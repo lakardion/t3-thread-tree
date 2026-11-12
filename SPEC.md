@@ -18,7 +18,7 @@ Source: [How does the standalone app run, and on which stack?](.wayfinder/ticket
   - `Bun.serve` serves the page (HTML import) and `GET /events` (SSE).
   - The Bun WebSocket client holds the T3 shell stream.
   - `bun:sqlite` reads `statev2.sqlite` in read-only mode for the launched-thread lineage.
-- **Frontend:** Preact with JSX and `@preact/signals`, built by Bun. No Vite and no plugin. `tsc --strict` checks the types.
+- **Frontend:** React 19, Tailwind v4 (`bun-plugin-tailwind` through `bunfig.toml`) and shadcn components (Radix), built by Bun HTML imports. No Vite. `tsc --strict` checks the types.
 - **Shared type:** one `Tree` type in a shared module. The backend and the page both import it.
 
 ## Data source

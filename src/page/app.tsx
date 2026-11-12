@@ -1,6 +1,13 @@
-import { render } from "preact";
-import { effect, signal } from "@preact/signals";
+import { useEffect, useState } from "react";
+import { createRoot } from "react-dom/client";
 import { allThreads, type Branch, type Status, type ThreadNode, type Tree } from "../shared/tree.ts";
+import { Alert, AlertDescription } from "@/components/ui/alert";
+import { Badge } from "@/components/ui/badge";
+import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
+import { Label } from "@/components/ui/label";
+import { Switch } from "@/components/ui/switch";
+import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
+import { cn } from "@/lib/utils";
 
 const TOKEN_CMD =
   "~/.t3/bin/t3 auth session issue --scope orchestration:read --label thread-tree --ttl 52w --token-only";
@@ -11,6 +18,14 @@ const LABEL: Record<Status, string> = {
   cancelled: "cancelled",
   idle: "idle",
   snoozed: "snoozed",
+};
+const DOT: Record<Status, string> = {
+  "needs-input": "bg-status-needs-input",
+  running: "bg-status-running animate-pulse motion-reduce:animate-none",
+  completed: "bg-status-completed",
+  cancelled: "bg-status-cancelled",
+  idle: "bg-status-idle",
+  snoozed: "bg-status-snoozed",
 };
 const CLOSED_KEY = "thread-tree:closed";
 const SETTLED_KEY = "thread-tree:settled";
@@ -28,55 +43,62 @@ const save = (k: string, v: string) => {
   } catch {}
 };
 
-const tree = signal<Tree | null>(null);
-const settled = signal(load(SETTLED_KEY) === "1");
-const closed = signal(new Set<string>(JSON.parse(load(CLOSED_KEY) ?? "[]") as string[]));
-const toggle = (id: string) => {
-  const n = new Set(closed.value);
-  n.has(id) ? n.delete(id) : n.add(id);
-  closed.value = n;
-  save(CLOSED_KEY, JSON.stringify([...n]));
-};
-
-let es: EventSource | undefined;
-effect(() => {
-  es?.close();
-  save(SETTLED_KEY, settled.value ? "1" : "0");
-  es = new EventSource(settled.value ? "/events?settled=1" : "/events");
-  es.onmessage = (e) => (tree.value = JSON.parse(e.data) as Tree);
-});
-
 const hhmm = (iso: string) => new Date(iso).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" });
 const until = (iso: string) =>
   new Date(iso).toLocaleString([], { weekday: "short", hour: "2-digit", minute: "2-digit" });
 
-const Dot = ({ t }: { t: ThreadNode }) => <span class={`dot s-${t.status}`} title={`${LABEL[t.status]} · ${t.raw}`} />;
+const Dot = ({ t }: { t: ThreadNode }) => (
+  <Tooltip>
+    <TooltipTrigger asChild>
+      <span className={cn("inline-block size-[9px] flex-none rounded-full", DOT[t.status])} />
+    </TooltipTrigger>
+    <TooltipContent>
+      {LABEL[t.status]} · {t.raw}
+    </TooltipContent>
+  </Tooltip>
+);
+
+const ROW = "flex min-w-0 items-center gap-2 rounded-[5px] px-1 py-0.5 hover:bg-accent";
+const PILL = "gap-[3px] rounded-[10px] px-1.5 py-0 text-[11px] font-normal text-muted-foreground";
 
 function ThreadRow({ t }: { t: ThreadNode }) {
   return (
-    <li class={t.snoozedUntil ? "snoozed" : ""}>
-      <div class="row">
+    <li className="my-px">
+      <div className={ROW}>
         <Dot t={t} />
-        <a class="t title" href={t.href}>
+        <a
+          className={cn("min-w-0 truncate hover:underline", t.snoozedUntil && "opacity-55")}
+          href={t.href}
+        >
           {t.title || t.id}
         </a>
-        <span class="meta">
-          {t.snoozedUntil && <span class="badge">⏾ until {until(t.snoozedUntil)}</span>}
+        <span className="ml-auto flex flex-none items-center gap-1.5">
+          {t.snoozedUntil && (
+            <Badge variant="outline" className={PILL}>
+              ⏾ until {until(t.snoozedUntil)}
+            </Badge>
+          )}
           {t.stack && (
-            <span class="badge stack" title="PR stack">
+            <Badge
+              variant="outline"
+              className={cn(PILL, "border-status-running/45 text-status-running")}
+              title="PR stack"
+            >
               ⧉ {t.stack.pos ? `${t.stack.pos}/${t.stack.total}` : `base · ${t.stack.total}`}
-            </span>
+            </Badge>
           )}
           {t.prs.map((p) => (
-            <a key={p.n} class="badge" href={p.url} target="_blank" rel="noreferrer" title={p.state}>
-              #{p.n}
-              {p.state !== "open" && ` ${p.state}`}
-            </a>
+            <Badge key={p.n} variant="outline" className={PILL} asChild>
+              <a href={p.url} target="_blank" rel="noreferrer" title={p.state}>
+                #{p.n}
+                {p.state !== "open" && ` ${p.state}`}
+              </a>
+            </Badge>
           ))}
         </span>
       </div>
       {t.children.length > 0 && (
-        <ul>
+        <ul className="m-0 list-none pl-[18px]">
           {t.children.map((c) => (
             <ThreadRow key={c.id} t={c} />
           ))}
@@ -86,68 +108,106 @@ function ThreadRow({ t }: { t: ThreadNode }) {
   );
 }
 
-function BranchRow({ b, top }: { b: Branch; top?: boolean }) {
-  const open = !closed.value.has(b.id);
+function BranchRow({
+  b,
+  top,
+  closed,
+  toggle,
+}: {
+  b: Branch;
+  top?: boolean;
+  closed: Set<string>;
+  toggle: (id: string) => void;
+}) {
+  const open = !closed.has(b.id);
   return (
-    <li>
-      <div class="row">
-        <button class="tw" aria-expanded={open} onClick={() => toggle(b.id)}>
-          {open ? "▾" : "▸"}
-        </button>
-        <span class={top ? "proj" : "key"}>{b.label}</span>
-        {!open && (
-          <span class="dots">
-            {allThreads(b).map((t) => (
-              <Dot key={t.id} t={t} />
+    <Collapsible asChild open={open} onOpenChange={() => toggle(b.id)}>
+      <li className="my-px">
+        <div className={cn(ROW, top && "mt-2")}>
+          <CollapsibleTrigger className="w-3.5 flex-none cursor-pointer select-none text-center text-muted-foreground">
+            {open ? "▾" : "▸"}
+          </CollapsibleTrigger>
+          <span className={top ? "text-sm font-bold" : "font-semibold"}>{b.label}</span>
+          {!open && (
+            <span className="inline-flex flex-wrap gap-[3px]">
+              {allThreads(b).map((t) => (
+                <Dot key={t.id} t={t} />
+              ))}
+            </span>
+          )}
+        </div>
+        <CollapsibleContent asChild>
+          <ul className="m-0 list-none pl-[18px]">
+            {b.branches.map((c) => (
+              <BranchRow key={c.id} b={c} closed={closed} toggle={toggle} />
             ))}
-          </span>
-        )}
-      </div>
-      {open && (
-        <ul>
-          {b.branches.map((c) => (
-            <BranchRow key={c.id} b={c} />
-          ))}
-          {b.threads.map((t) => (
-            <ThreadRow key={t.id} t={t} />
-          ))}
-        </ul>
-      )}
-    </li>
+            {b.threads.map((t) => (
+              <ThreadRow key={t.id} t={t} />
+            ))}
+          </ul>
+        </CollapsibleContent>
+      </li>
+    </Collapsible>
   );
 }
 
 function App() {
-  const t = tree.value;
+  const [tree, setTree] = useState<Tree | null>(null);
+  const [settled, setSettled] = useState(load(SETTLED_KEY) === "1");
+  const [closed, setClosed] = useState(() => new Set<string>(JSON.parse(load(CLOSED_KEY) ?? "[]") as string[]));
+
+  useEffect(() => {
+    save(SETTLED_KEY, settled ? "1" : "0");
+    const es = new EventSource(settled ? "/events?settled=1" : "/events");
+    es.onmessage = (e) => setTree(JSON.parse(e.data) as Tree);
+    return () => es.close();
+  }, [settled]);
+
+  const toggle = (id: string) => {
+    const n = new Set(closed);
+    n.has(id) ? n.delete(id) : n.add(id);
+    setClosed(n);
+    save(CLOSED_KEY, JSON.stringify([...n]));
+  };
+
   return (
-    <>
-      <header>
-        <h1>Thread tree</h1>
-        <label>
-          <input type="checkbox" checked={settled.value} onChange={(e) => (settled.value = e.currentTarget.checked)} />{" "}
-          show settled
-        </label>
-      </header>
-      {t?.conn === "down" && (
-        <div class="banner">T3 not running: last update {t.lastUpdate ? hhmm(t.lastUpdate) : "never"}</div>
-      )}
-      {t?.conn === "unauthorized" && (
-        <div class="banner">
-          T3 rejected the token. Issue one and put it in <code>.env</code> as <code>T3_TOKEN</code>, then restart:
-          <br />
-          <code>{TOKEN_CMD}</code>
+    <TooltipProvider>
+      <header className="mb-3.5 flex flex-wrap items-center gap-x-5 gap-y-3 text-muted-foreground">
+        <h1 className="m-0 text-[15px] font-semibold text-foreground">Thread tree</h1>
+        <div className="flex items-center gap-2">
+          <Switch id="settled" checked={settled} onCheckedChange={setSettled} />
+          <Label htmlFor="settled" className="font-normal">
+            show settled
+          </Label>
         </div>
+      </header>
+      {tree?.conn === "down" && (
+        <Alert className="mb-3 border-l-[3px] border-l-status-needs-input">
+          <AlertDescription className="text-foreground">
+            T3 not running: last update {tree.lastUpdate ? hhmm(tree.lastUpdate) : "never"}
+          </AlertDescription>
+        </Alert>
       )}
-      <div class={t && t.conn !== "up" ? "stale" : ""}>
-        {t && t.projects.length === 0 && <p class="empty">No active threads.</p>}
-        <ul>
-          {t?.projects.map((p) => (
-            <BranchRow key={p.id} b={p} top />
+      {tree?.conn === "unauthorized" && (
+        <Alert className="mb-3 border-l-[3px] border-l-status-needs-input">
+          <AlertDescription className="block text-foreground">
+            T3 rejected the token. Issue one and put it in <code className="text-xs select-all">.env</code> as{" "}
+            <code className="text-xs select-all">T3_TOKEN</code>, then restart:
+            <br />
+            <code className="text-xs select-all">{TOKEN_CMD}</code>
+          </AlertDescription>
+        </Alert>
+      )}
+      <div className={tree && tree.conn !== "up" ? "opacity-45 grayscale" : ""}>
+        {tree && tree.projects.length === 0 && <p className="text-muted-foreground">No active threads.</p>}
+        <ul className="m-0 list-none p-0">
+          {tree?.projects.map((p) => (
+            <BranchRow key={p.id} b={p} top closed={closed} toggle={toggle} />
           ))}
         </ul>
       </div>
-    </>
+    </TooltipProvider>
   );
 }
 
-render(<App />, document.getElementById("root")!);
+createRoot(document.getElementById("root")!).render(<App />);
