@@ -2,7 +2,7 @@
 title: Add the attention summary and the "Needs you" filter
 type: task
 status: open
-assignee:
+assignee: claude (design-overhaul-11)
 blocked-by: [01-shadcn-migration, 04-synthesize-design-spec, 07-thread-row]
 ---
 
