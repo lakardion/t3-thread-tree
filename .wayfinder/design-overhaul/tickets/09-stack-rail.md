@@ -23,3 +23,11 @@ Key groups that share a PR stack sit in one rail with a label row, as in `DESIGN
 - The checks in `DESIGN-SPEC.md` › Checks for each build key pass.
 - The demo stack shows one rail, the label "PR stack · N PRs", and the base when the data has it.
 - A group that is not in a stack has no rail.
+
+## Handed over from design-overhaul-08
+
+- `ProjectCard` (`src/page/app.tsx`) maps `b.branches` to `GroupRow` in one `<ul>`. The rail wraps adjacent groups there. `GroupRow` returns a bare `ThreadRow` (one `<li>`) for a folded group and a `Collapsible` `<li>` for all other groups.
+- `Branch` in `src/shared/tree.ts` has `repo?` now. Add `stack?` next to it.
+- `.project-head` is in `src/page/index.css` in `@layer components`. Put `.stack-rail` there.
+- The demo stack is four folded groups (`SHOP-412`, `SHOP-413`, `SHOP-415`, `SHOP-418`), so the rail holds four rows and no group header.
+- `BuildInput.projects` is `Map<string, Project>` (`title`, `repo`) from `src/server/t3.ts`.
