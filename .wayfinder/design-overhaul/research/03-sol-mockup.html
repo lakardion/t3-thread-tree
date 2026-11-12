@@ -1,0 +1,57 @@
+<!doctype html><html lang="en"><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Slate signal thread tree proposal</title><style>
+:root, .light {
+  --background: #f8fafc;
+  --foreground: #172033;
+  --card: #ffffff;
+  --muted: #eef2f7;
+  --muted-foreground: #475569;
+  --primary: #1d4ed8;
+  --primary-foreground: #ffffff;
+  --border: #cbd5e1;
+  --status-running: #1d4ed8;
+  --status-needs-input: #92400e;
+  --status-completed: #166534;
+  --status-cancelled: #9f1239;
+  --status-idle: #475569;
+  --status-snoozed: #475569;
+  --card-foreground: #172033;
+  --popover: #ffffff;
+  --popover-foreground: #172033;
+  --secondary: #eef2f7;
+  --secondary-foreground: #172033;
+  --accent: #eef2f7;
+  --accent-foreground: #172033;
+  --input: #cbd5e1;
+  --ring: #1d4ed8;
+  --destructive: #9f1239;
+  --radius: 0.5rem;
+}
+.dark {
+  --background: #101827;
+  --foreground: #e5edf7;
+  --card: #172033;
+  --muted: #223047;
+  --muted-foreground: #a8b8cc;
+  --primary: #93c5fd;
+  --primary-foreground: #101827;
+  --border: #52647c;
+  --status-running: #93c5fd;
+  --status-needs-input: #fcd34d;
+  --status-completed: #86efac;
+  --status-cancelled: #fda4af;
+  --status-idle: #a8b8cc;
+  --status-snoozed: #a8b8cc;
+  --card-foreground: #e5edf7;
+  --popover: #172033;
+  --popover-foreground: #e5edf7;
+  --secondary: #223047;
+  --secondary-foreground: #e5edf7;
+  --accent: #223047;
+  --accent-foreground: #e5edf7;
+  --input: #52647c;
+  --ring: #93c5fd;
+  --destructive: #fda4af;
+  --radius: 0.5rem;
+}
+*{box-sizing:border-box}body{margin:0;font:13px/1.5 system-ui,sans-serif;color:var(--foreground)}.samples{display:grid;gap:20px}.panel{background:var(--card);color:var(--foreground);padding:16px;border:1px solid var(--border);border-radius:8px;min-width:0}.toolbar{display:flex;justify-content:space-between;gap:8px;margin-bottom:14px;color:var(--muted-foreground)}header{background:linear-gradient(100deg,var(--muted),var(--card) 75%);padding:10px;display:flex;justify-content:space-between;gap:8px;border-radius:6px}header span{color:var(--muted-foreground);font-size:12px}ul{list-style:none;margin:8px 0;padding:0 0 0 12px}.group{font-size:12px;font-weight:600;padding:7px 0 3px;color:var(--muted-foreground)}.row{display:grid;grid-template-columns:120px minmax(80px,1fr) auto 24px 12px;gap:8px;align-items:center;min-height:36px;padding:5px 6px;border-inline-start:2px solid transparent;border-bottom:1px solid var(--muted)}.thread-running{background:linear-gradient(90deg,var(--muted),var(--card) 65%);border-inline-start-color:var(--status-running)}.title{overflow-wrap:anywhere}.state{display:flex;align-items:center;gap:6px;font-size:12px}.state i{font-style:normal;display:inline-block}.age,.meta,footer{color:var(--muted-foreground);font-size:12px}.age{font-variant-numeric:tabular-nums}.badges{display:flex;gap:6px;font-size:11px;flex-wrap:wrap}.badges span:not(:empty){border:1px solid var(--border);border-radius:4px;padding:1px 4px}.badges .stack-badge{border-left:3px solid var(--status-running);color:var(--status-running)}.detail{margin:4px 24px 8px 128px;padding:12px;background:var(--muted);border-radius:6px}.detail p{margin:6px 0}footer{margin-top:16px}.work-ring{width:12px;height:12px;border:2px solid currentColor;border-right-color:transparent;border-radius:50%;font-size:0;animation:turn 1.4s linear infinite}@keyframes turn{to{transform:rotate(360deg)}}@media(prefers-reduced-motion:reduce){.work-ring{animation:none}}@media(max-width:600px){.row{grid-template-columns:110px minmax(70px,1fr) 12px}.badges{grid-column:2;grid-row:2}.age{grid-column:1;grid-row:2}.row>span:last-child{grid-column:3;grid-row:1}.detail{margin-left:8px}header{flex-wrap:wrap}.panel{padding:12px}}
+</style><main class="samples"><section class="light panel"><div class="toolbar"><b>Light mode</b><span>Show settled ○</span></div><header><strong>▾ storefront</strong><span>3 in progress · 1 input</span></header><ul><li><div class="group">▾ SHOP-412</div><div class="row thread-running"><span class="state" style="color:var(--status-running)"><i class="work-ring">◌</i>Working</span><span class="title">Checkout: split the payment step</span><span class="badges"><span class="stack-badge">⧉ 1/4</span><span>#2101</span></span><span class="age">4m</span><span aria-hidden="true">⌄</span></div></li><li><div class="group">▾ SHOP-413</div><div class="row "><span class="state" style="color:var(--status-needs-input)"><i class="">◆</i>Input</span><span class="title">Saved cards list with default selection</span><span class="badges"><span class="stack-badge">⧉ 2/4</span><span>#2102</span></span><span class="age">1m</span><span aria-hidden="true">⌄</span></div><div class="detail"><b>Input requested · blocking</b><p>Choose the default card before the thread can continue.</p><div class="meta">Model: gpt-6.1-sol · Branch: feat/saved-cards<br>Requested 13:42 · Updated 13:43<br>PR #2102 · Checks passed · Review required</div></div></li><li><div class="group">▾ SHOP-415</div><div class="row "><span class="state" style="color:var(--status-running)"><i class="">◷</i>Queued</span><span class="title">Apple Pay button behind a feature flag</span><span class="badges"><span class="stack-badge">⧉ 3/4</span><span>#2104</span></span><span class="age">7m</span><span aria-hidden="true">⌄</span></div></li><li><div class="group">▾ SHOP-418</div><div class="row thread-running"><span class="state" style="color:var(--status-running)"><i class="work-ring">◌</i>Starting</span><span class="title">Order summary in the new design</span><span class="badges"><span class="stack-badge">⧉ 4/4</span><span>#2107</span></span><span class="age">2m</span><span aria-hidden="true">⌄</span></div></li><li><div class="group">▾ Reviews / SHOP-401</div><div class="row "><span class="state" style="color:var(--status-completed)"><i class="">✓</i>Done, your turn</span><span class="title">Review #2095 SHOP-401</span><span class="badges"><span>#2095 merged</span></span><span class="age">9m</span><span aria-hidden="true">⌄</span></div></li><li><div class="group">▾ No issue key</div><div class="row "><span class="state" style="color:var(--status-cancelled)"><i class="">×</i>Failed</span><span class="title">Flaky e2e: cart badge count</span><span class="badges"><span></span></span><span class="age">12m</span><span aria-hidden="true">⌄</span></div></li><li><div class="group">▾ No issue key</div><div class="row "><span class="state" style="color:var(--status-snoozed)"><i class="">☾</i>Snoozed</span><span class="title">Investigate slow cold starts</span><span class="badges"><span>until Fri 14:00</span></span><span class="age">1h</span><span aria-hidden="true">⌄</span></div></li></ul><footer>Connected · Updated 13:44 · Made-up data</footer></section><section class="dark panel"><div class="toolbar"><b>Dark mode</b><span>Show settled ○</span></div><header><strong>▾ storefront</strong><span>3 in progress · 1 input</span></header><ul><li><div class="group">▾ SHOP-412</div><div class="row thread-running"><span class="state" style="color:var(--status-running)"><i class="work-ring">◌</i>Working</span><span class="title">Checkout: split the payment step</span><span class="badges"><span class="stack-badge">⧉ 1/4</span><span>#2101</span></span><span class="age">4m</span><span aria-hidden="true">⌄</span></div></li><li><div class="group">▾ SHOP-413</div><div class="row "><span class="state" style="color:var(--status-needs-input)"><i class="">◆</i>Input</span><span class="title">Saved cards list with default selection</span><span class="badges"><span class="stack-badge">⧉ 2/4</span><span>#2102</span></span><span class="age">1m</span><span aria-hidden="true">⌄</span></div><div class="detail"><b>Input requested · blocking</b><p>Choose the default card before the thread can continue.</p><div class="meta">Model: gpt-6.1-sol · Branch: feat/saved-cards<br>Requested 13:42 · Updated 13:43<br>PR #2102 · Checks passed · Review required</div></div></li><li><div class="group">▾ SHOP-415</div><div class="row "><span class="state" style="color:var(--status-running)"><i class="">◷</i>Queued</span><span class="title">Apple Pay button behind a feature flag</span><span class="badges"><span class="stack-badge">⧉ 3/4</span><span>#2104</span></span><span class="age">7m</span><span aria-hidden="true">⌄</span></div></li><li><div class="group">▾ SHOP-418</div><div class="row thread-running"><span class="state" style="color:var(--status-running)"><i class="work-ring">◌</i>Starting</span><span class="title">Order summary in the new design</span><span class="badges"><span class="stack-badge">⧉ 4/4</span><span>#2107</span></span><span class="age">2m</span><span aria-hidden="true">⌄</span></div></li><li><div class="group">▾ Reviews / SHOP-401</div><div class="row "><span class="state" style="color:var(--status-completed)"><i class="">✓</i>Done, your turn</span><span class="title">Review #2095 SHOP-401</span><span class="badges"><span>#2095 merged</span></span><span class="age">9m</span><span aria-hidden="true">⌄</span></div></li><li><div class="group">▾ No issue key</div><div class="row "><span class="state" style="color:var(--status-cancelled)"><i class="">×</i>Failed</span><span class="title">Flaky e2e: cart badge count</span><span class="badges"><span></span></span><span class="age">12m</span><span aria-hidden="true">⌄</span></div></li><li><div class="group">▾ No issue key</div><div class="row "><span class="state" style="color:var(--status-snoozed)"><i class="">☾</i>Snoozed</span><span class="title">Investigate slow cold starts</span><span class="badges"><span>until Fri 14:00</span></span><span class="age">1h</span><span aria-hidden="true">⌄</span></div></li></ul><footer>Connected · Updated 13:44 · Made-up data</footer></section></main></html>

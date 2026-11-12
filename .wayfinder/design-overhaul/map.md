@@ -40,6 +40,8 @@ None. The repo has no remote: a key is "in review" when its branch is ready, and
 - shadcn adoption: switch the page from Preact to React 19, with Tailwind v4 through `bun-plugin-tailwind`. This replaces the "Preact, no plugin" rule in `SPEC.md` › Runtime and stack (chosen by the user at charting).
 - Base: `build/thread-tree` was fast-forwarded into `main` at charting.
 
+- [UI/UX design proposal B (OpenAI Sol)](tickets/03-design-proposal-sol.md): independent Slate signal proposal and light/dark mockup are ready for synthesis.
+
 ## Not yet specified
 
 - The build keys after 04, and their order. 04 cuts them.

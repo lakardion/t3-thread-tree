@@ -1,8 +1,8 @@
 ---
 title: UI/UX design proposal B (OpenAI Sol)
 type: research
-status: open
-assignee:
+status: closed
+assignee: codex (design-overhaul-03)
 blocked-by: [01-shadcn-migration]
 ---
 
@@ -18,3 +18,11 @@ Use the same question and brief as [02](02-design-proposal-opus.md), sections "Q
 - `.wayfinder/design-overhaul/research/03-sol-mockup.html`: one static mockup with demo data, light and dark.
 
 Add a `## Resolution` with a link to both files, then set `status: closed`.
+
+## Resolution
+
+Completed the independent [Slate signal proposal](../research/03-sol-proposal.md) and [static light and dark mockup](../research/03-sol-mockup.html).
+
+The proposal covers the stream field inventory, color variables and contrast ratios, gradients, status indicators, layout and shadcn components. It marks challenges to the rough tree UI choices. The synthesis ticket can use this proposal as one input. The proposal does not select the final design.
+
+Checked the demo on port 4776 in light and dark mode. Rendered the mockup at 728 and 390 pixels wide. All 18 tests and typechecking passed. No app source files changed.
