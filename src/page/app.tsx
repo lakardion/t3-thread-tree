@@ -28,8 +28,10 @@ import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Switch } from "@/components/ui/switch";
+import { ToggleGroup, ToggleGroupItem } from "@/components/ui/toggle-group";
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
 import { cn } from "@/lib/utils";
+import { countAttention, needsYou, onlyNeedsYou } from "./attention.ts";
 import { ago, folded, isKeyGroup, phraseWith, stripKey } from "./format.ts";
 
 const TOKEN_CMD =
@@ -49,6 +51,7 @@ const STATUS: Record<Status, { icon: LucideIcon; shape: string; text: string }> 
 };
 const CLOSED_KEY = "thread-tree:closed";
 const SETTLED_KEY = "thread-tree:settled";
+const FILTER_KEY = "thread-tree:filter";
 const THEME_KEY = "thread-tree:theme";
 const THEMES = ["system", "light", "dark"] as const;
 type Theme = (typeof THEMES)[number];
@@ -71,6 +74,7 @@ const until = (iso: string) =>
   new Date(iso).toLocaleString([], { weekday: "short", hour: "2-digit", minute: "2-digit" });
 
 const Now = createContext(Date.now());
+const NeedsOnly = createContext(false);
 
 const StatusIcon = ({ t }: { t: ThreadNode }) => {
   const { icon: Icon, shape } = STATUS[t.status];
@@ -89,6 +93,10 @@ const StatusIcon = ({ t }: { t: ThreadNode }) => {
 };
 
 const CHIP = "gap-1 rounded-[6px] px-1.5 py-0 text-[11px] font-normal text-muted-foreground";
+const NEED_CHIP =
+  "border-transparent bg-[color-mix(in_oklch,var(--status-needs-input)_var(--wash),transparent)] text-status-needs-input-fg";
+const FILTER_ITEM =
+  "pointer-coarse:min-h-11 pointer-coarse:min-w-11 focus-visible:ring-0 focus-visible:outline-solid focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring";
 
 const Mark = ({ title, children }: { title: string; children: ReactNode }) => (
   <span title={title} className="inline-flex [&>svg]:size-3">
@@ -126,6 +134,7 @@ function PrChip({ p }: { p: PrNode }) {
 
 function ThreadRow({ t, chip }: { t: ThreadNode; chip?: string }) {
   const now = useContext(Now);
+  const dim = useContext(NeedsOnly) && !needsYou(t.status);
   return (
     <li className="my-px">
       <div
@@ -133,7 +142,7 @@ function ThreadRow({ t, chip }: { t: ThreadNode; chip?: string }) {
         data-status={t.status}
       >
         <StatusIcon t={t} />
-        <span className={cn("w-[120px] flex-none truncate text-xs font-medium", STATUS[t.status].text)}>
+        <span className={cn("w-[120px] flex-none truncate text-xs font-medium", dim ? "text-muted-foreground" : STATUS[t.status].text)}>
           {phraseWith(t, now)}
         </span>
         {chip && (
@@ -145,7 +154,7 @@ function ThreadRow({ t, chip }: { t: ThreadNode; chip?: string }) {
           className={cn(
             "min-w-0 flex-1 truncate hover:underline max-[720px]:line-clamp-2 max-[720px]:whitespace-normal",
             t.status === "your-turn" ? "font-[650]" : "font-medium",
-            (t.status === "snoozed" || t.settled) && "text-muted-foreground",
+            (t.status === "snoozed" || t.settled || dim) && "text-muted-foreground",
             chip && "max-[720px]:basis-full max-[720px]:pl-5",
           )}
           href={t.href}
@@ -284,6 +293,7 @@ function ProjectCard({ b, closed, toggle }: { b: Branch } & Fold) {
 function App() {
   const [tree, setTree] = useState<Tree | null>(null);
   const [settled, setSettled] = useState(load(SETTLED_KEY) === "1");
+  const [needsOnly, setNeedsOnly] = useState(load(FILTER_KEY) === "needs");
   const [theme, setTheme] = useState<Theme>(() => THEMES.find((t) => t === load(THEME_KEY)) ?? "system");
   const [now, setNow] = useState(Date.now);
   const [closed, setClosed] = useState(() => new Set<string>(JSON.parse(load(CLOSED_KEY) ?? "[]") as string[]));
@@ -299,6 +309,10 @@ function App() {
     es.onmessage = (e) => setTree(JSON.parse(e.data) as Tree);
     return () => es.close();
   }, [settled]);
+
+  useEffect(() => {
+    save(FILTER_KEY, needsOnly ? "needs" : "all");
+  }, [needsOnly]);
 
   useEffect(() => {
     save(THEME_KEY, theme);
@@ -318,18 +332,54 @@ function App() {
     save(CLOSED_KEY, JSON.stringify([...n]));
   };
 
+  const counts = countAttention(tree?.projects ?? []);
+  const projects = tree && needsOnly ? onlyNeedsYou(tree.projects) : tree?.projects;
+
   return (
     <TooltipProvider>
       <header className="mb-3.5 flex flex-wrap items-center gap-x-5 gap-y-3 text-muted-foreground">
         <h1 className="m-0 text-[15px] font-semibold text-foreground">Thread tree</h1>
-        <div className="flex items-center gap-2">
+        {tree && (
+          <div className="flex flex-wrap items-center gap-1.5">
+            {counts.needYou > 0 && (
+              <Badge variant="outline" className={cn(CHIP, NEED_CHIP)}>
+                {counts.needYou} need you
+              </Badge>
+            )}
+            <Badge variant="outline" className={CHIP}>
+              {counts.working} working
+            </Badge>
+            <Badge variant="outline" className={CHIP}>
+              {counts.yourTurn} your turn
+            </Badge>
+            <Badge variant="outline" className={CHIP}>
+              {counts.stopped} stopped
+            </Badge>
+          </div>
+        )}
+        <ToggleGroup
+          type="single"
+          size="sm"
+          variant="outline"
+          aria-label="Filter"
+          value={needsOnly ? "needs" : "all"}
+          onValueChange={(v) => v && setNeedsOnly(v === "needs")}
+        >
+          <ToggleGroupItem value="all" className={FILTER_ITEM}>
+            All
+          </ToggleGroupItem>
+          <ToggleGroupItem value="needs" className={FILTER_ITEM}>
+            Needs you
+          </ToggleGroupItem>
+        </ToggleGroup>
+        <div className="ml-auto flex items-center gap-2">
           <Switch id="settled" checked={settled} onCheckedChange={setSettled} />
           <Label htmlFor="settled" className="font-normal">
             show settled
           </Label>
         </div>
         <Select value={theme} onValueChange={(v) => setTheme(v as Theme)}>
-          <SelectTrigger size="sm" aria-label="Theme" className="ml-auto">
+          <SelectTrigger size="sm" aria-label="Theme">
             <SelectValue />
           </SelectTrigger>
           <SelectContent>
@@ -356,29 +406,31 @@ function App() {
           </AlertDescription>
         </Alert>
       )}
-      <Now value={now}>
-        <div
-          className={tree && tree.conn !== "up" ? "grayscale" : ""}
-          data-conn={tree && tree.conn !== "up" ? "down" : undefined}
-        >
-          {tree && tree.projects.length === 0 && <p className="text-muted-foreground">No active threads.</p>}
-          {tree ? (
-            <ul className="m-0 flex list-none flex-col gap-3 p-0">
-              {tree.projects.map((p) => (
-                <ProjectCard key={p.id} b={p} closed={closed} toggle={toggle} />
-              ))}
-            </ul>
-          ) : (
-            <Card className="gap-0 rounded-[12px] py-0 shadow-none" aria-busy="true" aria-label="Loading threads">
-              <CardContent className="flex flex-col gap-0.5 p-1.5">
-                {[0, 1, 2].map((i) => (
-                  <Skeleton key={i} className="h-9 rounded-[8px] motion-reduce:animate-none" />
+      <NeedsOnly value={needsOnly}>
+        <Now value={now}>
+          <div
+            className={tree && tree.conn !== "up" ? "grayscale" : ""}
+            data-conn={tree && tree.conn !== "up" ? "down" : undefined}
+          >
+            {projects?.length === 0 && <p className="text-muted-foreground">No active threads.</p>}
+            {projects ? (
+              <ul className="m-0 flex list-none flex-col gap-3 p-0">
+                {projects.map((p) => (
+                  <ProjectCard key={p.id} b={p} closed={closed} toggle={toggle} />
                 ))}
-              </CardContent>
-            </Card>
-          )}
-        </div>
-      </Now>
+              </ul>
+            ) : (
+              <Card className="gap-0 rounded-[12px] py-0 shadow-none" aria-busy="true" aria-label="Loading threads">
+                <CardContent className="flex flex-col gap-0.5 p-1.5">
+                  {[0, 1, 2].map((i) => (
+                    <Skeleton key={i} className="h-9 rounded-[8px] motion-reduce:animate-none" />
+                  ))}
+                </CardContent>
+              </Card>
+            )}
+          </div>
+        </Now>
+      </NeedsOnly>
     </TooltipProvider>
   );
 }

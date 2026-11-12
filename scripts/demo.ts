@@ -67,7 +67,7 @@ const threads: Thread[] = [
   t("Review #2095 SHOP-401", { prs: [pr(2095, "agent", "merged")] }),
   t("Design-system migration map", { id: "map", status: "idle" }),
   t("Migrate Button to the new tokens", { id: "m1", status: "running" }),
-  t("Migrate Dialog to the new tokens", { id: "m2" }),
+  t("Migrate Dialog to the new tokens", { id: "m2", ...completed }),
   t("Migrate Tooltip to the new tokens", { id: "m3", snoozedUntil: later(20) }),
   t("Flaky e2e: cart badge count", { status: "failed" }),
   t("API-77 · Rate-limit the search endpoint per API key", { projectId: "api", status: "running" }),
