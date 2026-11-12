@@ -1,6 +1,6 @@
 ---
 label: wayfinder:map
-status: open
+status: closed
 created: 2026-11-12
 ---
 
