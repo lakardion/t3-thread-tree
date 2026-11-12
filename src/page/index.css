@@ -124,3 +124,73 @@
     @apply bg-background p-4 text-[13px] leading-[1.45] text-foreground;
   }
 }
+
+@layer components {
+  .thread-row[data-status="working"] .status-icon {
+    animation: work-turn 1.4s linear infinite;
+  }
+  @keyframes work-turn {
+    to {
+      transform: rotate(360deg);
+    }
+  }
+  .thread-row[data-status="needs-input"]::before {
+    animation: breathe 2.4s ease-in-out infinite;
+  }
+  @keyframes breathe {
+    50% {
+      opacity: 0.45;
+    }
+  }
+  @media (prefers-reduced-motion: reduce) {
+    .thread-row[data-status="working"] .status-icon,
+    .thread-row[data-status="needs-input"]::before {
+      animation: none;
+    }
+  }
+  [data-conn="down"] .thread-row[data-status="working"] .status-icon,
+  [data-conn="down"] .thread-row[data-status="needs-input"]::before {
+    animation: none;
+  }
+
+  .thread-row {
+    position: relative;
+  }
+  .thread-row[data-status="needs-input"]::before,
+  .thread-row[data-status="working"]::before {
+    content: "";
+    position: absolute;
+    left: 0;
+    top: 6px;
+    bottom: 6px;
+    width: 2px;
+    border-radius: 1px;
+  }
+  .thread-row[data-status="needs-input"] {
+    background: linear-gradient(
+      90deg,
+      color-mix(in oklch, var(--status-needs-input) var(--wash), transparent),
+      transparent 45%
+    );
+  }
+  .thread-row[data-status="needs-input"]::before {
+    background: var(--status-needs-input);
+  }
+  .thread-row[data-status="working"] {
+    background: linear-gradient(
+      90deg,
+      color-mix(in oklch, var(--status-working) calc(var(--wash) * 0.6), transparent),
+      transparent 35%
+    );
+  }
+  .thread-row[data-status="working"]::before {
+    background: var(--status-working);
+  }
+  .thread-row:hover {
+    background: var(--accent);
+  }
+
+  .chip-stack {
+    background: linear-gradient(135deg, color-mix(in oklch, var(--primary) 10%, var(--card)), var(--card));
+  }
+}

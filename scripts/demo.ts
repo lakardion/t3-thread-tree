@@ -80,6 +80,23 @@ const threads: Thread[] = [
   t("API-93 · Confirm the retry policy", { projectId: "api", status: "running", pending: request("command", false) }),
   t("DOC-14 · Review the changelog wording", { projectId: "docs", guestMessages: 1 }),
   t("Fix broken anchors after the sidebar change", { projectId: "docs", status: "cancelled" }),
+  t("DOC-15 · Link the four release PRs", {
+    projectId: "docs",
+    ...completed,
+    prs: [
+      pr(3001, "linked", "open", { checks: "passing", review: "approved" }),
+      pr(3002, "linked", "merged"),
+      pr(3003, "linked", "closed"),
+      pr(3004, "linked", "open", { draft: true }),
+    ],
+  }),
+  t("API-94 · Approve the schema change, then sleep", {
+    projectId: "api",
+    status: "running",
+    pending: request("command"),
+    snoozedUntil: later(30),
+  }),
+  t("DOC-16 · Archive the old tutorial", { projectId: "docs", settledAt: ago(60) }),
 ];
 const spawners: Record<string, string> = { m1: "map", m2: "map", m3: "map" };
 const projects = new Map([
@@ -88,18 +105,23 @@ const projects = new Map([
   ["docs", "docs-site"],
 ]);
 
-const tree = JSON.stringify({
-  conn: "up",
-  lastUpdate: new Date(now).toISOString(),
-  projects: buildTree({ threads, projects, spawnerOf: (id) => spawners[id], environmentId: "demo", settled: false, now }),
-});
+const treeFor = (settled: boolean) =>
+  JSON.stringify({
+    conn: process.env.CONN ?? "up",
+    lastUpdate: new Date(now).toISOString(),
+    projects: buildTree({ threads, projects, spawnerOf: (id) => spawners[id], environmentId: "demo", settled, now }),
+  });
+const trees = { open: treeFor(false), settled: treeFor(true) };
 
 const server = Bun.serve({
   hostname: "127.0.0.1",
   port: Number(process.env.PORT ?? 4774),
   routes: {
     "/": index,
-    "/events": () => new Response(`data: ${tree}\n\n`, { headers: { "Content-Type": "text/event-stream" } }),
+    "/events": (req) => {
+      const tree = new URL(req.url).searchParams.get("settled") === "1" ? trees.settled : trees.open;
+      return new Response(`data: ${tree}\n\n`, { headers: { "Content-Type": "text/event-stream" } });
+    },
   },
 });
 console.log(`demo tree on ${server.url}`);

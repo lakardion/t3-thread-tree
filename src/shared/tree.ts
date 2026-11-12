@@ -23,7 +23,7 @@ export type ThreadNode = {
   phrase: string;
   /** Start of the elapsed time in the phrase. */
   since: string | null;
-  /** Raw T3 status, for the dot tooltip. */
+  /** Raw T3 status, for the icon tooltip. */
   raw: string;
   updatedAt: string;
   settled: boolean;

@@ -1,6 +1,23 @@
-import { useEffect, useState } from "react";
+import { createContext, useContext, useEffect, useState, type ReactNode } from "react";
+import {
+  Check,
+  Circle,
+  CircleCheck,
+  CircleDashed,
+  CirclePause,
+  CircleX,
+  Diamond,
+  Layers,
+  ListChecks,
+  LoaderCircle,
+  Moon,
+  Square,
+  TriangleAlert,
+  X,
+  type LucideIcon,
+} from "lucide-react";
 import { createRoot } from "react-dom/client";
-import { allThreads, type Branch, type Status, type ThreadNode, type Tree } from "../shared/tree.ts";
+import { allThreads, type Branch, type PrNode, type Status, type ThreadNode, type Tree } from "../shared/tree.ts";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { Badge } from "@/components/ui/badge";
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
@@ -9,24 +26,22 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Switch } from "@/components/ui/switch";
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
 import { cn } from "@/lib/utils";
+import { ago, phraseWith } from "./format.ts";
 
 const TOKEN_CMD =
   "~/.t3/bin/t3 auth session issue --scope orchestration:read --label thread-tree --ttl 52w --token-only";
-const RUNNING = "bg-status-working";
-const DONE = "bg-status-done";
-const CANCELLED = "bg-status-failed";
-const DOT: Record<Status, string> = {
-  "needs-input": "bg-status-needs-input",
-  working: `${RUNNING} animate-pulse motion-reduce:animate-none`,
-  starting: RUNNING,
-  waiting: RUNNING,
-  "plan-ready": DONE,
-  "your-turn": DONE,
-  done: DONE,
-  failed: CANCELLED,
-  interrupted: CANCELLED,
-  idle: "bg-status-idle",
-  snoozed: "bg-status-idle",
+const STATUS: Record<Status, { icon: LucideIcon; shape: string; text: string }> = {
+  "needs-input": { icon: Diamond, shape: "text-status-needs-input", text: "text-status-needs-input-fg" },
+  working: { icon: LoaderCircle, shape: "text-status-working", text: "text-status-working-fg" },
+  starting: { icon: CircleDashed, shape: "text-status-working", text: "text-status-working-fg" },
+  waiting: { icon: CirclePause, shape: "text-status-working", text: "text-status-working-fg" },
+  "plan-ready": { icon: ListChecks, shape: "text-status-plan", text: "text-status-plan-fg" },
+  "your-turn": { icon: CircleCheck, shape: "text-status-done", text: "text-status-done-fg" },
+  done: { icon: Check, shape: "text-status-done", text: "text-status-done-fg" },
+  failed: { icon: CircleX, shape: "text-status-failed", text: "text-status-failed-fg" },
+  interrupted: { icon: Square, shape: "text-status-failed", text: "text-status-failed-fg" },
+  snoozed: { icon: Moon, shape: "text-status-idle", text: "text-muted-foreground" },
+  idle: { icon: Circle, shape: "text-status-idle", text: "text-muted-foreground" },
 };
 const CLOSED_KEY = "thread-tree:closed";
 const SETTLED_KEY = "thread-tree:settled";
@@ -51,54 +66,115 @@ const hhmm = (iso: string) => new Date(iso).toLocaleTimeString([], { hour: "2-di
 const until = (iso: string) =>
   new Date(iso).toLocaleString([], { weekday: "short", hour: "2-digit", minute: "2-digit" });
 
-const Dot = ({ t }: { t: ThreadNode }) => (
-  <Tooltip>
-    <TooltipTrigger asChild>
-      <span className={cn("inline-block size-[9px] flex-none rounded-full", DOT[t.status])} />
-    </TooltipTrigger>
-    <TooltipContent>
-      {t.phrase} · {t.raw}
-    </TooltipContent>
-  </Tooltip>
-);
+const Now = createContext(Date.now());
+
+const StatusIcon = ({ t }: { t: ThreadNode }) => {
+  const { icon: Icon, shape } = STATUS[t.status];
+  return (
+    <Tooltip>
+      <TooltipTrigger asChild>
+        <span className="inline-flex flex-none" role="img" aria-label={t.phrase}>
+          <Icon className={cn("status-icon size-3", shape)} fill={t.status === "needs-input" ? "currentColor" : "none"} />
+        </span>
+      </TooltipTrigger>
+      <TooltipContent>
+        {t.phrase} · {t.raw}
+      </TooltipContent>
+    </Tooltip>
+  );
+};
 
 const ROW = "flex min-w-0 items-center gap-2 rounded-[5px] px-1 py-0.5 hover:bg-accent";
-const PILL = "gap-[3px] rounded-[10px] px-1.5 py-0 text-[11px] font-normal text-muted-foreground";
+const CHIP = "gap-1 rounded-[6px] px-1.5 py-0 text-[11px] font-normal text-muted-foreground";
+
+const Mark = ({ title, children }: { title: string; children: ReactNode }) => (
+  <span title={title} className="inline-flex [&>svg]:size-3">
+    {children}
+  </span>
+);
+
+function PrChip({ p }: { p: PrNode }) {
+  return (
+    <Badge
+      variant="outline"
+      className={cn(
+        CHIP,
+        "font-mono focus-visible:ring-0",
+        p.draft && "border-dashed",
+        p.state === "merged" && "text-pr-merged",
+        p.state === "closed" && "line-through",
+      )}
+      asChild
+    >
+      <a href={p.url} target="_blank" rel="noreferrer" title={p.draft ? `${p.state} · draft` : p.state}>
+        #{p.n}
+        {p.checks === "passing" && <Mark title="Checks passing"><span className="size-1.5 rounded-full bg-status-done" /></Mark>}
+        {p.checks === "failing" && <Mark title="Checks failing"><span className="size-1.5 rounded-full bg-status-failed" /></Mark>}
+        {p.checks === "pending" && (
+          <Mark title="Checks pending"><span className="size-1.5 rounded-full border border-status-needs-input" /></Mark>
+        )}
+        {p.review === "approved" && <Mark title="Approved"><Check className="text-status-done" /></Mark>}
+        {p.review === "changes-requested" && <Mark title="Changes requested"><X className="text-status-failed" /></Mark>}
+        {p.conflicting && <Mark title="Merge conflict"><TriangleAlert className="text-status-needs-input" /></Mark>}
+      </a>
+    </Badge>
+  );
+}
 
 function ThreadRow({ t }: { t: ThreadNode }) {
+  const now = useContext(Now);
   return (
     <li className="my-px">
-      <div className={ROW}>
-        <Dot t={t} />
+      <div
+        className="thread-row flex min-h-9 min-w-0 items-center gap-x-2 rounded-[8px] px-2 text-[13px] leading-5 max-[720px]:flex-wrap max-[720px]:py-1"
+        data-status={t.status}
+      >
+        <StatusIcon t={t} />
+        <span className={cn("w-[120px] flex-none truncate text-xs font-medium", STATUS[t.status].text)}>
+          {phraseWith(t, now)}
+        </span>
         <a
-          className={cn("min-w-0 truncate hover:underline", t.snoozedUntil && "text-muted-foreground")}
+          className={cn(
+            "min-w-0 flex-1 truncate hover:underline max-[720px]:line-clamp-2 max-[720px]:whitespace-normal",
+            t.status === "your-turn" ? "font-[650]" : "font-medium",
+            (t.status === "snoozed" || t.settled) && "text-muted-foreground",
+          )}
           href={t.href}
         >
           {t.title || t.id}
         </a>
-        <span className="ml-auto flex flex-none items-center gap-1.5">
+        <span className="ml-auto flex flex-none items-center gap-1.5 max-[720px]:ml-0 max-[720px]:basis-full max-[720px]:flex-wrap max-[720px]:pl-5">
+          {t.input && (
+            <Badge variant="outline" className={CHIP}>
+              Input
+            </Badge>
+          )}
           {t.snoozedUntil && (
-            <Badge variant="outline" className={PILL}>
-              ⏾ until {until(t.snoozedUntil)}
+            <Badge variant="outline" className={CHIP}>
+              until {until(t.snoozedUntil)}
+            </Badge>
+          )}
+          {t.settled && (
+            <Badge variant="outline" className={CHIP}>
+              Settled
             </Badge>
           )}
           {t.stack && (
-            <Badge
-              variant="outline"
-              className={cn(PILL, "border-status-working/45 text-status-working-fg")}
-              title="PR stack"
-            >
-              ⧉ {t.stack.pos ? `${t.stack.pos}/${t.stack.total}` : `base · ${t.stack.total}`}
+            <Badge variant="outline" className={cn(CHIP, "chip-stack")} title="PR stack">
+              <Layers />
+              {t.stack.pos ? `${t.stack.pos}/${t.stack.total}` : `base · ${t.stack.total}`}
             </Badge>
           )}
-          {t.prs.map((p) => (
-            <Badge key={p.n} variant="outline" className={PILL} asChild>
-              <a href={p.url} target="_blank" rel="noreferrer" title={p.state}>
-                #{p.n}
-                {p.state !== "open" && ` ${p.state}`}
-              </a>
-            </Badge>
+          {t.prs.slice(0, 2).map((p) => (
+            <PrChip key={p.n} p={p} />
           ))}
+          {t.prs.length > 2 && <span className="text-[11px] text-muted-foreground">+{t.prs.length - 2}</span>}
+          <Tooltip>
+            <TooltipTrigger asChild>
+              <span className="font-mono text-[11px] tabular-nums text-muted-foreground">{ago(t.updatedAt, now)}</span>
+            </TooltipTrigger>
+            <TooltipContent>Updated {new Date(t.updatedAt).toLocaleString()}</TooltipContent>
+          </Tooltip>
         </span>
       </div>
       {t.children.length > 0 && (
@@ -135,7 +211,7 @@ function BranchRow({
           {!open && (
             <span className="inline-flex flex-wrap gap-[3px]">
               {allThreads(b).map((t) => (
-                <Dot key={t.id} t={t} />
+                <StatusIcon key={t.id} t={t} />
               ))}
             </span>
           )}
@@ -159,7 +235,13 @@ function App() {
   const [tree, setTree] = useState<Tree | null>(null);
   const [settled, setSettled] = useState(load(SETTLED_KEY) === "1");
   const [theme, setTheme] = useState<Theme>(() => THEMES.find((t) => t === load(THEME_KEY)) ?? "system");
+  const [now, setNow] = useState(Date.now);
   const [closed, setClosed] = useState(() => new Set<string>(JSON.parse(load(CLOSED_KEY) ?? "[]") as string[]));
+
+  useEffect(() => {
+    const id = setInterval(() => setNow(Date.now()), 60_000);
+    return () => clearInterval(id);
+  }, []);
 
   useEffect(() => {
     save(SETTLED_KEY, settled ? "1" : "0");
@@ -224,14 +306,19 @@ function App() {
           </AlertDescription>
         </Alert>
       )}
-      <div className={tree && tree.conn !== "up" ? "grayscale" : ""}>
-        {tree && tree.projects.length === 0 && <p className="text-muted-foreground">No active threads.</p>}
-        <ul className="m-0 list-none p-0">
-          {tree?.projects.map((p) => (
-            <BranchRow key={p.id} b={p} top closed={closed} toggle={toggle} />
-          ))}
-        </ul>
-      </div>
+      <Now value={now}>
+        <div
+          className={tree && tree.conn !== "up" ? "grayscale" : ""}
+          data-conn={tree && tree.conn !== "up" ? "down" : undefined}
+        >
+          {tree && tree.projects.length === 0 && <p className="text-muted-foreground">No active threads.</p>}
+          <ul className="m-0 list-none p-0">
+            {tree?.projects.map((p) => (
+              <BranchRow key={p.id} b={p} top closed={closed} toggle={toggle} />
+            ))}
+          </ul>
+        </div>
+      </Now>
     </TooltipProvider>
   );
 }
