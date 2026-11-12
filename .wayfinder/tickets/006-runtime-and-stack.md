@@ -3,7 +3,7 @@ id: 006
 title: How does the standalone app run, and on which stack?
 type: grilling
 status: open
-assignee:
+assignee: claude (session 006)
 blocked_by: [003]
 ---
 
