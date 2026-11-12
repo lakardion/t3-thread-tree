@@ -2,7 +2,7 @@
 title: Draw the stack rail around key groups of one PR stack
 type: task
 status: open
-assignee:
+assignee: claude (design-overhaul-09)
 blocked-by: [01-shadcn-migration, 04-synthesize-design-spec, 08-project-cards-and-fold]
 ---
 
