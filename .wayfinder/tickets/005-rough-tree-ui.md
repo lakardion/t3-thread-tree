@@ -3,7 +3,7 @@ id: 005
 title: Rough tree UI on a real snapshot
 type: prototype
 status: open
-assignee:
+assignee: claude-005-session
 blocked_by: [001, 004]
 ---
 
