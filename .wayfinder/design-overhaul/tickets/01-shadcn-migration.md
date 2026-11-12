@@ -1,7 +1,7 @@
 ---
 title: Move the page to React + Tailwind and adopt shadcn components
 type: task
-status: in-review
+status: closed
 assignee: claude (design-overhaul-01)
 blocked-by: []
 ---
