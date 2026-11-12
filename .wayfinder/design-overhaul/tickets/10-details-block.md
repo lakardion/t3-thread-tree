@@ -26,3 +26,9 @@ Each thread row has a details button that opens the block of `DESIGN-SPEC.md` â€
 - An open block stays open after a push.
 - A launched thread under "No issue key" shows "Launched by" with a link.
 - The block shows no last message and no subagent or background task data.
+
+## Handed over from design-overhaul-07
+
+- The "+N" count in `ThreadRow` (`src/page/app.tsx`) is a plain `<span>`. This key makes it the button that opens the details block.
+- Key 07 added no button to the row, so it added no touch-target rule. The 44 px touch target of `DESIGN-SPEC.md` â€º Narrow screens is for the details button and the "+N" button of this key.
+- Below 720 px the right group of the row wraps to its own line (`max-[720px]:` classes on the row). Put the details button in that group.

@@ -25,3 +25,9 @@ Projects are cards, groups follow `DESIGN-SPEC.md` › Groups, and the first loa
 - The checks in `DESIGN-SPEC.md` › Checks for each build key pass.
 - A key group with one thread uses one row. A key group with two threads keeps its header.
 - Closed rows stay closed after a push and after a reload.
+
+## Handed over from design-overhaul-07
+
+- The nested thread list in `ThreadRow` (`src/page/app.tsx`) still indents 18 px. The 16 px rule of `DESIGN-SPEC.md` › Groups is for this key.
+- The key chip goes in `ThreadRow` between the phrase column and the title. Use the `CHIP` class string for the 6 px radius and the 11 px text.
+- `StatusIcon` is the one status shape for a row and for a closed branch. It turns only inside `.thread-row`, so a closed branch shows still icons.
