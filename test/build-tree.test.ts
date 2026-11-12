@@ -2,7 +2,7 @@ import { describe, expect, test } from "bun:test";
 import { buildTree, issueKey, statusOf, type BuildInput } from "../src/server/build-tree.ts";
 import { decodeItem, decodeThread, type Thread } from "../src/server/t3.ts";
 import { launchedIds } from "../src/server/lineage.ts";
-import type { Branch, ThreadNode } from "../src/shared/tree.ts";
+import type { Branch, Status, ThreadNode } from "../src/shared/tree.ts";
 
 const NOW = Date.parse("2026-11-12T12:00:00.000Z");
 let clock = 0;
@@ -219,25 +219,104 @@ describe("PR stack", () => {
     expect(child(tree, "frontend", "WEB-2").threads[0]!.prs.map((p) => p.n)).toEqual([11, 99]);
     const closed = child(tree, "frontend", "WEB-5").threads[0]!;
     expect(closed.stack).toBeNull();
-    expect(closed.prs).toEqual([{ n: 20, url: "https://github.com/org/repo/pull/20", state: "merged" }]);
+    expect(closed.prs).toEqual([
+      { n: 20, url: "https://github.com/org/repo/pull/20", state: "merged", draft: false, checks: null, review: null, conflicting: false },
+    ]);
   });
 });
 
 describe("status", () => {
   const s = (over: Record<string, unknown>) => statusOf(decodeThread(shell("a", "x", over)) as Thread, NOW);
-  test("mapping table", () => {
-    for (const st of ["running", "queued", "preparing", "starting"]) expect(s({ status: st })).toBe("running");
-    expect(s({ status: "completed" })).toBe("completed");
-    for (const st of ["cancelled", "failed", "interrupted"]) expect(s({ status: st })).toBe("cancelled");
-    expect(s({ status: "idle" })).toBe("idle");
-    expect(s({ status: "something-new" })).toBe("idle");
+  const req = (kind: string, extra: object = {}) => ({ id: "r", kind, createdAt: "2026-11-12T09:00:00.000Z", ...extra });
+  const SNOOZE = "2026-11-13T00:00:00.000Z";
+  const DONE_AT = { latestRunCompletedAt: "2026-11-12T10:00:00.000Z" };
+
+  test.each<[string, Record<string, unknown>, Status]>([
+    ["request", { pendingRuntimeRequest: req("user_input") }, "needs-input"],
+    ["guest message", { pendingGuestMessageCount: 2 }, "needs-input"],
+    ["snooze", { status: "completed", snoozedUntil: SNOOZE }, "snoozed"],
+    ["waiting", { status: "running", blockedOnThreadWait: true }, "waiting"],
+    ["working", { status: "running" }, "working"],
+    ["waiting run status", { status: "waiting" }, "working"],
+    ["starting", { status: "preparing" }, "starting"],
+    ["plan-ready", { status: "completed", interactionMode: "plan", hasActionableProposedPlan: true }, "plan-ready"],
+    ["your-turn", { status: "completed", ...DONE_AT }, "your-turn"],
+    ["done", { status: "completed" }, "done"],
+    ["failed", { status: "failed" }, "failed"],
+    ["interrupted", { status: "rolled_back" }, "interrupted"],
+    ["idle", { status: "something-new" }, "idle"],
+    ["request beats snooze", { pendingRuntimeRequest: req("user_input"), snoozedUntil: SNOOZE }, "needs-input"],
+    ["snooze beats run", { status: "running", snoozedUntil: SNOOZE }, "snoozed"],
+    ["past snooze is ignored", { status: "completed", snoozedUntil: "2026-11-11T00:00:00.000Z" }, "done"],
+    ["non-blocking request does not block", { status: "running", pendingRuntimeRequest: req("user_input", { blocking: false }) }, "working"],
+    ["activity run status beats status", { status: "idle", activityRunStatus: "running" }, "working"],
+    ["plan-ready beats your-turn", { status: "completed", interactionMode: "plan", hasActionableProposedPlan: true, ...DONE_AT }, "plan-ready"],
+    ["plan without proposal", { status: "completed", interactionMode: "plan" }, "done"],
+  ])("%s", (_name, over, status) => {
+    expect(s(over).status).toBe(status);
   });
-  test("pending request wins over status and snooze; snooze wins over status", () => {
-    const req = { id: "r", kind: "user_input", createdAt: "2026-11-12T09:00:00.000Z" };
-    expect(s({ status: "running", pendingRuntimeRequest: req })).toBe("needs-input");
-    expect(s({ pendingRuntimeRequest: req, snoozedUntil: "2026-11-13T00:00:00.000Z" })).toBe("needs-input");
-    expect(s({ status: "running", snoozedUntil: "2026-11-13T00:00:00.000Z" })).toBe("snoozed");
-    expect(s({ status: "completed", snoozedUntil: "2026-11-11T00:00:00.000Z" })).toBe("completed");
+
+  test.each([
+    ["command", "Approval"],
+    ["file-read", "Approval"],
+    ["file-change", "Approval"],
+    ["permission", "Approval"],
+    ["dynamic_tool_call", "Approval"],
+    ["user_input", "Question"],
+    ["mcp-elicitation", "Question"],
+    ["auth_refresh", "Sign in"],
+    ["constructor", "Input"],
+    ["unknown", "Input"],
+  ])("request kind %s reads %s", (kind, phrase) => {
+    expect(s({ pendingRuntimeRequest: req(kind) }).phrase).toBe(phrase);
+  });
+
+  test("guest messages alone, or with a non-blocking request, read Guest message with no since", () => {
+    expect(s({ pendingGuestMessageCount: 1 })).toEqual({ status: "needs-input", phrase: "Guest message", since: null });
+    expect(s({ pendingGuestMessageCount: 1, pendingRuntimeRequest: req("command", { blocking: false }) }).phrase).toBe("Guest message");
+  });
+
+  test.each<[string, Record<string, unknown>, Status]>([
+    ["no completion time", { status: "completed" }, "done"],
+    ["never visited", { status: "completed", ...DONE_AT }, "your-turn"],
+    ["visited before", { status: "completed", ...DONE_AT, lastVisitedAt: "2026-11-12T09:00:00.000Z" }, "your-turn"],
+    ["visited after", { status: "completed", ...DONE_AT, lastVisitedAt: "2026-11-12T11:00:00.000Z" }, "done"],
+  ])("unseen completion: %s", (_name, over, status) => {
+    expect(s(over).status).toBe(status);
+  });
+
+  test("since: request time, activity run start, else latest run start", () => {
+    expect(s({ pendingRuntimeRequest: req("command") }).since).toBe("2026-11-12T09:00:00.000Z");
+    const both = { status: "running", activityRunStartedAt: "2026-11-12T08:00:00.000Z", latestRunStartedAt: "2026-11-12T07:00:00.000Z" };
+    expect(s(both).since).toBe("2026-11-12T08:00:00.000Z");
+    expect(s({ ...both, activityRunStartedAt: null }).since).toBe("2026-11-12T07:00:00.000Z");
+    expect(s({ status: "completed", ...DONE_AT }).since).toBeNull();
+  });
+
+  test("Queued, Starting and Cancelled phrases", () => {
+    expect(s({ status: "queued" }).phrase).toBe("Queued");
+    expect(s({ status: "starting" }).phrase).toBe("Starting");
+    expect(s({ status: "cancelled" })).toEqual({ status: "interrupted", phrase: "Cancelled", since: null });
+    expect(s({ status: "interrupted" }).phrase).toBe("Interrupted");
+  });
+
+  test("node carries key, updatedAt, settled, input and PR marks; absent snapshot fields give false or null", () => {
+    const marked = {
+      ...pr(7, "created"),
+      snapshot: { ...pr(7, "created").snapshot, isDraft: true, checksState: "failing", reviewDecision: "changes-requested", mergeability: "conflicting" },
+    };
+    const [t] = build([
+      shell("a", "SHOP-1 x", {
+        settledAt: "2026-11-12T09:00:00.000Z",
+        pendingRuntimeRequest: req("command", { blocking: false }),
+        pullRequests: [marked, pr(8, "manual")],
+      }),
+    ], {}, { settled: true })[0]!.branches[0]!.threads;
+    expect(t).toMatchObject({ key: "SHOP-1", settled: true, input: true, updatedAt: expect.any(String) });
+    expect(t!.prs).toEqual([
+      { n: 7, url: "https://github.com/org/repo/pull/7", state: "open", draft: true, checks: "failing", review: "changes-requested", conflicting: true },
+      { n: 8, url: "https://github.com/org/repo/pull/8", state: "open", draft: false, checks: null, review: null, conflicting: false },
+    ]);
   });
 });
 

@@ -1,7 +1,7 @@
 /** Serves the page with made-up threads, run through the real tree rules. No T3 needed. */
 import index from "../src/page/index.html";
 import { buildTree } from "../src/server/build-tree.ts";
-import type { Thread } from "../src/server/t3.ts";
+import type { Pr, Thread } from "../src/server/t3.ts";
 
 const now = Date.now();
 const ago = (min: number) => new Date(now - min * 60_000).toISOString();
@@ -18,8 +18,16 @@ function t(title: string, over: Partial<Thread> = {}): Thread {
     status: "completed",
     parentThreadId: null,
     sideChat: false,
-    needsInput: false,
-    pendingKind: null,
+    pending: null,
+    guestMessages: null,
+    activityRunStatus: null,
+    blockedOnThreadWait: false,
+    hasPlan: false,
+    interactionMode: null,
+    latestRunCompletedAt: null,
+    lastVisitedAt: null,
+    activityRunStartedAt: null,
+    latestRunStartedAt: null,
     settledAt: null,
     snoozedUntil: null,
     updatedAt: ago(seq * 7),
@@ -31,28 +39,46 @@ function t(title: string, over: Partial<Thread> = {}): Thread {
 
 /** A four-PR stack spread over four issue keys. */
 const STACK = [2101, 2102, 2104, 2107];
-const stacked = (own: number) => [
-  { n: own, url: gh(own), source: "created", state: "open" },
-  ...STACK.filter((n) => n !== own).map((n) => ({ n, url: gh(n), source: "stack", state: "open" })),
+const pr = (n: number, source: string, state = "open", over: Partial<Pr> = {}): Pr => ({
+  n,
+  url: gh(n),
+  source,
+  state,
+  draft: null,
+  checks: null,
+  review: null,
+  mergeability: null,
+  ...over,
+});
+const stacked = (own: number, over: Partial<Pr> = {}) => [
+  pr(own, "created", "open", over),
+  ...STACK.filter((n) => n !== own).map((n) => pr(n, "stack")),
 ];
+const request = (kind: string, blocking: boolean | null = null) => ({ kind, createdAt: ago(12), blocking });
+const completed = { latestRunCompletedAt: ago(30) };
 
 const threads: Thread[] = [
-  t("SHOP-412 · Checkout: split the payment step into its own route", { status: "running", prs: stacked(2101) }),
-  t("SHOP-413 · Saved cards list with default selection", { needsInput: true, pendingKind: "user_input", status: "running", prs: stacked(2102) }),
-  t("SHOP-415 · Apple Pay button behind a feature flag", { prs: stacked(2104) }),
-  t("SHOP-418 · Order summary sidebar in the new design", { status: "interrupted", prs: stacked(2107) }),
-  t("Review #2088 SHOP-398", { prs: [{ n: 2088, url: gh(2088), source: "agent", state: "open" }] }),
-  t("Review #2093 SHOP-401", { status: "running", prs: [{ n: 2093, url: gh(2093), source: "agent", state: "open" }] }),
-  t("Review #2095 SHOP-401", { prs: [{ n: 2095, url: gh(2095), source: "agent", state: "merged" }] }),
+  t("SHOP-412 · Checkout: split the payment step into its own route", { status: "running", activityRunStartedAt: ago(9), prs: stacked(2101, { checks: "pending" }) }),
+  t("SHOP-413 · Saved cards list with default selection", { pending: request("user_input"), status: "running", prs: stacked(2102, { checks: "passing", review: "approved" }) }),
+  t("SHOP-415 · Apple Pay button behind a feature flag", { ...completed, lastVisitedAt: ago(5), prs: stacked(2104, { draft: true }) }),
+  t("SHOP-418 · Order summary sidebar in the new design", { status: "interrupted", prs: stacked(2107, { checks: "failing", review: "changes-requested", mergeability: "conflicting" }) }),
+  t("Review #2088 SHOP-398", { prs: [pr(2088, "agent")] }),
+  t("Review #2093 SHOP-401", { status: "running", prs: [pr(2093, "agent")] }),
+  t("Review #2095 SHOP-401", { prs: [pr(2095, "agent", "merged")] }),
   t("Design-system migration map", { id: "map", status: "idle" }),
   t("Migrate Button to the new tokens", { id: "m1", status: "running" }),
   t("Migrate Dialog to the new tokens", { id: "m2" }),
   t("Migrate Tooltip to the new tokens", { id: "m3", snoozedUntil: later(20) }),
   t("Flaky e2e: cart badge count", { status: "failed" }),
   t("API-77 · Rate-limit the search endpoint per API key", { projectId: "api", status: "running" }),
-  t("API-81 · Move webhook retries to a durable queue", { projectId: "api", needsInput: true, pendingKind: "approval" }),
+  t("API-81 · Move webhook retries to a durable queue", { projectId: "api", pending: request("command") }),
   t("Investigate slow cold starts", { projectId: "api", snoozedUntil: later(14), status: "idle" }),
-  t("DOC-12 · Getting-started guide for the CLI", { projectId: "docs" }),
+  t("DOC-12 · Getting-started guide for the CLI", { projectId: "docs", ...completed }),
+  t("API-90 · Queue the nightly export job", { projectId: "api", status: "queued" }),
+  t("API-91 · Fan out the reindex across shards", { projectId: "api", status: "running", blockedOnThreadWait: true }),
+  t("API-92 · Draft the pagination plan", { projectId: "api", ...completed, interactionMode: "plan", hasPlan: true }),
+  t("API-93 · Confirm the retry policy", { projectId: "api", status: "running", pending: request("command", false) }),
+  t("DOC-14 · Review the changelog wording", { projectId: "docs", guestMessages: 1 }),
   t("Fix broken anchors after the sidebar change", { projectId: "docs", status: "cancelled" }),
 ];
 const spawners: Record<string, string> = { m1: "map", m2: "map", m3: "map" };

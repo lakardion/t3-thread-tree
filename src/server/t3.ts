@@ -8,7 +8,16 @@ import type { Conn } from "../shared/tree.ts";
 
 export const USERDATA = join(homedir(), ".t3", "userdata");
 
-export type Pr = { n: number; url: string; source: string; state: string };
+export type Pr = {
+  n: number;
+  url: string;
+  source: string;
+  state: string;
+  draft: boolean | null;
+  checks: string | null;
+  review: string | null;
+  mergeability: string | null;
+};
 
 export type Thread = {
   id: string;
@@ -17,8 +26,16 @@ export type Thread = {
   status: string;
   parentThreadId: string | null;
   sideChat: boolean;
-  needsInput: boolean;
-  pendingKind: string | null;
+  pending: { kind: string | null; createdAt: string | null; blocking: boolean | null } | null;
+  guestMessages: number | null;
+  activityRunStatus: string | null;
+  blockedOnThreadWait: boolean;
+  hasPlan: boolean;
+  interactionMode: string | null;
+  latestRunCompletedAt: string | null;
+  lastVisitedAt: string | null;
+  activityRunStartedAt: string | null;
+  latestRunStartedAt: string | null;
   settledAt: string | null;
   snoozedUntil: string | null;
   updatedAt: string;
@@ -37,6 +54,8 @@ export type StreamEvent =
 type Obj = Record<string, unknown>;
 const obj = (v: unknown): Obj => (v && typeof v === "object" ? (v as Obj) : {});
 const str = (v: unknown): string | null => (typeof v === "string" ? v : null);
+const num = (v: unknown): number | null => (typeof v === "number" ? v : null);
+const bool = (v: unknown): boolean | null => (typeof v === "boolean" ? v : null);
 
 /** Lenient decode: many shell fields are optional, and unknown fields are ignored. */
 export function decodeThread(raw: unknown): Thread | null {
@@ -53,8 +72,16 @@ export function decodeThread(raw: unknown): Thread | null {
     status: str(t.status) ?? "idle",
     parentThreadId: str(lineage.parentThreadId),
     sideChat: lineage.sideChat === true,
-    needsInput: pending !== null,
-    pendingKind: pending ? str(pending.kind) : null,
+    pending: pending && { kind: str(pending.kind), createdAt: str(pending.createdAt), blocking: bool(pending.blocking) },
+    guestMessages: num(t.pendingGuestMessageCount),
+    activityRunStatus: str(t.activityRunStatus),
+    blockedOnThreadWait: t.blockedOnThreadWait === true,
+    hasPlan: t.hasActionableProposedPlan === true,
+    interactionMode: str(t.interactionMode),
+    latestRunCompletedAt: str(t.latestRunCompletedAt),
+    lastVisitedAt: str(t.lastVisitedAt),
+    activityRunStartedAt: str(t.activityRunStartedAt),
+    latestRunStartedAt: str(t.latestRunStartedAt),
     settledAt: str(t.settledAt),
     snoozedUntil: str(t.snoozedUntil),
     updatedAt: str(t.updatedAt) ?? "",
@@ -64,8 +91,20 @@ export function decodeThread(raw: unknown): Thread | null {
       const n = typeof o.number === "number" ? o.number : null;
       if (n === null) return [];
       /** A link not synced yet has no snapshot; count it as open. */
-      const state = str(obj(o.snapshot).state) ?? "open";
-      return [{ n, url: str(o.url) ?? "", source: str(o.source) ?? "", state }];
+      const snap = obj(o.snapshot);
+      const state = str(snap.state) ?? "open";
+      return [
+        {
+          n,
+          url: str(o.url) ?? "",
+          source: str(o.source) ?? "",
+          state,
+          draft: bool(snap.isDraft),
+          checks: str(snap.checksState),
+          review: str(snap.reviewDecision),
+          mergeability: str(snap.mergeability),
+        },
+      ];
     }),
   };
 }

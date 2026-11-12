@@ -1,5 +1,5 @@
 /** The tree rules: visibility, placement, stack order and status. Pure, so `bun test` covers it. */
-import type { Branch, Status, ThreadNode } from "../shared/tree.ts";
+import type { Branch, PrNode, Status, ThreadNode } from "../shared/tree.ts";
 import type { Thread } from "./t3.ts";
 
 const KEY = /\b[A-Z][A-Z0-9]+-\d+\b/;
@@ -9,24 +9,32 @@ export const REVIEWS = "Reviews";
 
 export const issueKey = (title: string): string | null => title.match(KEY)?.[0] ?? null;
 
-export function statusOf(t: Thread, now: number): Status {
-  if (t.needsInput) return "needs-input";
-  if (t.snoozedUntil && Date.parse(t.snoozedUntil) > now) return "snoozed";
-  switch (t.status) {
-    case "running":
-    case "queued":
-    case "preparing":
-    case "starting":
-    case "waiting":
-      return "running";
-    case "completed":
-      return "completed";
-    case "cancelled":
-    case "failed":
-    case "interrupted":
-      return "cancelled";
+const REQUEST = new Map([
+  ...["command", "file-read", "file-change", "permission", "dynamic_tool_call"].map((k) => [k, "Approval"] as const),
+  ...["user_input", "mcp-elicitation"].map((k) => [k, "Question"] as const),
+  ["auth_refresh", "Sign in"],
+]);
+
+/** The first matching rule wins; the order is the contract. */
+export function statusOf(t: Thread, now: number): { status: Status; phrase: string; since: string | null } {
+  const run = t.activityRunStatus ?? t.status;
+  const out = (status: Status, phrase: string, since: string | null = null) => ({ status, phrase, since });
+  const blocking = t.pending && t.pending.blocking !== false ? t.pending : null;
+  if (blocking) return out("needs-input", REQUEST.get(blocking.kind ?? "") ?? "Input", blocking.createdAt);
+  if ((t.guestMessages ?? 0) > 0) return out("needs-input", "Guest message");
+  if (t.snoozedUntil && Date.parse(t.snoozedUntil) > now) return out("snoozed", "Snoozed");
+  if (run === "running" || run === "waiting")
+    return t.blockedOnThreadWait ? out("waiting", "Waiting") : out("working", "Working", t.activityRunStartedAt ?? t.latestRunStartedAt);
+  if (run === "queued" || run === "preparing" || run === "starting") return out("starting", run === "queued" ? "Queued" : "Starting");
+  if (run === "completed") {
+    if (t.interactionMode === "plan" && t.hasPlan) return out("plan-ready", "Plan ready");
+    const unseen = t.latestRunCompletedAt && (!t.lastVisitedAt || Date.parse(t.lastVisitedAt) < Date.parse(t.latestRunCompletedAt));
+    return unseen ? out("your-turn", "Your turn") : out("done", "Done");
   }
-  return "idle";
+  if (run === "failed") return out("failed", "Failed");
+  if (run === "interrupted" || run === "cancelled" || run === "rolled_back")
+    return out("interrupted", run === "cancelled" ? "Cancelled" : "Interrupted");
+  return out("idle", "Idle");
 }
 
 export type BuildInput = {
@@ -38,11 +46,23 @@ export type BuildInput = {
   now: number;
 };
 
-type Node = ThreadNode & { t: Thread; latest: string; key: string | null };
+type Node = ThreadNode & { t: Thread; latest: string };
 type Group = { key: string; nodes: Node[]; latest: string };
 type Stack = { set: Set<number>; threads: Thread[]; order: number[] };
 
 const stackPrs = (t: Thread) => t.prs.filter((p) => STACK_SOURCES.has(p.source) && p.state === "open").map((p) => p.n);
+const CHECKS = ["passing", "failing", "pending"] as const;
+const REVIEWS_STATE = ["approved", "changes-requested", "review-required"] as const;
+const narrow = <T extends string>(v: string | null, set: readonly T[]): T | null => set.find((x) => x === v) ?? null;
+const prNode = (p: Thread["prs"][number]): PrNode => ({
+  n: p.n,
+  url: p.url,
+  state: p.state,
+  draft: p.draft === true,
+  checks: narrow(p.checks, CHECKS),
+  review: narrow(p.review, REVIEWS_STATE),
+  conflicting: p.mergeability === "conflicting",
+});
 const byLatest = <T extends { latest: string }>(a: T, b: T) => b.latest.localeCompare(a.latest);
 
 /**
@@ -98,14 +118,17 @@ export function buildTree(input: BuildInput): Branch[] {
       id: t.id,
       href: `t3code://threads/${encodeURIComponent(environmentId)}/${encodeURIComponent(t.id)}`,
       title: t.title,
-      status: statusOf(t, now),
-      raw: t.needsInput ? `${t.status} · pending ${t.pendingKind ?? "request"}` : t.status,
+      key: issueKey(t.title),
+      ...statusOf(t, now),
+      raw: t.pending ? `${t.status} · pending ${t.pending.kind ?? "request"}` : t.status,
+      updatedAt: t.updatedAt,
+      settled: !!t.settledAt,
+      input: t.pending?.blocking === false,
       snoozedUntil: t.snoozedUntil && Date.parse(t.snoozedUntil) > now ? t.snoozedUntil : null,
       stack: st ? { pos, total: st.order.length } : null,
-      prs: t.prs.filter((p) => p.source !== "stack" && p.source !== "stack-dismissed").map(({ n, url, state }) => ({ n, url, state })),
+      prs: t.prs.filter((p) => p.source !== "stack" && p.source !== "stack-dismissed").map(prNode),
       children: [],
       latest: t.updatedAt,
-      key: issueKey(t.title),
     });
   }
 
@@ -191,4 +214,4 @@ export function buildTree(input: BuildInput): Branch[] {
 }
 
 /** Strips the build-only fields before the node goes on the wire. */
-const clean = ({ t: _t, latest: _l, key: _k, children, ...n }: Node): ThreadNode => ({ ...n, children: (children as Node[]).map(clean) });
+const clean = ({ t: _t, latest: _l, children, ...n }: Node): ThreadNode => ({ ...n, children: (children as Node[]).map(clean) });

@@ -11,19 +11,19 @@ import { cn } from "@/lib/utils";
 
 const TOKEN_CMD =
   "~/.t3/bin/t3 auth session issue --scope orchestration:read --label thread-tree --ttl 52w --token-only";
-const LABEL: Record<Status, string> = {
-  "needs-input": "needs input",
-  running: "running",
-  completed: "done, your turn",
-  cancelled: "cancelled",
-  idle: "idle",
-  snoozed: "snoozed",
-};
+const RUNNING = "bg-status-running";
+const DONE = "bg-status-completed";
+const CANCELLED = "bg-status-cancelled";
 const DOT: Record<Status, string> = {
   "needs-input": "bg-status-needs-input",
-  running: "bg-status-running animate-pulse motion-reduce:animate-none",
-  completed: "bg-status-completed",
-  cancelled: "bg-status-cancelled",
+  working: `${RUNNING} animate-pulse motion-reduce:animate-none`,
+  starting: RUNNING,
+  waiting: RUNNING,
+  "plan-ready": DONE,
+  "your-turn": DONE,
+  done: DONE,
+  failed: CANCELLED,
+  interrupted: CANCELLED,
   idle: "bg-status-idle",
   snoozed: "bg-status-snoozed",
 };
@@ -53,7 +53,7 @@ const Dot = ({ t }: { t: ThreadNode }) => (
       <span className={cn("inline-block size-[9px] flex-none rounded-full", DOT[t.status])} />
     </TooltipTrigger>
     <TooltipContent>
-      {LABEL[t.status]} · {t.raw}
+      {t.phrase} · {t.raw}
     </TooltipContent>
   </Tooltip>
 );
