@@ -1,7 +1,7 @@
 ---
 title: Add the inline details block
 type: task
-status: open
+status: in-review
 assignee: claude (design-overhaul-10)
 blocked-by: [01-shadcn-migration, 04-synthesize-design-spec, 07-thread-row]
 ---
