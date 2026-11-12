@@ -1,5 +1,6 @@
 /** The tree rules: visibility, placement, stack order and status. Pure, so `bun test` covers it. */
-import type { Branch, PrNode, Status, ThreadNode } from "../shared/tree.ts";
+import type { Branch, Detail, PrNode, Status, ThreadNode } from "../shared/tree.ts";
+import { ago } from "../page/format.ts";
 import type { Project, Thread } from "./t3.ts";
 
 const KEY = /\b[A-Z][A-Z0-9]+-\d+\b/;
@@ -62,7 +63,42 @@ const prNode = (p: Thread["prs"][number]): PrNode => ({
   checks: narrow(p.checks, CHECKS),
   review: narrow(p.review, REVIEWS_STATE),
   conflicting: p.mergeability === "conflicting",
+  title: p.title,
+  additions: p.additions,
+  deletions: p.deletions,
+  changedFiles: p.changedFiles,
 });
+const hrefOf = (environmentId: string, id: string) =>
+  `t3code://threads/${encodeURIComponent(environmentId)}/${encodeURIComponent(id)}`;
+
+/** The details of a thread, without the spawner link, which needs the placement. */
+export function detailOf(t: Thread, now: number, all: Map<string, Thread>): Omit<Detail, "launchedBy"> {
+  const fork = t.forkedFromThreadId && all.get(t.forkedFromThreadId);
+  const startedBy = [t.createdBy, t.creationSource].filter((x) => x !== null).join(" via ");
+  return {
+    request: t.pending ? `${t.pending.kind ?? "request"}${t.pending.createdAt ? ` · ${ago(t.pending.createdAt, now)}` : ""}` : null,
+    error: t.lastError === null && t.lastErrorClass === null && t.lastErrorCode === null ? null : { class: t.lastErrorClass, code: t.lastErrorCode, text: t.lastError },
+    limitResetAt: t.limitResetAt,
+    autoResume: t.autoResume,
+    stopRequested: t.stopRequested,
+    model: t.model,
+    planMode: t.interactionMode === "plan",
+    branch: t.branch,
+    worktreePath: t.worktreePath,
+    origin: fork
+      ? `Fork of ${fork.title || fork.id}`
+      : t.delegatedFromTitle !== null
+        ? `Delegated from ${t.delegatedFromTitle}`
+        : t.linkLabel !== null
+          ? `via ${t.linkLabel}`
+          : null,
+    startedBy: startedBy || null,
+    createdAt: t.createdAt,
+    goal: t.goal,
+    tags: t.tags,
+    pinned: t.pinned,
+  };
+}
 const byLatest = <T extends { latest: string }>(a: T, b: T) => b.latest.localeCompare(a.latest);
 
 /**
@@ -100,8 +136,11 @@ export function computeStacks(threads: Thread[]): Stack[] {
 export function buildTree(input: BuildInput): Branch[] {
   const { projects, spawnerOf, environmentId, settled, now } = input;
   const visible = new Map<string, Thread>();
-  for (const t of input.threads)
+  const all = new Map<string, Thread>();
+  for (const t of input.threads) {
+    all.set(t.id, t);
     if (!t.parentThreadId && !t.sideChat && !t.gone && (settled || !t.settledAt)) visible.set(t.id, t);
+  }
 
   const stacks = computeStacks([...visible.values()]);
   const stackIdOf = new Map<string, number>();
@@ -116,7 +155,7 @@ export function buildTree(input: BuildInput): Branch[] {
     nodes.set(t.id, {
       t,
       id: t.id,
-      href: `t3code://threads/${encodeURIComponent(environmentId)}/${encodeURIComponent(t.id)}`,
+      href: hrefOf(environmentId, t.id),
       title: t.title,
       key: issueKey(t.title),
       ...statusOf(t, now),
@@ -127,6 +166,7 @@ export function buildTree(input: BuildInput): Branch[] {
       snoozedUntil: t.snoozedUntil && Date.parse(t.snoozedUntil) > now ? t.snoozedUntil : null,
       stack: st ? { pos, total: st.order.length } : null,
       prs: t.prs.filter((p) => p.source !== "stack" && p.source !== "stack-dismissed").map(prNode),
+      detail: { ...detailOf(t, now, all), launchedBy: null },
       children: [],
       latest: t.updatedAt,
     });
@@ -153,6 +193,8 @@ export function buildTree(input: BuildInput): Branch[] {
   };
   for (const n of nodes.values()) {
     const { t } = n;
+    const sp = spawnerOf(t.id);
+    const spawner = sp ? all.get(sp) : undefined;
     if (t.title.startsWith("Review #")) addTo(t.projectId, REVIEWS, n);
     else if (n.key) addTo(t.projectId, n.key, n);
     else {
@@ -160,6 +202,8 @@ export function buildTree(input: BuildInput): Branch[] {
       if (vs && visible.get(vs)!.projectId === t.projectId) nodes.get(vs)!.children.push(n);
       else addTo(t.projectId, NO_KEY, n);
     }
+    if (spawner && !nodes.get(spawner.id)?.children.includes(n))
+      n.detail.launchedBy = { title: spawner.title || spawner.id, href: hrefOf(environmentId, spawner.id) };
   }
 
   /** The latest update of a node includes its nested threads. Sorts children on the way. */

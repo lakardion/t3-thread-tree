@@ -11,6 +11,29 @@ export type PrNode = {
   checks: "passing" | "failing" | "pending" | null;
   review: "approved" | "changes-requested" | "review-required" | null;
   conflicting: boolean;
+  title: string | null;
+  additions: number | null;
+  deletions: number | null;
+  changedFiles: number | null;
+};
+
+export type Detail = {
+  request: string | null;
+  error: { class: string | null; code: string | null; text: string | null } | null;
+  limitResetAt: string | null;
+  autoResume: boolean;
+  stopRequested: boolean;
+  model: string | null;
+  planMode: boolean;
+  branch: string | null;
+  worktreePath: string | null;
+  launchedBy: { title: string; href: string } | null;
+  origin: string | null;
+  startedBy: string | null;
+  createdAt: string | null;
+  goal: { objective: string; status: string } | null;
+  tags: string[];
+  pinned: boolean;
 };
 
 export type ThreadNode = {
@@ -33,6 +56,7 @@ export type ThreadNode = {
   /** `pos` is null when the thread created no PR in the stack. */
   stack: { pos: number | null; total: number } | null;
   prs: PrNode[];
+  detail: Detail;
   children: ThreadNode[];
 };
 

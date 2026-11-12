@@ -2,7 +2,7 @@
 title: Draw the stack rail around key groups of one PR stack
 type: task
 status: open
-assignee:
+assignee: claude (design-overhaul-09)
 blocked-by: [01-shadcn-migration, 04-synthesize-design-spec, 08-project-cards-and-fold]
 ---
 
@@ -31,3 +31,8 @@ Key groups that share a PR stack sit in one rail with a label row, as in `DESIGN
 - `.project-head` is in `src/page/index.css` in `@layer components`. Put `.stack-rail` there.
 - The demo stack is four folded groups (`SHOP-412`, `SHOP-413`, `SHOP-415`, `SHOP-418`), so the rail holds four rows and no group header.
 - `BuildInput.projects` is `Map<string, Project>` (`title`, `repo`) from `src/server/t3.ts`.
+
+## Handed over from design-overhaul-10
+
+- `ThreadNode` has a required `detail` field and `PrNode` has `title`, `additions`, `deletions` and `changedFiles`. A test that builds a `ThreadNode` by hand must set `detail` (see `test/attention.test.ts`).
+- `ThreadRow` wraps its `<li>` in a `Collapsible`, and an open details block makes the row taller. Check the stack rail with a details block open inside it.

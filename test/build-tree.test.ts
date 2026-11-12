@@ -1,5 +1,6 @@
 import { describe, expect, test } from "bun:test";
 import { buildTree, issueKey, statusOf, type BuildInput } from "../src/server/build-tree.ts";
+import { homedir } from "node:os";
 import { decodeItem, decodeThread, type Thread } from "../src/server/t3.ts";
 import { launchedIds } from "../src/server/lineage.ts";
 import type { Branch, Status, ThreadNode } from "../src/shared/tree.ts";
@@ -277,7 +278,7 @@ describe("PR stack", () => {
     const closed = child(tree, "frontend", "WEB-5").threads[0]!;
     expect(closed.stack).toBeNull();
     expect(closed.prs).toEqual([
-      { n: 20, url: "https://github.com/org/repo/pull/20", state: "merged", draft: false, checks: null, review: null, conflicting: false },
+      { n: 20, url: "https://github.com/org/repo/pull/20", state: "merged", draft: false, checks: null, review: null, conflicting: false, title: "x", additions: null, deletions: null, changedFiles: null },
     ]);
   });
 });
@@ -371,9 +372,109 @@ describe("status", () => {
     ], {}, { settled: true })[0]!.branches[0]!.threads;
     expect(t).toMatchObject({ key: "SHOP-1", settled: true, input: true, updatedAt: expect.any(String) });
     expect(t!.prs).toEqual([
-      { n: 7, url: "https://github.com/org/repo/pull/7", state: "open", draft: true, checks: "failing", review: "changes-requested", conflicting: true },
-      { n: 8, url: "https://github.com/org/repo/pull/8", state: "open", draft: false, checks: null, review: null, conflicting: false },
+      { n: 7, url: "https://github.com/org/repo/pull/7", state: "open", draft: true, checks: "failing", review: "changes-requested", conflicting: true, title: "x", additions: null, deletions: null, changedFiles: null },
+      { n: 8, url: "https://github.com/org/repo/pull/8", state: "open", draft: false, checks: null, review: null, conflicting: false, title: "x", additions: null, deletions: null, changedFiles: null },
     ]);
+  });
+});
+
+describe("details", () => {
+  const node = (raws: object[], id: string, spawners: Record<string, string> = {}) => {
+    const walk = (ts: ThreadNode[]): ThreadNode[] => ts.flatMap((t) => [t, ...walk(t.children)]);
+    const walkB = (b: Branch): ThreadNode[] => [...walk(b.threads), ...b.branches.flatMap(walkB)];
+    return build(raws, spawners).flatMap(walkB).find((t) => t.id === id)!;
+  };
+  const EMPTY = {
+    request: null, error: null, limitResetAt: null, autoResume: false, stopRequested: false, model: null, planMode: false,
+    branch: null, worktreePath: null, launchedBy: null, origin: null, startedBy: null, createdAt: "2026-11-12T08:00:00.000Z",
+    goal: null, tags: [], pinned: false,
+  };
+
+  test("every field decodes into the detail and the PR counts", () => {
+    const full = shell("a", "SHOP-1 x", {
+      pendingRuntimeRequest: { id: "r", kind: "command", createdAt: "2026-11-12T11:57:00.000Z" },
+      lastError: "boom", lastErrorClass: "provider", lastErrorCode: "e1",
+      usageLimitResetAt: "2026-11-12T14:00:00.000Z",
+      limitRecovery: { resetAt: "2026-11-12T15:00:00.000Z", autoResume: true },
+      latestRunStopRequested: true,
+      modelSelection: { model: "m1" },
+      interactionMode: "plan",
+      branch: "b",
+      worktreePath: `${homedir()}/w`,
+      createdBy: "agent", creationSource: "mcp",
+      goal: { objective: "ship", status: "active" },
+      tags: ["x", 3, "y"],
+      pinnedAt: "2026-11-12T08:00:00.000Z",
+      pullRequests: [{ ...pr(1, "created"), snapshot: { ...pr(1, "created").snapshot, additions: 5, deletions: 2, changedFiles: 3 } }],
+    });
+    const t = node([full], "a");
+    expect(t.detail).toEqual({
+      request: "command · 3m",
+      error: { class: "provider", code: "e1", text: "boom" },
+      limitResetAt: "2026-11-12T14:00:00.000Z",
+      autoResume: true,
+      stopRequested: true,
+      model: "m1",
+      planMode: true,
+      branch: "b",
+      worktreePath: "~/w",
+      launchedBy: null,
+      origin: null,
+      startedBy: "agent via mcp",
+      createdAt: "2026-11-12T08:00:00.000Z",
+      goal: { objective: "ship", status: "active" },
+      tags: ["x", "y"],
+      pinned: true,
+    });
+    expect(t.prs[0]).toMatchObject({ title: "x", additions: 5, deletions: 2, changedFiles: 3 });
+    expect(decodeThread(shell("b", "y", { worktreePath: `${homedir()}x/w` }))!.worktreePath).toBe(`${homedir()}x/w`);
+  });
+
+  test("no optional field gives nulls, false and empty lists", () => {
+    const t = node([shell("a", "SHOP-1 x", { pullRequests: [pr(1, "created")] })], "a");
+    expect(t.detail).toEqual(EMPTY);
+    expect(t.prs[0]).toMatchObject({ additions: null, deletions: null, changedFiles: null });
+  });
+
+  test("a request without a kind reads request", () => {
+    expect(node([shell("a", "SHOP-1 x", { pendingRuntimeRequest: { id: "r" } })], "a").detail.request).toBe("request");
+  });
+
+  test("limit reset falls back to limitRecovery.resetAt", () => {
+    const t = node([shell("a", "SHOP-1 x", { limitRecovery: { resetAt: "2026-11-12T15:00:00.000Z" } })], "a");
+    expect(t.detail).toMatchObject({ limitResetAt: "2026-11-12T15:00:00.000Z", autoResume: false });
+  });
+
+  test("origin: fork of a known thread, unknown fork, delegated, link label", () => {
+    const raws = [
+      shell("src", "Source thread"),
+      shell("f1", "SHOP-1 a", { forkedFrom: { kind: "run", threadId: "src" } }),
+      shell("f2", "SHOP-2 b", { forkedFrom: { kind: "run", threadId: "nope" }, delegatedFrom: { title: "Boss" } }),
+      shell("f3", "SHOP-3 c", { forkedFrom: { kind: "run", threadId: "nope" }, linkOrigin: { label: "Linear" } }),
+    ];
+    expect(node(raws, "f1").detail.origin).toBe("Fork of Source thread");
+    expect(node(raws, "f2").detail.origin).toBe("Delegated from Boss");
+    expect(node(raws, "f3").detail.origin).toBe("via Linear");
+  });
+
+  describe("launchedBy", () => {
+    const spawner = { title: "Spawner", href: "t3code://threads/env-1/sp" };
+    test("null when the thread nests under its spawner or the spawner is unknown", () => {
+      const raws = [shell("sp", "Spawner"), shell("k", "keyless")];
+      expect(node(raws, "k", { k: "sp" }).detail.launchedBy).toBeNull();
+      expect(node([shell("k", "keyless")], "k", { k: "ghost" }).detail.launchedBy).toBeNull();
+    });
+    test("set for a keyed thread", () => {
+      expect(node([shell("sp", "Spawner"), shell("k", "SHOP-1 keyed")], "k", { k: "sp" }).detail.launchedBy).toEqual(spawner);
+    });
+    test("set under No issue key when the spawner is in another project", () => {
+      const raws = [shell("sp", "Spawner", { projectId: "p2" }), shell("k", "keyless")];
+      expect(node(raws, "k", { k: "sp" }).detail.launchedBy).toEqual(spawner);
+    });
+    test("names a settled spawner when the thread nests under a grandparent", () => {
+      const raws = [shell("gp", "Grand"), shell("sp", "Spawner", { settledAt: "2026-11-12T09:00:00.000Z" }), shell("k", "keyless")];
+      expect(node(raws, "k", { k: "sp", sp: "gp" }).detail.launchedBy).toEqual(spawner);
+    });
   });
 });
 

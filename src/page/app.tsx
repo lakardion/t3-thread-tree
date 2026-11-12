@@ -22,6 +22,7 @@ import { createRoot } from "react-dom/client";
 import { allThreads, type Branch, type PrNode, type Status, type ThreadNode, type Tree } from "../shared/tree.ts";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { Badge } from "@/components/ui/badge";
+import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader } from "@/components/ui/card";
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
 import { Label } from "@/components/ui/label";
@@ -74,6 +75,11 @@ const until = (iso: string) =>
   new Date(iso).toLocaleString([], { weekday: "short", hour: "2-digit", minute: "2-digit" });
 
 const Now = createContext(Date.now());
+const Details = createContext<{ open: Set<string>; toggle: (id: string) => void; show: (id: string) => void }>({
+  open: new Set(),
+  toggle: () => {},
+  show: () => {},
+});
 const NeedsOnly = createContext(false);
 
 const StatusIcon = ({ t }: { t: ThreadNode }) => {
@@ -93,6 +99,8 @@ const StatusIcon = ({ t }: { t: ThreadNode }) => {
 };
 
 const CHIP = "gap-1 rounded-[6px] px-1.5 py-0 text-[11px] font-normal text-muted-foreground";
+const ROW_BUTTON =
+  "size-5 rounded-[6px] text-muted-foreground motion-reduce:transition-none pointer-coarse:min-h-11 pointer-coarse:min-w-11 focus-visible:border-transparent focus-visible:ring-0 focus-visible:outline-2 focus-visible:outline-solid focus-visible:outline-offset-2 focus-visible:outline-ring";
 const NEED_CHIP =
   "border-transparent bg-[color-mix(in_oklch,var(--status-needs-input)_var(--wash),transparent)] text-status-needs-input-fg";
 const FILTER_ITEM =
@@ -132,10 +140,92 @@ function PrChip({ p }: { p: PrNode }) {
   );
 }
 
+function Line({ label, children }: { label: string; children: ReactNode }) {
+  return (
+    <>
+      <dt className="text-muted-foreground">{label}</dt>
+      <dd className="m-0 min-w-0 break-words">{children}</dd>
+    </>
+  );
+}
+
+const Mono = ({ children }: { children: ReactNode }) => <span className="font-mono">{children}</span>;
+
+function DetailBlock({ t }: { t: ThreadNode }) {
+  const now = useContext(Now);
+  const d = t.detail;
+  const limit = [d.limitResetAt && `resets ${hhmm(d.limitResetAt)}`, d.autoResume && "auto-resume"].filter(Boolean).join(" · ");
+  const tags = [d.tags.join(", "), d.pinned && "Pinned"].filter(Boolean).join(" · ");
+  return (
+    <dl className="m-0 grid grid-cols-[auto_1fr] gap-x-3 gap-y-0.5 py-1 pl-[156px] text-xs max-[720px]:pl-7">
+      {d.request && <Line label="Request">{d.request}</Line>}
+      {d.error && (
+        <Line label="Error">
+          {[[d.error.class, d.error.code].filter(Boolean).join(" · "), d.error.text].filter(Boolean).join(" ")}
+        </Line>
+      )}
+      {limit && <Line label="Limit">{limit}</Line>}
+      {d.stopRequested && <Line label="Run">Stop requested</Line>}
+      {(d.model || d.planMode) && (
+        <Line label="Model">
+          {d.model && <Mono>{d.model}</Mono>}
+          {d.model && d.planMode && " · "}
+          {d.planMode && "plan mode"}
+        </Line>
+      )}
+      {d.branch && (
+        <Line label="Branch">
+          <Mono>{d.branch}</Mono>
+        </Line>
+      )}
+      {d.worktreePath && (
+        <Line label="Worktree">
+          <Mono>{d.worktreePath}</Mono>
+        </Line>
+      )}
+      {d.launchedBy && (
+        <Line label="Launched by">
+          <a className="hover:underline" href={d.launchedBy.href}>
+            {d.launchedBy.title}
+          </a>
+        </Line>
+      )}
+      {d.origin && <Line label="Origin">{d.origin}</Line>}
+      {d.startedBy && <Line label="Started by">{d.startedBy}</Line>}
+      {d.createdAt && <Line label="Created">{ago(d.createdAt, now)}</Line>}
+      {d.goal && (
+        <Line label="Goal">
+          {d.goal.objective} · {d.goal.status}
+        </Line>
+      )}
+      {tags && <Line label="Tags">{tags}</Line>}
+      {t.prs.map((p, i) => (
+        <Line key={p.n} label={i === 0 ? "PRs" : ""}>
+          <a className="font-mono hover:underline" href={p.url} target="_blank" rel="noreferrer">
+            #{p.n}
+          </a>{" "}
+          {[
+            p.title,
+            p.draft ? `${p.state} (draft)` : p.state,
+            p.checks && `checks ${p.checks}`,
+            p.review,
+            p.additions !== null && p.deletions !== null && `+${p.additions} -${p.deletions}`,
+            p.changedFiles !== null && `${p.changedFiles} ${p.changedFiles === 1 ? "file" : "files"}`,
+          ]
+            .filter(Boolean)
+            .join(" · ")}
+        </Line>
+      ))}
+    </dl>
+  );
+}
+
 function ThreadRow({ t, chip }: { t: ThreadNode; chip?: string }) {
   const now = useContext(Now);
+  const { open, toggle, show } = useContext(Details);
   const dim = useContext(NeedsOnly) && !needsYou(t.status);
   return (
+    <Collapsible asChild open={open.has(t.id)} onOpenChange={() => toggle(t.id)}>
     <li className="my-px">
       <div
         className="thread-row flex min-h-9 min-w-0 items-center gap-x-2 rounded-[8px] px-2 text-[13px] leading-5 max-[720px]:flex-wrap max-[720px]:py-1"
@@ -186,15 +276,32 @@ function ThreadRow({ t, chip }: { t: ThreadNode; chip?: string }) {
           {t.prs.slice(0, 2).map((p) => (
             <PrChip key={p.n} p={p} />
           ))}
-          {t.prs.length > 2 && <span className="text-[11px] text-muted-foreground">+{t.prs.length - 2}</span>}
+          {t.prs.length > 2 && (
+            <Button
+              variant="ghost"
+              className={cn(ROW_BUTTON, "w-auto px-1 text-[11px] font-normal")}
+              title={`Show all ${t.prs.length} pull requests`}
+              onClick={() => show(t.id)}
+            >
+              +{t.prs.length - 2}
+            </Button>
+          )}
           <Tooltip>
             <TooltipTrigger asChild>
               <span className="font-mono text-[11px] tabular-nums text-muted-foreground">{ago(t.updatedAt, now)}</span>
             </TooltipTrigger>
             <TooltipContent>Updated {new Date(t.updatedAt).toLocaleString()}</TooltipContent>
           </Tooltip>
+          <CollapsibleTrigger asChild>
+            <Button variant="ghost" size="icon" className={cn(ROW_BUTTON, "group")} aria-label="Details">
+              <ChevronDown className="size-3.5 group-data-[state=open]:rotate-180" />
+            </Button>
+          </CollapsibleTrigger>
         </span>
       </div>
+      <CollapsibleContent>
+        <DetailBlock t={t} />
+      </CollapsibleContent>
       {t.children.length > 0 && (
         <ul className="m-0 list-none pl-4">
           {t.children.map((c) => (
@@ -203,6 +310,7 @@ function ThreadRow({ t, chip }: { t: ThreadNode; chip?: string }) {
         </ul>
       )}
     </li>
+    </Collapsible>
   );
 }
 
@@ -326,6 +434,7 @@ function App() {
   const [needsOnly, setNeedsOnly] = useState(load(FILTER_KEY) === "needs");
   const [theme, setTheme] = useState<Theme>(() => THEMES.find((t) => t === load(THEME_KEY)) ?? "system");
   const [now, setNow] = useState(Date.now);
+  const [shown, setShown] = useState(() => new Set<string>());
   const [closed, setClosed] = useState(() => new Set<string>(JSON.parse(load(CLOSED_KEY) ?? "[]") as string[]));
 
   useEffect(() => {
@@ -362,6 +471,16 @@ function App() {
     save(CLOSED_KEY, JSON.stringify([...n]));
   };
 
+  const details = {
+    open: shown,
+    toggle: (id: string) =>
+      setShown((s) => {
+        const n = new Set(s);
+        n.has(id) ? n.delete(id) : n.add(id);
+        return n;
+      }),
+    show: (id: string) => setShown((s) => new Set(s).add(id)),
+  };
   const counts = countAttention(tree?.projects ?? []);
   const projects = tree && needsOnly ? onlyNeedsYou(tree.projects) : tree?.projects;
 
@@ -436,6 +555,7 @@ function App() {
           </AlertDescription>
         </Alert>
       )}
+      <Details value={details}>
       <NeedsOnly value={needsOnly}>
         <Now value={now}>
           <div
@@ -461,6 +581,7 @@ function App() {
           </div>
         </Now>
       </NeedsOnly>
+      </Details>
     </TooltipProvider>
   );
 }

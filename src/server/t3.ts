@@ -18,6 +18,10 @@ export type Pr = {
   review: string | null;
   mergeability: string | null;
   stackBase: string | null;
+  title: string | null;
+  additions: number | null;
+  deletions: number | null;
+  changedFiles: number | null;
 };
 
 export type Thread = {
@@ -42,6 +46,24 @@ export type Thread = {
   updatedAt: string;
   gone: boolean;
   prs: Pr[];
+  lastError: string | null;
+  lastErrorClass: string | null;
+  lastErrorCode: string | null;
+  limitResetAt: string | null;
+  autoResume: boolean;
+  stopRequested: boolean;
+  model: string | null;
+  branch: string | null;
+  worktreePath: string | null;
+  forkedFromThreadId: string | null;
+  delegatedFromTitle: string | null;
+  linkLabel: string | null;
+  createdBy: string | null;
+  creationSource: string | null;
+  createdAt: string | null;
+  goal: { objective: string; status: string } | null;
+  tags: string[];
+  pinned: boolean;
 };
 
 export type Project = { title: string; repo: string | null };
@@ -60,6 +82,12 @@ const str = (v: unknown): string | null => (typeof v === "string" ? v : null);
 const num = (v: unknown): number | null => (typeof v === "number" ? v : null);
 const bool = (v: unknown): boolean | null => (typeof v === "boolean" ? v : null);
 
+/** Shows the home folder as `~`, only at a path boundary. */
+const tilde = (p: string | null): string | null => {
+  const home = homedir();
+  return p !== null && (p === home || p.startsWith(`${home}/`)) ? `~${p.slice(home.length)}` : p;
+};
+
 /** `owner/name` from `repositoryIdentity`, or null when a part is absent. */
 const repoOf = (p: Obj): string | null => {
   const r = obj(p.repositoryIdentity);
@@ -76,6 +104,8 @@ export function decodeThread(raw: unknown): Thread | null {
   const lineage = obj(t.lineage);
   const pending = t.pendingRuntimeRequest ? obj(t.pendingRuntimeRequest) : null;
   const prs = Array.isArray(t.pullRequests) ? t.pullRequests : [];
+  const recovery = obj(t.limitRecovery);
+  const goal = obj(t.goal);
   return {
     id,
     projectId: str(t.projectId) ?? "",
@@ -115,9 +145,31 @@ export function decodeThread(raw: unknown): Thread | null {
           review: str(snap.reviewDecision),
           mergeability: str(snap.mergeability),
           stackBase: str(obj(o.stack).base),
+          title: str(snap.title),
+          additions: num(snap.additions),
+          deletions: num(snap.deletions),
+          changedFiles: num(snap.changedFiles),
         },
       ];
     }),
+    lastError: str(t.lastError),
+    lastErrorClass: str(t.lastErrorClass),
+    lastErrorCode: str(t.lastErrorCode),
+    limitResetAt: str(t.usageLimitResetAt) ?? str(recovery.resetAt),
+    autoResume: recovery.autoResume === true,
+    stopRequested: t.latestRunStopRequested === true,
+    model: str(obj(t.modelSelection).model),
+    branch: str(t.branch),
+    worktreePath: tilde(str(t.worktreePath)),
+    forkedFromThreadId: str(obj(t.forkedFrom).threadId),
+    delegatedFromTitle: str(obj(t.delegatedFrom).title),
+    linkLabel: str(obj(t.linkOrigin).label),
+    createdBy: str(t.createdBy),
+    creationSource: str(t.creationSource),
+    createdAt: str(t.createdAt),
+    goal: typeof goal.objective === "string" && typeof goal.status === "string" ? { objective: goal.objective, status: goal.status } : null,
+    tags: Array.isArray(t.tags) ? t.tags.filter((x): x is string => typeof x === "string") : [],
+    pinned: typeof t.pinnedAt === "string",
   };
 }
 

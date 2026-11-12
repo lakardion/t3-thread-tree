@@ -17,6 +17,7 @@ const thread = (id: string, status: Status, children: ThreadNode[] = []): Thread
   snoozedUntil: null,
   stack: null,
   prs: [],
+  detail: {} as ThreadNode["detail"],
   children,
 });
 const branch = (id: string, threads: ThreadNode[], branches: Branch[] = []): Branch => ({
