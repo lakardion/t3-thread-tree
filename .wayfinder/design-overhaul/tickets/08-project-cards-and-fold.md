@@ -2,7 +2,7 @@
 title: Draw project cards, fold single-thread key groups, add the skeleton
 type: task
 status: open
-assignee:
+assignee: claude (design-overhaul-08)
 blocked-by: [01-shadcn-migration, 04-synthesize-design-spec, 07-thread-row]
 ---
 
