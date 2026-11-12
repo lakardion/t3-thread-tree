@@ -4,6 +4,13 @@
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width,initial-scale=1" />
     <title>Thread tree</title>
+    <script>
+      try {
+        var t = localStorage.getItem("thread-tree:theme");
+        if (t === "dark" || (t !== "light" && matchMedia("(prefers-color-scheme: dark)").matches))
+          document.documentElement.classList.add("dark");
+      } catch (e) {}
+    </script>
     <link rel="stylesheet" href="./index.css" />
   </head>
   <body>

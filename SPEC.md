@@ -86,27 +86,11 @@ A **top-level thread** has no native `parentThreadId`. A **subagent** has `relat
 
 ## UI
 
-Source: [Rough tree UI on a real snapshot](.wayfinder/tickets/005-rough-tree-ui.md). Reference design: variant D in `prototype/005-tree-ui/thread-tree-prototype.html` on branch `prototype/005-tree-ui`.
+The page shows an outline tree: Project, group, thread. Each thread row has a status dot, a title link to `t3code://threads/<environmentId>/<threadId>`, a stack badge and PR links. Closed rows are saved in `localStorage`. A toggle shows settled threads. A banner shows when T3 is down or rejects the token.
 
-- **Layout:** an outline tree with one indented line per node: Project › group › thread. Keyless threads nest under their spawner.
-- **Disclosure:** project and group rows have an arrow. All rows are open at first load. A closed group shows one status dot per thread.
-- **Closed rows:**
-  - The page keeps the ids of closed rows in one Set, outside the pushed tree. A new tree from a push does not open them again.
-  - The page saves the Set in `localStorage`.
-- **Node:** a status dot, then the title as a link to `t3code://threads/<environmentId>/<threadId>`, then the stack badge, then the PR numbers as links to their PRs. The PRs are the thread's `pullRequests` without `source: stack`. A snoozed thread also shows the badge "until <time>".
-- **Status dot:** the tooltip shows the raw status.
+A pending request wins over snooze. A snoozed thread with a pending request shows as needs input.
 
-  | Shown as | Color | When |
-  |---|---|---|
-  | needs input | orange | The thread has a pending runtime request (`pendingRuntimeRequest`). This wins over the status. |
-  | running | blue, pulsing | `running`, `queued`, `preparing`, `starting` |
-  | done, your turn | green | `completed` |
-  | cancelled | red | `cancelled`, `failed`, `interrupted` |
-  | idle | grey | `idle` |
-  | snoozed | grey, title muted | The thread is snoozed. This wins over the status. |
-
-- **Settled toggle:** it shows settled top-level threads. It does not show archived threads.
-- **Banner:** "T3 not running: last update HH:MM" with the tree greyed, or the token command after a 401.
+The header has a System / Light / Dark choice. The full design is in [DESIGN-SPEC.md](DESIGN-SPEC.md).
 
 ## Live updates
 
