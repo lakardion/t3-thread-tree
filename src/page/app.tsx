@@ -5,15 +5,16 @@ import { Alert, AlertDescription } from "@/components/ui/alert";
 import { Badge } from "@/components/ui/badge";
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
 import { Label } from "@/components/ui/label";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Switch } from "@/components/ui/switch";
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
 import { cn } from "@/lib/utils";
 
 const TOKEN_CMD =
   "~/.t3/bin/t3 auth session issue --scope orchestration:read --label thread-tree --ttl 52w --token-only";
-const RUNNING = "bg-status-running";
-const DONE = "bg-status-completed";
-const CANCELLED = "bg-status-cancelled";
+const RUNNING = "bg-status-working";
+const DONE = "bg-status-done";
+const CANCELLED = "bg-status-failed";
 const DOT: Record<Status, string> = {
   "needs-input": "bg-status-needs-input",
   working: `${RUNNING} animate-pulse motion-reduce:animate-none`,
@@ -25,10 +26,13 @@ const DOT: Record<Status, string> = {
   failed: CANCELLED,
   interrupted: CANCELLED,
   idle: "bg-status-idle",
-  snoozed: "bg-status-snoozed",
+  snoozed: "bg-status-idle",
 };
 const CLOSED_KEY = "thread-tree:closed";
 const SETTLED_KEY = "thread-tree:settled";
+const THEME_KEY = "thread-tree:theme";
+const THEMES = ["system", "light", "dark"] as const;
+type Theme = (typeof THEMES)[number];
 
 const load = (k: string): string | null => {
   try {
@@ -67,7 +71,7 @@ function ThreadRow({ t }: { t: ThreadNode }) {
       <div className={ROW}>
         <Dot t={t} />
         <a
-          className={cn("min-w-0 truncate hover:underline", t.snoozedUntil && "opacity-55")}
+          className={cn("min-w-0 truncate hover:underline", t.snoozedUntil && "text-muted-foreground")}
           href={t.href}
         >
           {t.title || t.id}
@@ -81,7 +85,7 @@ function ThreadRow({ t }: { t: ThreadNode }) {
           {t.stack && (
             <Badge
               variant="outline"
-              className={cn(PILL, "border-status-running/45 text-status-running")}
+              className={cn(PILL, "border-status-working/45 text-status-working-fg")}
               title="PR stack"
             >
               ⧉ {t.stack.pos ? `${t.stack.pos}/${t.stack.total}` : `base · ${t.stack.total}`}
@@ -154,6 +158,7 @@ function BranchRow({
 function App() {
   const [tree, setTree] = useState<Tree | null>(null);
   const [settled, setSettled] = useState(load(SETTLED_KEY) === "1");
+  const [theme, setTheme] = useState<Theme>(() => THEMES.find((t) => t === load(THEME_KEY)) ?? "system");
   const [closed, setClosed] = useState(() => new Set<string>(JSON.parse(load(CLOSED_KEY) ?? "[]") as string[]));
 
   useEffect(() => {
@@ -162,6 +167,17 @@ function App() {
     es.onmessage = (e) => setTree(JSON.parse(e.data) as Tree);
     return () => es.close();
   }, [settled]);
+
+  useEffect(() => {
+    save(THEME_KEY, theme);
+    const mq = matchMedia("(prefers-color-scheme: dark)");
+    const apply = () =>
+      document.documentElement.classList.toggle("dark", theme === "dark" || (theme === "system" && mq.matches));
+    apply();
+    if (theme !== "system") return;
+    mq.addEventListener("change", apply);
+    return () => mq.removeEventListener("change", apply);
+  }, [theme]);
 
   const toggle = (id: string) => {
     const n = new Set(closed);
@@ -180,6 +196,16 @@ function App() {
             show settled
           </Label>
         </div>
+        <Select value={theme} onValueChange={(v) => setTheme(v as Theme)}>
+          <SelectTrigger size="sm" aria-label="Theme" className="ml-auto">
+            <SelectValue />
+          </SelectTrigger>
+          <SelectContent>
+            <SelectItem value="system">System</SelectItem>
+            <SelectItem value="light">Light</SelectItem>
+            <SelectItem value="dark">Dark</SelectItem>
+          </SelectContent>
+        </Select>
       </header>
       {tree?.conn === "down" && (
         <Alert className="mb-3 border-l-[3px] border-l-status-needs-input">
@@ -198,7 +224,7 @@ function App() {
           </AlertDescription>
         </Alert>
       )}
-      <div className={tree && tree.conn !== "up" ? "opacity-45 grayscale" : ""}>
+      <div className={tree && tree.conn !== "up" ? "grayscale" : ""}>
         {tree && tree.projects.length === 0 && <p className="text-muted-foreground">No active threads.</p>}
         <ul className="m-0 list-none p-0">
           {tree?.projects.map((p) => (
