@@ -4,39 +4,7 @@
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width,initial-scale=1" />
     <title>Thread tree</title>
-    <style>
-      :root{--bg:#fff;--fg:#1d1f23;--mut:#6b7280;--line:#e5e7eb;--card:#f8f9fb;--hl:#eef2ff;
-      --needs-input:#e8590c;--running:#1c7ed6;--completed:#2f9e44;--cancelled:#a61e4d;--idle:#9ca3af;--snoozed:#9ca3af}
-      @media (prefers-color-scheme:dark){:root:not([data-theme=light]){--bg:#15171b;--fg:#e6e7ea;--mut:#8b919c;--line:#2a2e35;--card:#1c1f25;--hl:#232a3d}}
-      :root[data-theme=dark]{--bg:#15171b;--fg:#e6e7ea;--mut:#8b919c;--line:#2a2e35;--card:#1c1f25;--hl:#232a3d}
-      *{box-sizing:border-box}
-      body{margin:0;background:var(--bg);color:var(--fg);font:13px/1.45 ui-sans-serif,system-ui,-apple-system,sans-serif;padding:16px}
-      a{color:inherit;text-decoration:none}a:hover{text-decoration:underline}
-      button{font:inherit;color:inherit;background:none;border:0;padding:0}
-      header{display:flex;flex-wrap:wrap;gap:12px 20px;align-items:center;margin-bottom:14px;color:var(--mut)}
-      header h1{font-size:15px;margin:0;color:var(--fg)}
-      .banner{background:var(--card);border:1px solid var(--line);border-left:3px solid var(--needs-input);border-radius:6px;padding:8px 12px;margin-bottom:12px}
-      .banner code{user-select:all;font-size:12px}
-      .stale{opacity:.45;filter:grayscale(1)}
-      .dot{display:inline-block;width:9px;height:9px;border-radius:50%;background:var(--c);flex:none}
-      .dot.s-running{animation:pulse 1.4s infinite}@keyframes pulse{50%{opacity:.35}}
-      @media (prefers-reduced-motion:reduce){.dot.s-running{animation:none}}
-      .s-needs-input{--c:var(--needs-input)}.s-running{--c:var(--running)}.s-completed{--c:var(--completed)}
-      .s-cancelled{--c:var(--cancelled)}.s-idle{--c:var(--idle)}.s-snoozed{--c:var(--snoozed)}
-      .badge{display:inline-flex;gap:3px;align-items:center;border:1px solid var(--line);border-radius:10px;padding:0 6px;font-size:11px;color:var(--mut);white-space:nowrap}
-      .badge.stack{border-color:color-mix(in srgb,var(--running) 45%,var(--line));color:var(--running)}
-      .snoozed>.row .title{opacity:.55}
-      ul{list-style:none;margin:0;padding-left:18px}#root>ul{padding-left:0}
-      li{margin:1px 0}
-      .row{display:flex;gap:8px;align-items:center;padding:2px 4px;border-radius:5px;min-width:0}
-      .row:hover{background:var(--hl)}
-      .tw{width:14px;cursor:pointer;color:var(--mut);flex:none;text-align:center;user-select:none}
-      .proj{font-weight:700;font-size:14px;margin-top:8px}.key{font-weight:600}
-      .t{white-space:nowrap;overflow:hidden;text-overflow:ellipsis;min-width:0}
-      .meta{margin-left:auto;display:flex;gap:6px;align-items:center;flex:none}
-      .dots{display:inline-flex;gap:3px;flex-wrap:wrap}
-      .empty{color:var(--mut)}
-    </style>
+    <link rel="stylesheet" href="./index.css" />
   </head>
   <body>
     <div id="root"></div>

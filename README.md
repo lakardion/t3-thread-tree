@@ -62,7 +62,7 @@ To see the UI without T3, run `bun run demo` and open <http://127.0.0.1:4774>.
 ## How it works
 
 ```
-T3 Code ──WebSocket (orchestration.subscribeShell)──▶ Bun server ──SSE (/events)──▶ Preact page
+T3 Code ──WebSocket (orchestration.subscribeShell)──▶ Bun server ──SSE (/events)──▶ React page
 statev2.sqlite (read-only) ──launch lineage──────────▶
 ```
 
@@ -70,7 +70,7 @@ statev2.sqlite (read-only) ──launch lineage──────────▶
 - `src/server/lineage.ts` finds the spawner of a launched thread from the launch tool calls in `statev2.sqlite`, opened read-only.
 - `src/server/build-tree.ts` applies the tree rules: visibility, placement, stack order and status. It is a pure function, and `bun test` covers it.
 - `src/server.ts` keeps the thread map. It builds the whole tree again on each change, and pushes it as JSON over Server-Sent Events.
-- `src/page/` is a Preact and signals page, bundled by Bun's HTML imports. There is no Vite and no build step.
+- `src/page/` is a React, Tailwind and shadcn page, bundled by Bun's HTML imports (Tailwind runs through `bunfig.toml`). There is no Vite and no build step.
 - `src/shared/tree.ts` holds the `Tree` type that the server and the page share.
 
 The app never writes to T3. It uses a token with the `orchestration:read` scope only, and it opens the database read-only.
