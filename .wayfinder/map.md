@@ -26,6 +26,7 @@ A buildable spec for a local, read-only webapp. It shows active T3 Code threads 
 - [Can the spawner of a launched thread be recovered?](tickets/002-recover-launched-lineage.md): yes, from the caller's tool-call row (fallback `senderThreadId`); all 153 launched threads resolve.
 - [Tree model rules for the nested tree](tickets/004-tree-model-rules.md): active = unsettled top-level thread (subagents follow it); a keyed thread always sits under its own key, a keyless one nests under its nearest visible spawner; cross-key spawns become "launched by" hints; the stack is a badge plus sort order.
 - [Standalone webapp or a view inside T3 Code?](tickets/003-standalone-or-in-t3.md): standalone local webapp with a Node backend; launched-thread lineage resolved on arrival by one SQLite query per new `mcp:` thread.
+- [Rough tree UI on a real snapshot](tickets/005-rough-tree-ui.md): outline tree, all open; review threads go to `Project › Reviews › key`; a node shows status dot, title, stack badge and PR links only; subagents, age, last message and "launched by" hints are not shown.
 
 ## Not yet specified
 
