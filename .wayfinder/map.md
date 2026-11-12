@@ -24,6 +24,7 @@ A buildable spec for a local, read-only webapp. It shows active T3 Code threads 
 
 - [How can a local process read T3 thread data live?](tickets/001-data-source-for-local-reader.md): the server WebSocket `orchestration.subscribeShell` via a small Node backend with a read-scoped token; SQLite only as a fallback.
 - [Can the spawner of a launched thread be recovered?](tickets/002-recover-launched-lineage.md): yes, from the caller's tool-call row (fallback `senderThreadId`); all 153 launched threads resolve.
+- [Tree model rules for the nested tree](tickets/004-tree-model-rules.md): active = unsettled top-level thread (subagents follow it); a keyed thread always sits under its own key, a keyless one nests under its nearest visible spawner; cross-key spawns become "launched by" hints; the stack is a badge plus sort order.
 
 ## Not yet specified
 

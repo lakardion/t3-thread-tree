@@ -30,7 +30,7 @@ A chain of dependent PRs. T3 reports every PR in a thread's stack.
 A T3 Code project, usually one repo.
 
 **Active thread**:
-A thread that the default view shows. The exact rule is still open.
+An unsettled top-level thread (any status, snoozed included), or a subagent whose top-level ancestor is active. The default view shows only active threads.
 
 ## Relationships
 
