@@ -1,7 +1,7 @@
 ---
 title: Apply the Harbor tokens, the theme choice and the page column
 type: task
-status: in-review
+status: closed
 assignee: claude (design-overhaul-05)
 blocked-by: [01-shadcn-migration, 04-synthesize-design-spec]
 ---
