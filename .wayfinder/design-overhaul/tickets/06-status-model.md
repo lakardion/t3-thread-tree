@@ -2,7 +2,7 @@
 title: Add the status model and the row data to the tree
 type: task
 status: open
-assignee:
+assignee: claude (design-overhaul-06)
 blocked-by: [01-shadcn-migration, 04-synthesize-design-spec]
 ---
 
