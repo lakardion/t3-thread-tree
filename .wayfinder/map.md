@@ -25,11 +25,10 @@ A buildable spec for a local, read-only webapp. It shows active T3 Code threads 
 - [How can a local process read T3 thread data live?](tickets/001-data-source-for-local-reader.md): the server WebSocket `orchestration.subscribeShell` via a small Node backend with a read-scoped token; SQLite only as a fallback.
 - [Can the spawner of a launched thread be recovered?](tickets/002-recover-launched-lineage.md): yes, from the caller's tool-call row (fallback `senderThreadId`); all 153 launched threads resolve.
 - [Tree model rules for the nested tree](tickets/004-tree-model-rules.md): active = unsettled top-level thread (subagents follow it); a keyed thread always sits under its own key, a keyless one nests under its nearest visible spawner; cross-key spawns become "launched by" hints; the stack is a badge plus sort order.
+- [Standalone webapp or a view inside T3 Code?](tickets/003-standalone-or-in-t3.md): standalone local webapp with a Node backend; launched-thread lineage resolved on arrival by one SQLite query per new `mcp:` thread.
 
 ## Not yet specified
 
-- **Runtime and stack**: how the app runs (a dev server, a launch at login, a T3 plugin surface), port, and framework. Depends on the data-source and standalone-vs-in-T3 answers.
-- **Lineage feed**: how launched-thread lineage reaches the app live, since the shell stream carries only the native parent link (tool-call rows vs a SQLite side-read vs an upstream `spawnedByThreadId`). Likely folds into the standalone-or-in-T3 ticket.
 - **Node content**: what one tree node shows apart from title and status: "waiting for you" highlight, last message, age, model, PR states. Probably comes out of the prototype.
 - **Scale and noise**: how the tree stays readable with many review-lens subagents (collapse rules, counts).
 - **Linked machines**: whether threads on other linked T3 environments show up too.
@@ -38,3 +37,4 @@ A buildable spec for a local, read-only webapp. It shows active T3 Code threads 
 
 - Write actions (settle, snooze, send, interrupt, launch). The user chose read-only plus "open in T3".
 - Building the app. This map ends at the spec.
+- An upstream `spawnedByThreadId` field in T3 Code: lineage rebuilds without it ([Standalone webapp or a view inside T3 Code?](tickets/003-standalone-or-in-t3.md)).
