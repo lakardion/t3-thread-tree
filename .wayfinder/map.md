@@ -5,7 +5,7 @@ labels: [wayfinder:map]
 
 ## Destination
 
-A buildable spec for a local, read-only webapp. It shows active T3 Code threads as one live nested tree: Project › Issue key › spawn lineage, with the PR stack shown on each node. A click opens the thread in T3. The build is a hand-off after this map.
+A buildable spec for a local, read-only webapp. It shows active T3 Code threads as one live nested tree: Project › Issue key › spawn lineage, with the PR stack shown on each node. A click opens the thread in T3. The build is a hand-off after this map. **Reached:** [SPEC.md](../SPEC.md).
 
 ## Notes
 
@@ -15,17 +15,17 @@ A buildable spec for a local, read-only webapp. It shows active T3 Code threads 
   - About 900 threads exist.
   - Launched threads (ids `mcp:launch:…`) have `parentThreadId: null`, so their spawn lineage is lost.
 - Live T3 state is in `~/.t3/userdata` (`~/.t3/dev` is a stale dev copy). Data sources: `statev2.sqlite`, `server-runtime.json`, and the T3 Code source at `~/repos/t3code` (the user's fork).
-- Settled choices at charting: one nested tree (not switchable lenses); live updates; read-only plus "open in T3"; active threads by default, with settled/archived threads behind a toggle.
+- Settled choices at charting: one nested tree (not switchable lenses); live updates; read-only plus "open in T3"; active threads by default, with settled threads behind a toggle (archived threads are never shown; decided while writing SPEC.md, with the status colors for states 005 did not cover).
 - Skills for grilling tickets: `grilling` + `domain-modeling`. Write in ASD-STE100.
 
 ## Decisions so far
 
 <!-- one line per closed ticket -->
 
-- [How can a local process read T3 thread data live?](tickets/001-data-source-for-local-reader.md): the server WebSocket `orchestration.subscribeShell` via a small Node backend with a read-scoped token; SQLite only as a fallback.
+- [How can a local process read T3 thread data live?](tickets/001-data-source-for-local-reader.md): the server WebSocket `orchestration.subscribeShell` via a small backend (Bun since 006) with a read-scoped token; SQLite only as a fallback.
 - [Can the spawner of a launched thread be recovered?](tickets/002-recover-launched-lineage.md): yes, from the caller's tool-call row (fallback `senderThreadId`); all 153 launched threads resolve.
 - [Tree model rules for the nested tree](tickets/004-tree-model-rules.md): active = unsettled top-level thread (subagents follow it); a keyed thread always sits under its own key, a keyless one nests under its nearest visible spawner; cross-key spawns become "launched by" hints; the stack is a badge plus sort order.
-- [Standalone webapp or a view inside T3 Code?](tickets/003-standalone-or-in-t3.md): standalone local webapp with a Node backend; launched-thread lineage resolved on arrival by one SQLite query per new `mcp:` thread.
+- [Standalone webapp or a view inside T3 Code?](tickets/003-standalone-or-in-t3.md): standalone local webapp with a small backend (Bun since 006); launched-thread lineage resolved on arrival by one SQLite query per new `mcp:` thread.
 - [Rough tree UI on a real snapshot](tickets/005-rough-tree-ui.md): outline tree, all open; review threads go to `Project › Reviews › key`; a node shows status dot, title, stack badge and PR links only; subagents, age, last message and "launched by" hints are not shown.
 - [How does the standalone app run, and on which stack?](tickets/006-runtime-and-stack.md): `bun start` on `127.0.0.1:4773`; Bun backend builds the whole tree and pushes it over SSE; Preact + JSX page built by Bun; token issued once into `.env`; retry with a banner while T3 is down.
 
