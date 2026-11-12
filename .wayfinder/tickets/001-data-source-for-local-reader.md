@@ -2,7 +2,7 @@
 id: 001
 title: How can a local process read T3 thread data live?
 type: research
-status: open
+status: closed
 assignee:
 blocked_by: []
 ---
@@ -19,3 +19,15 @@ Check each candidate and report what it gives:
 - The deep-link format to open a thread in T3 (`t3-thread://v2/<env>/<threadId>`): does it work from a browser?
 
 Report the fields available per thread, the live-update mechanism, and the risks (schema churn, auth) of each source.
+
+## Resolution
+
+Findings: `research/data-source.md` on branch `research/data-source` (commit `4a42c2f`).
+
+- Recommended: the T3 server WebSocket `orchestration.subscribeShell` at `ws://127.0.0.1:<port>/ws?orchestrationProtocol=2`. It sends a snapshot, then `thread.updated` / `thread.removed` with a resumable `sequence`. Per thread: `status`, `lineage.parentThreadId`, `relationshipToParent`, `pullRequests[]` with `source`, archived, settled, snoozed.
+- Auth: a token from `t3 auth session issue --scope orchestration:read`. A browser cannot set the bearer header on a WebSocket, so a small Node backend connects (or the page uses a `wsTicket`).
+- Port: read `~/.t3/userdata/server-runtime.json` each start (now 3773).
+- SQLite fallback (`orchestration_v2_projection_threads`): no thread `status` column, no push (poll `orchestration_events.sequence`), and the schema changes fast (81 migrations). Safe to read in WAL mode.
+- MCP is not reachable from outside an agent. The `t3 thread list` CLI has no subagents and no push.
+- Deep link: `t3code://threads/<envId>/<threadId>` (the `t3-thread://` scheme does not open from a browser).
+- Open tension: the shell stream carries only the native parent link. The launched-thread lineage (ticket 002) comes from tool-call rows, which the shell stream may not carry.

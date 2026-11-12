@@ -2,7 +2,7 @@
 id: 002
 title: Can the spawner of a launched thread be recovered?
 type: research
-status: open
+status: closed
 assignee:
 blocked_by: []
 ---
@@ -19,3 +19,14 @@ Check in `~/repos/t3code` and the local state in `~/.t3/dev/statev2.sqlite`:
 - Any `createdBy`, `creationSource`, or event-log field that links back.
 
 Report: a reliable way to rebuild the full spawn lineage, a partial way (with how it fails), or none. If none, state the smallest upstream change in T3 Code that would record it.
+
+## Resolution
+
+Findings: `research/launched-lineage.md` on branch `research/launched-lineage` (commit `60dd23f`).
+
+Yes. The full spawn lineage can be rebuilt from local state, and T3 Code needs no change:
+
+1. Primary source: the caller's launch/create/delegate tool call, a `dynamic_tool` row in `orchestration_v2_projection_turn_items`. Its output names the new thread id.
+2. Fallback: `senderThreadId` on the new thread's first message.
+
+All 153 MCP-created threads resolve. The `mcp:launch:<hash>` id does not contain the caller. Chains include intermediate "launcher" threads (JED-4313 <- JED-4313 launcher <- JED-4312), so the tree must show or collapse them. Optional upstream change: a `spawnedByThreadId` field.

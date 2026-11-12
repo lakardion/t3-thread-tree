@@ -16,6 +16,7 @@ Settle these cases:
 - **Issue key extraction**: the pattern, and what to do with a title that has no key, or two keys.
 - **Lineage crosses keys**: a subthread with a different key than its parent (for example, JED-4312 launches JED-4313). Does it stay under its parent, or move to its own key?
 - **PR stack across keys**: JED-4312 and JED-4313 share one stack. Is the stack only a badge, or does it also join the two keys?
+- **Launcher threads**: intermediate threads that only launch the next one (JED-4313 <- JED-4313 launcher <- JED-4312). Show them, or collapse them into the edge?
 - **Orphans**: a subthread whose parent is not active, or not in the view.
 - **Active thread**: the exact rule (unsettled? which statuses? a recency window?).
 
