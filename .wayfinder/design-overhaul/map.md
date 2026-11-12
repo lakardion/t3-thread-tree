@@ -15,7 +15,15 @@ The thread tree page uses shadcn components on React + Tailwind. It has a chosen
 ## Route
 
 1. design-overhaul-01 — shadcn migration
-2. Build keys from `DESIGN-SPEC.md` — cut by [04](tickets/04-synthesize-design-spec.md), each blocked by 01 and 04.
+2. design-overhaul-05 — [Apply the Harbor tokens, the theme choice and the page column](tickets/05-palette-and-theme.md)
+3. design-overhaul-06 — [Add the status model and the row data to the tree](tickets/06-status-model.md)
+4. design-overhaul-07 — [Draw the thread row: status column, PR marks, age and motion](tickets/07-thread-row.md)
+5. design-overhaul-08 — [Draw project cards, fold single-thread key groups, add the skeleton](tickets/08-project-cards-and-fold.md)
+6. design-overhaul-09 — [Draw the stack rail around key groups of one PR stack](tickets/09-stack-rail.md)
+7. design-overhaul-10 — [Add the inline details block](tickets/10-details-block.md)
+8. design-overhaul-11 — [Add the attention summary and the "Needs you" filter](tickets/11-attention-header.md)
+
+Keys 05 and 06 are independent. Keys 08, 10 and 11 are independent after 07.
 
 The destination is reached when every route key is done and no map ticket is open.
 
@@ -41,10 +49,11 @@ None. The repo has no remote: a key is "in review" when its branch is ready, and
 - Base: `build/thread-tree` was fast-forwarded into `main` at charting.
 
 - [UI/UX design proposal B (OpenAI Sol)](tickets/03-design-proposal-sol.md): independent Slate signal proposal and light/dark mockup are ready for synthesis.
+- [Synthesize the two proposals into DESIGN-SPEC.md](tickets/04-synthesize-design-spec.md): [DESIGN-SPEC.md](../../DESIGN-SPEC.md) merges Harbor colors with a one-line row and inline details, and cuts seven build keys.
 
 ## Not yet specified
 
-- The build keys after 04, and their order. 04 cuts them.
+None.
 
 ## Out of scope
 
