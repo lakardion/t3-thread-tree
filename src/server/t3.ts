@@ -27,7 +27,8 @@ export type Thread = {
 };
 
 export type StreamEvent =
-  | { kind: "snapshot"; threads: Thread[]; projects: [string, string][] }
+  /** `fresh` marks the first snapshot of a connection, which replaces all state. Later snapshot items carry project metadata only. */
+  | { kind: "snapshot"; fresh: boolean; threads: Thread[]; projects: [string, string][] }
   | { kind: "thread"; thread: Thread }
   | { kind: "thread.removed"; id: string }
   | { kind: "project"; id: string; title: string }
@@ -81,7 +82,7 @@ export function decodeItem(raw: unknown): StreamEvent | null {
         const id = str(o.id);
         return id ? [[id, str(o.title) ?? id]] : [];
       });
-      return { kind: "snapshot", threads, projects };
+      return { kind: "snapshot", fresh: false, threads, projects };
     }
     case "thread.updated": {
       const thread = decodeThread(it.thread);
@@ -145,6 +146,7 @@ export function connectShell(opts: {
     const sock = new WebSocket(url.replace(/^http/, "ws"), { headers } as unknown as string[]);
     ws = sock;
     let ping: ReturnType<typeof setInterval> | undefined;
+    let fresh = true;
     const send = (m: unknown) => sock.readyState === WebSocket.OPEN && sock.send(JSON.stringify(m));
     sock.onopen = () => {
       send({
@@ -163,6 +165,7 @@ export function connectShell(opts: {
           opts.onConn("up");
           for (const v of Array.isArray(m.values) ? m.values : []) {
             const e = decodeItem(v);
+            if (e?.kind === "snapshot") (e.fresh = fresh), (fresh = false);
             if (e) opts.onEvent(e);
           }
           /** The server sends the next chunk only after an Ack. */

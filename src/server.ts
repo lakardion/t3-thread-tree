@@ -77,8 +77,7 @@ connectShell({
     lastUpdate = new Date().toISOString();
     switch (e.kind) {
       case "snapshot":
-        threads.clear();
-        projects.clear();
+        if (e.fresh) threads.clear(), projects.clear();
         for (const t of e.threads) threads.set(t.id, t);
         for (const [id, title] of e.projects) projects.set(id, title);
         break;

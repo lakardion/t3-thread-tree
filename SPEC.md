@@ -29,7 +29,7 @@ Source: [How can a local process read T3 thread data live?](.wayfinder/tickets/0
 2. Open `ws://127.0.0.1:<port>/ws?orchestrationProtocol=2` with the header `Authorization: Bearer <token>`.
 3. Call `orchestration.subscribeShell` with `omitIdleSubagents` and `omitOlderSettled` off. The protocol is Effect RPC with JSON frames. Write the small frame handler by hand; the T3 packages are private.
 4. Stream items:
-   - `snapshot` holds `projects`, `threads` and `archivedThreads`.
+   - `snapshot` holds `projects`, `threads` and `archivedThreads`. Only the first `snapshot` of a connection is the full state. Later `snapshot` items (with `resolvedRepositoryIdentityRoots`) carry project metadata and empty thread lists; merge their projects and do not clear the thread map.
    - `thread.updated` holds the full thread, not a patch.
    - `thread.removed`, `project.updated` and `project.removed` also arrive.
 5. Ignore archived threads (`archivedThreads`, and items with `location: "archive"`). The app never shows them.
@@ -46,7 +46,7 @@ Source: [How can a local process read T3 thread data live?](.wayfinder/tickets/0
 - The backend starts even when T3 is not running.
 - Every 3 s, it reads `server-runtime.json` again and tries to connect.
 - While T3 is down, the page keeps the last tree, greyed, with the banner "T3 not running: last update HH:MM".
-- Each new connection takes a fresh snapshot and replaces the whole thread map. Do not use `afterSequence`.
+- Each new connection takes a fresh snapshot, and its first `snapshot` item replaces the whole thread map. Do not use `afterSequence`.
 
 ## Launched-thread lineage
 
@@ -57,7 +57,7 @@ A thread that an agent starts with `t3_thread_launch`, `create_threads` or `dele
 1. **Primary:** the caller's `dynamic_tool` row in `orchestration_v2_projection_turn_items` with `status = 'completed'`, where `toolName` ends in `t3_thread_launch`, `create_threads` or `delegate_task`. Parse `payload_json.output.content` as JSON. The new id is in `threadId`, `threads[].threadId` or `childThreadId`. The row's `thread_id` is the spawner. Do not match the child id as a substring.
 2. **Fallback:** `senderThreadId` on the thread's first user message in `orchestration_v2_projection_messages` (`message_id = thread_id` for a launch).
 
-Run the lookup when the backend first sees a thread with an `mcp:` id, in the snapshot or in `thread.updated`. Cache the result in memory. A thread that arrives before its tool-call row is written gets a short retry. Keep the SQLite code in one module.
+Run the lookup when the backend first sees a top-level thread whose id contains `mcp:` or `mcp%3A` (`t3_thread_launch` gives `mcp:…`, `create_threads` gives `thread:mcp:…`, `delegate_task` gives `thread:delegated-task:command%3Amcp%3A…`), in the snapshot or in `thread.updated`. Cache the result in memory. A thread that arrives before its tool-call row is written gets a short retry. Keep the SQLite code in one module.
 
 ## Tree rules
 
