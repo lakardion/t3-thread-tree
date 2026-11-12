@@ -56,7 +56,7 @@ function build(raws: object[], spawners: Record<string, string> = {}, over: Part
   const threads = raws.map((r) => decodeThread(r)!);
   return buildTree({
     threads,
-    projects: new Map([["p1", "frontend"], ["p2", "backend"]]),
+    projects: new Map([["p1", { title: "frontend", repo: "acme/frontend" }], ["p2", { title: "backend", repo: null }]]),
     spawnerOf: (id) => spawners[id],
     environmentId: "env-1",
     settled: false,
@@ -116,6 +116,39 @@ describe("visibility", () => {
     expect(decodeItem({ kind: "thread.updated", sequence: 1, location: "archive", thread: shell("a", "x") })).toEqual({
       kind: "thread.removed",
       id: "a",
+    });
+  });
+});
+
+describe("project repository", () => {
+  test("a project branch carries its repo only when known", () => {
+    const tree = build([shell("a", "SHOP-1 x"), shell("b", "SHOP-2 y", { projectId: "p2" })]);
+    const byLabel = (l: string) => tree.find((b) => b.label === l)!;
+    expect(byLabel("frontend").repo).toBe("acme/frontend");
+    expect("repo" in byLabel("backend")).toBe(false);
+  });
+
+  test("decodeItem reads owner/name from repositoryIdentity, else null", () => {
+    const withRepo = { id: "p1", title: "shop", repositoryIdentity: { owner: "acme", name: "shop" } };
+    const without = { id: "p2", title: "docs" };
+    expect(decodeItem({ kind: "snapshot", snapshot: { threads: [], projects: [withRepo, without] } })).toEqual({
+      kind: "snapshot",
+      fresh: false,
+      threads: [],
+      projects: [
+        ["p1", { title: "shop", repo: "acme/shop" }],
+        ["p2", { title: "docs", repo: null }],
+      ],
+    });
+    expect(decodeItem({ kind: "project.updated", project: withRepo })).toEqual({
+      kind: "project",
+      id: "p1",
+      project: { title: "shop", repo: "acme/shop" },
+    });
+    expect(decodeItem({ kind: "project.updated", project: without })).toEqual({
+      kind: "project",
+      id: "p2",
+      project: { title: "docs", repo: null },
     });
   });
 });

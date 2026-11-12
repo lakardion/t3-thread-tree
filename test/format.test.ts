@@ -1,5 +1,6 @@
 import { describe, expect, test } from "bun:test";
-import { ago, phraseWith } from "../src/page/format.ts";
+import { ago, folded, phraseWith, stripKey } from "../src/page/format.ts";
+import type { Branch, ThreadNode } from "../src/shared/tree.ts";
 
 const NOW = Date.parse("2026-11-12T12:00:00.000Z");
 const before = (sec: number) => new Date(NOW - sec * 1000).toISOString();
@@ -28,5 +29,37 @@ describe("phraseWith", () => {
   });
   test("returns the phrase with no since", () => {
     expect(phraseWith({ status: "done", phrase: "Done", since: null }, NOW)).toBe("Done");
+  });
+});
+
+describe("stripKey", () => {
+  test.each([
+    ["SHOP-412 · Checkout", "SHOP-412", "Checkout"],
+    ["SHOP-412: Checkout", "SHOP-412", "Checkout"],
+    ["SHOP-412 - Checkout", "SHOP-412", "Checkout"],
+    ["SHOP-412 Checkout", "SHOP-412", "Checkout"],
+    ["Review #2088 SHOP-398", "SHOP-398", "Review #2088 SHOP-398"],
+    ["SHOP-412", "SHOP-412", "SHOP-412"],
+  ])("%s", (title, key, out) => {
+    expect(stripKey(title, key)).toBe(out);
+  });
+});
+
+describe("folded", () => {
+  const thread = (key: string | null) => ({ id: `t-${key}`, key }) as ThreadNode;
+  const group = (label: string, threads: ThreadNode[], branches: Branch[] = []): Branch => ({ id: label, label, branches, threads });
+
+  test("a key group with one thread folds into it", () => {
+    const t = thread("SHOP-1");
+    expect(folded(group("SHOP-1", [t]))).toBe(t);
+  });
+  test("a key group with two threads does not fold", () => {
+    expect(folded(group("SHOP-1", [thread("SHOP-1"), thread("SHOP-1")]))).toBeNull();
+  });
+  test("No issue key does not fold", () => {
+    expect(folded(group("No issue key", [thread(null)]))).toBeNull();
+  });
+  test("a group with branches and no threads does not fold", () => {
+    expect(folded(group("Reviews", [], [group("SHOP-1", [thread("SHOP-1")])]))).toBeNull();
   });
 });

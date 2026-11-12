@@ -65,12 +65,14 @@ export type Thread = {
   pinned: boolean;
 };
 
+export type Project = { title: string; repo: string | null };
+
 export type StreamEvent =
   /** `fresh` marks the first snapshot of a connection, which replaces all state. Later snapshot items carry project metadata only. */
-  | { kind: "snapshot"; fresh: boolean; threads: Thread[]; projects: [string, string][] }
+  | { kind: "snapshot"; fresh: boolean; threads: Thread[]; projects: [string, Project][] }
   | { kind: "thread"; thread: Thread }
   | { kind: "thread.removed"; id: string }
-  | { kind: "project"; id: string; title: string }
+  | { kind: "project"; id: string; project: Project }
   | { kind: "project.removed"; id: string };
 
 type Obj = Record<string, unknown>;
@@ -83,6 +85,14 @@ const bool = (v: unknown): boolean | null => (typeof v === "boolean" ? v : null)
 const tilde = (p: string | null): string | null => {
   const home = homedir();
   return p !== null && (p === home || p.startsWith(`${home}/`)) ? `~${p.slice(home.length)}` : p;
+};
+
+/** `owner/name` from `repositoryIdentity`, or null when a part is absent. */
+const repoOf = (p: Obj): string | null => {
+  const r = obj(p.repositoryIdentity);
+  const owner = str(r.owner);
+  const name = str(r.name);
+  return owner && name ? `${owner}/${name}` : null;
 };
 
 /** Lenient decode: many shell fields are optional, and unknown fields are ignored. */
@@ -168,10 +178,10 @@ export function decodeItem(raw: unknown): StreamEvent | null {
     case "snapshot": {
       const s = obj(it.snapshot);
       const threads = (Array.isArray(s.threads) ? s.threads : []).flatMap((t) => decodeThread(t) ?? []);
-      const projects = (Array.isArray(s.projects) ? s.projects : []).flatMap((p): [string, string][] => {
+      const projects = (Array.isArray(s.projects) ? s.projects : []).flatMap((p): [string, Project][] => {
         const o = obj(p);
         const id = str(o.id);
-        return id ? [[id, str(o.title) ?? id]] : [];
+        return id ? [[id, { title: str(o.title) ?? id, repo: repoOf(o) }]] : [];
       });
       return { kind: "snapshot", fresh: false, threads, projects };
     }
@@ -187,7 +197,7 @@ export function decodeItem(raw: unknown): StreamEvent | null {
     case "project.updated": {
       const p = obj(it.project);
       const id = str(p.id);
-      return id ? { kind: "project", id, title: str(p.title) ?? id } : null;
+      return id ? { kind: "project", id, project: { title: str(p.title) ?? id, repo: repoOf(p) } } : null;
     }
     case "project.removed": {
       const id = str(it.projectId);

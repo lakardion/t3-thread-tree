@@ -1,8 +1,8 @@
 ---
 title: Draw project cards, fold single-thread key groups, add the skeleton
 type: task
-status: open
-assignee:
+status: closed
+assignee: claude (design-overhaul-08)
 blocked-by: [01-shadcn-migration, 04-synthesize-design-spec, 07-thread-row]
 ---
 
@@ -31,3 +31,10 @@ Projects are cards, groups follow `DESIGN-SPEC.md` › Groups, and the first loa
 - The nested thread list in `ThreadRow` (`src/page/app.tsx`) still indents 18 px. The 16 px rule of `DESIGN-SPEC.md` › Groups is for this key.
 - The key chip goes in `ThreadRow` between the phrase column and the title. Use the `CHIP` class string for the 6 px radius and the 11 px text.
 - `StatusIcon` is the one status shape for a row and for a closed branch. It turns only inside `.thread-row`, so a closed branch shows still icons.
+
+## Handed over from design-overhaul-11
+
+- `App` in `src/page/app.tsx` renders `projects`, not `tree.projects`. With the "Needs you" filter on, `projects` is the result of `onlyNeedsYou` (`src/page/attention.ts`). Run the fold on `projects`, so a key group with one thread left after the filter folds.
+- The tree is inside `<NeedsOnly>` and `<Now>`. Keep the two contexts around the project cards: `ThreadRow` reads `NeedsOnly` for the muted spawner row.
+- The header chips count `tree.projects`, the tree before the filter and the fold.
+- The shadcn CLI wrote `import { cn } from "cn"` in the new components and added the `cn` npm package. Set the import to `@/lib/utils` and run `bun remove cn`.

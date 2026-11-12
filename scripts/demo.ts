@@ -1,7 +1,7 @@
 /** Serves the page with made-up threads, run through the real tree rules. No T3 needed. */
 import index from "../src/page/index.html";
 import { buildTree } from "../src/server/build-tree.ts";
-import type { Pr, Thread } from "../src/server/t3.ts";
+import type { Pr, Project, Thread } from "../src/server/t3.ts";
 
 const now = Date.now();
 const ago = (min: number) => new Date(now - min * 60_000).toISOString();
@@ -89,10 +89,11 @@ const threads: Thread[] = [
   t("Review #2095 SHOP-401", { prs: [pr(2095, "agent", "merged")] }),
   t("Design-system migration map", { id: "map", status: "idle" }),
   t("Migrate Button to the new tokens", { id: "m1", status: "running" }),
-  t("Migrate Dialog to the new tokens", { id: "m2" }),
+  t("Migrate Dialog to the new tokens", { id: "m2", ...completed }),
   t("Migrate Tooltip to the new tokens", { id: "m3", snoozedUntil: later(20) }),
   t("Flaky e2e: cart badge count", { status: "failed", lastErrorClass: "provider", lastErrorCode: "rate_limited", lastError: "The provider closed the stream before the run finished.", limitResetAt: later(2), autoResume: true, tags: ["flaky", "e2e"], pinned: true }),
   t("API-77 · Rate-limit the search endpoint per API key", { projectId: "api", status: "running" }),
+  t("API-77 · Document the rate-limit headers", { projectId: "api" }),
   t("API-81 · Move webhook retries to a durable queue", { projectId: "api", pending: request("command") }),
   t("Investigate slow cold starts", { projectId: "api", goal: { objective: "Cut cold start below 400 ms", status: "active" }, linkLabel: "Linear", snoozedUntil: later(14), status: "idle" }),
   t("DOC-12 · Getting-started guide for the CLI", { projectId: "docs", ...completed }),
@@ -122,10 +123,10 @@ const threads: Thread[] = [
   t("DOC-16 · Archive the old tutorial", { projectId: "docs", settledAt: ago(60) }),
 ];
 const spawners: Record<string, string> = { m1: "map", m2: "map", m3: "map", launched: "map" };
-const projects = new Map([
-  ["storefront", "storefront"],
-  ["api", "api-gateway"],
-  ["docs", "docs-site"],
+const projects = new Map<string, Project>([
+  ["storefront", { title: "storefront", repo: "acme/storefront" }],
+  ["api", { title: "api-gateway", repo: "acme/api-gateway" }],
+  ["docs", { title: "docs-site", repo: null }],
 ]);
 
 const treeFor = (settled: boolean) =>
@@ -141,7 +142,8 @@ const server = Bun.serve({
   port: Number(process.env.PORT ?? 4774),
   routes: {
     "/": index,
-    "/events": (req) => {
+    "/events": async (req) => {
+      await Bun.sleep(Number(process.env.DELAY ?? 0));
       const tree = new URL(req.url).searchParams.get("settled") === "1" ? trees.settled : trees.open;
       return new Response(`data: ${tree}\n\n`, { headers: { "Content-Type": "text/event-stream" } });
     },
