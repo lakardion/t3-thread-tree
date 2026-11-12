@@ -1,6 +1,8 @@
 import { createContext, useContext, useEffect, useState, type ReactNode } from "react";
 import {
   Check,
+  ChevronDown,
+  ChevronRight,
   Circle,
   CircleCheck,
   CircleDashed,
@@ -20,13 +22,15 @@ import { createRoot } from "react-dom/client";
 import { allThreads, type Branch, type PrNode, type Status, type ThreadNode, type Tree } from "../shared/tree.ts";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { Badge } from "@/components/ui/badge";
+import { Card, CardContent, CardDescription, CardHeader } from "@/components/ui/card";
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
 import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { Skeleton } from "@/components/ui/skeleton";
 import { Switch } from "@/components/ui/switch";
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
 import { cn } from "@/lib/utils";
-import { ago, phraseWith } from "./format.ts";
+import { ago, folded, isKeyGroup, phraseWith, stripKey } from "./format.ts";
 
 const TOKEN_CMD =
   "~/.t3/bin/t3 auth session issue --scope orchestration:read --label thread-tree --ttl 52w --token-only";
@@ -84,7 +88,6 @@ const StatusIcon = ({ t }: { t: ThreadNode }) => {
   );
 };
 
-const ROW = "flex min-w-0 items-center gap-2 rounded-[5px] px-1 py-0.5 hover:bg-accent";
 const CHIP = "gap-1 rounded-[6px] px-1.5 py-0 text-[11px] font-normal text-muted-foreground";
 
 const Mark = ({ title, children }: { title: string; children: ReactNode }) => (
@@ -121,7 +124,7 @@ function PrChip({ p }: { p: PrNode }) {
   );
 }
 
-function ThreadRow({ t }: { t: ThreadNode }) {
+function ThreadRow({ t, chip }: { t: ThreadNode; chip?: string }) {
   const now = useContext(Now);
   return (
     <li className="my-px">
@@ -133,15 +136,21 @@ function ThreadRow({ t }: { t: ThreadNode }) {
         <span className={cn("w-[120px] flex-none truncate text-xs font-medium", STATUS[t.status].text)}>
           {phraseWith(t, now)}
         </span>
+        {chip && (
+          <Badge variant="outline" className={cn(CHIP, "flex-none font-mono")}>
+            {chip}
+          </Badge>
+        )}
         <a
           className={cn(
             "min-w-0 flex-1 truncate hover:underline max-[720px]:line-clamp-2 max-[720px]:whitespace-normal",
             t.status === "your-turn" ? "font-[650]" : "font-medium",
             (t.status === "snoozed" || t.settled) && "text-muted-foreground",
+            chip && "max-[720px]:basis-full max-[720px]:pl-5",
           )}
           href={t.href}
         >
-          {t.title || t.id}
+          {(chip ? stripKey(t.title, chip) : t.title) || t.id}
         </a>
         <span className="ml-auto flex flex-none items-center gap-1.5 max-[720px]:ml-0 max-[720px]:basis-full max-[720px]:flex-wrap max-[720px]:pl-5">
           {t.input && (
@@ -178,7 +187,7 @@ function ThreadRow({ t }: { t: ThreadNode }) {
         </span>
       </div>
       {t.children.length > 0 && (
-        <ul className="m-0 list-none pl-[18px]">
+        <ul className="m-0 list-none pl-4">
           {t.children.map((c) => (
             <ThreadRow key={c.id} t={c} />
           ))}
@@ -188,38 +197,42 @@ function ThreadRow({ t }: { t: ThreadNode }) {
   );
 }
 
-function BranchRow({
-  b,
-  top,
-  closed,
-  toggle,
-}: {
-  b: Branch;
-  top?: boolean;
-  closed: Set<string>;
-  toggle: (id: string) => void;
-}) {
+const Chevron = ({ open }: { open: boolean }) => {
+  const Icon = open ? ChevronDown : ChevronRight;
+  return <Icon className="size-3.5 flex-none text-muted-foreground" />;
+};
+
+/** One status icon for each thread of a closed branch, in tree order. */
+const Icons = ({ b }: { b: Branch }) => (
+  <span className="inline-flex flex-wrap items-center gap-[3px]">
+    {allThreads(b).map((t) => (
+      <StatusIcon key={t.id} t={t} />
+    ))}
+  </span>
+);
+
+type Fold = { closed: Set<string>; toggle: (id: string) => void };
+
+function GroupRow({ b, closed, toggle }: { b: Branch } & Fold) {
   const open = !closed.has(b.id);
+  const one = folded(b);
+  if (one) return <ThreadRow t={one} chip={b.label} />;
   return (
     <Collapsible asChild open={open} onOpenChange={() => toggle(b.id)}>
       <li className="my-px">
-        <div className={cn(ROW, top && "mt-2")}>
-          <CollapsibleTrigger className="w-3.5 flex-none cursor-pointer select-none text-center text-muted-foreground">
-            {open ? "▾" : "▸"}
-          </CollapsibleTrigger>
-          <span className={top ? "text-sm font-bold" : "font-semibold"}>{b.label}</span>
-          {!open && (
-            <span className="inline-flex flex-wrap gap-[3px]">
-              {allThreads(b).map((t) => (
-                <StatusIcon key={t.id} t={t} />
-              ))}
+        <div className="flex h-7 min-w-0 items-center gap-2 rounded-[8px] px-2 hover:bg-accent max-[720px]:h-auto max-[720px]:min-h-7 max-[720px]:flex-wrap">
+          <CollapsibleTrigger className="flex min-w-0 cursor-pointer items-center gap-2 select-none max-[720px]:min-h-11">
+            <Chevron open={open} />
+            <span className={cn("truncate text-xs font-semibold", isKeyGroup(b) ? "font-mono" : "text-muted-foreground")}>
+              {b.label}
             </span>
-          )}
+          </CollapsibleTrigger>
+          {!open && <Icons b={b} />}
         </div>
         <CollapsibleContent asChild>
-          <ul className="m-0 list-none pl-[18px]">
+          <ul className="m-0 list-none pl-4">
             {b.branches.map((c) => (
-              <BranchRow key={c.id} b={c} closed={closed} toggle={toggle} />
+              <GroupRow key={c.id} b={c} closed={closed} toggle={toggle} />
             ))}
             {b.threads.map((t) => (
               <ThreadRow key={t.id} t={t} />
@@ -228,6 +241,43 @@ function BranchRow({
         </CollapsibleContent>
       </li>
     </Collapsible>
+  );
+}
+
+function ProjectCard({ b, closed, toggle }: { b: Branch } & Fold) {
+  const open = !closed.has(b.id);
+  return (
+    <li>
+      <Collapsible asChild open={open} onOpenChange={() => toggle(b.id)}>
+        <Card className="gap-0 overflow-hidden rounded-[12px] py-0 shadow-none">
+          <CardHeader className="project-head flex min-h-10 flex-wrap items-center gap-x-2 gap-y-1 px-3 py-1">
+            <CollapsibleTrigger className="flex min-w-0 cursor-pointer items-center gap-2 select-none max-[720px]:min-h-11">
+              <Chevron open={open} />
+              <span
+                aria-hidden
+                className="flex size-5 flex-none items-center justify-center rounded-[5px] bg-muted text-[11px] font-semibold text-muted-foreground uppercase"
+              >
+                {b.label[0]}
+              </span>
+              <span data-slot="card-title" className="truncate text-sm leading-5 font-semibold">
+                {b.label}
+              </span>
+            </CollapsibleTrigger>
+            {b.repo && <CardDescription className="truncate font-mono text-xs">{b.repo}</CardDescription>}
+            {!open && <Icons b={b} />}
+          </CardHeader>
+          <CollapsibleContent asChild>
+            <CardContent className="p-1.5">
+              <ul className="m-0 list-none p-0">
+                {b.branches.map((c) => (
+                  <GroupRow key={c.id} b={c} closed={closed} toggle={toggle} />
+                ))}
+              </ul>
+            </CardContent>
+          </CollapsibleContent>
+        </Card>
+      </Collapsible>
+    </li>
   );
 }
 
@@ -312,11 +362,21 @@ function App() {
           data-conn={tree && tree.conn !== "up" ? "down" : undefined}
         >
           {tree && tree.projects.length === 0 && <p className="text-muted-foreground">No active threads.</p>}
-          <ul className="m-0 list-none p-0">
-            {tree?.projects.map((p) => (
-              <BranchRow key={p.id} b={p} top closed={closed} toggle={toggle} />
-            ))}
-          </ul>
+          {tree ? (
+            <ul className="m-0 flex list-none flex-col gap-3 p-0">
+              {tree.projects.map((p) => (
+                <ProjectCard key={p.id} b={p} closed={closed} toggle={toggle} />
+              ))}
+            </ul>
+          ) : (
+            <Card className="gap-0 rounded-[12px] py-0 shadow-none" aria-busy="true" aria-label="Loading threads">
+              <CardContent className="flex flex-col gap-0.5 p-1.5">
+                {[0, 1, 2].map((i) => (
+                  <Skeleton key={i} className="h-9 rounded-[8px] motion-reduce:animate-none" />
+                ))}
+              </CardContent>
+            </Card>
+          )}
         </div>
       </Now>
     </TooltipProvider>

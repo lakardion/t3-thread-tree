@@ -36,7 +36,14 @@ export type ThreadNode = {
   children: ThreadNode[];
 };
 
-export type Branch = { id: string; label: string; branches: Branch[]; threads: ThreadNode[] };
+export type Branch = {
+  id: string;
+  label: string;
+  /** Project branches only: `owner/name`. */
+  repo?: string;
+  branches: Branch[];
+  threads: ThreadNode[];
+};
 
 export type Conn = "up" | "down" | "unauthorized";
 

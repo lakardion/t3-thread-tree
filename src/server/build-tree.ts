@@ -1,6 +1,6 @@
 /** The tree rules: visibility, placement, stack order and status. Pure, so `bun test` covers it. */
 import type { Branch, PrNode, Status, ThreadNode } from "../shared/tree.ts";
-import type { Thread } from "./t3.ts";
+import type { Project, Thread } from "./t3.ts";
 
 const KEY = /\b[A-Z][A-Z0-9]+-\d+\b/;
 const STACK_SOURCES = new Set(["created", "stack", "agent"]);
@@ -39,7 +39,7 @@ export function statusOf(t: Thread, now: number): { status: Status; phrase: stri
 
 export type BuildInput = {
   threads: Iterable<Thread>;
-  projects: Map<string, string>;
+  projects: Map<string, Project>;
   spawnerOf: (id: string) => string | null | undefined;
   environmentId: string;
   settled: boolean;
@@ -208,7 +208,11 @@ export function buildTree(input: BuildInput): Branch[] {
         branches: [...byKey].map(([k, ns]) => ({ id: `${gid(REVIEWS)}:${k}`, label: k, branches: [], threads: ns.map(clean) })),
       };
     });
-    out.push({ branch: { id: `p:${projectId}`, label: projects.get(projectId) ?? projectId, branches, threads: [] }, latest: gs[0]!.latest });
+    const project = projects.get(projectId);
+    out.push({
+      branch: { id: `p:${projectId}`, label: project?.title ?? projectId, ...(project?.repo && { repo: project.repo }), branches, threads: [] },
+      latest: gs[0]!.latest,
+    });
   }
   return out.sort(byLatest).map((o) => o.branch);
 }

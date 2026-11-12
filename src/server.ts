@@ -2,10 +2,10 @@ import index from "./page/index.html";
 import type { Conn, Tree } from "./shared/tree.ts";
 import { buildTree } from "./server/build-tree.ts";
 import { mayBeLaunched, openLineage } from "./server/lineage.ts";
-import { connectShell, readEnvironmentId, type Thread } from "./server/t3.ts";
+import { connectShell, readEnvironmentId, type Project, type Thread } from "./server/t3.ts";
 
 const threads = new Map<string, Thread>();
-const projects = new Map<string, string>();
+const projects = new Map<string, Project>();
 let conn: Conn = "down";
 let lastUpdate: string | null = null;
 const environmentId = await readEnvironmentId();
@@ -79,7 +79,7 @@ connectShell({
       case "snapshot":
         if (e.fresh) threads.clear(), projects.clear();
         for (const t of e.threads) threads.set(t.id, t);
-        for (const [id, title] of e.projects) projects.set(id, title);
+        for (const [id, project] of e.projects) projects.set(id, project);
         break;
       case "thread":
         threads.set(e.thread.id, e.thread);
@@ -88,7 +88,7 @@ connectShell({
         threads.delete(e.id);
         break;
       case "project":
-        projects.set(e.id, e.title);
+        projects.set(e.id, e.project);
         break;
       case "project.removed":
         projects.delete(e.id);
