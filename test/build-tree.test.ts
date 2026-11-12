@@ -71,8 +71,8 @@ const titles = (ts: ThreadNode[]) => ts.map((t) => t.title);
 
 describe("issue key", () => {
   test("first match, review number ignored", () => {
-    expect(issueKey("Review #15708 JED-4319")).toBe("JED-4319");
-    expect(issueKey("ENG-6081 then ENG-6082")).toBe("ENG-6081");
+    expect(issueKey("Review #15708 SHOP-4319")).toBe("SHOP-4319");
+    expect(issueKey("WEB-6081 then WEB-6082")).toBe("WEB-6081");
     expect(issueKey("combobox work")).toBeNull();
     expect(issueKey("x-123 lower")).toBeNull();
   });
@@ -81,32 +81,32 @@ describe("issue key", () => {
 describe("visibility", () => {
   test("settled, archived, deleted, subagent and side chat threads are hidden", () => {
     const tree = build([
-      shell("a", "JED-1 open"),
-      shell("b", "JED-2 settled", { settledAt: "2026-11-12T09:00:00.000Z", settledOverride: "settled" }),
-      shell("c", "JED-3 archived", { archivedAt: "2026-11-12T09:00:00.000Z" }),
-      shell("d", "JED-4 deleted", { deletedAt: "2026-11-12T09:00:00.000Z" }),
-      shell("e", "JED-5 subagent", { lineage: { parentThreadId: "a", relationshipToParent: "subagent", rootThreadId: "a" } }),
-      shell("f", "JED-6 side", { lineage: { parentThreadId: null, relationshipToParent: null, rootThreadId: "f", sideChat: true } }),
+      shell("a", "SHOP-1 open"),
+      shell("b", "SHOP-2 settled", { settledAt: "2026-11-12T09:00:00.000Z", settledOverride: "settled" }),
+      shell("c", "SHOP-3 archived", { archivedAt: "2026-11-12T09:00:00.000Z" }),
+      shell("d", "SHOP-4 deleted", { deletedAt: "2026-11-12T09:00:00.000Z" }),
+      shell("e", "SHOP-5 subagent", { lineage: { parentThreadId: "a", relationshipToParent: "subagent", rootThreadId: "a" } }),
+      shell("f", "SHOP-6 side", { lineage: { parentThreadId: null, relationshipToParent: null, rootThreadId: "f", sideChat: true } }),
     ]);
-    expect(labels(tree[0]!.branches)).toEqual(["JED-1"]);
+    expect(labels(tree[0]!.branches)).toEqual(["SHOP-1"]);
   });
 
   test("settled toggle shows settled threads, never archived ones", () => {
     const tree = build(
       [
-        shell("a", "JED-1 open"),
-        shell("b", "JED-2 settled", { settledAt: "2026-11-12T09:00:00.000Z" }),
-        shell("c", "JED-3 archived", { archivedAt: "2026-11-12T09:00:00.000Z" }),
+        shell("a", "SHOP-1 open"),
+        shell("b", "SHOP-2 settled", { settledAt: "2026-11-12T09:00:00.000Z" }),
+        shell("c", "SHOP-3 archived", { archivedAt: "2026-11-12T09:00:00.000Z" }),
       ],
       {},
       { settled: true },
     );
-    expect(labels(tree[0]!.branches).sort()).toEqual(["JED-1", "JED-2"]);
+    expect(labels(tree[0]!.branches).sort()).toEqual(["SHOP-1", "SHOP-2"]);
   });
 
   test("snoozed threads stay visible, with their wake time", () => {
     const until = "2026-11-13T09:00:00.000Z";
-    const [t] = build([shell("a", "JED-1", { snoozedUntil: until, status: "completed" })])[0]!.branches[0]!.threads;
+    const [t] = build([shell("a", "SHOP-1", { snoozedUntil: until, status: "completed" })])[0]!.branches[0]!.threads;
     expect(t!.status).toBe("snoozed");
     expect(t!.snoozedUntil).toBe(until);
   });
@@ -122,15 +122,15 @@ describe("visibility", () => {
 describe("placement", () => {
   test("Reviews group by key, keyed groups, No issue key last", () => {
     const tree = build([
-      shell("r1", "Review #15708 JED-4319"),
+      shell("r1", "Review #15708 SHOP-4319"),
       shell("r2", "Review #15709 without key"),
-      shell("k", "JED-4319 build the thing"),
+      shell("k", "SHOP-4319 build the thing"),
       shell("n", "loose thread"),
     ]);
     const p = tree[0]!;
-    expect(labels(p.branches)).toEqual(["JED-4319", "Reviews", "No issue key"]);
-    expect(labels(child(tree, "frontend", "Reviews").branches)).toEqual(["No issue key", "JED-4319"]);
-    expect(titles(child(tree, "frontend", "Reviews", "JED-4319").threads)).toEqual(["Review #15708 JED-4319"]);
+    expect(labels(p.branches)).toEqual(["SHOP-4319", "Reviews", "No issue key"]);
+    expect(labels(child(tree, "frontend", "Reviews").branches)).toEqual(["No issue key", "SHOP-4319"]);
+    expect(titles(child(tree, "frontend", "Reviews", "SHOP-4319").threads)).toEqual(["Review #15708 SHOP-4319"]);
   });
 
   test("keyless thread nests under its visible spawner, skipping a settled launcher", () => {
@@ -148,8 +148,8 @@ describe("placement", () => {
   });
 
   test("keyed thread stays under its key even with a visible spawner", () => {
-    const tree = build([shell("a", "JED-4312 parent"), shell("mcp:b", "JED-4313 child")], { "mcp:b": "a" });
-    expect(labels(tree[0]!.branches).sort()).toEqual(["JED-4312", "JED-4313"]);
+    const tree = build([shell("a", "SHOP-4312 parent"), shell("mcp:b", "SHOP-4313 child")], { "mcp:b": "a" });
+    expect(labels(tree[0]!.branches).sort()).toEqual(["SHOP-4312", "SHOP-4313"]);
   });
 
   test("spawner in another project is not followed", () => {
@@ -190,34 +190,34 @@ describe("order", () => {
 });
 
 describe("PR stack", () => {
-  /** ENG-1 holds #10, ENG-2 #11, ENG-3 #12; each thread lists the stack. */
+  /** WEB-1 holds #10, WEB-2 #11, WEB-3 #12; each thread lists the stack. */
   const stacked = () => [
-    shell("s3", "ENG-3 top", { pullRequests: [pr(12, "created"), pr(10, "stack"), pr(11, "stack")] }),
-    shell("other", "ENG-9 unrelated"),
-    shell("s1", "ENG-1 base", { pullRequests: [pr(10, "created"), pr(11, "stack"), pr(12, "stack")] }),
-    shell("s2", "ENG-2 middle", { pullRequests: [pr(11, "created"), pr(10, "stack"), pr(12, "stack"), pr(99, "manual")] }),
+    shell("s3", "WEB-3 top", { pullRequests: [pr(12, "created"), pr(10, "stack"), pr(11, "stack")] }),
+    shell("other", "WEB-9 unrelated"),
+    shell("s1", "WEB-1 base", { pullRequests: [pr(10, "created"), pr(11, "stack"), pr(12, "stack")] }),
+    shell("s2", "WEB-2 middle", { pullRequests: [pr(11, "created"), pr(10, "stack"), pr(12, "stack"), pr(99, "manual")] }),
   ];
 
   test("badge position and total", () => {
     const tree = build(stacked());
     const pos = (k: string) => child(tree, "frontend", k).threads[0]!.stack;
-    expect(pos("ENG-1")).toEqual({ pos: 1, total: 3 });
-    expect(pos("ENG-2")).toEqual({ pos: 2, total: 3 });
-    expect(pos("ENG-3")).toEqual({ pos: 3, total: 3 });
-    expect(pos("ENG-9")).toBeNull();
+    expect(pos("WEB-1")).toEqual({ pos: 1, total: 3 });
+    expect(pos("WEB-2")).toEqual({ pos: 2, total: 3 });
+    expect(pos("WEB-3")).toEqual({ pos: 3, total: 3 });
+    expect(pos("WEB-9")).toBeNull();
   });
 
   test("stack-mate groups sit together in stack order, at the newest member's slot", () => {
-    expect(labels(build(stacked())[0]!.branches)).toEqual(["ENG-1", "ENG-2", "ENG-3", "ENG-9"]);
+    expect(labels(build(stacked())[0]!.branches)).toEqual(["WEB-1", "WEB-2", "WEB-3", "WEB-9"]);
   });
 
   test("node PRs leave out stack links; closed PRs are not stack members", () => {
     const tree = build([
       ...stacked(),
-      shell("c", "ENG-5 closed", { pullRequests: [pr(20, "created", "merged"), pr(21, "stack", "merged")] }),
+      shell("c", "WEB-5 closed", { pullRequests: [pr(20, "created", "merged"), pr(21, "stack", "merged")] }),
     ]);
-    expect(child(tree, "frontend", "ENG-2").threads[0]!.prs.map((p) => p.n)).toEqual([11, 99]);
-    const closed = child(tree, "frontend", "ENG-5").threads[0]!;
+    expect(child(tree, "frontend", "WEB-2").threads[0]!.prs.map((p) => p.n)).toEqual([11, 99]);
+    const closed = child(tree, "frontend", "WEB-5").threads[0]!;
     expect(closed.stack).toBeNull();
     expect(closed.prs).toEqual([{ n: 20, url: "https://github.com/org/repo/pull/20", state: "merged" }]);
   });

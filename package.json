@@ -4,7 +4,8 @@
   "type": "module",
   "scripts": {
     "start": "bun run src/server.ts",
-    "typecheck": "tsc --noEmit"
+    "typecheck": "tsc --noEmit",
+    "demo": "bun run scripts/demo.ts"
   },
   "dependencies": {
     "@preact/signals": "^2.11.4",

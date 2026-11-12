@@ -20,6 +20,7 @@
       .stale{opacity:.45;filter:grayscale(1)}
       .dot{display:inline-block;width:9px;height:9px;border-radius:50%;background:var(--c);flex:none}
       .dot.s-running{animation:pulse 1.4s infinite}@keyframes pulse{50%{opacity:.35}}
+      @media (prefers-reduced-motion:reduce){.dot.s-running{animation:none}}
       .s-needs-input{--c:var(--needs-input)}.s-running{--c:var(--running)}.s-completed{--c:var(--completed)}
       .s-cancelled{--c:var(--cancelled)}.s-idle{--c:var(--idle)}.s-snoozed{--c:var(--snoozed)}
       .badge{display:inline-flex;gap:3px;align-items:center;border:1px solid var(--line);border-radius:10px;padding:0 6px;font-size:11px;color:var(--mut);white-space:nowrap}
