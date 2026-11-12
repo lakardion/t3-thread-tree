@@ -1,7 +1,7 @@
 ---
 title: UI/UX design proposal A (Claude Opus)
 type: research
-status: open
+status: closed
 assignee:
 blocked-by: [01-shadcn-migration]
 ---
@@ -31,3 +31,8 @@ Cover each of these:
 - `.wayfinder/design-overhaul/research/02-opus-mockup.html`: one static mockup with demo data, light and dark.
 
 Add a `## Resolution` with a link to both files, then set `status: closed`.
+
+## Resolution
+
+- Proposal: [research/02-opus-proposal.md](../research/02-opus-proposal.md). "Harbor" palette with contrast table, five gradient uses, ten display states with motion and reduced-motion forms, two-line rows, folded single-thread key groups, stack rail, header attention summary with a "Needs you" filter, and a field inventory with challenges to ticket 005 (age, last message, launched-by, subagent counts).
+- Mockup: [research/02-opus-mockup.html](../research/02-opus-mockup.html), demo data, light and dark side by side.

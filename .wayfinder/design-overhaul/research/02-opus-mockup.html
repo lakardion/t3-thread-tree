@@ -1,0 +1,334 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Thread tree mockup A</title>
+<style>
+/** "Harbor" palette, scoped per pane so light and dark show side by side. The app puts these on :root. */
+.light {
+  --background: oklch(0.985 0.004 250);
+  --foreground: oklch(0.22 0.02 262);
+  --card: oklch(1 0 0);
+  --muted: oklch(0.965 0.006 250);
+  --muted-foreground: oklch(0.5 0.02 258);
+  --accent: oklch(0.955 0.012 255);
+  --border: oklch(0.915 0.01 255);
+  --primary: oklch(0.5 0.17 262);
+  --ring: oklch(0.5 0.17 262 / 50%);
+  --popover: oklch(1 0 0);
+  --st-needs: oklch(0.66 0.17 52);
+  --st-needs-fg: oklch(0.52 0.14 48);
+  --st-working: oklch(0.61 0.14 238);
+  --st-working-fg: oklch(0.5 0.13 240);
+  --st-done: oklch(0.62 0.15 155);
+  --st-done-fg: oklch(0.49 0.12 155);
+  --st-failed: oklch(0.62 0.2 20);
+  --st-failed-fg: oklch(0.52 0.19 22);
+  --st-plan: oklch(0.6 0.19 295);
+  --st-plan-fg: oklch(0.5 0.19 295);
+  --st-idle: oklch(0.63 0.015 258);
+  --pr-merged: oklch(0.5 0.19 300);
+  --wash: 11%;
+  --shadow: 0 1px 2px oklch(0.22 0.02 262 / 6%), 0 4px 16px -8px oklch(0.22 0.02 262 / 10%);
+}
+.dark {
+  --background: oklch(0.17 0.015 262);
+  --foreground: oklch(0.95 0.008 255);
+  --card: oklch(0.205 0.017 262);
+  --muted: oklch(0.25 0.018 262);
+  --muted-foreground: oklch(0.7 0.02 258);
+  --accent: oklch(0.26 0.022 262);
+  --border: oklch(1 0 0 / 9%);
+  --primary: oklch(0.72 0.14 262);
+  --ring: oklch(0.72 0.14 262 / 50%);
+  --popover: oklch(0.23 0.018 262);
+  --st-needs: oklch(0.8 0.15 70);
+  --st-needs-fg: oklch(0.83 0.13 72);
+  --st-working: oklch(0.76 0.12 230);
+  --st-working-fg: oklch(0.8 0.1 230);
+  --st-done: oklch(0.77 0.14 160);
+  --st-done-fg: oklch(0.8 0.12 160);
+  --st-failed: oklch(0.7 0.17 18);
+  --st-failed-fg: oklch(0.76 0.14 18);
+  --st-plan: oklch(0.72 0.15 295);
+  --st-plan-fg: oklch(0.78 0.12 295);
+  --st-idle: oklch(0.55 0.02 258);
+  --pr-merged: oklch(0.76 0.13 300);
+  --wash: 14%;
+  --shadow: 0 1px 2px oklch(0 0 0 / 30%), 0 6px 20px -10px oklch(0 0 0 / 60%);
+}
+
+* { box-sizing: border-box; }
+body { margin: 0; font: 13px/1.45 "Inter", ui-sans-serif, system-ui, -apple-system, sans-serif; background: oklch(0.17 0.015 262); }
+.panes { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 640px), 1fr)); }
+.pane { background: var(--background); color: var(--foreground); padding: 20px 16px 32px; min-width: 0; }
+.pane-label { font: 600 11px/1 ui-monospace, monospace; letter-spacing: .08em; text-transform: uppercase; color: var(--muted-foreground); margin-bottom: 14px; }
+.mono { font-family: ui-monospace, "SF Mono", "JetBrains Mono", Menlo, monospace; font-variant-numeric: tabular-nums; }
+a { color: inherit; text-decoration: none; }
+
+/** Header: title, attention summary, filter, settled switch. */
+.top { display: flex; flex-wrap: wrap; align-items: center; gap: 10px 14px; margin-bottom: 14px; }
+.top h1 { margin: 0; font-size: 15px; font-weight: 600; }
+.summary { display: flex; gap: 6px; flex-wrap: wrap; }
+.sum { display: inline-flex; align-items: center; gap: 6px; height: 24px; padding: 0 9px; border-radius: 999px; border: 1px solid var(--border); background: var(--card); font-size: 12px; color: var(--muted-foreground); }
+.sum b { color: var(--foreground); font-weight: 600; }
+.sum.hot { border-color: color-mix(in oklch, var(--st-needs) 45%, transparent); background: color-mix(in oklch, var(--st-needs) var(--wash), var(--card)); color: var(--st-needs-fg); }
+.sum.hot b { color: var(--st-needs-fg); }
+.spacer { flex: 1; }
+.toggle { display: inline-flex; padding: 2px; border-radius: 8px; background: var(--muted); }
+.toggle span { padding: 3px 10px; border-radius: 6px; font-size: 12px; color: var(--muted-foreground); }
+.toggle span.on { background: var(--card); color: var(--foreground); box-shadow: var(--shadow); }
+.switch { display: inline-flex; align-items: center; gap: 8px; color: var(--muted-foreground); font-size: 12px; }
+.switch i { width: 30px; height: 18px; border-radius: 999px; background: var(--border); position: relative; }
+.switch i::after { content: ""; position: absolute; top: 2px; left: 2px; width: 14px; height: 14px; border-radius: 50%; background: var(--card); box-shadow: var(--shadow); }
+
+/** Project card with a gradient header band and a gradient monogram. */
+.project { border: 1px solid var(--border); border-radius: 12px; background: var(--card); box-shadow: var(--shadow); margin-bottom: 12px; overflow: hidden; }
+.phead {
+  display: flex; align-items: center; gap: 10px; padding: 9px 12px;
+  background: linear-gradient(100deg, color-mix(in oklch, var(--p1) var(--wash), transparent) 0%, color-mix(in oklch, var(--p2) calc(var(--wash) / 2), transparent) 45%, transparent 75%);
+  border-bottom: 1px solid var(--border);
+}
+.project.closed .phead { border-bottom: 0; }
+.mark { width: 22px; height: 22px; border-radius: 6px; display: grid; place-items: center; font: 700 11px/1 ui-sans-serif, system-ui; color: white; background: linear-gradient(135deg, var(--p1), var(--p2)); flex: none; }
+.pname { font-weight: 600; font-size: 14px; }
+.prepo { color: var(--muted-foreground); font-size: 12px; }
+.pcounts { margin-left: auto; display: flex; gap: 10px; color: var(--muted-foreground); font-size: 12px; align-items: center; }
+.pcounts span { display: inline-flex; align-items: center; gap: 4px; }
+.chev { width: 14px; color: var(--muted-foreground); text-align: center; flex: none; font-size: 10px; }
+.pbody { padding: 4px 6px 6px; }
+
+/** Group rows: issue key, Reviews, No issue key. */
+.group-row { display: flex; align-items: center; gap: 6px; padding: 5px 6px 3px; font-size: 12px; font-weight: 600; color: var(--muted-foreground); }
+.group-row .key { color: var(--foreground); }
+.group-row .dots { display: inline-flex; gap: 3px; margin-left: 4px; }
+.nest { padding-left: 16px; }
+
+/** Stack rail: groups that share a PR stack sit inside one bracket with a gradient rail. */
+.stack { position: relative; margin: 2px 0 4px; padding-left: 14px; }
+.stack::before { content: ""; position: absolute; left: 4px; top: 22px; bottom: 6px; width: 3px; border-radius: 2px; background: linear-gradient(180deg, var(--primary), color-mix(in oklch, var(--st-plan) 80%, transparent)); }
+.stack-label { display: flex; align-items: center; gap: 6px; padding: 4px 6px 2px 0; font-size: 11px; color: var(--muted-foreground); }
+.stack-label .mono { color: var(--primary); }
+
+/** Thread row: two lines. Line 1 holds the status, title and right-hand meta. Line 2 holds the status phrase and the last message. */
+.row { position: relative; display: grid; grid-template-columns: 16px minmax(0, 1fr) auto; column-gap: 8px; padding: 5px 8px 6px 6px; border-radius: 8px; }
+.row:hover { background: var(--accent); }
+.row::before { content: ""; position: absolute; left: 0; top: 6px; bottom: 6px; width: 2px; border-radius: 2px; }
+.row .ind { grid-row: 1 / span 2; display: grid; place-items: start center; padding-top: 4px; }
+.l1 { display: flex; align-items: baseline; gap: 6px; min-width: 0; }
+.title { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-weight: 500; }
+.title:hover { text-decoration: underline; }
+.keychip { flex: none; font-size: 11px; font-weight: 600; color: var(--muted-foreground); }
+.meta { grid-column: 3; grid-row: 1; display: flex; align-items: center; gap: 5px; }
+.l2 { grid-column: 2 / span 2; display: flex; gap: 6px; min-width: 0; font-size: 12px; color: var(--muted-foreground); }
+.phrase { flex: none; font-weight: 500; }
+.msg { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.msg.agent::before { content: "› "; opacity: .6; }
+.msg.user::before { content: "you: "; opacity: .8; }
+.age { font-size: 11px; color: var(--muted-foreground); }
+.model { font-size: 10.5px; padding: 0 5px; border-radius: 4px; background: var(--muted); color: var(--muted-foreground); }
+
+/** Status: color on the dot and on the phrase, plus a row wash for the two states that matter most. */
+.dot { width: 9px; height: 9px; border-radius: 50%; position: relative; display: inline-block; flex: none; }
+.s-needs .dot { background: var(--st-needs); border-radius: 2px; transform: rotate(45deg) scale(.92); }
+.s-needs .phrase { color: var(--st-needs-fg); }
+.s-needs::before { background: var(--st-needs); animation: breathe 2.4s ease-in-out infinite; }
+.s-needs { background: linear-gradient(90deg, color-mix(in oklch, var(--st-needs) var(--wash), transparent), transparent 45%); }
+
+.s-working .dot { background: var(--st-working); }
+.s-working .dot::after { content: ""; position: absolute; inset: 0; border-radius: 50%; border: 2px solid var(--st-working); animation: ping 1.8s cubic-bezier(0, 0, .2, 1) infinite; }
+.s-working .phrase { color: var(--st-working-fg); }
+.s-working::before { background: linear-gradient(180deg, transparent, var(--st-working), transparent) 0 0 / 100% 200%; animation: sweep 1.6s linear infinite; }
+.s-working { background: linear-gradient(90deg, color-mix(in oklch, var(--st-working) calc(var(--wash) * .6), transparent), transparent 35%); }
+
+.s-connecting .dot { background: transparent; border: 2px dashed var(--st-working); animation: spin 2.4s linear infinite; }
+.s-connecting .phrase { color: var(--st-working-fg); }
+
+.s-waiting .dot { background: transparent; border: 2px solid var(--st-working); }
+.s-waiting .phrase { color: var(--st-working-fg); }
+
+.s-done .dot { background: var(--st-done); }
+.s-done .phrase { color: var(--st-done-fg); }
+.s-done.unseen .title { font-weight: 650; }
+
+.s-plan .dot { background: var(--st-plan); }
+.s-plan .phrase { color: var(--st-plan-fg); }
+
+.s-failed .dot { background: var(--st-failed); }
+.s-failed .phrase { color: var(--st-failed-fg); }
+
+.s-interrupted .dot { background: transparent; border: 2px solid var(--st-failed); }
+.s-interrupted .phrase { color: var(--st-failed-fg); }
+
+.s-idle .dot { background: var(--st-idle); }
+.s-snoozed .dot { background: transparent; border: 2px solid var(--st-idle); }
+.s-snoozed .title { color: var(--muted-foreground); font-weight: 400; }
+
+@keyframes ping { 0% { transform: scale(1); opacity: .65; } 80%, 100% { transform: scale(2.4); opacity: 0; } }
+@keyframes sweep { from { background-position: 0 100%; } to { background-position: 0 -100%; } }
+@keyframes breathe { 50% { opacity: .45; } }
+@keyframes spin { to { transform: rotate(360deg); } }
+@media (prefers-reduced-motion: reduce) {
+  .row::before, .dot, .dot::after { animation: none !important; }
+  .s-working .dot::after { transform: scale(1.7); opacity: .35; }
+  .s-working::before { background: var(--st-working); }
+}
+
+/** Chips: stack position, PRs, small flags. */
+.chip { display: inline-flex; align-items: center; gap: 4px; height: 19px; padding: 0 6px; border-radius: 6px; border: 1px solid var(--border); font-size: 11px; color: var(--muted-foreground); background: var(--card); white-space: nowrap; }
+.chip.stackpos { border-color: color-mix(in oklch, var(--primary) 40%, transparent); color: var(--primary); background: linear-gradient(135deg, color-mix(in oklch, var(--primary) 10%, var(--card)), var(--card)); }
+.chip.draft { border-style: dashed; }
+.chip.merged { color: var(--pr-merged); border-color: color-mix(in oklch, var(--pr-merged) 40%, transparent); }
+.chip.closed { text-decoration: line-through; }
+.ck { width: 6px; height: 6px; border-radius: 50%; }
+.ck.passing { background: var(--st-done); }
+.ck.failing { background: var(--st-failed); }
+.ck.pending { background: transparent; border: 1.5px solid var(--st-needs); }
+.rv { font-size: 10px; }
+.rv.approved { color: var(--st-done-fg); }
+.rv.changes { color: var(--st-failed-fg); }
+.rv.conflict { color: var(--st-needs-fg); }
+.flag { font-size: 11px; color: var(--muted-foreground); }
+
+/** Hover card sample. */
+.hc-wrap { margin-top: 18px; }
+.hc-wrap .cap { font-size: 11px; color: var(--muted-foreground); margin-bottom: 6px; }
+.hovercard { width: min(100%, 360px); border: 1px solid var(--border); border-radius: 10px; background: var(--popover); box-shadow: var(--shadow); padding: 12px; font-size: 12px; }
+.hovercard h3 { margin: 0 0 6px; font-size: 13px; font-weight: 600; }
+.hovercard dl { display: grid; grid-template-columns: auto 1fr; gap: 3px 10px; margin: 8px 0 0; }
+.hovercard dt { color: var(--muted-foreground); }
+.hovercard dd { margin: 0; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.hovercard blockquote { margin: 8px 0 0; padding: 6px 8px; border-left: 2px solid var(--st-needs); background: var(--muted); border-radius: 0 6px 6px 0; }
+</style>
+</head>
+<body>
+<div class="panes">
+  <section class="pane light"><div class="pane-label">Light</div><div class="app"></div></section>
+  <section class="pane dark"><div class="pane-label">Dark</div><div class="app"></div></section>
+</div>
+
+<script>
+/** Demo data: the same threads as scripts/demo.ts, with the extra fields the proposal shows. */
+const pr = (n, st = "open", checks = null, review = null, conflict = false) => ({ n, st, checks, review, conflict });
+const PROJECTS = [
+  {
+    name: "storefront", repo: "acme/storefront", p1: "oklch(0.62 0.17 262)", p2: "oklch(0.66 0.16 300)",
+    groups: [
+      { stack: "4 PRs · base main", items: [
+        { key: "SHOP-412", st: "working", title: "Checkout: split the payment step into its own route", phrase: "Working 12m", msg: ["agent", "Running the checkout e2e suite against the new route…"], age: "now", model: "opus", stackpos: "1/4", prs: [pr(2101, "draft", "pending")] },
+        { key: "SHOP-413", st: "needs", title: "Saved cards list with default selection", phrase: "Approval · command · 3m", msg: ["agent", "Run `bun test apps/web/cards`?"], age: "3m", model: "opus", stackpos: "2/4", prs: [pr(2102, "open", "passing")] },
+        { key: "SHOP-415", st: "done", unseen: true, title: "Apple Pay button behind a feature flag", phrase: "Your turn", msg: ["agent", "PR is ready. Checks pass and the flag defaults to off."], age: "25m", model: "sonnet", stackpos: "3/4", prs: [pr(2104, "open", "passing", "approved")] },
+        { key: "SHOP-418", st: "interrupted", title: "Order summary sidebar in the new design", phrase: "Interrupted", msg: ["user", "stop, the design changed"], age: "41m", model: "codex", stackpos: "4/4", prs: [pr(2107, "open", "failing", "changes", true)] },
+      ] },
+      { label: "Reviews", items: [
+        { group: "SHOP-398", items: [{ st: "done", title: "Review #2088", phrase: "Your turn", msg: ["agent", "Two blocking findings, both in cart.ts."], age: "52m", model: "opus", prs: [pr(2088, "open", "passing")] }] },
+        { group: "SHOP-401", items: [
+          { st: "connecting", title: "Review #2093", phrase: "Starting", msg: ["user", "Review this PR against the spec"], age: "now", model: "codex", prs: [pr(2093, "open", "pending")] },
+          { st: "done", title: "Review #2095", phrase: "Done", msg: ["agent", "Approved. No findings."], age: "2h", model: "opus", prs: [pr(2095, "merged")] },
+        ] },
+      ] },
+      { label: "No issue key", items: [
+        { st: "waiting", title: "Design-system migration map", phrase: "Waiting on 2 threads", msg: ["agent", "Dispatched the three migration keys."], age: "4m", model: "opus", flags: ["⛬ 2 subagents"], children: [
+          { st: "working", title: "Migrate Button to the new tokens", phrase: "Working 4m", msg: ["agent", "Editing button.tsx"], age: "now", model: "sonnet" },
+          { st: "plan", title: "Migrate Dialog to the new tokens", phrase: "Plan ready", msg: ["agent", "Plan: 3 steps, 2 files."], age: "9m", model: "opus" },
+          { st: "snoozed", title: "Migrate Tooltip to the new tokens", phrase: "Snoozed until Fri 10:42", msg: null, age: "1h", model: "opus" },
+        ] },
+        { st: "failed", title: "Flaky e2e: cart badge count", phrase: "Usage limit · resets 14:00", msg: ["agent", "Hit the usage limit while re-running the suite."], age: "1h", model: "opus", flags: ["↻ auto-resume"] },
+      ] },
+    ],
+  },
+  {
+    name: "api-gateway", repo: "acme/api-gateway", p1: "oklch(0.62 0.12 185)", p2: "oklch(0.65 0.14 230)",
+    groups: [
+      { key: "API-77", items: [{ st: "connecting", title: "Rate-limit the search endpoint per API key", phrase: "Queued", msg: ["user", "Use a token bucket per key"], age: "now", model: "codex" }] },
+      { key: "API-81", items: [{ st: "needs", title: "Move webhook retries to a durable queue", phrase: "Question · 6m", msg: ["agent", "Should retries cap at 5 or at 10?"], age: "6m", model: "opus" }] },
+      { label: "No issue key", items: [{ st: "snoozed", title: "Investigate slow cold starts", phrase: "Snoozed until Fri 04:42", msg: ["agent", "Cold start is 1.8 s; most of it is the ORM."], age: "3h", model: "sonnet" }] },
+    ],
+  },
+  { name: "docs-site", repo: "acme/docs", p1: "oklch(0.64 0.16 340)", p2: "oklch(0.7 0.15 20)", closed: true, closedDots: ["done", "failed"] },
+];
+
+const esc = (s) => s.replace(/[&<>]/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;" })[c]);
+const prChip = (p) => {
+  const cls = ["chip", "mono", p.st === "draft" && "draft", p.st === "merged" && "merged", p.st === "closed" && "closed"].filter(Boolean).join(" ");
+  const ck = p.checks ? `<span class="ck ${p.checks}" title="checks ${p.checks}"></span>` : "";
+  const rv = p.review === "approved" ? `<span class="rv approved" title="approved">✓</span>` : p.review === "changes" ? `<span class="rv changes" title="changes requested">✕</span>` : "";
+  const cf = p.conflict ? `<span class="rv conflict" title="merge conflict">⚠</span>` : "";
+  return `<a class="${cls}" href="#">${ck}#${p.n}${p.st === "merged" ? " merged" : ""}${rv}${cf}</a>`;
+};
+const row = (t, key) => `
+  <div class="row s-${t.st}${t.unseen ? " unseen" : ""}">
+    <span class="ind"><span class="dot" title="${t.st}"></span></span>
+    <div class="l1">${key ? `<span class="keychip mono">${key}</span>` : ""}<a class="title" href="#">${esc(t.title)}</a></div>
+    <span class="meta">
+      ${(t.flags ?? []).map((f) => `<span class="flag">${f}</span>`).join("")}
+      ${t.stackpos ? `<span class="chip stackpos mono" title="PR stack position">⧉ ${t.stackpos}</span>` : ""}
+      ${(t.prs ?? []).map(prChip).join("")}
+      <span class="model mono">${t.model}</span>
+      <span class="age mono">${t.age}</span>
+    </span>
+    <div class="l2"><span class="phrase">${t.phrase}</span>${t.msg ? `<span class="msg ${t.msg[0]}">${esc(t.msg[1])}</span>` : ""}</div>
+  </div>
+  ${t.children ? `<div class="nest">${t.children.map((c) => row(c)).join("")}</div>` : ""}`;
+const groupRow = (label, mono) => `<div class="group-row"><span class="chev">▾</span><span class="${mono ? "key mono" : ""}">${label}</span></div>`;
+const group = (g) => {
+  /** A key group with one thread folds into that thread's row. */
+  if (g.key && g.items.length === 1) return row(g.items[0], g.key);
+  if (g.stack) return `<div class="stack"><div class="stack-label"><span class="mono">⧉</span>PR stack · ${g.stack}</div>${g.items.map((t) => row(t, t.key)).join("")}</div>`;
+  const inner = g.items.map((x) => (x.group ? (x.items.length === 1 ? row(x.items[0], x.group) : `${groupRow(x.group, true)}<div class="nest">${x.items.map((t) => row(t)).join("")}</div>`) : row(x))).join("");
+  return `${groupRow(g.label ?? g.key, !!g.key)}<div class="nest">${inner}</div>`;
+};
+const counts = (p) => {
+  const all = [];
+  const walk = (xs) => xs.forEach((x) => (x.items ? walk(x.items) : (all.push(x.st), x.children && walk(x.children))));
+  walk(p.groups ?? []);
+  const n = (s) => all.filter((x) => s.includes(x)).length;
+  return [["needs", n(["needs"])], ["working", n(["working", "connecting", "waiting"])], ["done", n(["done", "plan"])]]
+    .filter(([, c]) => c).map(([s, c]) => `<span class="s-${s}"><span class="dot"></span>${c}</span>`).join("");
+};
+const project = (p) => `
+  <section class="project${p.closed ? " closed" : ""}" style="--p1:${p.p1};--p2:${p.p2}">
+    <div class="phead">
+      <span class="chev">${p.closed ? "▸" : "▾"}</span>
+      <span class="mark">${p.name[0].toUpperCase()}</span>
+      <span class="pname">${p.name}</span><span class="prepo mono">${p.repo}</span>
+      <span class="pcounts">${p.closed ? p.closedDots.map((s) => `<span class="s-${s}"><span class="dot"></span></span>`).join("") : counts(p)}</span>
+    </div>
+    ${p.closed ? "" : `<div class="pbody">${p.groups.map(group).join("")}</div>`}
+  </section>`;
+const header = `
+  <div class="top">
+    <h1>Thread tree</h1>
+    <div class="summary">
+      <span class="sum hot"><b>2</b> need you</span>
+      <span class="sum"><b>5</b> working</span>
+      <span class="sum"><b>4</b> your turn</span>
+      <span class="sum"><b>2</b> stopped</span>
+    </div>
+    <span class="spacer"></span>
+    <span class="toggle"><span class="on">All</span><span>Needs you</span></span>
+    <span class="switch"><i></i>show settled</span>
+  </div>`;
+const hover = `
+  <div class="hc-wrap">
+    <div class="cap">Hover card on the SHOP-413 title</div>
+    <div class="hovercard">
+      <h3>SHOP-413 · Saved cards list with default selection</h3>
+      <div class="l2"><span class="phrase" style="color:var(--st-needs-fg)">Approval · command</span><span class="msg">waiting 3m · blocks the run</span></div>
+      <blockquote class="mono">bun test apps/web/cards</blockquote>
+      <dl>
+        <dt>Model</dt><dd class="mono">claude-opus-5-5 · plan mode</dd>
+        <dt>Branch</dt><dd class="mono">shop-413-saved-cards</dd>
+        <dt>Worktree</dt><dd class="mono">~/.t3/worktrees/storefront/shop-413</dd>
+        <dt>Started by</dt><dd>agent via launch, from “SHOP map”</dd>
+        <dt>Run</dt><dd>started 14m ago</dd>
+        <dt>PR #2102</dt><dd>open · checks passing · +212 −40 · 9 files</dd>
+        <dt>Goal</dt><dd>Ship the saved-cards list · active</dd>
+      </dl>
+    </div>
+  </div>`;
+for (const el of document.querySelectorAll(".app")) el.innerHTML = header + PROJECTS.map(project).join("") + hover;
+</script>
+</body>
+</html>
