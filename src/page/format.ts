@@ -1,4 +1,4 @@
-import type { Branch, ThreadNode } from "../shared/tree.ts";
+import type { Branch, ThreadNode, Tree } from "../shared/tree.ts";
 
 /** Adjacent branches with the same stack id form one run. A branch with no stack is a run of one. */
 export function stackRuns(bs: Branch[]): Branch[][] {
@@ -37,3 +37,9 @@ export const isKeyGroup = (b: Branch): boolean => b.threads.length > 0 && b.thre
 
 /** The one thread of a key group that folds into its row, else null. */
 export const folded = (b: Branch): ThreadNode | null => (isKeyGroup(b) && b.threads.length === 1 ? b.threads[0]! : null);
+
+/** The Linear issue URL when the key prefix is a configured team, else null. */
+export function linearHref(key: string, linear: Tree["linear"]): string | null {
+  if (!linear || !linear.teams.includes(key.slice(0, key.lastIndexOf("-")))) return null;
+  return `https://linear.app/${linear.workspace}/issue/${key}`;
+}

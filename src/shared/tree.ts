@@ -73,7 +73,13 @@ export type Branch = {
 
 export type Conn = "up" | "down" | "unauthorized";
 
-export type Tree = { conn: Conn; lastUpdate: string | null; projects: Branch[] };
+export type Tree = {
+  conn: Conn;
+  lastUpdate: string | null;
+  /** Set when the server knows the Linear workspace and its team keys. */
+  linear: { workspace: string; teams: string[] } | null;
+  projects: Branch[];
+};
 
 const flat = (t: ThreadNode): ThreadNode[] => [t, ...t.children.flatMap(flat)];
 export const allThreads = (b: Branch): ThreadNode[] => [

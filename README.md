@@ -46,6 +46,13 @@ Issue a read-only token once, and put it in `.env` (gitignored):
 echo "T3_TOKEN=$(~/.t3/bin/t3 auth session issue --scope orchestration:read --label thread-tree --ttl 52w --token-only)" > .env
 ```
 
+Optional: link Linear issue keys. Add these to `.env`:
+
+```sh
+LINEAR_WORKSPACE=join-com   # the slug in linear.app/<workspace>
+LINEAR_TEAMS=JED,ENG,MOR    # team keys that are Linear keys
+```
+
 ## Run
 
 ```sh

@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test";
-import { ago, folded, phraseWith, stackRuns, stripKey } from "../src/page/format.ts";
+import { ago, folded, linearHref, phraseWith, stackRuns, stripKey } from "../src/page/format.ts";
 import type { Branch, ThreadNode } from "../src/shared/tree.ts";
 
 const NOW = Date.parse("2026-11-12T12:00:00.000Z");
@@ -82,5 +82,19 @@ describe("stackRuns", () => {
   });
   test("an empty list gives no runs", () => {
     expect(stackRuns([])).toEqual([]);
+  });
+});
+
+describe("linearHref", () => {
+  const linear = { workspace: "acme", teams: ["JED", "ENG"] };
+
+  test("links a key of a configured team", () => {
+    expect(linearHref("JED-12", linear)).toBe("https://linear.app/acme/issue/JED-12");
+  });
+  test("returns null for a key of another prefix", () => {
+    expect(linearHref("SHOP-1", linear)).toBeNull();
+  });
+  test("returns null with no Linear config", () => {
+    expect(linearHref("JED-12", null)).toBeNull();
   });
 });

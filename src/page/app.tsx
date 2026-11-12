@@ -9,6 +9,7 @@ import {
   CirclePause,
   CircleX,
   Diamond,
+  ExternalLink,
   Layers,
   ListChecks,
   LoaderCircle,
@@ -33,7 +34,7 @@ import { ToggleGroup, ToggleGroupItem } from "@/components/ui/toggle-group";
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
 import { cn } from "@/lib/utils";
 import { countAttention, needsYou, onlyNeedsYou } from "./attention.ts";
-import { ago, folded, isKeyGroup, phraseWith, stackRuns, stripKey } from "./format.ts";
+import { ago, folded, isKeyGroup, linearHref, phraseWith, stackRuns, stripKey } from "./format.ts";
 
 const TOKEN_CMD =
   "~/.t3/bin/t3 auth session issue --scope orchestration:read --label thread-tree --ttl 52w --token-only";
@@ -81,6 +82,7 @@ const Details = createContext<{ open: Set<string>; toggle: (id: string) => void;
   show: () => {},
 });
 const NeedsOnly = createContext(false);
+const Linear = createContext<Tree["linear"]>(null);
 
 const StatusIcon = ({ t }: { t: ThreadNode }) => {
   const { icon: Icon, shape } = STATUS[t.status];
@@ -224,6 +226,8 @@ function ThreadRow({ t, chip }: { t: ThreadNode; chip?: string }) {
   const now = useContext(Now);
   const { open, toggle, show } = useContext(Details);
   const dim = useContext(NeedsOnly) && !needsYou(t.status);
+  const linear = useContext(Linear);
+  const chipHref = chip ? linearHref(chip, linear) : null;
   return (
     <Collapsible asChild open={open.has(t.id)} onOpenChange={() => toggle(t.id)}>
     <li className="my-px">
@@ -236,8 +240,14 @@ function ThreadRow({ t, chip }: { t: ThreadNode; chip?: string }) {
           {phraseWith(t, now)}
         </span>
         {chip && (
-          <Badge variant="outline" className={cn(CHIP, "flex-none font-mono")}>
-            {chip}
+          <Badge variant="outline" className={cn(CHIP, "flex-none font-mono", chipHref && "hover:underline")} asChild={!!chipHref}>
+            {chipHref ? (
+              <a href={chipHref} target="_blank" rel="noreferrer" title="Open in Linear">
+                {chip}
+              </a>
+            ) : (
+              chip
+            )}
           </Badge>
         )}
         <a
@@ -333,6 +343,8 @@ type Fold = { closed: Set<string>; toggle: (id: string) => void };
 function GroupRow({ b, closed, toggle }: { b: Branch } & Fold) {
   const open = !closed.has(b.id);
   const one = folded(b);
+  const linear = useContext(Linear);
+  const groupHref = isKeyGroup(b) ? linearHref(b.label, linear) : null;
   if (one) return <ThreadRow t={one} chip={b.label} />;
   return (
     <Collapsible asChild open={open} onOpenChange={() => toggle(b.id)}>
@@ -344,6 +356,18 @@ function GroupRow({ b, closed, toggle }: { b: Branch } & Fold) {
               {b.label}
             </span>
           </CollapsibleTrigger>
+          {groupHref && (
+            <a
+              href={groupHref}
+              target="_blank"
+              rel="noreferrer"
+              aria-label={`Open ${b.label} in Linear`}
+              title="Open in Linear"
+              className="flex-none text-muted-foreground hover:text-foreground"
+            >
+              <ExternalLink className="size-3" aria-hidden />
+            </a>
+          )}
           {!open && <Icons b={b} />}
         </div>
         <CollapsibleContent asChild>
@@ -557,6 +581,7 @@ function App() {
       )}
       <Details value={details}>
       <NeedsOnly value={needsOnly}>
+        <Linear value={tree?.linear ?? null}>
         <Now value={now}>
           <div
             className={tree && tree.conn !== "up" ? "grayscale" : ""}
@@ -580,6 +605,7 @@ function App() {
             )}
           </div>
         </Now>
+        </Linear>
       </NeedsOnly>
       </Details>
     </TooltipProvider>

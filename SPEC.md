@@ -86,7 +86,7 @@ A **top-level thread** has no native `parentThreadId`. A **subagent** has `relat
 
 ## UI
 
-The page shows an outline tree: Project, group, thread. Each thread row has a status dot, a title link to `t3code://threads/<environmentId>/<threadId>`, a stack badge and PR links. Closed rows are saved in `localStorage`. A toggle shows settled threads. A banner shows when T3 is down or rejects the token.
+The page shows an outline tree: Project, group, thread. Each thread row has a status dot, a title link to `t3code://threads/<environmentId>/<threadId>`, a stack badge and PR links. Closed rows are saved in `localStorage`. A toggle shows settled threads. When `LINEAR_WORKSPACE` and `LINEAR_TEAMS` are set, an issue key of a listed team links to its Linear issue. A banner shows when T3 is down or rejects the token.
 
 A pending request wins over snooze. A snoozed thread with a pending request shows as needs input.
 

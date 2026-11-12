@@ -134,6 +134,7 @@ const treeFor = (settled: boolean) =>
   JSON.stringify({
     conn: process.env.CONN ?? "up",
     lastUpdate: new Date(now).toISOString(),
+    linear: { workspace: "acme", teams: ["SHOP"] },
     projects: buildTree({ threads, projects, spawnerOf: (id) => spawners[id], environmentId: "demo", settled, now }),
   });
 const trees = { open: treeFor(false), settled: treeFor(true) };

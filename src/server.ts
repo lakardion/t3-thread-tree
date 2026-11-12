@@ -41,9 +41,14 @@ function resolveSpawners() {
 type Client = { settled: boolean; send: (data: string) => void };
 const clients = new Set<Client>();
 
+const linearWorkspace = process.env.LINEAR_WORKSPACE?.trim();
+const linearTeams = (process.env.LINEAR_TEAMS ?? "").split(",").map((s) => s.trim()).filter(Boolean);
+const linear: Tree["linear"] = linearWorkspace && linearTeams.length ? { workspace: linearWorkspace, teams: linearTeams } : null;
+
 const treeFor = (settled: boolean): Tree => ({
   conn,
   lastUpdate,
+  linear,
   projects: buildTree({
     threads: threads.values(),
     projects,
