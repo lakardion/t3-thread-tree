@@ -1,7 +1,7 @@
 ---
 title: Draw the thread row: status column, PR marks, age and motion
 type: task
-status: in-review
+status: closed
 assignee: claude (design-overhaul-07)
 blocked-by: [01-shadcn-migration, 04-synthesize-design-spec, 05-palette-and-theme, 06-status-model]
 ---
