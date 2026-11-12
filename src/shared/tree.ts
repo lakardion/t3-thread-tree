@@ -41,6 +41,8 @@ export type Branch = {
   label: string;
   /** Project branches only: `owner/name`. */
   repo?: string;
+  /** Key groups in a PR stack. Adjacent groups with the same `id` share one rail. */
+  stack?: { id: string; total: number; base: string | null };
   branches: Branch[];
   threads: ThreadNode[];
 };

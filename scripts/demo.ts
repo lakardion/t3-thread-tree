@@ -48,10 +48,11 @@ const pr = (n: number, source: string, state = "open", over: Partial<Pr> = {}): 
   checks: null,
   review: null,
   mergeability: null,
+  stackBase: null,
   ...over,
 });
 const stacked = (own: number, over: Partial<Pr> = {}) => [
-  pr(own, "created", "open", over),
+  pr(own, "created", "open", { stackBase: "main", ...over }),
   ...STACK.filter((n) => n !== own).map((n) => pr(n, "stack")),
 ];
 const request = (kind: string, blocking: boolean | null = null) => ({ kind, createdAt: ago(12), blocking });

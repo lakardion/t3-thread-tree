@@ -17,6 +17,7 @@ export type Pr = {
   checks: string | null;
   review: string | null;
   mergeability: string | null;
+  stackBase: string | null;
 };
 
 export type Thread = {
@@ -113,6 +114,7 @@ export function decodeThread(raw: unknown): Thread | null {
           checks: str(snap.checksState),
           review: str(snap.reviewDecision),
           mergeability: str(snap.mergeability),
+          stackBase: str(obj(o.stack).base),
         },
       ];
     }),

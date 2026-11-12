@@ -197,8 +197,19 @@ export function buildTree(input: BuildInput): Branch[] {
     ordered.sort((a, b) => rank(a) - rank(b));
 
     const gid = (key: string) => `g:${projectId}:${key}`;
+    /** The stack of a group, for the rail. A group with threads in two stacks takes the first one, as the order does. */
+    const railOf = (g: Group): Branch["stack"] => {
+      const st = stacks[stackOf(g) ?? -1];
+      if (!st) return undefined;
+      const base = st.threads.flatMap((t) => t.prs).find((p) => st.set.has(p.n) && p.stackBase)?.stackBase ?? null;
+      return { id: `s${st.order[0]}`, total: st.order.length, base };
+    };
     const branches = ordered.map((g): Branch => {
-      if (g.key !== REVIEWS) return { id: gid(g.key), label: g.key, branches: [], threads: g.nodes.map(clean) };
+      if (g.key !== REVIEWS) {
+        /** "No issue key" gets no rail: it does not sit with its stack mates. Reviews takes the other return. */
+        const stack = g.key === NO_KEY ? undefined : railOf(g);
+        return { id: gid(g.key), label: g.key, ...(stack && { stack }), branches: [], threads: g.nodes.map(clean) };
+      }
       const byKey = new Map<string, Node[]>();
       for (const n of g.nodes) byKey.set(n.key ?? NO_KEY, [...(byKey.get(n.key ?? NO_KEY) ?? []), n]);
       return {

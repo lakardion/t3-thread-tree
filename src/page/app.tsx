@@ -32,7 +32,7 @@ import { ToggleGroup, ToggleGroupItem } from "@/components/ui/toggle-group";
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
 import { cn } from "@/lib/utils";
 import { countAttention, needsYou, onlyNeedsYou } from "./attention.ts";
-import { ago, folded, isKeyGroup, phraseWith, stripKey } from "./format.ts";
+import { ago, folded, isKeyGroup, phraseWith, stackRuns, stripKey } from "./format.ts";
 
 const TOKEN_CMD =
   "~/.t3/bin/t3 auth session issue --scope orchestration:read --label thread-tree --ttl 52w --token-only";
@@ -253,6 +253,32 @@ function GroupRow({ b, closed, toggle }: { b: Branch } & Fold) {
   );
 }
 
+/** Key groups of one PR stack, in one rail with a label row. */
+function StackRail({ run, closed, toggle }: { run: Branch[] } & Fold) {
+  const { total, base } = run[0]!.stack!;
+  return (
+    <li className="stack-rail my-1">
+      <div className="flex min-h-6 flex-wrap items-center gap-x-1.5 px-2 text-xs text-muted-foreground">
+        <Layers className="size-3 flex-none" aria-hidden />
+        <span>
+          PR stack · {total} PRs
+          {base && (
+            <>
+              {" "}
+              · base <code className="font-mono">{base}</code>
+            </>
+          )}
+        </span>
+      </div>
+      <ul className="m-0 list-none p-0">
+        {run.map((c) => (
+          <GroupRow key={c.id} b={c} closed={closed} toggle={toggle} />
+        ))}
+      </ul>
+    </li>
+  );
+}
+
 function ProjectCard({ b, closed, toggle }: { b: Branch } & Fold) {
   const open = !closed.has(b.id);
   return (
@@ -278,9 +304,13 @@ function ProjectCard({ b, closed, toggle }: { b: Branch } & Fold) {
           <CollapsibleContent asChild>
             <CardContent className="p-1.5">
               <ul className="m-0 list-none p-0">
-                {b.branches.map((c) => (
-                  <GroupRow key={c.id} b={c} closed={closed} toggle={toggle} />
-                ))}
+                {stackRuns(b.branches).map((run) =>
+                  run[0]!.stack ? (
+                    <StackRail key={`rail:${run[0]!.id}`} run={run} closed={closed} toggle={toggle} />
+                  ) : (
+                    <GroupRow key={run[0]!.id} b={run[0]!} closed={closed} toggle={toggle} />
+                  ),
+                )}
               </ul>
             </CardContent>
           </CollapsibleContent>

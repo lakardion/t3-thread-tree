@@ -129,6 +129,20 @@
   .project-head {
     background: linear-gradient(100deg, var(--muted), var(--card) 75%);
   }
+  .stack-rail {
+    position: relative;
+    padding-left: 10px;
+  }
+  .stack-rail::before {
+    content: "";
+    position: absolute;
+    left: 0;
+    top: 0;
+    bottom: 0;
+    width: 3px;
+    border-radius: 2px;
+    background: linear-gradient(180deg, var(--primary), var(--status-plan));
+  }
   .thread-row[data-status="working"] .status-icon {
     animation: work-turn 1.4s linear infinite;
   }

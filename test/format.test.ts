@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test";
-import { ago, folded, phraseWith, stripKey } from "../src/page/format.ts";
+import { ago, folded, phraseWith, stackRuns, stripKey } from "../src/page/format.ts";
 import type { Branch, ThreadNode } from "../src/shared/tree.ts";
 
 const NOW = Date.parse("2026-11-12T12:00:00.000Z");
@@ -61,5 +61,26 @@ describe("folded", () => {
   });
   test("a group with branches and no threads does not fold", () => {
     expect(folded(group("Reviews", [], [group("SHOP-1", [thread("SHOP-1")])]))).toBeNull();
+  });
+});
+
+describe("stackRuns", () => {
+  const b = (label: string, stack?: string): Branch => ({
+    id: label,
+    label,
+    branches: [],
+    threads: [],
+    ...(stack && { stack: { id: stack, total: 2, base: null } }),
+  });
+  const names = (runs: Branch[][]) => runs.map((r) => r.map((x) => x.label));
+
+  test("adjacent branches of one stack share a run", () => {
+    const bs = [b("a", "s1"), b("b", "s1"), b("c"), b("d", "s2"), b("e", "s1")];
+    const runs = stackRuns(bs);
+    expect(names(runs)).toEqual([["a", "b"], ["c"], ["d"], ["e"]]);
+    expect(runs.flat()).toEqual(bs);
+  });
+  test("an empty list gives no runs", () => {
+    expect(stackRuns([])).toEqual([]);
   });
 });

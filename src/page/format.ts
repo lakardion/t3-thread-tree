@@ -1,5 +1,16 @@
 import type { Branch, ThreadNode } from "../shared/tree.ts";
 
+/** Adjacent branches with the same stack id form one run. A branch with no stack is a run of one. */
+export function stackRuns(bs: Branch[]): Branch[][] {
+  const runs: Branch[][] = [];
+  for (const b of bs) {
+    const last = runs.at(-1);
+    if (b.stack && last?.[0]?.stack?.id === b.stack.id) last.push(b);
+    else runs.push([b]);
+  }
+  return runs;
+}
+
 /** "now" below 1 minute, then "12m", "3h", "2d". */
 export function ago(iso: string, now: number): string {
   const m = Math.floor((now - Date.parse(iso)) / 60_000);

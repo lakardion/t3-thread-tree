@@ -40,7 +40,7 @@ function shell(id: string, title: string, over: Record<string, unknown> = {}) {
   };
 }
 
-const pr = (number: number, source: string, state = "open") => ({
+const pr = (number: number, source: string, state = "open", stack: object | null = null) => ({
   host: "github.com",
   repository: "org/repo",
   number,
@@ -48,7 +48,7 @@ const pr = (number: number, source: string, state = "open") => ({
   source,
   linkedAt: "2026-11-12T08:00:00.000Z",
   snapshot: { state, title: "x", headBranch: "h", baseBranch: "b", isDraft: false, updatedAt: null, syncedAt: "2026-11-12T08:00:00.000Z" },
-  stack: null,
+  stack,
 });
 
 function build(raws: object[], spawners: Record<string, string> = {}, over: Partial<BuildInput> = {}) {
@@ -227,7 +227,7 @@ describe("PR stack", () => {
   const stacked = () => [
     shell("s3", "WEB-3 top", { pullRequests: [pr(12, "created"), pr(10, "stack"), pr(11, "stack")] }),
     shell("other", "WEB-9 unrelated"),
-    shell("s1", "WEB-1 base", { pullRequests: [pr(10, "created"), pr(11, "stack"), pr(12, "stack")] }),
+    shell("s1", "WEB-1 base", { pullRequests: [pr(10, "created", "open", { base: "main" }), pr(11, "stack"), pr(12, "stack")] }),
     shell("s2", "WEB-2 middle", { pullRequests: [pr(11, "created"), pr(10, "stack"), pr(12, "stack"), pr(99, "manual")] }),
   ];
 
@@ -242,6 +242,30 @@ describe("PR stack", () => {
 
   test("stack-mate groups sit together in stack order, at the newest member's slot", () => {
     expect(labels(build(stacked())[0]!.branches)).toEqual(["WEB-1", "WEB-2", "WEB-3", "WEB-9"]);
+  });
+
+  test("the decoder reads the stack base", () => {
+    const t = decodeThread(shell("x", "WEB-1", { pullRequests: [pr(10, "created", "open", { base: "main" }), pr(11, "stack")] }))!;
+    expect(t.prs.map((p) => p.stackBase)).toEqual(["main", null]);
+  });
+
+  test("key groups of one stack carry the rail; others carry none", () => {
+    const tree = build(stacked());
+    for (const k of ["WEB-1", "WEB-2", "WEB-3"]) expect(child(tree, "frontend", k).stack).toEqual({ id: "s10", total: 3, base: "main" });
+    expect("stack" in child(tree, "frontend", "WEB-9")).toBe(false);
+  });
+
+  test("a stack with no base has a null base", () => {
+    const tree = build([
+      shell("a", "WEB-20 a", { pullRequests: [pr(30, "created"), pr(31, "stack")] }),
+      shell("b", "WEB-21 b", { pullRequests: [pr(31, "created"), pr(30, "stack")] }),
+    ]);
+    expect(child(tree, "frontend", "WEB-20").stack).toEqual({ id: "s30", total: 2, base: null });
+  });
+
+  test("a thread with no key gets no rail", () => {
+    const tree = build([...stacked(), shell("loose", "loose thread", { pullRequests: [pr(12, "stack"), pr(10, "stack")] })]);
+    expect("stack" in child(tree, "frontend", "No issue key")).toBe(false);
   });
 
   test("node PRs leave out stack links; closed PRs are not stack members", () => {
