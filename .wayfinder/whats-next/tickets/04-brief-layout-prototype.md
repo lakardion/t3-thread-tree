@@ -12,4 +12,4 @@ Where does the Next-step brief show (inline panel above the tree, side drawer, o
 
 ## Brief
 
-Make two or three layouts in the demo (`bun run demo`) with a fixed sample brief in the shape from 03. Show light and dark mode. The user picks one.
+Make two or three layouts in the demo (`bun run demo`) with a fixed sample brief in the shape from 03. Show light and dark mode. The user picks one. Include the colour-coded kind chips, the copy button for `prompt`, and the empty state ("Nothing needs you right now").
