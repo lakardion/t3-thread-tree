@@ -33,6 +33,29 @@ export function launchedIds(result: unknown): string[] {
 /** Launched-thread ids look like `mcp:…`, `thread:mcp:…` or `thread:delegated-task:command%3Amcp%3A…`. */
 export const mayBeLaunched = (id: string) => /mcp(:|%3A)/i.test(id);
 
+/**
+ * Whether the full scan must run: a thread in `unscanned` is on the requested view.
+ * The active view walks unsettled threads and their spawner chains; the settled view shows all threads.
+ */
+export function needsScan(
+  unscanned: Set<string>,
+  threads: Iterable<{ id: string; settledAt: string | null; gone: boolean }>,
+  spawnerOf: (id: string) => string | null | undefined,
+  settledView: boolean,
+): boolean {
+  if (unscanned.size === 0 || settledView) return unscanned.size > 0;
+  const seen = new Set<string>();
+  for (const t of threads) {
+    let id = t.settledAt || t.gone ? null : t.id;
+    while (id && !seen.has(id)) {
+      if (unscanned.has(id)) return true;
+      seen.add(id);
+      id = spawnerOf(id) ?? null;
+    }
+  }
+  return false;
+}
+
 const LAST_MESSAGES = `
   SELECT ids.value AS id,
     (SELECT json_extract(m.payload_json, '$.text')
@@ -54,7 +77,7 @@ export function openLineage(path = join(USERDATA, "statev2.sqlite")) {
     lastMessages(ids: string[]): Map<string, string | null> {
       return new Map(last.all(JSON.stringify(ids)).map((r) => [r.id, r.text]));
     },
-    /** Re-reads every launch tool call. One full scan, so call it only for an unknown launched thread. */
+    /** Re-reads every launch tool call. One full scan, so run it only in a Worker. */
     reload() {
       const next = new Map<string, string>();
       for (const row of calls.all())
@@ -66,7 +89,7 @@ export function openLineage(path = join(USERDATA, "statev2.sqlite")) {
     seed(e: [string, string][]) {
       callers = new Map(e);
     },
-    /** Tool-call caller first, then the sender of the thread's initial message. */
+    /** Tool-call caller from the last scan, else the sender of the thread's initial message. */
     spawner(id: string): string | null {
       return callers.get(id) ?? sender.get(id)?.sender ?? null;
     },

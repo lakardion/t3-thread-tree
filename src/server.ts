@@ -2,7 +2,7 @@ import index from "./page/index.html";
 import type { Conn, Tree } from "./shared/tree.ts";
 import { briefInput, briefService, detectClis } from "./server/brief.ts";
 import { buildTree } from "./server/build-tree.ts";
-import { mayBeLaunched, openLineage } from "./server/lineage.ts";
+import { mayBeLaunched, needsScan, openLineage } from "./server/lineage.ts";
 import { connectShell, readEnvironmentId, type Project, type Thread } from "./server/t3.ts";
 
 const threads = new Map<string, Thread>();
@@ -12,35 +12,45 @@ let lastUpdate: string | null = null;
 const environmentId = await readEnvironmentId();
 
 const log = (m: string) => console.log(`thread tree: ${m}`);
-let lineageReady = false;
 let gotSnapshot = false;
 let ready = false;
-/** Ready once the lineage is read and T3 answered: with a snapshot, or as down or unauthorized. */
+/** Ready once T3 answered: with a snapshot, or as down or unauthorized. */
 function checkReady() {
-  if (ready || !lineageReady || conn === "connecting" || (conn === "up" && !gotSnapshot)) return;
+  if (ready || conn === "connecting" || (conn === "up" && !gotSnapshot)) return;
   ready = true;
   log(conn === "up" ? `ready on ${server.url}` : `ready on ${server.url} (T3 ${conn})`);
   changed();
 }
 
 const lineage = openLineage();
-/** The first full scan takes seconds, so it runs in a Worker while the server already answers. */
-const scan = new Worker(new URL("./server/lineage-scan.ts", import.meta.url));
-scan.onmessage = (e: MessageEvent<[string, string][]>) => {
-  lineage.seed(e.data);
-  lineageReady = true;
-  scan.terminate();
-  log("launch lineage read");
-  resolveSpawners();
-  checkReady();
-};
 const spawners = new Map<string, string | null>();
-/** Launched threads whose tool-call row was not written yet, with the retries left. */
+/** Launched threads whose initial message was not written yet, with the retries left. */
 const unresolved = new Map<string, number>();
+/** Launched threads without a sender message. Only the full scan of launch tool calls can resolve them. */
+const unscanned = new Set<string>();
+
+let scanning = false;
+/** The full scan takes seconds on a cold disk, so it runs in a Worker, and only when a requested view needs it. */
+function scanIfNeeded() {
+  const settledView = [...clients].some((c) => c.settled);
+  if (scanning || !needsScan(unscanned, threads.values(), (id) => spawners.get(id), settledView)) return;
+  scanning = true;
+  const ids = [...unscanned];
+  const started = performance.now();
+  const scan = new Worker(new URL("./server/lineage-scan.ts", import.meta.url));
+  scan.onmessage = (e: MessageEvent<[string, string][]>) => {
+    scan.terminate();
+    scanning = false;
+    lineage.seed(e.data);
+    log(`launch lineage scanned in ${Math.round(performance.now() - started)} ms`);
+    for (const id of ids) spawners.set(id, lineage.spawner(id)), unscanned.delete(id);
+    changed();
+    scanIfNeeded();
+  };
+}
 
 let retry: ReturnType<typeof setTimeout> | undefined;
 function resolveSpawners() {
-  if (!lineageReady) return;
   for (const t of threads.values()) {
     if (t.parentThreadId || spawners.has(t.id) || unresolved.has(t.id) || !mayBeLaunched(t.id)) continue;
     const s = lineage.spawner(t.id);
@@ -50,14 +60,15 @@ function resolveSpawners() {
   if (unresolved.size === 0 || retry) return;
   retry = setTimeout(() => {
     retry = undefined;
-    lineage.reload();
     for (const [id, left] of unresolved) {
       const s = lineage.spawner(id);
       if (s || left <= 1) spawners.set(id, s), unresolved.delete(id);
       else unresolved.set(id, left - 1);
+      if (!s && left <= 1) unscanned.add(id);
     }
     changed();
     resolveSpawners();
+    scanIfNeeded();
   }, 2000);
 }
 
@@ -143,7 +154,7 @@ const brief = briefService({
 
 const server = Bun.serve({
   hostname: "127.0.0.1",
-  port: 4773,
+  port: Number(process.env.PORT) || 4773,
   routes: {
     "/": index,
     ...brief.routes,
@@ -160,6 +171,7 @@ const server = Bun.serve({
               send: (d, event) => ctrl.enqueue(enc.encode(`${event ? `event: ${event}\n` : ""}data: ${d}\n\n`)),
             };
             clients.add(client);
+            if (settled) scanIfNeeded();
             client.send(JSON.stringify(treeFor(settled)));
             client.send(JSON.stringify(brief.state()), "brief");
           },
