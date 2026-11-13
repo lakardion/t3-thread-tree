@@ -71,7 +71,8 @@ export type Branch = {
   threads: ThreadNode[];
 };
 
-export type Conn = "up" | "down" | "unauthorized";
+/** `connecting`: the server is up but has no tree yet. */
+export type Conn = "connecting" | "up" | "down" | "unauthorized";
 
 export type Tree = {
   conn: Conn;

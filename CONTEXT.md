@@ -32,6 +32,14 @@ A T3 Code project, usually one repo.
 **Active thread**:
 An unsettled top-level thread (any status, snoozed included), or a subagent whose top-level ancestor is active. The default view shows only active threads.
 
+**Next-step brief**:
+A model-written, ranked list of recommended actions over the active threads. Each action links to one or more threads. The user asks for it with the "What's next" button.
+_Avoid_: suggestion, summary, advice
+
+**Action**:
+One ranked item of a **Next-step brief**. It has a kind (answer, merge, fix, review, clean-up, unblock) and links to one or more top-level threads.
+_Avoid_: step, task, todo
+
 ## Relationships
 
 - A **Project** holds many **Issue keys**; an **Issue key** holds one or more **Spawn lineage** trees.

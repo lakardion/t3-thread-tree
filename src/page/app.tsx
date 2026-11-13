@@ -506,7 +506,8 @@ function App() {
     show: (id: string) => setShown((s) => new Set(s).add(id)),
   };
   const counts = countAttention(tree?.projects ?? []);
-  const projects = tree && needsOnly ? onlyNeedsYou(tree.projects) : tree?.projects;
+  const connecting = !tree || tree.conn === "connecting";
+  const projects = connecting ? undefined : needsOnly ? onlyNeedsYou(tree.projects) : tree.projects;
 
   return (
     <TooltipProvider>
@@ -584,8 +585,8 @@ function App() {
         <Linear value={tree?.linear ?? null}>
         <Now value={now}>
           <div
-            className={tree && tree.conn !== "up" ? "grayscale" : ""}
-            data-conn={tree && tree.conn !== "up" ? "down" : undefined}
+            className={!connecting && tree.conn !== "up" ? "grayscale" : ""}
+            data-conn={!connecting && tree.conn !== "up" ? "down" : undefined}
           >
             {projects?.length === 0 && <p className="text-muted-foreground">No active threads.</p>}
             {projects ? (
@@ -595,6 +596,8 @@ function App() {
                 ))}
               </ul>
             ) : (
+              <>
+              <p className="mb-2 text-sm text-muted-foreground" role="status">Connecting to T3…</p>
               <Card className="gap-0 rounded-[12px] py-0 shadow-none" aria-busy="true" aria-label="Loading threads">
                 <CardContent className="flex flex-col gap-0.5 p-1.5">
                   {[0, 1, 2].map((i) => (
@@ -602,6 +605,7 @@ function App() {
                   ))}
                 </CardContent>
               </Card>
+              </>
             )}
           </div>
         </Now>

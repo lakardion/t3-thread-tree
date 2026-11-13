@@ -1,23 +1,46 @@
 import index from "./page/index.html";
 import type { Conn, Tree } from "./shared/tree.ts";
+import { briefInput, briefService, detectClis } from "./server/brief.ts";
 import { buildTree } from "./server/build-tree.ts";
 import { mayBeLaunched, openLineage } from "./server/lineage.ts";
 import { connectShell, readEnvironmentId, type Project, type Thread } from "./server/t3.ts";
 
 const threads = new Map<string, Thread>();
 const projects = new Map<string, Project>();
-let conn: Conn = "down";
+let conn: Conn = "connecting";
 let lastUpdate: string | null = null;
 const environmentId = await readEnvironmentId();
 
+const log = (m: string) => console.log(`thread tree: ${m}`);
+let lineageReady = false;
+let gotSnapshot = false;
+let ready = false;
+/** Ready once the lineage is read and T3 answered: with a snapshot, or as down or unauthorized. */
+function checkReady() {
+  if (ready || !lineageReady || conn === "connecting" || (conn === "up" && !gotSnapshot)) return;
+  ready = true;
+  log(conn === "up" ? `ready on ${server.url}` : `ready on ${server.url} (T3 ${conn})`);
+  changed();
+}
+
 const lineage = openLineage();
-lineage.reload();
+/** The first full scan takes seconds, so it runs in a Worker while the server already answers. */
+const scan = new Worker(new URL("./server/lineage-scan.ts", import.meta.url));
+scan.onmessage = (e: MessageEvent<[string, string][]>) => {
+  lineage.seed(e.data);
+  lineageReady = true;
+  scan.terminate();
+  log("launch lineage read");
+  resolveSpawners();
+  checkReady();
+};
 const spawners = new Map<string, string | null>();
 /** Launched threads whose tool-call row was not written yet, with the retries left. */
 const unresolved = new Map<string, number>();
 
 let retry: ReturnType<typeof setTimeout> | undefined;
 function resolveSpawners() {
+  if (!lineageReady) return;
   for (const t of threads.values()) {
     if (t.parentThreadId || spawners.has(t.id) || unresolved.has(t.id) || !mayBeLaunched(t.id)) continue;
     const s = lineage.spawner(t.id);
@@ -38,7 +61,7 @@ function resolveSpawners() {
   }, 2000);
 }
 
-type Client = { settled: boolean; send: (data: string) => void };
+type Client = { settled: boolean; send: (data: string, event?: string) => void };
 const clients = new Set<Client>();
 
 const linearWorkspace = process.env.LINEAR_WORKSPACE?.trim();
@@ -46,7 +69,7 @@ const linearTeams = (process.env.LINEAR_TEAMS ?? "").split(",").map((s) => s.tri
 const linear: Tree["linear"] = linearWorkspace && linearTeams.length ? { workspace: linearWorkspace, teams: linearTeams } : null;
 
 const treeFor = (settled: boolean): Tree => ({
-  conn,
+  conn: ready ? conn : "connecting",
   lastUpdate,
   linear,
   projects: buildTree({
@@ -73,16 +96,20 @@ function changed() {
 /** Snoozes end on a clock, not on a stream event. */
 setInterval(changed, 30_000);
 
+log("connecting to T3…");
 connectShell({
   token: process.env.T3_TOKEN,
   onConn: (c) => {
+    if (c !== conn && c !== "up") log(c === "down" ? "T3 not running, retrying every 3 s" : "T3 rejected the token");
     if (c !== conn) (conn = c), changed();
+    checkReady();
   },
   onEvent: (e) => {
     lastUpdate = new Date().toISOString();
     switch (e.kind) {
       case "snapshot":
         if (e.fresh) threads.clear(), projects.clear();
+        gotSnapshot = true;
         for (const t of e.threads) threads.set(t.id, t);
         for (const [id, project] of e.projects) projects.set(id, project);
         break;
@@ -101,6 +128,16 @@ connectShell({
     }
     resolveSpawners();
     changed();
+    checkReady();
+  },
+});
+
+const brief = briefService({
+  clis: detectClis(),
+  input: (settled) => briefInput(treeFor(settled).projects, lineage.lastMessages, Date.now()),
+  onChange: () => {
+    const data = JSON.stringify(brief.state());
+    for (const c of clients) c.send(data, "brief");
   },
 });
 
@@ -109,6 +146,7 @@ const server = Bun.serve({
   port: 4773,
   routes: {
     "/": index,
+    ...brief.routes,
     "/events": (req) => {
       server.timeout(req, 0);
       const settled = new URL(req.url).searchParams.get("settled") === "1";
@@ -117,9 +155,13 @@ const server = Bun.serve({
       return new Response(
         new ReadableStream({
           start(ctrl) {
-            client = { settled, send: (d) => ctrl.enqueue(enc.encode(`data: ${d}\n\n`)) };
+            client = {
+              settled,
+              send: (d, event) => ctrl.enqueue(enc.encode(`${event ? `event: ${event}\n` : ""}data: ${d}\n\n`)),
+            };
             clients.add(client);
             client.send(JSON.stringify(treeFor(settled)));
+            client.send(JSON.stringify(brief.state()), "brief");
           },
           cancel() {
             clients.delete(client);
@@ -130,4 +172,4 @@ const server = Bun.serve({
     },
   },
 });
-console.log(`thread tree on ${server.url}`);
+log(`serving on ${server.url}`);
