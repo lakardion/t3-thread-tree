@@ -24,6 +24,8 @@ The thread tree page has a "What's next" button. A click runs a local agent CLI 
 
 <!-- one line per closed map ticket -->
 
+- [How do we run claude and codex headless, with no tools, on a cheap model?](tickets/01-headless-cli-invocation.md): `claude -p` (`haiku`) and `codex exec` (`gpt-6-luna`) with tools off and a JSON schema; detect with `auth status` / `login status`; SIGTERM cancels; about 10 s per run.
+
 - [Where does the backend read the last assistant message of a thread?](tickets/02-thread-messages-source.md): from `statev2.sqlite` with one batched query (the stream field is always null). Cap each message at 1500 characters, head and tail.
 
 Decided at charting (by the user):
