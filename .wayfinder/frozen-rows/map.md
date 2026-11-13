@@ -44,6 +44,8 @@ The destination is reached when every route key is done and no map ticket is ope
 
 <!-- one line per closed map ticket -->
 
+- [Which drag library reorders the tree?](tickets/01-drag-library.md): `@dnd-kit/react` 0.5.3; snapshot the dragged list's ids during a drag, one sortable item per stack run ([findings](research/01-drag-library.md)).
+
 Decided at charting (by the user):
 
 - **Base order:** creation time, oldest first, at all levels. A new project, group or thread appends at the end, so no existing row shifts.

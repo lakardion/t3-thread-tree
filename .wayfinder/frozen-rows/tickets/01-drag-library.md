@@ -1,7 +1,7 @@
 ---
 title: Which drag library reorders the tree?
 type: wayfinder:research
-status: open
+status: closed
 assignee: claude (frozen-rows-01)
 blocked-by: []
 ---
@@ -23,3 +23,9 @@ Answer from primary sources (library docs, changelogs, GitHub issues, bundle siz
 End with a recommendation and a sketch (under 40 lines) of how one sortable list wires into `src/page/app.tsx`.
 
 Write the findings to `.wayfinder/frozen-rows/research/01-drag-library.md`, then close this ticket with a short Resolution and add one line to the map's Decisions so far.
+
+## Resolution
+
+Use `@dnd-kit/react` with `@dnd-kit/helpers`, pinned to `0.5.3`. It has React 19 support, a keyboard drag with screen reader announcements, items that slide to make room, and it sets durations to 0 ms under `prefers-reduced-motion`. It costs 39.8 kB min+gzip. Pragmatic drag-and-drop has no keyboard drag and does not move items during a drag. Classic `@dnd-kit/core` + `sortable` has had no release since 2024-12-05.
+
+For 04-manual-reorder: render the dragged list from a snapshot of its ids from drag start to drop, make each `stackRuns` run one sortable item, give each list its own `group`/`type`/`accept` key, prefix ids by level, and pass custom announcements. Details and a wiring sketch: [research/01-drag-library.md](../research/01-drag-library.md).
