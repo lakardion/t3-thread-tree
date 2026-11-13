@@ -29,6 +29,9 @@ The destination is reached when every route key is done and no map ticket is ope
 ## Notes
 
 - Mode: autopilot
+- **Run to completion.** Do not stop for the user, except for a real decision that the tickets and the spec do not answer. Then stop and ask (grilling). A choice the spec leaves open but that has a clear default is not a stop: take the default and name it in the PR body.
+- **Auto-merge when green.** When `bun test` and `bun run typecheck` pass, mark the PR ready and merge it to `main` (squash). The next key in the chain then rebases on `main`. A failing check is a stop only after you cannot fix it.
+- **Fog graduates by itself.** When the second route key's measurement shows that a CLI flag or a model setting cuts the fixed cost, add it as a route key at the end of Lane 1 and continue.
 - **Execution lives in this map** (override of plan, don't do): route keys deliver code and PRs.
 - **Main goal is latency.** Rank every choice by the wait the user sees after a click.
 - **Spec:** each route ticket, then `SPEC.md` › What's next and `CONTEXT.md`. A ticket wins over the spec; each key updates the spec for its own part.
