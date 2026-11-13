@@ -24,3 +24,11 @@ Decisions: [Which actions does code make, and how do they join the model's actio
 ## Done when
 
 `bun test` and `bun run typecheck` pass. The after-median is lower than the before-median for `claude`.
+
+## Handed over from brief-speed-05
+
+- **Short refs, not ids.** The digest line starts with a short ref (`t1`, `t2`, …) in place of the thread id. `InputThread` is `{ id, ref, title, digest }`, and `filterAnswer` maps each ref back to the id and drops unknown refs. Haiku changed the long `mcp:launch:<64 hex>` ids in 2 of 3 runs, so do not give the model raw ids again. Code actions use the real ids directly.
+- **Refs follow input order.** `briefInput` numbers the threads after its status filter. When this key removes the threads that get code actions, number the refs over the model's threads only.
+- **Empty input.** `stdinFor` sends `No threads.` for an empty list, because `claude -p` rejects empty stdin. This key skips the CLI in that case, so the guard can stay or go.
+- **Baseline.** `main` already has the digest (PR #5). One live `claude` run over 23 threads took 27 s. Take the 3-run baseline on the current `main`.
+- **Checks.** `main` now has `bun run check` (oxfmt, oxlint, typecheck, tests). The CI check runs it on each PR.
