@@ -1,6 +1,6 @@
 ---
 label: wayfinder:map
-status: open
+status: closed
 created: 2026-11-13
 ---
 
@@ -45,6 +45,10 @@ The destination is reached when every route key is done and no map ticket is ope
 <!-- one line per closed map ticket -->
 
 - [Which drag library reorders the tree?](tickets/01-drag-library.md): `@dnd-kit/react` 0.5.3; snapshot the dragged list's ids during a drag, one sortable item per stack run ([findings](research/01-drag-library.md)).
+- [Order the tree by creation, new items at the bottom](tickets/02-stable-order.md): PR #10.
+- [Animate status, phrase and PR mark changes](tickets/03-status-transitions.md): PR #11.
+- [Let the user drag projects, groups and threads into their own order](tickets/04-manual-reorder.md): PR #12.
+- [Animate rows that enter and leave](tickets/05-row-enter-exit.md): PR #13.
 
 Decided at charting (by the user):
 
@@ -53,6 +57,8 @@ Decided at charting (by the user):
 - **Motion:** status icon and phrase, row enter and exit, a change pulse on a row whose status changed, and PR mark changes.
 
 ## Not yet specified
+
+<!-- empty: destination reached -->
 
 ## Out of scope
 
