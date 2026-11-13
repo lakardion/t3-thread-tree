@@ -13,6 +13,20 @@ export type BriefAction = {
 
 export type BriefState =
   | { status: "idle" }
-  | { status: "running"; cli: Cli; threadCount: number; startedAt: string }
+  | {
+      status: "running";
+      cli: Cli;
+      threadCount: number;
+      startedAt: string;
+      actions: BriefAction[];
+      titles: Record<string, string>;
+    }
   | { status: "done"; cli: Cli; generatedAt: string; actions: BriefAction[]; titles: Record<string, string> }
-  | { status: "failed"; cli: Cli; error: string; stderrTail: string };
+  | {
+      status: "failed";
+      cli: Cli;
+      error: string;
+      stderrTail: string;
+      actions: BriefAction[];
+      titles: Record<string, string>;
+    };

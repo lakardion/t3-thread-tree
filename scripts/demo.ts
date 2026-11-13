@@ -207,42 +207,14 @@ const treeFor = (settled: boolean) =>
   });
 const trees = { open: treeFor(false), settled: treeFor(true) };
 
-/** The sample brief from the layout prototype. `demo-27` is settled, so its link shows struck through. */
+/** The model part of the sample brief. Code makes the `answer`, `fix` and `merge` actions from the tree, so these threads have none of them. `demo-27` is settled, so its link shows struck through. */
 const SAMPLE: BriefAction[] = [
   {
-    kind: "answer",
-    title: "Pick the default saved card",
-    reason: "The agent asks which card is the default when two cards exist.",
-    threadIds: ["demo-2"],
-    prompt: "Use the card added last as the default.",
-  },
-  {
-    kind: "answer",
-    title: "Approve the pagination plan",
-    reason: "The plan is ready and waits 30 minutes for approval.",
-    threadIds: ["demo-20"],
-    prompt: "The plan is good. Implement it.",
-  },
-  {
-    kind: "merge",
-    title: "Merge the 4.2 version bump",
-    reason: "PR #3001 is approved, checks pass and it has no conflicts.",
-    threadIds: ["demo-24"],
-    prompt: null,
-  },
-  {
     kind: "unblock",
-    title: "Rebase the order summary PR",
-    reason: "PR #2107 conflicts with main and blocks the top of the 4-PR stack.",
-    threadIds: ["demo-4", "demo-1"],
-    prompt: "Rebase on main, resolve the conflicts, and push.",
-  },
-  {
-    kind: "fix",
-    title: "Fix the failing order summary checks",
-    reason: "Checks fail and the reviewer requested changes on #2107.",
-    threadIds: ["demo-4"],
-    prompt: "Fix the failing checks, address the review comments, and push.",
+    title: "Resume the flaky cart badge test",
+    reason: "The thread failed on a rate limit and the e2e fix waits.",
+    threadIds: ["demo-12"],
+    prompt: "Resume the work and fix the flaky cart badge count test.",
   },
   {
     kind: "review",
@@ -270,6 +242,8 @@ function stubRun(cli: Cli): { done: Promise<Outcome | null>; cancel: () => void 
           cli,
           error: "Overloaded",
           stderrTail: "Error: API Error: 529 overloaded_error\nclaude exited with code 1",
+          actions: [],
+          titles: {},
         }
       : {
           status: "done",

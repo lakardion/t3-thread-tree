@@ -2,7 +2,9 @@ import { describe, expect, test } from "bun:test";
 
 import {
   briefInput,
+  type BriefInput,
   briefService,
+  codeActions,
   digestOf,
   filterAnswer,
   parseAnswer,
@@ -51,7 +53,7 @@ describe("briefInput", () => {
       ]),
     ];
     let asked: string[] = [];
-    const input = briefInput(tree, (ids) => ((asked = ids), new Map([["A", "done"]])), NOW);
+    const { threads: input } = briefInput(tree, (ids) => ((asked = ids), new Map([["A", "done"]])), NOW);
     expect(asked.toSorted()).toEqual(["A", "L"]);
     expect(input.map((t) => [t.id, t.title])).toEqual([
       ["A", "Thread A"],
@@ -61,25 +63,114 @@ describe("briefInput", () => {
     expect(input[1].digest).toBe("t2 · Your turn 3h · Thread L");
     expect(input[0].digest).toBe("t1 · Your turn 3h · Thread A\n  done");
   });
+  test("covered threads leave the model input; refs restart over the rest; code titles are set", () => {
+    const tree = [branch([node("Q", { status: "needs-input" }), node("A"), node("B")])];
+    let asked: string[] = [];
+    const { code, threads } = briefInput(tree, (ids) => ((asked = ids), new Map()), NOW);
+    expect(asked).toEqual(["A", "B"]);
+    expect(threads.map((t) => [t.id, t.ref])).toEqual([
+      ["A", "t1"],
+      ["B", "t2"],
+    ]);
+    expect(code.actions.map((a) => a.threadIds)).toEqual([["Q"]]);
+    expect(code.titles).toEqual({ Q: "Thread Q" });
+  });
+});
+
+const pr = (over: object) =>
+  ({
+    n: 12,
+    url: "u",
+    state: "open",
+    draft: false,
+    checks: null,
+    review: null,
+    conflicting: false,
+    title: "t",
+    additions: 0,
+    deletions: 0,
+    changedFiles: 0,
+    ...over,
+  }) as ThreadNode["prs"][number];
+
+describe("codeActions", () => {
+  const one = (over: Partial<ThreadNode>) => codeActions([node("A", over)]).actions;
+  const ready = { review: "approved", checks: "passing" };
+
+  test("needs-input and plan-ready give an answer with no prompt", () => {
+    expect(one({ status: "needs-input" })).toEqual([
+      {
+        kind: "answer",
+        title: "Answer the agent",
+        reason: "The agent waits for your input.",
+        threadIds: ["A"],
+        prompt: null,
+      },
+    ]);
+    expect(one({ status: "plan-ready" })[0]).toMatchObject({ kind: "answer", title: "Review the plan", prompt: null });
+  });
+  test("a fix names one fact, or three joined, with the steps in fixed order", () => {
+    expect(one({ prs: [pr({ checks: "failing" })] })).toEqual([
+      {
+        kind: "fix",
+        title: "Fix PR #12",
+        reason: "PR #12 has failing checks.",
+        threadIds: ["A"],
+        prompt: "fix the failing checks, and push.",
+      },
+    ]);
+    expect(
+      one({ prs: [pr({ n: 7, checks: "failing", conflicting: true, review: "changes-requested" })] })[0],
+    ).toMatchObject({
+      title: "Fix PR #7",
+      reason: "PR #7 has conflicts, failing checks and changes requested.",
+      prompt:
+        "Rebase on main and resolve the conflicts, fix the failing checks, address the review comments, and push.",
+    });
+  });
+  test("a closed PR gives no fix", () => {
+    expect(one({ prs: [pr({ state: "merged", checks: "failing" })] })).toEqual([]);
+  });
+  test("a merge needs an open, non-draft, approved, passing PR with no conflicts", () => {
+    expect(one({ prs: [pr(ready)] })).toEqual([
+      {
+        kind: "merge",
+        title: "Merge PR #12",
+        reason: "PR #12 is approved, its checks pass, and it has no conflicts.",
+        threadIds: ["A"],
+        prompt: null,
+      },
+    ]);
+    expect(one({ prs: [pr({ ...ready, draft: true })] })).toEqual([]);
+    expect(one({ prs: [pr({ ...ready, state: "closed" })] })).toEqual([]);
+    expect(one({ prs: [pr({ review: "review-required", checks: "passing" })] })).toEqual([]);
+  });
+  test("the first PR that matches names the action", () => {
+    expect(
+      one({ prs: [pr({ n: 1 }), pr({ n: 2, checks: "failing" }), pr({ n: 3, conflicting: true })] })[0],
+    ).toMatchObject({
+      title: "Fix PR #2",
+    });
+  });
+  test("a thread that matches two rules gets the first", () => {
+    const out = one({ status: "needs-input", prs: [pr({ checks: "failing" })] });
+    expect(out.map((a) => a.kind)).toEqual(["answer"]);
+  });
+  test("groups by kind in rank order, tree order inside a kind, and reports the covered ids", () => {
+    const { actions, covered } = codeActions([
+      node("M", { prs: [pr(ready)] }),
+      node("F1", { prs: [pr({ conflicting: true })] }),
+      node("Q", { status: "needs-input" }),
+      node("F2", { prs: [pr({ checks: "failing" })] }),
+      node("P", { status: "plan-ready" }),
+      node("X"),
+    ]);
+    expect(actions.map((a) => a.threadIds[0])).toEqual(["Q", "P", "F1", "F2", "M"]);
+    expect([...covered].toSorted()).toEqual(["F1", "F2", "M", "P", "Q"]);
+  });
 });
 
 describe("digestOf", () => {
-  const pr = (over: object) =>
-    ({
-      n: 12,
-      url: "u",
-      state: "open",
-      draft: false,
-      checks: null,
-      review: null,
-      conflicting: false,
-      title: "t",
-      additions: 0,
-      deletions: 0,
-      changedFiles: 0,
-      ...over,
-    }) as ThreadNode["prs"][number];
-
   test("full line with key, PRs, stack, request and a cut message tail", () => {
     const n = node("A", {
       key: "ABC-1",
@@ -172,8 +263,8 @@ describe("filterAnswer", () => {
     { id: "A", ref: "t1", title: "Alpha" },
     { id: "B", ref: "t2", title: "Beta" },
   ];
-  const action = (threadIds: string[], prompt: string | null = null) => ({
-    kind: "fix",
+  const action = (threadIds: string[], prompt: string | null = null, kind = "review") => ({
+    kind,
     title: "t",
     reason: "r",
     threadIds,
@@ -184,14 +275,17 @@ describe("filterAnswer", () => {
     const out = filterAnswer({ actions: [action(["t2", "X"], "go"), action(["X"]), action(["t1"])] }, threads);
     expect(out).toEqual({
       actions: [
-        { kind: "fix", title: "t", reason: "r", threadIds: ["B"], prompt: "go" },
-        { kind: "fix", title: "t", reason: "r", threadIds: ["A"], prompt: null },
+        { kind: "review", title: "t", reason: "r", threadIds: ["B"], prompt: "go" },
+        { kind: "review", title: "t", reason: "r", threadIds: ["A"], prompt: null },
       ],
       titles: { B: "Beta", A: "Alpha" },
     });
   });
   test("a real id in place of a ref is dropped", () => {
     expect(filterAnswer({ actions: [action(["A"])] }, threads)).toEqual({ actions: [], titles: {} });
+  });
+  test("a kind that code makes is dropped", () => {
+    expect(filterAnswer({ actions: [action(["t1"], null, "merge")] }, threads)).toEqual({ actions: [], titles: {} });
   });
   test("0 actions is valid", () => {
     expect(filterAnswer({ actions: [] }, threads)).toEqual({ actions: [], titles: {} });
@@ -206,21 +300,29 @@ describe("briefService", () => {
   const CLIS = Promise.resolve([{ id: "claude" as const, label: "Claude Haiku" }]);
   const post = (path: string, body?: unknown) =>
     new Request(`http://x${path}`, { method: "POST", body: body === undefined ? undefined : JSON.stringify(body) });
-  const done = (actions: BriefAction[] = []): Outcome => ({
+  const done = (actions: BriefAction[] = [], titles: Record<string, string> = {}): Outcome => ({
     status: "done",
     cli: "claude",
     generatedAt: "t",
     actions,
-    titles: {},
+    titles,
   });
+  const act = (id: string, kind: BriefAction["kind"]): BriefAction => ({
+    kind,
+    title: id,
+    reason: "r",
+    threadIds: [id],
+    prompt: null,
+  });
+  const CODE = { actions: [act("Q", "answer")], titles: { Q: "Thread Q" } };
 
   /** A run that ends when the test calls `finish`, or with `null` on cancel. */
-  function setup() {
+  function setup(code = { actions: [], titles: {} } as BriefInput["code"]) {
     let finish!: (o: Outcome | null) => void;
     const changes: string[] = [];
     const svc = briefService({
       clis: CLIS,
-      input: (settled) => [{ id: settled ? "s" : "o" } as InputThread],
+      input: (settled) => ({ code, threads: [{ id: settled ? "s" : "o" } as InputThread] }),
       onChange: () => changes.push(svc.state().status),
       run: () => {
         const p = new Promise<Outcome | null>((r) => (finish = r));
@@ -264,12 +366,46 @@ describe("briefService", () => {
   test("a thrown run becomes a failed state", async () => {
     const svc = briefService({
       clis: CLIS,
-      input: () => [],
+      input: () => ({ code: CODE, threads: [{ id: "A" } as InputThread] }),
       onChange: () => {},
       run: () => ({ done: Promise.reject(new Error("boom")), cancel: () => {} }),
     });
     await svc.routes["/brief/run"].POST(post("/brief/run", { cli: "claude" }));
     await Bun.sleep(0);
-    expect(svc.state()).toMatchObject({ status: "failed", error: "boom" });
+    expect(svc.state()).toMatchObject({ status: "failed", error: "boom", ...CODE });
+  });
+
+  test("running carries the code actions; done lists code then model actions and merges titles", async () => {
+    const { svc, finish, flush } = setup(CODE);
+    await svc.routes["/brief/run"].POST(post("/brief/run", { cli: "claude" }));
+    expect(svc.state()).toMatchObject({ status: "running", ...CODE });
+    finish(done([act("A", "review")], { A: "Thread A" }));
+    await flush();
+    expect(svc.state()).toMatchObject({
+      status: "done",
+      actions: [act("Q", "answer"), act("A", "review")],
+      titles: { Q: "Thread Q", A: "Thread A" },
+    });
+  });
+
+  test("a model failure keeps the code actions", async () => {
+    const { svc, finish, flush } = setup(CODE);
+    await svc.routes["/brief/run"].POST(post("/brief/run", { cli: "claude" }));
+    finish({ status: "failed", cli: "claude", error: "e", stderrTail: "", actions: [], titles: {} });
+    await flush();
+    expect(svc.state()).toMatchObject({ status: "failed", error: "e", ...CODE });
+  });
+
+  test("with no model threads the run is skipped and the state is done with the code actions", async () => {
+    let ran = false;
+    const svc = briefService({
+      clis: CLIS,
+      input: () => ({ code: CODE, threads: [] }),
+      onChange: () => {},
+      run: () => ((ran = true), { done: new Promise(() => {}), cancel: () => {} }),
+    });
+    expect((await svc.routes["/brief/run"].POST(post("/brief/run", { cli: "claude" }))).status).toBe(202);
+    expect(ran).toBe(false);
+    expect(svc.state()).toMatchObject({ status: "done", cli: "claude", ...CODE });
   });
 });
