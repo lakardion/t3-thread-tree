@@ -40,6 +40,10 @@ _Avoid_: suggestion, summary, advice
 One ranked item of a **Next-step brief**. It has a kind (answer, merge, fix, review, clean-up, unblock) and links to one or more top-level threads.
 _Avoid_: step, task, todo
 
+**Digest**:
+The compact text form of one thread that the model reads for a **Next-step brief**: one line of facts, then the tail of the last assistant message. Code builds it on each click.
+_Avoid_: summary, snapshot
+
 ## Relationships
 
 - A **Project** holds many **Issue keys**; an **Issue key** holds one or more **Spawn lineage** trees.
