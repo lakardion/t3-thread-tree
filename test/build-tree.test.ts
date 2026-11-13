@@ -48,7 +48,15 @@ const pr = (number: number, source: string, state = "open", stack: object | null
   url: `https://github.com/org/repo/pull/${number}`,
   source,
   linkedAt: "2026-11-12T08:00:00.000Z",
-  snapshot: { state, title: "x", headBranch: "h", baseBranch: "b", isDraft: false, updatedAt: null, syncedAt: "2026-11-12T08:00:00.000Z" },
+  snapshot: {
+    state,
+    title: "x",
+    headBranch: "h",
+    baseBranch: "b",
+    isDraft: false,
+    updatedAt: null,
+    syncedAt: "2026-11-12T08:00:00.000Z",
+  },
   stack,
 });
 
@@ -56,7 +64,10 @@ function build(raws: object[], spawners: Record<string, string> = {}, over: Part
   const threads = raws.map((r) => decodeThread(r)!);
   return buildTree({
     threads,
-    projects: new Map([["p1", { title: "frontend", repo: "acme/frontend" }], ["p2", { title: "backend", repo: null }]]),
+    projects: new Map([
+      ["p1", { title: "frontend", repo: "acme/frontend" }],
+      ["p2", { title: "backend", repo: null }],
+    ]),
     spawnerOf: (id) => spawners[id],
     environmentId: "env-1",
     settled: false,
@@ -86,8 +97,12 @@ describe("visibility", () => {
       shell("b", "SHOP-2 settled", { settledAt: "2026-11-12T09:00:00.000Z", settledOverride: "settled" }),
       shell("c", "SHOP-3 archived", { archivedAt: "2026-11-12T09:00:00.000Z" }),
       shell("d", "SHOP-4 deleted", { deletedAt: "2026-11-12T09:00:00.000Z" }),
-      shell("e", "SHOP-5 subagent", { lineage: { parentThreadId: "a", relationshipToParent: "subagent", rootThreadId: "a" } }),
-      shell("f", "SHOP-6 side", { lineage: { parentThreadId: null, relationshipToParent: null, rootThreadId: "f", sideChat: true } }),
+      shell("e", "SHOP-5 subagent", {
+        lineage: { parentThreadId: "a", relationshipToParent: "subagent", rootThreadId: "a" },
+      }),
+      shell("f", "SHOP-6 side", {
+        lineage: { parentThreadId: null, relationshipToParent: null, rootThreadId: "f", sideChat: true },
+      }),
     ]);
     expect(labels(tree[0]!.branches)).toEqual(["SHOP-1"]);
   });
@@ -187,22 +202,29 @@ describe("placement", () => {
   });
 
   test("spawner in another project is not followed", () => {
-    const tree = build([shell("a", "Adapt planning"), shell("mcp:b", "t3exp work", { projectId: "p2" })], { "mcp:b": "a" });
+    const tree = build([shell("a", "Adapt planning"), shell("mcp:b", "t3exp work", { projectId: "p2" })], {
+      "mcp:b": "a",
+    });
     expect(labels(tree).sort()).toEqual(["backend", "frontend"]);
     expect(titles(child(tree, "backend", "No issue key").threads)).toEqual(["t3exp work"]);
   });
 
   test("no visible spawner in the chain → No issue key", () => {
-    const tree = build([shell("x", "gone", { settledAt: "2026-11-12T09:00:00.000Z" }), shell("mcp:b", "orphan")], { "mcp:b": "x" });
+    const tree = build([shell("x", "gone", { settledAt: "2026-11-12T09:00:00.000Z" }), shell("mcp:b", "orphan")], {
+      "mcp:b": "x",
+    });
     expect(titles(child(tree, "frontend", "No issue key").threads)).toEqual(["orphan"]);
   });
 
   test("a spawner cycle does not hang", () => {
-    const tree = build([shell("mcp:a", "a"), shell("mcp:b", "b")].map((t) => ({ ...t, settledAt: null })), {
-      "mcp:a": "x",
-      x: "y",
-      y: "x",
-    });
+    const tree = build(
+      [shell("mcp:a", "a"), shell("mcp:b", "b")].map((t) => ({ ...t, settledAt: null })),
+      {
+        "mcp:a": "x",
+        x: "y",
+        y: "x",
+      },
+    );
     expect(child(tree, "frontend", "No issue key").threads.length).toBe(2);
   });
 });
@@ -228,8 +250,12 @@ describe("PR stack", () => {
   const stacked = () => [
     shell("s3", "WEB-3 top", { pullRequests: [pr(12, "created"), pr(10, "stack"), pr(11, "stack")] }),
     shell("other", "WEB-9 unrelated"),
-    shell("s1", "WEB-1 base", { pullRequests: [pr(10, "created", "open", { base: "main" }), pr(11, "stack"), pr(12, "stack")] }),
-    shell("s2", "WEB-2 middle", { pullRequests: [pr(11, "created"), pr(10, "stack"), pr(12, "stack"), pr(99, "manual")] }),
+    shell("s1", "WEB-1 base", {
+      pullRequests: [pr(10, "created", "open", { base: "main" }), pr(11, "stack"), pr(12, "stack")],
+    }),
+    shell("s2", "WEB-2 middle", {
+      pullRequests: [pr(11, "created"), pr(10, "stack"), pr(12, "stack"), pr(99, "manual")],
+    }),
   ];
 
   test("badge position and total", () => {
@@ -246,13 +272,16 @@ describe("PR stack", () => {
   });
 
   test("the decoder reads the stack base", () => {
-    const t = decodeThread(shell("x", "WEB-1", { pullRequests: [pr(10, "created", "open", { base: "main" }), pr(11, "stack")] }))!;
+    const t = decodeThread(
+      shell("x", "WEB-1", { pullRequests: [pr(10, "created", "open", { base: "main" }), pr(11, "stack")] }),
+    )!;
     expect(t.prs.map((p) => p.stackBase)).toEqual(["main", null]);
   });
 
   test("key groups of one stack carry the rail; others carry none", () => {
     const tree = build(stacked());
-    for (const k of ["WEB-1", "WEB-2", "WEB-3"]) expect(child(tree, "frontend", k).stack).toEqual({ id: "s10", total: 3, base: "main" });
+    for (const k of ["WEB-1", "WEB-2", "WEB-3"])
+      expect(child(tree, "frontend", k).stack).toEqual({ id: "s10", total: 3, base: "main" });
     expect("stack" in child(tree, "frontend", "WEB-9")).toBe(false);
   });
 
@@ -265,7 +294,10 @@ describe("PR stack", () => {
   });
 
   test("a thread with no key gets no rail", () => {
-    const tree = build([...stacked(), shell("loose", "loose thread", { pullRequests: [pr(12, "stack"), pr(10, "stack")] })]);
+    const tree = build([
+      ...stacked(),
+      shell("loose", "loose thread", { pullRequests: [pr(12, "stack"), pr(10, "stack")] }),
+    ]);
     expect("stack" in child(tree, "frontend", "No issue key")).toBe(false);
   });
 
@@ -278,14 +310,31 @@ describe("PR stack", () => {
     const closed = child(tree, "frontend", "WEB-5").threads[0]!;
     expect(closed.stack).toBeNull();
     expect(closed.prs).toEqual([
-      { n: 20, url: "https://github.com/org/repo/pull/20", state: "merged", draft: false, checks: null, review: null, conflicting: false, title: "x", additions: null, deletions: null, changedFiles: null },
+      {
+        n: 20,
+        url: "https://github.com/org/repo/pull/20",
+        state: "merged",
+        draft: false,
+        checks: null,
+        review: null,
+        conflicting: false,
+        title: "x",
+        additions: null,
+        deletions: null,
+        changedFiles: null,
+      },
     ]);
   });
 });
 
 describe("status", () => {
   const s = (over: Record<string, unknown>) => statusOf(decodeThread(shell("a", "x", over)) as Thread, NOW);
-  const req = (kind: string, extra: object = {}) => ({ id: "r", kind, createdAt: "2026-11-12T09:00:00.000Z", ...extra });
+  const req = (kind: string, extra: object = {}) => ({
+    id: "r",
+    kind,
+    createdAt: "2026-11-12T09:00:00.000Z",
+    ...extra,
+  });
   const SNOOZE = "2026-11-13T00:00:00.000Z";
   const DONE_AT = { latestRunCompletedAt: "2026-11-12T10:00:00.000Z" };
 
@@ -306,9 +355,17 @@ describe("status", () => {
     ["request beats snooze", { pendingRuntimeRequest: req("user_input"), snoozedUntil: SNOOZE }, "needs-input"],
     ["snooze beats run", { status: "running", snoozedUntil: SNOOZE }, "snoozed"],
     ["past snooze is ignored", { status: "completed", snoozedUntil: "2026-11-11T00:00:00.000Z" }, "done"],
-    ["non-blocking request does not block", { status: "running", pendingRuntimeRequest: req("user_input", { blocking: false }) }, "working"],
+    [
+      "non-blocking request does not block",
+      { status: "running", pendingRuntimeRequest: req("user_input", { blocking: false }) },
+      "working",
+    ],
     ["activity run status beats status", { status: "idle", activityRunStatus: "running" }, "working"],
-    ["plan-ready beats your-turn", { status: "completed", interactionMode: "plan", hasActionableProposedPlan: true, ...DONE_AT }, "plan-ready"],
+    [
+      "plan-ready beats your-turn",
+      { status: "completed", interactionMode: "plan", hasActionableProposedPlan: true, ...DONE_AT },
+      "plan-ready",
+    ],
     ["plan without proposal", { status: "completed", interactionMode: "plan" }, "done"],
   ])("%s", (_name, over, status) => {
     expect(s(over).status).toBe(status);
@@ -331,7 +388,9 @@ describe("status", () => {
 
   test("guest messages alone, or with a non-blocking request, read Guest message with no since", () => {
     expect(s({ pendingGuestMessageCount: 1 })).toEqual({ status: "needs-input", phrase: "Guest message", since: null });
-    expect(s({ pendingGuestMessageCount: 1, pendingRuntimeRequest: req("command", { blocking: false }) }).phrase).toBe("Guest message");
+    expect(s({ pendingGuestMessageCount: 1, pendingRuntimeRequest: req("command", { blocking: false }) }).phrase).toBe(
+      "Guest message",
+    );
   });
 
   test.each<[string, Record<string, unknown>, Status]>([
@@ -345,7 +404,11 @@ describe("status", () => {
 
   test("since: request time, activity run start, else latest run start", () => {
     expect(s({ pendingRuntimeRequest: req("command") }).since).toBe("2026-11-12T09:00:00.000Z");
-    const both = { status: "running", activityRunStartedAt: "2026-11-12T08:00:00.000Z", latestRunStartedAt: "2026-11-12T07:00:00.000Z" };
+    const both = {
+      status: "running",
+      activityRunStartedAt: "2026-11-12T08:00:00.000Z",
+      latestRunStartedAt: "2026-11-12T07:00:00.000Z",
+    };
     expect(s(both).since).toBe("2026-11-12T08:00:00.000Z");
     expect(s({ ...both, activityRunStartedAt: null }).since).toBe("2026-11-12T07:00:00.000Z");
     expect(s({ status: "completed", ...DONE_AT }).since).toBeNull();
@@ -361,19 +424,53 @@ describe("status", () => {
   test("node carries key, updatedAt, settled, input and PR marks; absent snapshot fields give false or null", () => {
     const marked = {
       ...pr(7, "created"),
-      snapshot: { ...pr(7, "created").snapshot, isDraft: true, checksState: "failing", reviewDecision: "changes-requested", mergeability: "conflicting" },
+      snapshot: {
+        ...pr(7, "created").snapshot,
+        isDraft: true,
+        checksState: "failing",
+        reviewDecision: "changes-requested",
+        mergeability: "conflicting",
+      },
     };
-    const [t] = build([
-      shell("a", "SHOP-1 x", {
-        settledAt: "2026-11-12T09:00:00.000Z",
-        pendingRuntimeRequest: req("command", { blocking: false }),
-        pullRequests: [marked, pr(8, "manual")],
-      }),
-    ], {}, { settled: true })[0]!.branches[0]!.threads;
+    const [t] = build(
+      [
+        shell("a", "SHOP-1 x", {
+          settledAt: "2026-11-12T09:00:00.000Z",
+          pendingRuntimeRequest: req("command", { blocking: false }),
+          pullRequests: [marked, pr(8, "manual")],
+        }),
+      ],
+      {},
+      { settled: true },
+    )[0]!.branches[0]!.threads;
     expect(t).toMatchObject({ key: "SHOP-1", settled: true, input: true, updatedAt: expect.any(String) });
     expect(t!.prs).toEqual([
-      { n: 7, url: "https://github.com/org/repo/pull/7", state: "open", draft: true, checks: "failing", review: "changes-requested", conflicting: true, title: "x", additions: null, deletions: null, changedFiles: null },
-      { n: 8, url: "https://github.com/org/repo/pull/8", state: "open", draft: false, checks: null, review: null, conflicting: false, title: "x", additions: null, deletions: null, changedFiles: null },
+      {
+        n: 7,
+        url: "https://github.com/org/repo/pull/7",
+        state: "open",
+        draft: true,
+        checks: "failing",
+        review: "changes-requested",
+        conflicting: true,
+        title: "x",
+        additions: null,
+        deletions: null,
+        changedFiles: null,
+      },
+      {
+        n: 8,
+        url: "https://github.com/org/repo/pull/8",
+        state: "open",
+        draft: false,
+        checks: null,
+        review: null,
+        conflicting: false,
+        title: "x",
+        additions: null,
+        deletions: null,
+        changedFiles: null,
+      },
     ]);
   });
 });
@@ -382,18 +479,35 @@ describe("details", () => {
   const node = (raws: object[], id: string, spawners: Record<string, string> = {}) => {
     const walk = (ts: ThreadNode[]): ThreadNode[] => ts.flatMap((t) => [t, ...walk(t.children)]);
     const walkB = (b: Branch): ThreadNode[] => [...walk(b.threads), ...b.branches.flatMap(walkB)];
-    return build(raws, spawners).flatMap(walkB).find((t) => t.id === id)!;
+    return build(raws, spawners)
+      .flatMap(walkB)
+      .find((t) => t.id === id)!;
   };
   const EMPTY = {
-    request: null, error: null, limitResetAt: null, autoResume: false, stopRequested: false, model: null, planMode: false,
-    branch: null, worktreePath: null, launchedBy: null, origin: null, startedBy: null, createdAt: "2026-11-12T08:00:00.000Z",
-    goal: null, tags: [], pinned: false,
+    request: null,
+    error: null,
+    limitResetAt: null,
+    autoResume: false,
+    stopRequested: false,
+    model: null,
+    planMode: false,
+    branch: null,
+    worktreePath: null,
+    launchedBy: null,
+    origin: null,
+    startedBy: null,
+    createdAt: "2026-11-12T08:00:00.000Z",
+    goal: null,
+    tags: [],
+    pinned: false,
   };
 
   test("every field decodes into the detail and the PR counts", () => {
     const full = shell("a", "SHOP-1 x", {
       pendingRuntimeRequest: { id: "r", kind: "command", createdAt: "2026-11-12T11:57:00.000Z" },
-      lastError: "boom", lastErrorClass: "provider", lastErrorCode: "e1",
+      lastError: "boom",
+      lastErrorClass: "provider",
+      lastErrorCode: "e1",
       usageLimitResetAt: "2026-11-12T14:00:00.000Z",
       limitRecovery: { resetAt: "2026-11-12T15:00:00.000Z", autoResume: true },
       latestRunStopRequested: true,
@@ -401,11 +515,17 @@ describe("details", () => {
       interactionMode: "plan",
       branch: "b",
       worktreePath: `${homedir()}/w`,
-      createdBy: "agent", creationSource: "mcp",
+      createdBy: "agent",
+      creationSource: "mcp",
       goal: { objective: "ship", status: "active" },
       tags: ["x", 3, "y"],
       pinnedAt: "2026-11-12T08:00:00.000Z",
-      pullRequests: [{ ...pr(1, "created"), snapshot: { ...pr(1, "created").snapshot, additions: 5, deletions: 2, changedFiles: 3 } }],
+      pullRequests: [
+        {
+          ...pr(1, "created"),
+          snapshot: { ...pr(1, "created").snapshot, additions: 5, deletions: 2, changedFiles: 3 },
+        },
+      ],
     });
     const t = node([full], "a");
     expect(t.detail).toEqual({
@@ -465,14 +585,20 @@ describe("details", () => {
       expect(node([shell("k", "keyless")], "k", { k: "ghost" }).detail.launchedBy).toBeNull();
     });
     test("set for a keyed thread", () => {
-      expect(node([shell("sp", "Spawner"), shell("k", "SHOP-1 keyed")], "k", { k: "sp" }).detail.launchedBy).toEqual(spawner);
+      expect(node([shell("sp", "Spawner"), shell("k", "SHOP-1 keyed")], "k", { k: "sp" }).detail.launchedBy).toEqual(
+        spawner,
+      );
     });
     test("set under No issue key when the spawner is in another project", () => {
       const raws = [shell("sp", "Spawner", { projectId: "p2" }), shell("k", "keyless")];
       expect(node(raws, "k", { k: "sp" }).detail.launchedBy).toEqual(spawner);
     });
     test("names a settled spawner when the thread nests under a grandparent", () => {
-      const raws = [shell("gp", "Grand"), shell("sp", "Spawner", { settledAt: "2026-11-12T09:00:00.000Z" }), shell("k", "keyless")];
+      const raws = [
+        shell("gp", "Grand"),
+        shell("sp", "Spawner", { settledAt: "2026-11-12T09:00:00.000Z" }),
+        shell("k", "keyless"),
+      ];
       expect(node(raws, "k", { k: "sp", sp: "gp" }).detail.launchedBy).toEqual(spawner);
     });
   });
@@ -481,8 +607,13 @@ describe("details", () => {
 describe("lineage tool results", () => {
   test("launch, create_threads, delegate_task and wrapped text", () => {
     expect(launchedIds('{"threadId":"mcp:1","projectId":"p"}')).toEqual(["mcp:1"]);
-    expect(launchedIds('{"threads":[{"threadId":"thread:mcp:a"},{"threadId":"thread:mcp:b"}]}')).toEqual(["thread:mcp:a", "thread:mcp:b"]);
-    expect(launchedIds('{"taskId":"n","childThreadId":"thread:delegated-task:x"}')).toEqual(["thread:delegated-task:x"]);
+    expect(launchedIds('{"threads":[{"threadId":"thread:mcp:a"},{"threadId":"thread:mcp:b"}]}')).toEqual([
+      "thread:mcp:a",
+      "thread:mcp:b",
+    ]);
+    expect(launchedIds('{"taskId":"n","childThreadId":"thread:delegated-task:x"}')).toEqual([
+      "thread:delegated-task:x",
+    ]);
     expect(launchedIds('[{"type":"text","text":"{\\"threadId\\":\\"mcp:2\\"}"}]')).toEqual(["mcp:2"]);
     expect(launchedIds("not json")).toEqual([]);
   });

@@ -93,7 +93,10 @@ export const StatusIcon = ({ t }: { t: ThreadNode }) => {
     <Tooltip>
       <TooltipTrigger asChild>
         <span className="inline-flex flex-none" role="img" aria-label={t.phrase}>
-          <Icon className={cn("status-icon size-3", shape)} fill={t.status === "needs-input" ? "currentColor" : "none"} />
+          <Icon
+            className={cn("status-icon size-3", shape)}
+            fill={t.status === "needs-input" ? "currentColor" : "none"}
+          />
         </span>
       </TooltipTrigger>
       <TooltipContent>
@@ -132,14 +135,36 @@ function PrChip({ p }: { p: PrNode }) {
     >
       <a href={p.url} target="_blank" rel="noreferrer" title={p.draft ? `${p.state} · draft` : p.state}>
         #{p.n}
-        {p.checks === "passing" && <Mark title="Checks passing"><span className="size-1.5 rounded-full bg-status-done" /></Mark>}
-        {p.checks === "failing" && <Mark title="Checks failing"><span className="size-1.5 rounded-full bg-status-failed" /></Mark>}
-        {p.checks === "pending" && (
-          <Mark title="Checks pending"><span className="size-1.5 rounded-full border border-status-needs-input" /></Mark>
+        {p.checks === "passing" && (
+          <Mark title="Checks passing">
+            <span className="size-1.5 rounded-full bg-status-done" />
+          </Mark>
         )}
-        {p.review === "approved" && <Mark title="Approved"><Check className="text-status-done" /></Mark>}
-        {p.review === "changes-requested" && <Mark title="Changes requested"><X className="text-status-failed" /></Mark>}
-        {p.conflicting && <Mark title="Merge conflict"><TriangleAlert className="text-status-needs-input" /></Mark>}
+        {p.checks === "failing" && (
+          <Mark title="Checks failing">
+            <span className="size-1.5 rounded-full bg-status-failed" />
+          </Mark>
+        )}
+        {p.checks === "pending" && (
+          <Mark title="Checks pending">
+            <span className="size-1.5 rounded-full border border-status-needs-input" />
+          </Mark>
+        )}
+        {p.review === "approved" && (
+          <Mark title="Approved">
+            <Check className="text-status-done" />
+          </Mark>
+        )}
+        {p.review === "changes-requested" && (
+          <Mark title="Changes requested">
+            <X className="text-status-failed" />
+          </Mark>
+        )}
+        {p.conflicting && (
+          <Mark title="Merge conflict">
+            <TriangleAlert className="text-status-needs-input" />
+          </Mark>
+        )}
       </a>
     </Badge>
   );
@@ -159,7 +184,9 @@ const Mono = ({ children }: { children: ReactNode }) => <span className="font-mo
 function DetailBlock({ t }: { t: ThreadNode }) {
   const now = useContext(Now);
   const d = t.detail;
-  const limit = [d.limitResetAt && `resets ${hhmm(d.limitResetAt)}`, d.autoResume && "auto-resume"].filter(Boolean).join(" · ");
+  const limit = [d.limitResetAt && `resets ${hhmm(d.limitResetAt)}`, d.autoResume && "auto-resume"]
+    .filter(Boolean)
+    .join(" · ");
   const tags = [d.tags.join(", "), d.pinned && "Pinned"].filter(Boolean).join(" · ");
   return (
     <dl className="m-0 grid grid-cols-[auto_1fr] gap-x-3 gap-y-0.5 py-1 pl-[156px] text-xs max-[720px]:pl-7">
@@ -233,96 +260,107 @@ function ThreadRow({ t, chip }: { t: ThreadNode; chip?: string }) {
   const chipHref = chip ? linearHref(chip, linear) : null;
   return (
     <Collapsible asChild open={open.has(t.id)} onOpenChange={() => toggle(t.id)}>
-    <li className="my-px">
-      <div
-        className="thread-row flex min-h-9 min-w-0 items-center gap-x-2 rounded-[8px] px-2 text-[13px] leading-5 max-[720px]:flex-wrap max-[720px]:py-1"
-        data-status={t.status}
-      >
-        <StatusIcon t={t} />
-        <span className={cn("w-[120px] flex-none truncate text-xs font-medium", dim ? "text-muted-foreground" : STATUS[t.status].text)}>
-          {phraseWith(t, now)}
-        </span>
-        {chip && (
-          <Badge variant="outline" className={cn(CHIP, "flex-none font-mono", chipHref && "hover:underline")} asChild={!!chipHref}>
-            {chipHref ? (
-              <a href={chipHref} target="_blank" rel="noreferrer" title="Open in Linear">
-                {chip}
-              </a>
-            ) : (
-              chip
-            )}
-          </Badge>
-        )}
-        <a
-          className={cn(
-            "min-w-0 flex-1 truncate hover:underline max-[720px]:line-clamp-2 max-[720px]:whitespace-normal",
-            t.status === "your-turn" ? "font-[650]" : "font-medium",
-            (t.status === "snoozed" || t.settled || dim) && "text-muted-foreground",
-            chip && "max-[720px]:basis-full max-[720px]:pl-5",
-          )}
-          href={t.href}
+      <li className="my-px">
+        <div
+          className="thread-row flex min-h-9 min-w-0 items-center gap-x-2 rounded-[8px] px-2 text-[13px] leading-5 max-[720px]:flex-wrap max-[720px]:py-1"
+          data-status={t.status}
         >
-          {(chip ? stripKey(t.title, chip) : t.title) || t.id}
-        </a>
-        <span className="ml-auto flex flex-none items-center gap-1.5 max-[720px]:ml-0 max-[720px]:basis-full max-[720px]:flex-wrap max-[720px]:pl-5">
-          {t.input && (
-            <Badge variant="outline" className={CHIP}>
-              Input
-            </Badge>
-          )}
-          {t.snoozedUntil && (
-            <Badge variant="outline" className={CHIP}>
-              until {until(t.snoozedUntil)}
-            </Badge>
-          )}
-          {t.settled && (
-            <Badge variant="outline" className={CHIP}>
-              Settled
-            </Badge>
-          )}
-          {t.stack && (
-            <Badge variant="outline" className={cn(CHIP, "chip-stack")} title="PR stack">
-              <Layers />
-              {t.stack.pos ? `${t.stack.pos}/${t.stack.total}` : `base · ${t.stack.total}`}
-            </Badge>
-          )}
-          {t.prs.slice(0, 2).map((p) => (
-            <PrChip key={p.n} p={p} />
-          ))}
-          {t.prs.length > 2 && (
-            <Button
-              variant="ghost"
-              className={cn(ROW_BUTTON, "w-auto px-1 text-[11px] font-normal")}
-              title={`Show all ${t.prs.length} pull requests`}
-              onClick={() => show(t.id)}
+          <StatusIcon t={t} />
+          <span
+            className={cn(
+              "w-[120px] flex-none truncate text-xs font-medium",
+              dim ? "text-muted-foreground" : STATUS[t.status].text,
+            )}
+          >
+            {phraseWith(t, now)}
+          </span>
+          {chip && (
+            <Badge
+              variant="outline"
+              className={cn(CHIP, "flex-none font-mono", chipHref && "hover:underline")}
+              asChild={!!chipHref}
             >
-              +{t.prs.length - 2}
-            </Button>
+              {chipHref ? (
+                <a href={chipHref} target="_blank" rel="noreferrer" title="Open in Linear">
+                  {chip}
+                </a>
+              ) : (
+                chip
+              )}
+            </Badge>
           )}
-          <Tooltip>
-            <TooltipTrigger asChild>
-              <span className="font-mono text-[11px] tabular-nums text-muted-foreground">{ago(t.updatedAt, now)}</span>
-            </TooltipTrigger>
-            <TooltipContent>Updated {new Date(t.updatedAt).toLocaleString()}</TooltipContent>
-          </Tooltip>
-          <CollapsibleTrigger asChild>
-            <Button variant="ghost" size="icon" className={cn(ROW_BUTTON, "group")} aria-label="Details">
-              <ChevronDown className="size-3.5 group-data-[state=open]:rotate-180" />
-            </Button>
-          </CollapsibleTrigger>
-        </span>
-      </div>
-      <CollapsibleContent>
-        <DetailBlock t={t} />
-      </CollapsibleContent>
-      {t.children.length > 0 && (
-        <ul className="m-0 list-none pl-4">
-          {t.children.map((c) => (
-            <ThreadRow key={c.id} t={c} />
-          ))}
-        </ul>
-      )}
-    </li>
+          <a
+            className={cn(
+              "min-w-0 flex-1 truncate hover:underline max-[720px]:line-clamp-2 max-[720px]:whitespace-normal",
+              t.status === "your-turn" ? "font-[650]" : "font-medium",
+              (t.status === "snoozed" || t.settled || dim) && "text-muted-foreground",
+              chip && "max-[720px]:basis-full max-[720px]:pl-5",
+            )}
+            href={t.href}
+          >
+            {(chip ? stripKey(t.title, chip) : t.title) || t.id}
+          </a>
+          <span className="ml-auto flex flex-none items-center gap-1.5 max-[720px]:ml-0 max-[720px]:basis-full max-[720px]:flex-wrap max-[720px]:pl-5">
+            {t.input && (
+              <Badge variant="outline" className={CHIP}>
+                Input
+              </Badge>
+            )}
+            {t.snoozedUntil && (
+              <Badge variant="outline" className={CHIP}>
+                until {until(t.snoozedUntil)}
+              </Badge>
+            )}
+            {t.settled && (
+              <Badge variant="outline" className={CHIP}>
+                Settled
+              </Badge>
+            )}
+            {t.stack && (
+              <Badge variant="outline" className={cn(CHIP, "chip-stack")} title="PR stack">
+                <Layers />
+                {t.stack.pos ? `${t.stack.pos}/${t.stack.total}` : `base · ${t.stack.total}`}
+              </Badge>
+            )}
+            {t.prs.slice(0, 2).map((p) => (
+              <PrChip key={p.n} p={p} />
+            ))}
+            {t.prs.length > 2 && (
+              <Button
+                variant="ghost"
+                className={cn(ROW_BUTTON, "w-auto px-1 text-[11px] font-normal")}
+                title={`Show all ${t.prs.length} pull requests`}
+                onClick={() => show(t.id)}
+              >
+                +{t.prs.length - 2}
+              </Button>
+            )}
+            <Tooltip>
+              <TooltipTrigger asChild>
+                <span className="font-mono text-[11px] tabular-nums text-muted-foreground">
+                  {ago(t.updatedAt, now)}
+                </span>
+              </TooltipTrigger>
+              <TooltipContent>Updated {new Date(t.updatedAt).toLocaleString()}</TooltipContent>
+            </Tooltip>
+            <CollapsibleTrigger asChild>
+              <Button variant="ghost" size="icon" className={cn(ROW_BUTTON, "group")} aria-label="Details">
+                <ChevronDown className="size-3.5 group-data-[state=open]:rotate-180" />
+              </Button>
+            </CollapsibleTrigger>
+          </span>
+        </div>
+        <CollapsibleContent>
+          <DetailBlock t={t} />
+        </CollapsibleContent>
+        {t.children.length > 0 && (
+          <ul className="m-0 list-none pl-4">
+            {t.children.map((c) => (
+              <ThreadRow key={c.id} t={c} />
+            ))}
+          </ul>
+        )}
+      </li>
     </Collapsible>
   );
 }
@@ -355,7 +393,9 @@ function GroupRow({ b, closed, toggle }: { b: Branch } & Fold) {
         <div className="flex h-7 min-w-0 items-center gap-2 rounded-[8px] px-2 hover:bg-accent max-[720px]:h-auto max-[720px]:min-h-7 max-[720px]:flex-wrap">
           <CollapsibleTrigger className="flex min-w-0 cursor-pointer items-center gap-2 select-none max-[720px]:min-h-11">
             <Chevron open={open} />
-            <span className={cn("truncate text-xs font-semibold", isKeyGroup(b) ? "font-mono" : "text-muted-foreground")}>
+            <span
+              className={cn("truncate text-xs font-semibold", isKeyGroup(b) ? "font-mono" : "text-muted-foreground")}
+            >
               {b.label}
             </span>
           </CollapsibleTrigger>
@@ -504,7 +544,8 @@ function App() {
 
   const toggle = (id: string) => {
     const n = new Set(closed);
-    n.has(id) ? n.delete(id) : n.add(id);
+    if (n.has(id)) n.delete(id);
+    else n.add(id);
     setClosed(n);
     save(CLOSED_KEY, JSON.stringify([...n]));
   };
@@ -514,7 +555,8 @@ function App() {
     toggle: (id: string) =>
       setShown((s) => {
         const n = new Set(s);
-        n.has(id) ? n.delete(id) : n.add(id);
+        if (n.has(id)) n.delete(id);
+        else n.add(id);
         return n;
       }),
     show: (id: string) => setShown((s) => new Set(s).add(id)),
@@ -619,36 +661,42 @@ function App() {
         />
       )}
       <Details value={details}>
-      <NeedsOnly value={needsOnly}>
-        <Linear value={tree?.linear ?? null}>
-        <Now value={now}>
-          <div
-            className={!connecting && tree.conn !== "up" ? "grayscale" : ""}
-            data-conn={!connecting && tree.conn !== "up" ? "down" : undefined}
-          >
-            {projects?.length === 0 && <p className="text-muted-foreground">No active threads.</p>}
-            {projects ? (
-              <ul className="m-0 flex list-none flex-col gap-3 p-0">
-                {projects.map((p) => (
-                  <ProjectCard key={p.id} b={p} closed={closed} toggle={toggle} />
-                ))}
-              </ul>
-            ) : (
-              <>
-              <p className="mb-2 text-sm text-muted-foreground" role="status">Connecting to T3…</p>
-              <Card className="gap-0 rounded-[12px] py-0 shadow-none" aria-busy="true" aria-label="Loading threads">
-                <CardContent className="flex flex-col gap-0.5 p-1.5">
-                  {[0, 1, 2].map((i) => (
-                    <Skeleton key={i} className="h-9 rounded-[8px] motion-reduce:animate-none" />
-                  ))}
-                </CardContent>
-              </Card>
-              </>
-            )}
-          </div>
-        </Now>
-        </Linear>
-      </NeedsOnly>
+        <NeedsOnly value={needsOnly}>
+          <Linear value={tree?.linear ?? null}>
+            <Now value={now}>
+              <div
+                className={!connecting && tree.conn !== "up" ? "grayscale" : ""}
+                data-conn={!connecting && tree.conn !== "up" ? "down" : undefined}
+              >
+                {projects?.length === 0 && <p className="text-muted-foreground">No active threads.</p>}
+                {projects ? (
+                  <ul className="m-0 flex list-none flex-col gap-3 p-0">
+                    {projects.map((p) => (
+                      <ProjectCard key={p.id} b={p} closed={closed} toggle={toggle} />
+                    ))}
+                  </ul>
+                ) : (
+                  <>
+                    <p className="mb-2 text-sm text-muted-foreground" role="status">
+                      Connecting to T3…
+                    </p>
+                    <Card
+                      className="gap-0 rounded-[12px] py-0 shadow-none"
+                      aria-busy="true"
+                      aria-label="Loading threads"
+                    >
+                      <CardContent className="flex flex-col gap-0.5 p-1.5">
+                        {[0, 1, 2].map((i) => (
+                          <Skeleton key={i} className="h-9 rounded-[8px] motion-reduce:animate-none" />
+                        ))}
+                      </CardContent>
+                    </Card>
+                  </>
+                )}
+              </div>
+            </Now>
+          </Linear>
+        </NeedsOnly>
       </Details>
     </TooltipProvider>
   );

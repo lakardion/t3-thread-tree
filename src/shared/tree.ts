@@ -1,7 +1,16 @@
 /** The placed tree that the backend pushes and the page renders. */
 export type Status =
-  | "needs-input" | "working" | "starting" | "waiting" | "plan-ready"
-  | "your-turn" | "done" | "failed" | "interrupted" | "snoozed" | "idle";
+  | "needs-input"
+  | "working"
+  | "starting"
+  | "waiting"
+  | "plan-ready"
+  | "your-turn"
+  | "done"
+  | "failed"
+  | "interrupted"
+  | "snoozed"
+  | "idle";
 
 export type PrNode = {
   n: number;
@@ -83,7 +92,4 @@ export type Tree = {
 };
 
 const flat = (t: ThreadNode): ThreadNode[] => [t, ...t.children.flatMap(flat)];
-export const allThreads = (b: Branch): ThreadNode[] => [
-  ...b.branches.flatMap(allThreads),
-  ...b.threads.flatMap(flat),
-];
+export const allThreads = (b: Branch): ThreadNode[] => [...b.branches.flatMap(allThreads), ...b.threads.flatMap(flat)];

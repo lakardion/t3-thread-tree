@@ -25,11 +25,15 @@ export function statusOf(t: Thread, now: number): { status: Status; phrase: stri
   if ((t.guestMessages ?? 0) > 0) return out("needs-input", "Guest message");
   if (t.snoozedUntil && Date.parse(t.snoozedUntil) > now) return out("snoozed", "Snoozed");
   if (run === "running" || run === "waiting")
-    return t.blockedOnThreadWait ? out("waiting", "Waiting") : out("working", "Working", t.activityRunStartedAt ?? t.latestRunStartedAt);
-  if (run === "queued" || run === "preparing" || run === "starting") return out("starting", run === "queued" ? "Queued" : "Starting");
+    return t.blockedOnThreadWait
+      ? out("waiting", "Waiting")
+      : out("working", "Working", t.activityRunStartedAt ?? t.latestRunStartedAt);
+  if (run === "queued" || run === "preparing" || run === "starting")
+    return out("starting", run === "queued" ? "Queued" : "Starting");
   if (run === "completed") {
     if (t.interactionMode === "plan" && t.hasPlan) return out("plan-ready", "Plan ready");
-    const unseen = t.latestRunCompletedAt && (!t.lastVisitedAt || Date.parse(t.lastVisitedAt) < Date.parse(t.latestRunCompletedAt));
+    const unseen =
+      t.latestRunCompletedAt && (!t.lastVisitedAt || Date.parse(t.lastVisitedAt) < Date.parse(t.latestRunCompletedAt));
     return unseen ? out("your-turn", "Your turn") : out("done", "Done");
   }
   if (run === "failed") return out("failed", "Failed");
@@ -76,8 +80,13 @@ export function detailOf(t: Thread, now: number, all: Map<string, Thread>): Omit
   const fork = t.forkedFromThreadId && all.get(t.forkedFromThreadId);
   const startedBy = [t.createdBy, t.creationSource].filter((x) => x !== null).join(" via ");
   return {
-    request: t.pending ? `${t.pending.kind ?? "request"}${t.pending.createdAt ? ` · ${ago(t.pending.createdAt, now)}` : ""}` : null,
-    error: t.lastError === null && t.lastErrorClass === null && t.lastErrorCode === null ? null : { class: t.lastErrorClass, code: t.lastErrorCode, text: t.lastError },
+    request: t.pending
+      ? `${t.pending.kind ?? "request"}${t.pending.createdAt ? ` · ${ago(t.pending.createdAt, now)}` : ""}`
+      : null,
+    error:
+      t.lastError === null && t.lastErrorClass === null && t.lastErrorCode === null
+        ? null
+        : { class: t.lastErrorClass, code: t.lastErrorCode, text: t.lastError },
     limitResetAt: t.limitResetAt,
     autoResume: t.autoResume,
     stopRequested: t.stopRequested,
@@ -122,7 +131,9 @@ export function computeStacks(threads: Thread[]): Stack[] {
   }
   for (const st of stacks) {
     const best = st.threads.reduce((a, b) => (stackPrs(b).length > stackPrs(a).length ? b : a));
-    const order = best.prs.filter((p) => (p.source === "stack" || p.source === "agent") && p.state === "open").map((p) => p.n);
+    const order = best.prs
+      .filter((p) => (p.source === "stack" || p.source === "agent") && p.state === "open")
+      .map((p) => p.n);
     for (const p of best.prs.filter((p) => p.source === "created")) {
       let k = 0;
       order.forEach((x, j) => x < p.n && (k = j + 1));
@@ -234,8 +245,14 @@ export function buildTree(input: BuildInput): Branch[] {
       const mates =
         si === undefined
           ? [g]
-          : gs.filter((h) => h.nodes.some((n) => stackIdOf.get(n.id) === si)).sort((a, b) => minPos(a, si) - minPos(b, si));
-      for (const h of mates) if (!placed.has(h)) placed.add(h), ordered.push(h);
+          : gs
+              .filter((h) => h.nodes.some((n) => stackIdOf.get(n.id) === si))
+              .sort((a, b) => minPos(a, si) - minPos(b, si));
+      for (const h of mates)
+        if (!placed.has(h)) {
+          placed.add(h);
+          ordered.push(h);
+        }
     }
     const rank = (g: Group) => (g.key === REVIEWS ? 1 : g.key === NO_KEY ? 2 : 0);
     ordered.sort((a, b) => rank(a) - rank(b));
@@ -260,12 +277,23 @@ export function buildTree(input: BuildInput): Branch[] {
         id: gid(REVIEWS),
         label: REVIEWS,
         threads: [],
-        branches: [...byKey].map(([k, ns]) => ({ id: `${gid(REVIEWS)}:${k}`, label: k, branches: [], threads: ns.map(clean) })),
+        branches: [...byKey].map(([k, ns]) => ({
+          id: `${gid(REVIEWS)}:${k}`,
+          label: k,
+          branches: [],
+          threads: ns.map(clean),
+        })),
       };
     });
     const project = projects.get(projectId);
     out.push({
-      branch: { id: `p:${projectId}`, label: project?.title ?? projectId, ...(project?.repo && { repo: project.repo }), branches, threads: [] },
+      branch: {
+        id: `p:${projectId}`,
+        label: project?.title ?? projectId,
+        ...(project?.repo && { repo: project.repo }),
+        branches,
+        threads: [],
+      },
       latest: gs[0]!.latest,
     });
   }
@@ -273,4 +301,7 @@ export function buildTree(input: BuildInput): Branch[] {
 }
 
 /** Strips the build-only fields before the node goes on the wire. */
-const clean = ({ t: _t, latest: _l, children, ...n }: Node): ThreadNode => ({ ...n, children: (children as Node[]).map(clean) });
+const clean = ({ t: _t, latest: _l, children, ...n }: Node): ThreadNode => ({
+  ...n,
+  children: (children as Node[]).map(clean),
+});

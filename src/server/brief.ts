@@ -38,7 +38,14 @@ export type InputThread = {
   status: string;
   phrase: string;
   age: string;
-  prs: { n: number; state: string; draft: boolean; checks: string | null; review: string | null; conflicting: boolean }[];
+  prs: {
+    n: number;
+    state: string;
+    draft: boolean;
+    checks: string | null;
+    review: string | null;
+    conflicting: boolean;
+  }[];
   stack: { pos: number | null; total: number } | null;
   request: string | null;
   subthreads: number;
@@ -60,7 +67,14 @@ export function briefInput(
     status: n.status,
     phrase: phraseWith(n, now),
     age: ago(n.updatedAt, now),
-    prs: n.prs.map(({ n: num, state, draft, checks, review, conflicting }) => ({ n: num, state, draft, checks, review, conflicting })),
+    prs: n.prs.map(({ n: num, state, draft, checks, review, conflicting }) => ({
+      n: num,
+      state,
+      draft,
+      checks,
+      review,
+      conflicting,
+    })),
     stack: n.stack,
     request: n.detail.request,
     subthreads: n.children.length,
@@ -96,16 +110,58 @@ export const SCHEMA = {
 export function cliArgs(cli: Cli, guide: string, schemaFile: string, cwd: string): string[] {
   if (cli === "claude")
     return [
-      "claude", "-p", "--model", "haiku", "--effort", "medium", "--tools", "",
-      "--system-prompt", guide, "--output-format", "json", "--json-schema", JSON.stringify(SCHEMA),
-      "--no-session-persistence", "--strict-mcp-config", "--setting-sources", "", "--disable-slash-commands",
+      "claude",
+      "-p",
+      "--model",
+      "haiku",
+      "--effort",
+      "medium",
+      "--tools",
+      "",
+      "--system-prompt",
+      guide,
+      "--output-format",
+      "json",
+      "--json-schema",
+      JSON.stringify(SCHEMA),
+      "--no-session-persistence",
+      "--strict-mcp-config",
+      "--setting-sources",
+      "",
+      "--disable-slash-commands",
     ];
   return [
-    "codex", "exec", "--model", "gpt-6-luna", "-c", "model_reasoning_effort=medium",
-    "--ephemeral", "--ignore-user-config", "--ignore-rules", "--skip-git-repo-check", "-s", "read-only", "-C", cwd,
-    ...["shell_tool", "unified_exec", "apps", "plugins", "image_generation", "computer_use", "browser_use", "multi_agent", "hooks"]
-      .flatMap((f) => ["--disable", f]),
-    "-c", "web_search=disabled", "--output-schema", schemaFile, "--json", "-",
+    "codex",
+    "exec",
+    "--model",
+    "gpt-6-luna",
+    "-c",
+    "model_reasoning_effort=medium",
+    "--ephemeral",
+    "--ignore-user-config",
+    "--ignore-rules",
+    "--skip-git-repo-check",
+    "-s",
+    "read-only",
+    "-C",
+    cwd,
+    ...[
+      "shell_tool",
+      "unified_exec",
+      "apps",
+      "plugins",
+      "image_generation",
+      "computer_use",
+      "browser_use",
+      "multi_agent",
+      "hooks",
+    ].flatMap((f) => ["--disable", f]),
+    "-c",
+    "web_search=disabled",
+    "--output-schema",
+    schemaFile,
+    "--json",
+    "-",
   ];
 }
 
@@ -249,7 +305,8 @@ export function briefService(o: {
       "/brief/run": {
         POST: async (req: Request) => {
           const { cli } = ((await req.json().catch(() => null)) ?? {}) as { cli?: Cli };
-          if (!(await o.clis).some((c) => c.id === cli)) return new Response("This CLI is not offered.", { status: 400 });
+          if (!(await o.clis).some((c) => c.id === cli))
+            return new Response("This CLI is not offered.", { status: 400 });
           if (active) return new Response("A run is active.", { status: 409 });
           const threads = o.input(new URL(req.url).searchParams.get("settled") === "1");
           const before = state;

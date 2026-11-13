@@ -8,29 +8,29 @@ The design merges two proposals: [A, "Harbor"](.wayfinder/design-overhaul/resear
 
 Each row gives the choice and its one reason.
 
-| Part | Choice | Reason |
-|---|---|---|
-| Palette | Harbor (A), with the stronger borders of B and no lowered text opacity (B) | Only Harbor has a dot token and a text token for each status. |
-| Row | One line of 36 px with a status column: icon, phrase and elapsed time (merge) | The tree stays dense and the phrase is in view. |
-| Details | An inline details block below the row, opened by a button (B) | It works with keyboard and touch, and it stays open during stream updates. |
-| Details content | The curated set of A: no ids, no housekeeping fields | Each line helps a decision, and the decoder stays small. |
-| Motion | Working: the ring turns (B). Needs input: the left edge breathes (A). All other states are still. | Motion then means "alive" or "waiting for you". |
-| Projects | Cards (A) with a neutral header gradient (B) | Color then always means status. |
-| Gradients | Color gradients for state and for the stack only (A, reduced) | Calm rows stay flat, so a gradient keeps its meaning. |
-| Layout | Fold single-thread key groups (A), stack rail (A), centered column of 1200 px maximum (B), one status shape per thread on closed rows (A) | Fewer rows, a visible stack, and no wide gap between title and chips. |
-| Header | Attention summary (A), "Needs you" filter (A), theme choice (B), first-load skeleton (A) | They answer "what needs me?" before the user reads the tree. |
-| Inventory | Row: status phrase, elapsed time, age, PR marks. All other useful fields: details. | The row holds only what the user scans. |
+| Part            | Choice                                                                                                                                    | Reason                                                                     |
+| --------------- | ----------------------------------------------------------------------------------------------------------------------------------------- | -------------------------------------------------------------------------- |
+| Palette         | Harbor (A), with the stronger borders of B and no lowered text opacity (B)                                                                | Only Harbor has a dot token and a text token for each status.              |
+| Row             | One line of 36 px with a status column: icon, phrase and elapsed time (merge)                                                             | The tree stays dense and the phrase is in view.                            |
+| Details         | An inline details block below the row, opened by a button (B)                                                                             | It works with keyboard and touch, and it stays open during stream updates. |
+| Details content | The curated set of A: no ids, no housekeeping fields                                                                                      | Each line helps a decision, and the decoder stays small.                   |
+| Motion          | Working: the ring turns (B). Needs input: the left edge breathes (A). All other states are still.                                         | Motion then means "alive" or "waiting for you".                            |
+| Projects        | Cards (A) with a neutral header gradient (B)                                                                                              | Color then always means status.                                            |
+| Gradients       | Color gradients for state and for the stack only (A, reduced)                                                                             | Calm rows stay flat, so a gradient keeps its meaning.                      |
+| Layout          | Fold single-thread key groups (A), stack rail (A), centered column of 1200 px maximum (B), one status shape per thread on closed rows (A) | Fewer rows, a visible stack, and no wide gap between title and chips.      |
+| Header          | Attention summary (A), "Needs you" filter (A), theme choice (B), first-load skeleton (A)                                                  | They answer "what needs me?" before the user reads the tree.               |
+| Inventory       | Row: status phrase, elapsed time, age, PR marks. All other useful fields: details.                                                        | The row holds only what the user scans.                                    |
 
 Rejected from both proposals: the last message of a thread, in any place; subagent and background task counts, in any place; a model chip, tags, pin, limit and stop flags on the row (they are in details); hashed project hues (A); exhaustive details with ids (B); a hover card (A); a popover for extra PR links (B).
 
 ### Changes to the "not shown" rules
 
-| Rule from the rough tree UI | Result |
-|---|---|
-| No update age | Overturned. The row shows the age. |
-| No launched-by hint | Overturned. Details show "Launched by" when the thread does not nest under its spawner. |
-| No last message | Kept. |
-| No subagent rows, counts or signals (tree rule 2) | Kept. The page does not read `pendingBackgroundTasks`. |
+| Rule from the rough tree UI                       | Result                                                                                  |
+| ------------------------------------------------- | --------------------------------------------------------------------------------------- |
+| No update age                                     | Overturned. The row shows the age.                                                      |
+| No launched-by hint                               | Overturned. Details show "Launched by" when the thread does not nest under its spawner. |
+| No last message                                   | Kept.                                                                                   |
+| No subagent rows, counts or signals (tree rule 2) | Kept. The page does not read `pendingBackgroundTasks`.                                  |
 
 ### Correction to SPEC.md › UI
 
@@ -127,23 +127,23 @@ The page header has a System / Light / Dark choice. The page stores it in `local
 
 WCAG 2 contrast ratios, computed from the token values above. Text needs 4.5:1 or more. Shapes need 3:1 or more.
 
-| Token | Light: page | Light: card | Dark: page | Dark: card |
-|---|---:|---:|---:|---:|
-| `foreground` | 16.59 | 17.32 | 16.53 | 15.49 |
-| `muted-foreground` | 5.74 | 6.00 | 7.16 | 6.71 |
-| `primary` | 5.92 | 6.18 | 7.63 | 7.15 |
-| `status-needs-input` (shape) | 3.16 | 3.30 | 9.98 | 9.35 |
-| `status-needs-input-fg` | 5.58 | 5.83 | 11.11 | 10.41 |
-| `status-working` (shape) | 3.54 | 3.70 | 9.13 | 8.56 |
-| `status-working-fg` | 5.57 | 5.81 | 10.46 | 9.80 |
-| `status-done` (shape) | 3.26 | 3.40 | 9.78 | 9.17 |
-| `status-done-fg` | 5.66 | 5.91 | 10.75 | 10.07 |
-| `status-failed` (shape) | 3.86 | 4.02 | 6.62 | 6.20 |
-| `status-failed-fg` | 5.84 | 6.09 | 8.38 | 7.85 |
-| `status-plan` (shape) | 4.09 | 4.27 | 7.34 | 6.88 |
-| `status-plan-fg` | 6.29 | 6.56 | 9.23 | 8.65 |
-| `status-idle` (shape) | 3.35 | 3.50 | 3.94 | 3.70 |
-| `pr-merged` (text) | 6.32 | 6.59 | 8.54 | 8.00 |
+| Token                        | Light: page | Light: card | Dark: page | Dark: card |
+| ---------------------------- | ----------: | ----------: | ---------: | ---------: |
+| `foreground`                 |       16.59 |       17.32 |      16.53 |      15.49 |
+| `muted-foreground`           |        5.74 |        6.00 |       7.16 |       6.71 |
+| `primary`                    |        5.92 |        6.18 |       7.63 |       7.15 |
+| `status-needs-input` (shape) |        3.16 |        3.30 |       9.98 |       9.35 |
+| `status-needs-input-fg`      |        5.58 |        5.83 |      11.11 |      10.41 |
+| `status-working` (shape)     |        3.54 |        3.70 |       9.13 |       8.56 |
+| `status-working-fg`          |        5.57 |        5.81 |      10.46 |       9.80 |
+| `status-done` (shape)        |        3.26 |        3.40 |       9.78 |       9.17 |
+| `status-done-fg`             |        5.66 |        5.91 |      10.75 |      10.07 |
+| `status-failed` (shape)      |        3.86 |        4.02 |       6.62 |       6.20 |
+| `status-failed-fg`           |        5.84 |        6.09 |       8.38 |       7.85 |
+| `status-plan` (shape)        |        4.09 |        4.27 |       7.34 |       6.88 |
+| `status-plan-fg`             |        6.29 |        6.56 |       9.23 |       8.65 |
+| `status-idle` (shape)        |        3.35 |        3.50 |       3.94 |       3.70 |
+| `pr-merged` (text)           |        6.32 |        6.59 |       8.54 |       8.00 |
 
 Thread rows sit on the card. On `--muted`, the light `status-needs-input` shape is 2.98:1, so do not put a status shape on a `--muted` surface. The border is decoration (1.48:1 light, 2.12:1 dark on the card) and never the only sign of a state.
 
@@ -151,19 +151,19 @@ Thread rows sit on the card. On `--muted`, the light `status-needs-input` shape 
 
 `ThreadNode.status` has eleven values. The backend applies the first rule that matches.
 
-| Order | Status | When |
-|---|---|---|
-| 1 | `needs-input` | `pendingRuntimeRequest` is set and its `blocking` is not `false`, or `pendingGuestMessageCount` is more than 0 |
-| 2 | `snoozed` | `snoozedUntil` is in the future |
-| 3 | `waiting` | The run status is `running` or `waiting`, and `blockedOnThreadWait` is true |
-| 4 | `working` | The run status is `running` or `waiting` |
-| 5 | `starting` | The run status is `queued`, `preparing` or `starting` |
-| 6 | `plan-ready` | `completed`, `interactionMode` is `plan`, and `hasActionableProposedPlan` is true |
-| 7 | `your-turn` | `completed`, and the completion is unseen |
-| 8 | `done` | `completed` |
-| 9 | `failed` | `failed` |
-| 10 | `interrupted` | `interrupted`, `cancelled` or `rolled_back` |
-| 11 | `idle` | All other cases |
+| Order | Status        | When                                                                                                           |
+| ----- | ------------- | -------------------------------------------------------------------------------------------------------------- |
+| 1     | `needs-input` | `pendingRuntimeRequest` is set and its `blocking` is not `false`, or `pendingGuestMessageCount` is more than 0 |
+| 2     | `snoozed`     | `snoozedUntil` is in the future                                                                                |
+| 3     | `waiting`     | The run status is `running` or `waiting`, and `blockedOnThreadWait` is true                                    |
+| 4     | `working`     | The run status is `running` or `waiting`                                                                       |
+| 5     | `starting`    | The run status is `queued`, `preparing` or `starting`                                                          |
+| 6     | `plan-ready`  | `completed`, `interactionMode` is `plan`, and `hasActionableProposedPlan` is true                              |
+| 7     | `your-turn`   | `completed`, and the completion is unseen                                                                      |
+| 8     | `done`        | `completed`                                                                                                    |
+| 9     | `failed`      | `failed`                                                                                                       |
+| 10    | `interrupted` | `interrupted`, `cancelled` or `rolled_back`                                                                    |
+| 11    | `idle`        | All other cases                                                                                                |
 
 - The run status is `activityRunStatus` when it is not null, and `status` in all other cases.
 - A completion is unseen when `latestRunCompletedAt` is set, and `lastVisitedAt` is absent or earlier than `latestRunCompletedAt`.
@@ -173,29 +173,29 @@ Thread rows sit on the card. On `--muted`, the light `status-needs-input` shape 
 
 The backend sends `phrase` and `since`. The page adds the elapsed time from `since` to the phrase, and updates it once each minute.
 
-| Status | Icon (`lucide-react`) | Phrase | `since` | Motion |
-|---|---|---|---|---|
-| `needs-input` | `Diamond`, filled | See the request table | `pendingRuntimeRequest.createdAt` | The left edge breathes |
-| `working` | `LoaderCircle` | "Working" | `activityRunStartedAt`, else `latestRunStartedAt` | The icon turns |
-| `starting` | `CircleDashed` | "Queued" for `queued`, else "Starting" | none | none |
-| `waiting` | `CirclePause` | "Waiting" | none | none |
-| `plan-ready` | `ListChecks` | "Plan ready" | none | none |
-| `your-turn` | `CircleCheck` | "Your turn" | none | none |
-| `done` | `Check` | "Done" | none | none |
-| `failed` | `CircleX` | "Failed" | none | none |
-| `interrupted` | `Square` | "Interrupted", or "Cancelled" for `cancelled` | none | none |
-| `snoozed` | `Moon` | "Snoozed" | none | none |
-| `idle` | `Circle` | "Idle" | none | none |
+| Status        | Icon (`lucide-react`) | Phrase                                        | `since`                                           | Motion                 |
+| ------------- | --------------------- | --------------------------------------------- | ------------------------------------------------- | ---------------------- |
+| `needs-input` | `Diamond`, filled     | See the request table                         | `pendingRuntimeRequest.createdAt`                 | The left edge breathes |
+| `working`     | `LoaderCircle`        | "Working"                                     | `activityRunStartedAt`, else `latestRunStartedAt` | The icon turns         |
+| `starting`    | `CircleDashed`        | "Queued" for `queued`, else "Starting"        | none                                              | none                   |
+| `waiting`     | `CirclePause`         | "Waiting"                                     | none                                              | none                   |
+| `plan-ready`  | `ListChecks`          | "Plan ready"                                  | none                                              | none                   |
+| `your-turn`   | `CircleCheck`         | "Your turn"                                   | none                                              | none                   |
+| `done`        | `Check`               | "Done"                                        | none                                              | none                   |
+| `failed`      | `CircleX`             | "Failed"                                      | none                                              | none                   |
+| `interrupted` | `Square`              | "Interrupted", or "Cancelled" for `cancelled` | none                                              | none                   |
+| `snoozed`     | `Moon`                | "Snoozed"                                     | none                                              | none                   |
+| `idle`        | `Circle`              | "Idle"                                        | none                                              | none                   |
 
 Request phrase, from `pendingRuntimeRequest.kind`:
 
-| Kind | Phrase |
-|---|---|
-| `command`, `file-read`, `file-change`, `permission`, `dynamic_tool_call` | "Approval" |
-| `user_input`, `mcp-elicitation` | "Question" |
-| `auth_refresh` | "Sign in" |
-| No request, guest messages only | "Guest message" |
-| Any other kind | "Input" |
+| Kind                                                                     | Phrase          |
+| ------------------------------------------------------------------------ | --------------- |
+| `command`, `file-read`, `file-change`, `permission`, `dynamic_tool_call` | "Approval"      |
+| `user_input`, `mcp-elicitation`                                          | "Question"      |
+| `auth_refresh`                                                           | "Sign in"       |
+| No request, guest messages only                                          | "Guest message" |
+| Any other kind                                                           | "Input"         |
 
 Elapsed time and age use one format: "now" below 1 minute, then "12m", "3h", "2d". The phrase with time reads "Working 12m" and "Approval · 3m".
 
@@ -204,16 +204,34 @@ Icons are 12 px. If an icon name is not in the installed `lucide-react`, use the
 ### Motion CSS
 
 ```css
-.thread-row[data-status="working"] .status-icon { animation: work-turn 1.4s linear infinite; }
-@keyframes work-turn { to { transform: rotate(360deg); } }
+.thread-row[data-status="working"] .status-icon {
+  animation: work-turn 1.4s linear infinite;
+}
+@keyframes work-turn {
+  to {
+    transform: rotate(360deg);
+  }
+}
 
-.thread-row[data-status="needs-input"]::before { animation: breathe 2.4s ease-in-out infinite; }
-@keyframes breathe { 50% { opacity: 0.45; } }
+.thread-row[data-status="needs-input"]::before {
+  animation: breathe 2.4s ease-in-out infinite;
+}
+@keyframes breathe {
+  50% {
+    opacity: 0.45;
+  }
+}
 
 @media (prefers-reduced-motion: reduce) {
-  .thread-row .status-icon, .thread-row::before { animation: none; }
+  .thread-row .status-icon,
+  .thread-row::before {
+    animation: none;
+  }
 }
-[data-conn="down"] .thread-row .status-icon, [data-conn="down"] .thread-row::before { animation: none; }
+[data-conn="down"] .thread-row .status-icon,
+[data-conn="down"] .thread-row::before {
+  animation: none;
+}
 ```
 
 With reduced motion, the shape, the phrase and the static edge still tell each status apart.
@@ -224,36 +242,69 @@ Five gradients, all static. No gradient on text, on the page background, or on a
 
 ```css
 /* Project card header: neutral. */
-.project-head { background: linear-gradient(100deg, var(--muted), var(--card) 75%); }
+.project-head {
+  background: linear-gradient(100deg, var(--muted), var(--card) 75%);
+}
 
 /* Needs input: warm wash and a 2 px left edge. */
 .thread-row[data-status="needs-input"] {
-  background: linear-gradient(90deg, color-mix(in oklch, var(--status-needs-input) var(--wash), transparent), transparent 45%);
+  background: linear-gradient(
+    90deg,
+    color-mix(in oklch, var(--status-needs-input) var(--wash), transparent),
+    transparent 45%
+  );
 }
-.thread-row[data-status="needs-input"]::before { background: var(--status-needs-input); }
+.thread-row[data-status="needs-input"]::before {
+  background: var(--status-needs-input);
+}
 
 /* Working: weaker wash and a 2 px left edge. */
 .thread-row[data-status="working"] {
-  background: linear-gradient(90deg, color-mix(in oklch, var(--status-working) calc(var(--wash) * 0.6), transparent), transparent 35%);
+  background: linear-gradient(
+    90deg,
+    color-mix(in oklch, var(--status-working) calc(var(--wash) * 0.6), transparent),
+    transparent 35%
+  );
 }
-.thread-row[data-status="working"]::before { background: var(--status-working); }
+.thread-row[data-status="working"]::before {
+  background: var(--status-working);
+}
 
 /* The edge. */
-.thread-row { position: relative; }
+.thread-row {
+  position: relative;
+}
 .thread-row[data-status="needs-input"]::before,
 .thread-row[data-status="working"]::before {
-  content: ""; position: absolute; left: 0; top: 6px; bottom: 6px; width: 2px; border-radius: 1px;
+  content: "";
+  position: absolute;
+  left: 0;
+  top: 6px;
+  bottom: 6px;
+  width: 2px;
+  border-radius: 1px;
 }
 
 /* Stack rail: from the base of the stack (blue) to its top (violet). */
-.stack-rail { position: relative; padding-left: 10px; }
+.stack-rail {
+  position: relative;
+  padding-left: 10px;
+}
 .stack-rail::before {
-  content: ""; position: absolute; left: 0; top: 0; bottom: 0; width: 3px; border-radius: 2px;
+  content: "";
+  position: absolute;
+  left: 0;
+  top: 0;
+  bottom: 0;
+  width: 3px;
+  border-radius: 2px;
   background: linear-gradient(180deg, var(--primary), var(--status-plan));
 }
 
 /* Stack position chip. */
-.chip-stack { background: linear-gradient(135deg, color-mix(in oklch, var(--primary) 10%, var(--card)), var(--card)); }
+.chip-stack {
+  background: linear-gradient(135deg, color-mix(in oklch, var(--primary) 10%, var(--card)), var(--card));
+}
 ```
 
 The hover background of a row is `--accent`. It replaces the wash while the pointer is on the row.
@@ -269,12 +320,12 @@ The hover background of a row is `--accent`. It replaces the wash while the poin
 
 **Attention summary.** Four count chips over the visible threads, nested threads included:
 
-| Chip | Counts | Style |
-|---|---|---|
-| "N need you" | `needs-input`, `plan-ready` | Amber wash and `--status-needs-input-fg`. Hidden when N is 0. |
-| "N working" | `working`, `starting`, `waiting` | Outline |
-| "N your turn" | `your-turn` | Outline |
-| "N stopped" | `failed`, `interrupted` | Outline |
+| Chip          | Counts                           | Style                                                         |
+| ------------- | -------------------------------- | ------------------------------------------------------------- |
+| "N need you"  | `needs-input`, `plan-ready`      | Amber wash and `--status-needs-input-fg`. Hidden when N is 0. |
+| "N working"   | `working`, `starting`, `waiting` | Outline                                                       |
+| "N your turn" | `your-turn`                      | Outline                                                       |
+| "N stopped"   | `failed`, `interrupted`          | Outline                                                       |
 
 **"Needs you" filter.** It keeps the threads with status `needs-input`, `plan-ready` or `your-turn`, and the groups and projects that hold them. A thread that matches keeps its place under a spawner that does not match; that spawner row stays, in muted color. The filter runs on the page. The backend tree does not change. The page stores the choice in `localStorage` under `thread-tree:filter`.
 
@@ -312,33 +363,33 @@ One line, `min-height: 36px`, radius 8 px, 13 px text with a 20 px line height.
  12px   120px column      chip  flex, truncates        right group, gap 6px
 ```
 
-| Part | Rule |
-|---|---|
-| Icon | 12 px, in `--status-<name>`. A tooltip shows the raw T3 status. |
-| Phrase | 12 px, weight 500, in the status text color. The column is 120 px wide and does not wrap. |
-| Key chip | Only on a folded group. Mono 11 px, muted, outline. |
-| Title | The link to T3. Weight 500; weight 650 when the status is `your-turn`. `--muted-foreground` when the status is `snoozed` or the thread is settled. It truncates with an ellipsis. |
-| "Input" chip | Outline. Only when a request with `blocking: false` is pending. |
-| "until" note | "until Fri 10:42" in an outline chip, when `snoozedUntil` is in the future. It also shows on a `needs-input` row of a snoozed thread. |
-| "Settled" chip | Outline, muted. Only with "show settled" on, on a settled thread. |
-| Stack chip | `.chip-stack`, the `Layers` icon and "2/4", or "base · 4" when the thread created no PR in the stack. |
-| PR chips | The first two PRs, then a "+N" button that opens the details block. |
-| Age | Relative age of `updatedAt`, mono 11 px, muted, `tabular-nums`. The tooltip shows "Updated" and the exact time. |
-| Details button | Ghost icon button with `ChevronDown`, `aria-expanded`, label "Details". |
+| Part           | Rule                                                                                                                                                                              |
+| -------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Icon           | 12 px, in `--status-<name>`. A tooltip shows the raw T3 status.                                                                                                                   |
+| Phrase         | 12 px, weight 500, in the status text color. The column is 120 px wide and does not wrap.                                                                                         |
+| Key chip       | Only on a folded group. Mono 11 px, muted, outline.                                                                                                                               |
+| Title          | The link to T3. Weight 500; weight 650 when the status is `your-turn`. `--muted-foreground` when the status is `snoozed` or the thread is settled. It truncates with an ellipsis. |
+| "Input" chip   | Outline. Only when a request with `blocking: false` is pending.                                                                                                                   |
+| "until" note   | "until Fri 10:42" in an outline chip, when `snoozedUntil` is in the future. It also shows on a `needs-input` row of a snoozed thread.                                             |
+| "Settled" chip | Outline, muted. Only with "show settled" on, on a settled thread.                                                                                                                 |
+| Stack chip     | `.chip-stack`, the `Layers` icon and "2/4", or "base · 4" when the thread created no PR in the stack.                                                                             |
+| PR chips       | The first two PRs, then a "+N" button that opens the details block.                                                                                                               |
+| Age            | Relative age of `updatedAt`, mono 11 px, muted, `tabular-nums`. The tooltip shows "Updated" and the exact time.                                                                   |
+| Details button | Ghost icon button with `ChevronDown`, `aria-expanded`, label "Details".                                                                                                           |
 
 **PR chip.** "#2102" in mono 11 px, a link to the PR, with these marks:
 
-| Mark | When |
-|---|---|
-| Dot, `--status-done` | `checksState` is `passing` |
-| Dot, `--status-failed` | `checksState` is `failing` |
-| Ring, `--status-needs-input` | `checksState` is `pending` |
-| `Check` icon | `reviewDecision` is `approved` |
-| `X` icon | `reviewDecision` is `changes-requested` |
-| `TriangleAlert` icon | `mergeability` is `conflicting` |
-| Dashed border | `isDraft` is true |
-| Text in `--pr-merged` | `state` is `merged` |
-| Text struck through, muted | `state` is `closed` |
+| Mark                         | When                                    |
+| ---------------------------- | --------------------------------------- |
+| Dot, `--status-done`         | `checksState` is `passing`              |
+| Dot, `--status-failed`       | `checksState` is `failing`              |
+| Ring, `--status-needs-input` | `checksState` is `pending`              |
+| `Check` icon                 | `reviewDecision` is `approved`          |
+| `X` icon                     | `reviewDecision` is `changes-requested` |
+| `TriangleAlert` icon         | `mergeability` is `conflicting`         |
+| Dashed border                | `isDraft` is true                       |
+| Text in `--pr-merged`        | `state` is `merged`                     |
+| Text struck through, muted   | `state` is `closed`                     |
 
 An absent value shows no mark. Each mark has a `title` with its meaning.
 
@@ -350,22 +401,22 @@ The details button opens a block below the row, inside the same list item, inden
 
 The block is a two-column list of label and value, 12 px. It shows a line only when the value is present. Paths, branches and ids of models are in mono.
 
-| Line | Value |
-|---|---|
-| Request | The raw request kind and its age: "command · 3m". |
-| Error | `lastErrorClass`, `lastErrorCode`, then `lastError` as plain text. |
-| Limit | "resets 14:00" from `usageLimitResetAt` or `limitRecovery.resetAt`, and "auto-resume" when `limitRecovery.autoResume` is true. |
-| Run | "Stop requested" when `latestRunStopRequested` is true. |
-| Model | `modelSelection.model`, and "plan mode" when `interactionMode` is `plan`. |
-| Branch | `branch`. |
-| Worktree | `worktreePath`, with the home folder as `~`. |
-| Launched by | The title of the spawner, as a link to that thread in T3. Only when the thread has a spawner and does not nest under it. |
-| Origin | "Fork of `<title>`" from `forkedFrom` when the source thread is known, "Delegated from `<title>`" from `delegatedFrom`, or "via `<label>`" from `linkOrigin`. |
-| Started by | `createdBy` and `creationSource`: "agent via mcp". |
-| Created | Relative age of `createdAt`. |
-| Goal | `goal.objective` and `goal.status`. |
-| Tags | `tags` as plain text. "Pinned" when `pinnedAt` is set. |
-| PRs | One line for each PR, all PRs of the row: number, title, state, checks, review, "+212 -40 · 9 files". |
+| Line        | Value                                                                                                                                                         |
+| ----------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Request     | The raw request kind and its age: "command · 3m".                                                                                                             |
+| Error       | `lastErrorClass`, `lastErrorCode`, then `lastError` as plain text.                                                                                            |
+| Limit       | "resets 14:00" from `usageLimitResetAt` or `limitRecovery.resetAt`, and "auto-resume" when `limitRecovery.autoResume` is true.                                |
+| Run         | "Stop requested" when `latestRunStopRequested` is true.                                                                                                       |
+| Model       | `modelSelection.model`, and "plan mode" when `interactionMode` is `plan`.                                                                                     |
+| Branch      | `branch`.                                                                                                                                                     |
+| Worktree    | `worktreePath`, with the home folder as `~`.                                                                                                                  |
+| Launched by | The title of the spawner, as a link to that thread in T3. Only when the thread has a spawner and does not nest under it.                                      |
+| Origin      | "Fork of `<title>`" from `forkedFrom` when the source thread is known, "Delegated from `<title>`" from `delegatedFrom`, or "via `<label>`" from `linkOrigin`. |
+| Started by  | `createdBy` and `creationSource`: "agent via mcp".                                                                                                            |
+| Created     | Relative age of `createdAt`.                                                                                                                                  |
+| Goal        | `goal.objective` and `goal.status`.                                                                                                                           |
+| Tags        | `tags` as plain text. "Pinned" when `pinnedAt` is set.                                                                                                        |
+| PRs         | One line for each PR, all PRs of the row: number, title, state, checks, review, "+212 -40 · 9 files".                                                         |
 
 ### Typography and focus
 
@@ -377,18 +428,18 @@ The block is a two-column list of label and value, 12 px. It shows a line only w
 
 ## Components
 
-| Page part | shadcn component | State |
-|---|---|---|
-| Project card | `Card` | Add |
-| Project and group disclosure, details block | `Collapsible` | Installed |
-| Details button, "+N" button | `Button` | Add |
-| Filter "All / Needs you" | `ToggleGroup`, `type="single"` | Add |
-| Theme choice | `Select` | Add |
-| First load | `Skeleton` | Add |
-| "show settled" | `Switch`, `Label` | Installed |
-| Summary chips, key chip, stack chip, PR chips, notes | `Badge` | Installed |
-| Raw status, exact time | `Tooltip` | Installed |
-| Banner | `Alert` | Installed |
+| Page part                                            | shadcn component               | State     |
+| ---------------------------------------------------- | ------------------------------ | --------- |
+| Project card                                         | `Card`                         | Add       |
+| Project and group disclosure, details block          | `Collapsible`                  | Installed |
+| Details button, "+N" button                          | `Button`                       | Add       |
+| Filter "All / Needs you"                             | `ToggleGroup`, `type="single"` | Add       |
+| Theme choice                                         | `Select`                       | Add       |
+| First load                                           | `Skeleton`                     | Add       |
+| "show settled"                                       | `Switch`, `Label`              | Installed |
+| Summary chips, key chip, stack chip, PR chips, notes | `Badge`                        | Installed |
+| Raw status, exact time                               | `Tooltip`                      | Installed |
+| Banner                                               | `Alert`                        | Installed |
 
 Add components with the shadcn CLI. Status icons, washes, edges and the stack rail are plain Tailwind classes and the CSS in this spec.
 
@@ -398,14 +449,14 @@ All new stream fields are optional or nullable in the T3 shell schema (`Orchestr
 
 ### New fields to decode from the stream
 
-| For | Thread fields |
-|---|---|
-| Status | `activityRunStatus`, `blockedOnThreadWait`, `pendingRuntimeRequest.createdAt`, `pendingRuntimeRequest.blocking`, `pendingGuestMessageCount`, `hasActionableProposedPlan`, `interactionMode`, `latestRunCompletedAt`, `lastVisitedAt` |
-| Elapsed time | `activityRunStartedAt`, `latestRunStartedAt` |
-| PR marks | `pullRequests[].snapshot`: `isDraft`, `checksState`, `reviewDecision`, `mergeability` |
-| Stack rail | `pullRequests[].stack.base` |
-| Details | `lastError`, `lastErrorClass`, `lastErrorCode`, `usageLimitResetAt`, `limitRecovery.resetAt`, `limitRecovery.autoResume`, `latestRunStopRequested`, `modelSelection.model`, `branch`, `worktreePath`, `forkedFrom`, `delegatedFrom.title`, `linkOrigin.label`, `createdBy`, `creationSource`, `createdAt`, `goal.objective`, `goal.status`, `tags`, `pinnedAt`, and `pullRequests[].snapshot`: `title`, `additions`, `deletions`, `changedFiles` |
-| Project card | `repositoryIdentity.owner` and `repositoryIdentity.name` of the project |
+| For          | Thread fields                                                                                                                                                                                                                                                                                                                                                                                                                                    |
+| ------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| Status       | `activityRunStatus`, `blockedOnThreadWait`, `pendingRuntimeRequest.createdAt`, `pendingRuntimeRequest.blocking`, `pendingGuestMessageCount`, `hasActionableProposedPlan`, `interactionMode`, `latestRunCompletedAt`, `lastVisitedAt`                                                                                                                                                                                                             |
+| Elapsed time | `activityRunStartedAt`, `latestRunStartedAt`                                                                                                                                                                                                                                                                                                                                                                                                     |
+| PR marks     | `pullRequests[].snapshot`: `isDraft`, `checksState`, `reviewDecision`, `mergeability`                                                                                                                                                                                                                                                                                                                                                            |
+| Stack rail   | `pullRequests[].stack.base`                                                                                                                                                                                                                                                                                                                                                                                                                      |
+| Details      | `lastError`, `lastErrorClass`, `lastErrorCode`, `usageLimitResetAt`, `limitRecovery.resetAt`, `limitRecovery.autoResume`, `latestRunStopRequested`, `modelSelection.model`, `branch`, `worktreePath`, `forkedFrom`, `delegatedFrom.title`, `linkOrigin.label`, `createdBy`, `creationSource`, `createdAt`, `goal.objective`, `goal.status`, `tags`, `pinnedAt`, and `pullRequests[].snapshot`: `title`, `additions`, `deletions`, `changedFiles` |
+| Project card | `repositoryIdentity.owner` and `repositoryIdentity.name` of the project                                                                                                                                                                                                                                                                                                                                                                          |
 
 ### Tree type
 
@@ -413,8 +464,17 @@ All new stream fields are optional or nullable in the T3 shell schema (`Orchestr
 
 ```ts
 export type Status =
-  | "needs-input" | "working" | "starting" | "waiting" | "plan-ready"
-  | "your-turn" | "done" | "failed" | "interrupted" | "snoozed" | "idle";
+  | "needs-input"
+  | "working"
+  | "starting"
+  | "waiting"
+  | "plan-ready"
+  | "your-turn"
+  | "done"
+  | "failed"
+  | "interrupted"
+  | "snoozed"
+  | "idle";
 
 export type PrNode = {
   n: number;

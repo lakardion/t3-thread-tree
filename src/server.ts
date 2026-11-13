@@ -43,7 +43,10 @@ function scanIfNeeded() {
     scanning = false;
     lineage.seed(e.data);
     log(`launch lineage scanned in ${Math.round(performance.now() - started)} ms`);
-    for (const id of ids) spawners.set(id, lineage.spawner(id)), unscanned.delete(id);
+    for (const id of ids) {
+      spawners.set(id, lineage.spawner(id));
+      unscanned.delete(id);
+    }
     changed();
     scanIfNeeded();
   };
@@ -62,8 +65,10 @@ function resolveSpawners() {
     retry = undefined;
     for (const [id, left] of unresolved) {
       const s = lineage.spawner(id);
-      if (s || left <= 1) spawners.set(id, s), unresolved.delete(id);
-      else unresolved.set(id, left - 1);
+      if (s || left <= 1) {
+        spawners.set(id, s);
+        unresolved.delete(id);
+      } else unresolved.set(id, left - 1);
       if (!s && left <= 1) unscanned.add(id);
     }
     changed();
@@ -76,8 +81,12 @@ type Client = { settled: boolean; send: (data: string, event?: string) => void }
 const clients = new Set<Client>();
 
 const linearWorkspace = process.env.LINEAR_WORKSPACE?.trim();
-const linearTeams = (process.env.LINEAR_TEAMS ?? "").split(",").map((s) => s.trim()).filter(Boolean);
-const linear: Tree["linear"] = linearWorkspace && linearTeams.length ? { workspace: linearWorkspace, teams: linearTeams } : null;
+const linearTeams = (process.env.LINEAR_TEAMS ?? "")
+  .split(",")
+  .map((s) => s.trim())
+  .filter(Boolean);
+const linear: Tree["linear"] =
+  linearWorkspace && linearTeams.length ? { workspace: linearWorkspace, teams: linearTeams } : null;
 
 const treeFor = (settled: boolean): Tree => ({
   conn: ready ? conn : "connecting",
@@ -112,14 +121,20 @@ connectShell({
   token: process.env.T3_TOKEN,
   onConn: (c) => {
     if (c !== conn && c !== "up") log(c === "down" ? "T3 not running, retrying every 3 s" : "T3 rejected the token");
-    if (c !== conn) (conn = c), changed();
+    if (c !== conn) {
+      conn = c;
+      changed();
+    }
     checkReady();
   },
   onEvent: (e) => {
     lastUpdate = new Date().toISOString();
     switch (e.kind) {
       case "snapshot":
-        if (e.fresh) threads.clear(), projects.clear();
+        if (e.fresh) {
+          threads.clear();
+          projects.clear();
+        }
         gotSnapshot = true;
         for (const t of e.threads) threads.set(t.id, t);
         for (const [id, project] of e.projects) projects.set(id, project);
