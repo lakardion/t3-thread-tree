@@ -189,6 +189,8 @@ const threads: Thread[] = [
   t("Rewrite the install page", { id: "launched", projectId: "docs" }),
   t("DOC-16 · Archive the old tutorial", { projectId: "docs", settledAt: ago(60) }),
 ];
+/** The thread that the push steps add to API-77 and remove again. */
+const extra = t("API-77 · Add a per-key quota dashboard", { projectId: "api" });
 const spawners: Record<string, string> = { m1: "map", m2: "map", m3: "map", launched: "map" };
 const projects = new Map<string, Project>([
   ["storefront", { title: "storefront", repo: "acme/storefront" }],
@@ -296,8 +298,10 @@ const STEPS: (() => void)[] = [
   () => setPr("demo-24", 3004, { draft: null }),
   () => (setPr("demo-24", 3004, { state: "merged" }), setPr("demo-24", 3001, { state: "closed" })),
   () => (touch("demo-12", runningNow()), touch("m1", runningNow())),
+  () => ((extra.createdAt = extra.updatedAt = ago(0)), threads.push(extra)),
   () => touch("demo-14", { settledAt: ago(0) }),
   () => touch("demo-14", { settledAt: null }),
+  () => threads.splice(threads.indexOf(extra), 1),
   () => {
     setPr("demo-1", 2101, { checks: "pending", review: null });
     setPr("demo-4", 2107, { mergeability: "conflicting" });

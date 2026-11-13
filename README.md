@@ -19,6 +19,7 @@ _Screenshots use made-up data from `bun run demo`._
 - **Your own order.** Drag the handle at the end of a project, group or thread row to move it in its list, or use Space and the arrow keys. A PR stack moves as one block. The order stays after a reload, and "Reset order" clears it.
 - **Stable order.** Rows keep their place while threads update. A new thread, group or project shows at the bottom of its list.
 - **Status changes move.** A new status, phrase or PR mark fades in. The row flashes once in the new status color. With reduced motion, changes show at once.
+- **Rows come and go.** A new project, group or thread grows in. A removed one collapses out. A change that arrives during a drag shows at once. With reduced motion, rows appear and disappear at once.
 - **Status at a glance.** Each row starts with an icon, a phrase and the elapsed time, for example "Working 12m" or "Approval · 3m". Color is never the only sign.
 
   | Color                | Statuses                                                            |
