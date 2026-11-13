@@ -1,8 +1,8 @@
 ---
 title: Rank the obvious actions in code and skip the model when it has nothing to judge
 type: wayfinder:task
-status: open
-assignee:
+status: closed
+assignee: claude
 blocked-by: [05-compact-digest]
 ---
 
@@ -32,3 +32,25 @@ Decisions: [Which actions does code make, and how do they join the model's actio
 - **Empty input.** `stdinFor` sends `No threads.` for an empty list, because `claude -p` rejects empty stdin. This key skips the CLI in that case, so the guard can stay or go.
 - **Baseline.** `main` already has the digest (PR #5). One live `claude` run over 23 threads took 27 s. Take the 3-run baseline on the current `main`.
 - **Checks.** `main` now has `bun run check` (oxfmt, oxlint, typecheck, tests). The CI check runs it on each PR.
+
+## Resolution
+
+Code makes `answer`, `fix` and `merge`. The model gets only the other threads, and the CLI does not start when none are left. `running` and `failed` carry the code actions. `done` holds the code actions first.
+
+Measured on the live tree, 3 runs per CLI. The time is from the click (`POST /brief/run`) to the `done` event. The input tokens include the cache.
+
+Before (`main` at `0b4a659`, 20–21 threads to the model):
+
+| CLI | Runs (s) | Median (s) | Input tokens |
+| --- | --- | --- | --- |
+| claude | 17.1, 34.1, 26.9 | 26.9 | ~7,750 |
+| codex | 22.5, 25.0, 23.7 | 23.7 | ~15,400 |
+
+After (14 threads to the model, 6–7 code actions):
+
+| CLI | Runs (s) | Median (s) | Input tokens |
+| --- | --- | --- | --- |
+| claude | 23.7, 18.2, 13.2 | 18.2 | ~5,970 |
+| codex | 26.7, 16.0, 30.4 | 26.7 | ~14,170 |
+
+The claude median is lower (26.9 s to 18.2 s). The codex runs vary a lot, and most of its input is fixed CLI cost, so fewer threads change it little. The code actions are ready at once, before the model ends.

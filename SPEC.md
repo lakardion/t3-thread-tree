@@ -105,7 +105,7 @@ The header has a System / Light / Dark choice. The full design is in [DESIGN-SPE
 
 Source: map [whats-next](.wayfinder/whats-next/map.md), tickets [How do we run claude and codex headless, with no tools, on a cheap model?](.wayfinder/whats-next/tickets/01-headless-cli-invocation.md) (research on branch `research/headless-cli`), [Where does the backend read the last assistant message of a thread?](.wayfinder/whats-next/tickets/02-thread-messages-source.md) (research on branch `research/thread-messages`), [What makes a good next step, and what is the shape of a brief?](.wayfinder/whats-next/tickets/03-ranking-rules-and-brief-shape.md), [Where and how does the brief show on the page?](.wayfinder/whats-next/tickets/04-brief-layout-prototype.md) (prototype on branch `prototype/brief-layout`).
 
-A click on "What's next" runs a local agent CLI on a cheap model. The CLI returns a **Next-step brief**: up to 7 ranked **Actions** over the active threads. The app stays read-only: the CLI runs with its tools off and writes nothing to T3.
+A click on "What's next" runs a local agent CLI on a cheap model. Code makes the obvious **Actions** (`answer`, `fix`, `merge`). The CLI returns the rest of the **Next-step brief**: up to 7 ranked **Actions** over the threads that code did not cover. The app stays read-only: the CLI runs with its tools off and writes nothing to T3.
 
 ### CLIs
 
@@ -123,6 +123,18 @@ A click on "What's next" runs a local agent CLI on a cheap model. The CLI return
 ### Input
 
 - **Threads:** the visible top-level threads of the tree for the settled setting of the page that started the run (launched threads included). No subthreads. The code removes the threads that are `working`, `starting`, `waiting` or `snoozed`: they need no action.
+- **Code actions:** code makes the actions below, before the model runs. Each thread gets at most one action: the first rule that matches. The list is grouped by kind in rank order (`answer`, `fix`, `merge`), in tree order inside a kind. The title and reason text is fixed.
+
+  | Kind     | Rule                                                                             | Title              | Prompt                                          |
+  | -------- | -------------------------------------------------------------------------------- | ------------------ | ----------------------------------------------- |
+  | `answer` | status `needs-input`                                                             | "Answer the agent" | `null`                                          |
+  | `answer` | status `plan-ready`                                                              | "Review the plan"  | `null`                                          |
+  | `fix`    | an open PR has failing checks, conflicts, or changes requested                   | "Fix PR #N"        | The fixed steps for each fact, then "and push." |
+  | `merge`  | an open PR is not a draft, is approved, its checks pass, and it has no conflicts | "Merge PR #N"      | `null`                                          |
+
+  `N` is the first PR that matches. The `fix` reason names the facts: "PR #N has failing checks, conflicts and changes requested."
+
+- **Model input:** only the threads with no code action. The refs (`t1`, `t2`, …) number these threads only. When no such thread is left, the CLI does not start and the state is `done` at once.
 - **Per thread**, one **Digest** block of text. The first line holds, split by `·`: short thread ref (`t1`, `t2`, … in tree order), status phrase with its age, title (with the issue key), PRs (number, state, draft, review, checks, conflicts), stack position, and pending request. A part with no value is left out. Then the tail of the last assistant message, each line indented by 2 spaces.
 - **Last assistant message:** one batched read-only query on `statev2.sqlite` per run, from `orchestration_v2_projection_messages` (`role = 'assistant'`, newest row with `streaming = 0` per thread). The tested query is in the ticket 02 research file. Keep the last 600 characters of each message, with `…` first when the text is cut. `null` when the thread has no assistant message. The shell stream field `latestVisibleMessage` is always `null`; do not use it.
 - **Prompt:** the system prompt is [src/server/next-step-prompt.md](src/server/next-step-prompt.md). It holds the ranking guide. The digest text is the user prompt. With no threads, the prompt is `No threads.`.
@@ -133,13 +145,19 @@ The JSON schema for both CLIs (strict: every property required, `additionalPrope
 
 ```ts
 type Action = {
-  kind: "answer" | "merge" | "fix" | "review" | "clean-up" | "unblock";
+  kind:
+    | "answer"
+    | "merge"
+    | "fix"
+    | "review"
+    | "clean-up"
+    | "unblock" /** the model makes only "review", "clean-up" and "unblock" */;
   title: string /** imperative, ≤ 8 words */;
   reason: string /** one sentence */;
   threadIds: string[] /** ≥ 1 */;
   prompt: string | null /** paste-ready message for the first thread's agent */;
 };
-type Answer = { actions: Action[] }; /** 0–7, in rank order */
+type Answer = { actions: Action[] }; /** 0–7 from the model, in rank order */
 ```
 
 - The code keeps the model's order.
@@ -154,12 +172,26 @@ The backend keeps one brief state in memory. A page reload keeps it; a server re
 ```ts
 type BriefState =
   | { status: "idle" }
-  | { status: "running"; cli: Cli; threadCount: number; startedAt: string }
+  | {
+      status: "running";
+      cli: Cli;
+      threadCount: number;
+      startedAt: string;
+      actions: BriefAction[];
+      titles: Record<string, string>;
+    }
   | { status: "done"; cli: Cli; generatedAt: string; actions: BriefAction[]; titles: Record<string, string> }
-  | { status: "failed"; cli: Cli; error: string; stderrTail: string };
+  | {
+      status: "failed";
+      cli: Cli;
+      error: string;
+      stderrTail: string;
+      actions: BriefAction[];
+      titles: Record<string, string>;
+    };
 ```
 
-`BriefAction` is `Action` after the id filter. The state type lives in a shared module, like `Tree`. A new run replaces the last brief only when it ends; a cancel returns to the state before the run.
+`BriefAction` is `Action` after the id filter. The state type lives in a shared module, like `Tree`. In `running` and `failed`, `actions` and `titles` hold the code actions only, so the page can show them at once and after a model failure. In `done`, `actions` holds the code actions first, then the model actions. A new run replaces the last brief only when it ends; a cancel returns to the state before the run.
 
 - `GET /brief/clis`: the offered CLIs, as `{ id, label }[]`.
 - `POST /brief/run?settled=0|1` with `{ cli }`: starts a run. 409 when a run is active, 400 for a CLI that is not offered.
@@ -167,7 +199,7 @@ type BriefState =
 - `GET /events` also sends the brief state as a named SSE event `brief`: once when the connection opens, and again at each change. The page does not poll.
 - **Error text:** the CLI error message (Claude `result`, Codex `turn.failed` message), or "timed out" or the parse error. `stderrTail` is the last 2 KB of stderr.
 
-`bun run demo` uses a stub runner. It returns the sample brief from the prototype after a short delay, so the page works with no CLI.
+`bun run demo` uses a stub runner. It returns a sample of the model part after a short delay; code makes the other actions from the demo tree, so the page works with no CLI.
 
 ### Page
 

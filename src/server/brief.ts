@@ -53,20 +53,87 @@ export function digestOf(n: ThreadNode, ref: string, message: string | null, now
   return `${line}\n${tail.replace(/^/gm, "  ")}`;
 }
 
-/** Every thread node of the visible tree, launched threads included, except those that need no action. */
+const KIND_RANK: BriefAction["kind"][] = ["answer", "fix", "merge"];
+const MODEL_KINDS: BriefAction["kind"][] = ["review", "clean-up", "unblock"];
+
+const listOf = (items: string[]) =>
+  items.length > 1 ? `${items.slice(0, -1).join(", ")} and ${items.at(-1)}` : (items[0] ?? "");
+
+/** The first rule that matches the thread, or `null`. */
+function codeAction(n: ThreadNode): BriefAction | null {
+  const make = (kind: BriefAction["kind"], title: string, reason: string, prompt: string | null) => ({
+    kind,
+    title,
+    reason,
+    threadIds: [n.id],
+    prompt,
+  });
+  if (n.status === "needs-input") return make("answer", "Answer the agent", "The agent waits for your input.", null);
+  if (n.status === "plan-ready")
+    return make("answer", "Review the plan", "The plan is ready and waits for your approval.", null);
+  const broken = n.prs.find(
+    (p) => p.state === "open" && (p.checks === "failing" || p.conflicting || p.review === "changes-requested"),
+  );
+  if (broken) {
+    const facts: [boolean, string, string][] = [
+      [broken.conflicting, "conflicts", "Rebase on main and resolve the conflicts"],
+      [broken.checks === "failing", "failing checks", "fix the failing checks"],
+      [broken.review === "changes-requested", "changes requested", "address the review comments"],
+    ];
+    const hit = facts.filter(([on]) => on);
+    return make(
+      "fix",
+      `Fix PR #${broken.n}`,
+      `PR #${broken.n} has ${listOf(hit.map(([, fact]) => fact))}.`,
+      `${hit.map(([, , step]) => step).join(", ")}, and push.`,
+    );
+  }
+  const ready = n.prs.find(
+    (p) => p.state === "open" && !p.draft && p.review === "approved" && p.checks === "passing" && !p.conflicting,
+  );
+  if (ready)
+    return make(
+      "merge",
+      `Merge PR #${ready.n}`,
+      `PR #${ready.n} is approved, its checks pass, and it has no conflicts.`,
+      null,
+    );
+  return null;
+}
+
+/** At most one action per thread. Grouped by kind in rank order, tree order inside a kind. */
+export function codeActions(nodes: ThreadNode[]): { actions: BriefAction[]; covered: Set<string> } {
+  const found = nodes.flatMap((n) => codeAction(n) ?? []);
+  return {
+    actions: KIND_RANK.flatMap((kind) => found.filter((a) => a.kind === kind)),
+    covered: new Set(found.flatMap((a) => a.threadIds)),
+  };
+}
+
+export type BriefInput = {
+  code: { actions: BriefAction[]; titles: Record<string, string> };
+  threads: InputThread[];
+};
+
+/** Every thread node of the visible tree, launched threads included, except those that need no action. Code actions cover some; the rest go to the model. */
 export function briefInput(
   projects: Branch[],
   lastMessages: (ids: string[]) => Map<string, string | null>,
   now: number,
-): InputThread[] {
+): BriefInput {
   const nodes = projects.flatMap(allThreads).filter((n) => !NO_ACTION.has(n.status));
-  const msgs = lastMessages(nodes.map((n) => n.id));
-  return nodes.map((n, i) => ({
-    id: n.id,
-    ref: `t${i + 1}`,
-    title: n.title,
-    digest: digestOf(n, `t${i + 1}`, msgs.get(n.id) ?? null, now),
-  }));
+  const { actions, covered } = codeActions(nodes);
+  const rest = nodes.filter((n) => !covered.has(n.id));
+  const msgs = lastMessages(rest.map((n) => n.id));
+  return {
+    code: { actions, titles: Object.fromEntries(nodes.filter((n) => covered.has(n.id)).map((n) => [n.id, n.title])) },
+    threads: rest.map((n, i) => ({
+      id: n.id,
+      ref: `t${i + 1}`,
+      title: n.title,
+      digest: digestOf(n, `t${i + 1}`, msgs.get(n.id) ?? null, now),
+    })),
+  };
 }
 
 /** Strict: Codex `--output-schema` needs every property required and no extra properties. */
@@ -83,7 +150,7 @@ export const SCHEMA = {
         additionalProperties: false,
         required: ["kind", "title", "reason", "threadIds", "prompt"],
         properties: {
-          kind: { type: "string", enum: ["answer", "merge", "fix", "review", "clean-up", "unblock"] },
+          kind: { type: "string", enum: MODEL_KINDS },
           title: { type: "string" },
           reason: { type: "string" },
           threadIds: { type: "array", minItems: 1, items: { type: "string" } },
@@ -201,7 +268,7 @@ export function parseAnswer(cli: Cli, stdout: string): { answer: unknown } | { e
   }
 }
 
-/** Maps each ref back to its thread id, drops unknown refs, then drops actions with none left. Keeps the model's order. */
+/** Maps each ref back to its thread id, drops unknown refs, then drops actions with none left or with a kind that code makes. Keeps the model's order. */
 export function filterAnswer(
   answer: unknown,
   threads: Pick<InputThread, "id" | "ref" | "title">[],
@@ -213,7 +280,7 @@ export function filterAnswer(
   const titles: Record<string, string> = {};
   for (const a of list as BriefAction[]) {
     const hit = (Array.isArray(a?.threadIds) ? a.threadIds : []).flatMap((r) => byRef.get(r) ?? []);
-    if (hit.length === 0) continue;
+    if (hit.length === 0 || !MODEL_KINDS.includes(a.kind)) continue;
     for (const t of hit) titles[t.id] = t.title;
     actions.push({
       kind: a.kind,
@@ -247,7 +314,14 @@ export type Run = { done: Promise<Outcome | null>; cancel: () => void };
 
 /** One CLI run. `done` gives `null` after `cancel()`. */
 export function runBrief(cli: Cli, threads: InputThread[], now = () => new Date()): Run {
-  const failed = (error: string, stderrTail = ""): Outcome => ({ status: "failed", cli, error, stderrTail });
+  const failed = (error: string, stderrTail = ""): Outcome => ({
+    status: "failed",
+    cli,
+    error,
+    stderrTail,
+    actions: [],
+    titles: {},
+  });
   let cancelled = false;
   let proc: ReturnType<typeof Bun.spawn> | undefined;
   const done = (async (): Promise<Outcome | null> => {
@@ -296,7 +370,7 @@ type Offered = { id: Cli; label: string }[];
 /** The one in-memory brief state, its routes, and one run at a time. */
 export function briefService(o: {
   clis: Promise<Offered>;
-  input: (settled: boolean) => InputThread[];
+  input: (settled: boolean) => BriefInput;
   onChange: () => void;
   run?: (cli: Cli, threads: InputThread[]) => Run;
 }) {
@@ -314,15 +388,39 @@ export function briefService(o: {
           if (!(await o.clis).some((c) => c.id === cli))
             return new Response("This CLI is not offered.", { status: 400 });
           if (active) return new Response("A run is active.", { status: 409 });
-          const threads = o.input(new URL(req.url).searchParams.get("settled") === "1");
+          const { code, threads } = o.input(new URL(req.url).searchParams.get("settled") === "1");
+          const cliId = cli!;
+          if (threads.length === 0) {
+            set({ status: "done", cli: cliId, generatedAt: new Date().toISOString(), ...code });
+            return new Response(null, { status: 202 });
+          }
           const before = state;
-          const r = (active = run(cli!, threads));
-          set({ status: "running", cli: cli!, threadCount: threads.length, startedAt: new Date().toISOString() });
+          const r = (active = run(cliId, threads));
+          set({
+            status: "running",
+            cli: cliId,
+            threadCount: threads.length,
+            startedAt: new Date().toISOString(),
+            ...code,
+          });
           void r.done
-            .catch((e): Outcome => ({ status: "failed", cli: cli!, error: String(e?.message ?? e), stderrTail: "" }))
+            .catch((e): Outcome => ({
+              status: "failed",
+              cli: cliId,
+              error: String(e?.message ?? e),
+              stderrTail: "",
+              actions: [],
+              titles: {},
+            }))
             .then((out) => {
               active = undefined;
-              set(out ?? before);
+              set(
+                !out
+                  ? before
+                  : out.status === "done"
+                    ? { ...out, actions: [...code.actions, ...out.actions], titles: { ...code.titles, ...out.titles } }
+                    : { ...out, ...code },
+              );
             });
           return new Response(null, { status: 202 });
         },

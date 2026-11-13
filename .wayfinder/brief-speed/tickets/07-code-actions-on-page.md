@@ -23,3 +23,11 @@ Decisions: [Which actions does code make, and how do they join the model's actio
 ## Done when
 
 `bun test` and `bun run typecheck` pass. `bun run demo` shows the running, done, failed and rules-only states in light and dark mode.
+
+## Handed over from brief-speed-06
+
+- **State.** `running` and `failed` now carry `actions` and `titles`: the code actions. `done` holds the code actions first, then the model actions. `threadCount` in `running` counts only the threads that go to the model.
+- **Rules only.** When no thread is left for the model, the service sets `done` at once and never sends `running`. That `done` has no marker. Add a field if the stamp must say "rules only".
+- **Kinds.** Code makes `answer`, `fix` and `merge`. The model makes only `review`, `clean-up` and `unblock`, and `filterAnswer` drops other kinds.
+- **Demo.** The demo tree gives the code actions. `SAMPLE` in `scripts/demo.ts` now holds only the model actions.
+- **Measure.** The claude median went from 26.9 s to 18.2 s. Codex did not change much (23.7 s to 26.7 s, noisy). The map's CLI start-up tuning fog stays: this measurement did not test a flag.
