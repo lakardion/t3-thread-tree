@@ -32,6 +32,8 @@ The thread tree page has a "What's next" button. A click runs a local agent CLI 
 
 - [Where and how does the brief show on the page?](tickets/04-brief-layout-prototype.md): an inline panel above the tree; a split "What's next" button with the model dropdown; a copy icon per prompt; kind chips on status tokens; the brief saves thread titles so stale links show struck through.
 
+- [Write the "What's next" section of SPEC.md](tickets/05-spec-section.md): `SPEC.md` holds the build source; the brief state goes to the page as an SSE `brief` event on `/events`, with `GET /brief/clis`, `POST /brief/run`, `POST /brief/cancel`.
+
 Decided at charting (by the user):
 
 - **Model route:** the backend runs a local agent CLI as a subprocess (`claude -p`, `codex exec`). It uses the existing logins, needs no API key, and writes nothing to T3. The app stays read-only.

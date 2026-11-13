@@ -101,6 +101,85 @@ The header has a System / Light / Dark choice. The full design is in [DESIGN-SPE
 5. `Bun.serve` closes a connection after 10 s with no bytes. Call `server.timeout(req, 0)` on the SSE request.
 6. Stop the push timer when the client disconnects.
 
+## "What's next" and the Next-step brief
+
+Source: map [whats-next](.wayfinder/whats-next/map.md), tickets [How do we run claude and codex headless, with no tools, on a cheap model?](.wayfinder/whats-next/tickets/01-headless-cli-invocation.md) (research on branch `research/headless-cli`), [Where does the backend read the last assistant message of a thread?](.wayfinder/whats-next/tickets/02-thread-messages-source.md) (research on branch `research/thread-messages`), [What makes a good next step, and what is the shape of a brief?](.wayfinder/whats-next/tickets/03-ranking-rules-and-brief-shape.md), [Where and how does the brief show on the page?](.wayfinder/whats-next/tickets/04-brief-layout-prototype.md) (prototype on branch `prototype/brief-layout`).
+
+A click on "What's next" runs a local agent CLI on a cheap model. The CLI returns a **Next-step brief**: up to 7 ranked **Actions** over the active threads. The app stays read-only: the CLI runs with its tools off and writes nothing to T3.
+
+### CLIs
+
+| Pick | Label | Model | Effort |
+|---|---|---|---|
+| `claude` | Claude Haiku | `haiku` (`claude-haiku-5-5`) | `--effort medium` |
+| `codex` | Codex Luna | `gpt-6-luna` | `-c model_reasoning_effort=medium` |
+
+- **Detection:** at start, run `claude auth status` and `codex login status`. Exit 0 means logged in. A CLI that is not on `PATH` (spawn gives `ENOENT`) or not logged in is not offered.
+- **Run:** use the tested command lines in ticket 01 (research file on branch `research/headless-cli`), with the prompt on stdin. Do not use `claude --bare`: it ignores the OAuth login. Codex runs with `-C` set to an empty temp folder and reads the schema from a temp file.
+- **Answer:** Claude: `structured_output` of the last JSON object on stdout; a failure is `is_error: true` or a non-zero exit. Codex: `JSON.parse` of the text of the last `item.completed` event with `item.type == "agent_message"`; a failure is `turn.failed` or a non-zero exit.
+- **Timeout:** 60 s, then SIGTERM. **Cancel:** SIGTERM to the process.
+- **One run at a time.** A second start while a run is active is refused.
+
+### Input
+
+- **Threads:** the visible top-level threads of the tree for the settled setting of the page that started the run (launched threads included). No subthreads.
+- **Per thread**, as compact JSON: id, title, issue key, status, phrase, age, PRs (with checks and review), stack position, pending request, subthread count, and the last assistant message.
+- **Last assistant message:** one batched read-only query on `statev2.sqlite` per run, from `orchestration_v2_projection_messages` (`role = 'assistant'`, newest row with `streaming = 0` per thread). The tested query is in the ticket 02 research file. Cap each message at 1500 characters: the first 1000, `…`, the last 500. `null` when the thread has no assistant message. The shell stream field `latestVisibleMessage` is always `null`; do not use it.
+- **Prompt:** the system prompt is [src/server/next-step-prompt.md](src/server/next-step-prompt.md). It holds the ranking guide. The thread JSON is the user prompt.
+
+### Brief shape
+
+The JSON schema for both CLIs (strict: every property required, `additionalProperties: false` at each level):
+
+```ts
+type Action = {
+  kind: "answer" | "merge" | "fix" | "review" | "clean-up" | "unblock";
+  title: string;          /** imperative, ≤ 8 words */
+  reason: string;         /** one sentence */
+  threadIds: string[];    /** ≥ 1 */
+  prompt: string | null;  /** paste-ready message for the first thread's agent */
+};
+type Answer = { actions: Action[] }; /** 0–7, in rank order */
+```
+
+- The code keeps the model's order.
+- **Unknown ids:** the code removes each thread id that is not in the input. It removes an action with no ids left. It does not reject the answer.
+- **Saved titles:** the code saves the title of each linked thread with the brief, so a thread that leaves the tree still has a name.
+- An answer with 0 actions is valid.
+
+### Endpoints and state
+
+The backend keeps one brief state in memory. A page reload keeps it; a server restart loses it.
+
+```ts
+type BriefState =
+  | { status: "idle" }
+  | { status: "running"; cli: Cli; threadCount: number; startedAt: string }
+  | { status: "done"; cli: Cli; generatedAt: string; actions: BriefAction[]; titles: Record<string, string> }
+  | { status: "failed"; cli: Cli; error: string; stderrTail: string };
+```
+
+`BriefAction` is `Action` after the id filter. The state type lives in a shared module, like `Tree`. A new run replaces the last brief only when it ends; a cancel returns to the state before the run.
+
+- `GET /brief/clis`: the offered CLIs, as `{ id, label }[]`.
+- `POST /brief/run?settled=0|1` with `{ cli }`: starts a run. 409 when a run is active, 400 for a CLI that is not offered.
+- `POST /brief/cancel`: sends SIGTERM to the active run.
+- `GET /events` also sends the brief state as a named SSE event `brief`: once when the connection opens, and again at each change. The page does not poll.
+- **Error text:** the CLI error message (Claude `result`, Codex `turn.failed` message), or "timed out" or the parse error. `stderrTail` is the last 2 KB of stderr.
+
+`bun run demo` uses a stub runner. It returns the sample brief from the prototype after a short delay, so the page works with no CLI.
+
+### Page
+
+The full look is in ticket 04. In short:
+
+- **Controls:** in the header, after the filter, a split control: a primary "What's next" button (Sparkles icon) joined to a model `Select`. The choice is saved in `localStorage`. With no CLI offered, the button is disabled with a tooltip. The button is disabled while a run is active.
+- **Panel:** an inline card between the header and the tree. It shows only after the first click, or when the brief state is not `idle` at load. The head has "Next steps", a mono stamp "generated HH:MM · <label>", and a close button that hides the panel.
+- **States:** loading ("Reading N threads…" with the letter wave, and "Cancel"); error (alert, "The brief failed.", "Retry", the stderr tail); empty ("Nothing needs you right now."); the ranked actions.
+- **Action row:** rank, kind chip, title with the reason, thread links, and a copy icon for `prompt` (none when `prompt` is `null`).
+- **Kind chips:** answer = `needs-input`, merge = `done`, unblock = `plan`, fix = `failed`, review = `working`, clean-up = `idle`.
+- **Thread links:** each link shows the live `StatusIcon` and title from the current tree, and opens the thread in T3. A thread that is not in the live tree shows its saved title struck through. The brief text does not change.
+
 ## Check at build
 
 These facts are not confirmed against a real stream. The research used the MCP thread list and SQLite.
@@ -109,3 +188,4 @@ These facts are not confirmed against a real stream. The research used the MCP t
 - The PR fields: the MCP list has `pullRequests[].state`; the shell has `pullRequests[].snapshot.state`. Confirm the path for the open-PR filter and for the stack.
 - `pendingRuntimeRequest` as the "needs input" signal (the prototype used `orchestration_v2_projection_runtime_requests` with `status = 'pending'`). Also check how the `waiting` run status fits the table.
 - `toolName` for callers that are not Claude (for example Codex) in the lineage lookup.
+- Whether `codex exec --ignore-user-config` skips a global `~/.codex/AGENTS.md`. If not, the brief run sees it.
