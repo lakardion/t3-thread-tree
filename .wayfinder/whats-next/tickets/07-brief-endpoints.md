@@ -1,8 +1,8 @@
 ---
 title: Add the brief endpoints (detect, run, cancel, last brief)
 type: task
-status: open
-assignee:
+status: claimed
+assignee: claude
 blocked-by: [06-brief-runner]
 ---
 
