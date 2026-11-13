@@ -1,12 +1,18 @@
 import { ago } from "../page/format.ts";
 /** The tree rules: visibility, placement, stack order and status. Pure, so `bun test` covers it. */
-import type { Branch, Detail, PrNode, Status, ThreadNode } from "../shared/tree.ts";
+import {
+  NO_KEY,
+  REVIEWS,
+  type Branch,
+  type Detail,
+  type PrNode,
+  type Status,
+  type ThreadNode,
+} from "../shared/tree.ts";
 import type { Project, Thread } from "./t3.ts";
 
 const KEY = /\b[A-Z][A-Z0-9]+-\d+\b/;
 const STACK_SOURCES = new Set(["created", "stack", "agent"]);
-export const NO_KEY = "No issue key";
-export const REVIEWS = "Reviews";
 
 export const issueKey = (title: string): string | null => title.match(KEY)?.[0] ?? null;
 

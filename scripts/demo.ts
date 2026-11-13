@@ -296,6 +296,8 @@ const STEPS: (() => void)[] = [
   () => setPr("demo-24", 3004, { draft: null }),
   () => (setPr("demo-24", 3004, { state: "merged" }), setPr("demo-24", 3001, { state: "closed" })),
   () => (touch("demo-12", runningNow()), touch("m1", runningNow())),
+  () => touch("demo-14", { settledAt: ago(0) }),
+  () => touch("demo-14", { settledAt: null }),
   () => {
     setPr("demo-1", 2101, { checks: "pending", review: null });
     setPr("demo-4", 2107, { mergeability: "conflicting" });

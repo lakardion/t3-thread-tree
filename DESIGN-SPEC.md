@@ -340,7 +340,7 @@ The hover background of a row is `--accent`. It replaces the wash while the poin
 ### Page
 
 - One centered column: `max-width: 1200px`, 16 px side padding.
-- Header, one line that wraps: the title "Thread tree" (15 px, semibold), the attention summary, the "All / Needs you" filter, then at the right the "show settled" switch and the theme choice.
+- Header, one line that wraps: the title "Thread tree" (15 px, semibold), the attention summary, the "All / Needs you" filter, then at the right the "Reset order" button, the "show settled" switch and the theme choice. "Reset order" is a ghost `sm` button. It shows only when the user has a stored order. A click clears the stored order.
 - The banner is below the header, as now.
 - Project cards follow, 12 px apart.
 
@@ -402,6 +402,7 @@ One line, `min-height: 36px`, radius 8 px, 13 px text with a 20 px line height.
 | PR chips       | The first two PRs, then a "+N" button that opens the details block.                                                                                                               |
 | Age            | Relative age of `updatedAt`, mono 11 px, muted, `tabular-nums`. The tooltip shows "Updated" and the exact time.                                                                   |
 | Details button | Ghost icon button with `ChevronDown`, `aria-expanded`, label "Details".                                                                                                           |
+| Handle         | Ghost icon button with `GripVertical`, after the details button. See "Drag to reorder".                                                                                           |
 
 **PR chip.** "#2102" in mono 11 px, a link to the PR, with these marks:
 
@@ -420,6 +421,18 @@ One line, `min-height: 36px`, radius 8 px, 13 px text with a 20 px line height.
 An absent value shows no mark. Each mark has a `title` with its meaning.
 
 **Narrow screens.** Below 720 px, the right group wraps to a second line below the title, and the title can wrap to two lines. The page never scrolls sideways. On a touch screen, buttons have a 44 px target.
+
+### Drag to reorder
+
+The user reorders project cards, key groups (a stack run is one block), review groups and top-level threads. A list with fewer than two visible items has no handle. Subthreads, groups inside a stack rail, Reviews and No issue key have no handle. No drag crosses lists.
+
+- **Handle.** A ghost icon `Button` with the `GripVertical` icon, `cursor-grab`, label "Move <name>". It sits at the right end of the row: after the details button on a thread row, and at the right end of a group header, a stack rail label row and a project header. It keeps its space, so nothing shifts on hover. A thread row with no handle keeps an empty column of the same size, so the age and the details button line up.
+- **Visibility.** The handle is hidden until the pointer is over its own row, or the handle has focus. It always shows on a touch screen. A hover on a parent does not show the handles of child rows.
+- **Click.** A title link, a chevron and a chip are not handles. A click on a title still opens the thread.
+- **Keyboard.** Tab reaches the handle. Space lifts the row, the arrow keys move it, Space drops it, Escape cancels.
+- **Announcements.** "Picked up <name>. Position 2 of 5." while the user moves: "<name> is at position 3 of 5." On drop: "<name> dropped at position 3 of 5." On cancel: "Move canceled. <name> is back at position 2 of 5."
+- **Motion.** Rows slide to make room. With reduced motion, the slide does not run.
+- **Drag layer.** The dragged item has the card background and the page radius.
 
 ### Details block
 
@@ -577,6 +590,7 @@ export type Branch = {
 - `bun test` and `bun run typecheck` pass.
 - `bun run demo` in light and dark mode, at 1400 px and at 390 px wide. `scripts/demo.ts` has a thread for each status that the key draws.
 - Keyboard: Tab reaches each link and button, and the focus ring is visible.
+- Drag at each level (project, group, stack rail, review group, thread), by pointer and by keyboard. The order holds after a reload.
 - Reduced motion: no animation runs.
 - `PUSH=1 bun run demo` shows each change transition.
 - A thread with absent optional fields shows no empty line, chip or mark.

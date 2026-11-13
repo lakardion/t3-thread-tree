@@ -80,6 +80,10 @@ export type Branch = {
   threads: ThreadNode[];
 };
 
+/** Labels of the two project groups that stay after the key groups. */
+export const REVIEWS = "Reviews";
+export const NO_KEY = "No issue key";
+
 /** `connecting`: the server is up but has no tree yet. */
 export type Conn = "connecting" | "up" | "down" | "unauthorized";
 

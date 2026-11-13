@@ -1,5 +1,15 @@
-import { Check, ChevronDown, ChevronRight, ExternalLink, Layers, TriangleAlert, X } from "lucide-react";
-import { createContext, useContext, useEffect, useState, type ReactNode } from "react";
+import {
+  Accessibility,
+  type defaultPreset,
+  type DragEndEvent,
+  type DragOverEvent,
+  type DragStartEvent,
+  type Draggable,
+} from "@dnd-kit/dom";
+import { DragDropProvider } from "@dnd-kit/react";
+import { isSortable, useSortable } from "@dnd-kit/react/sortable";
+import { Check, ChevronDown, ChevronRight, ExternalLink, GripVertical, Layers, TriangleAlert, X } from "lucide-react";
+import { createContext, useCallback, useContext, useEffect, useRef, useState, type ReactNode } from "react";
 import { createRoot } from "react-dom/client";
 
 import { Alert, AlertDescription } from "@/components/ui/alert";
@@ -20,6 +30,19 @@ import { allThreads, type Branch, type PrNode, type ThreadNode, type Tree } from
 import { countAttention, needsYou, onlyNeedsYou } from "./attention.ts";
 import { BriefControls, BriefPanel, type Offered } from "./brief.tsx";
 import { ago, folded, isKeyGroup, linearHref, phraseWith, stackRuns, stripKey } from "./format.ts";
+import {
+  PROJECTS,
+  arrange,
+  isTail,
+  parseOrders,
+  prune,
+  groupsKey,
+  reorder,
+  runUnitId,
+  threadUnitId,
+  threadsKey,
+  type Freeze,
+} from "./order.ts";
 import { STATUS, StatusIcon } from "./status-icon.tsx";
 import { Swap, useChanges } from "./swap.tsx";
 
@@ -30,6 +53,7 @@ const SETTLED_KEY = "thread-tree:settled";
 const FILTER_KEY = "thread-tree:filter";
 const THEME_KEY = "thread-tree:theme";
 const CLI_KEY = "thread-tree:cli";
+const ORDER_KEY = "thread-tree:order";
 const THEMES = ["system", "light", "dark"] as const;
 type Theme = (typeof THEMES)[number];
 
@@ -45,6 +69,11 @@ const save = (k: string, v: string) => {
     localStorage.setItem(k, v);
   } catch {}
 };
+const forget = (k: string) => {
+  try {
+    localStorage.removeItem(k);
+  } catch {}
+};
 
 const hhmm = (iso: string) => new Date(iso).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" });
 const until = (iso: string) =>
@@ -58,6 +87,8 @@ const Details = createContext<{ open: Set<string>; toggle: (id: string) => void;
 });
 const NeedsOnly = createContext(false);
 const Linear = createContext<Tree["linear"]>(null);
+/** The rendered ids of each list, by list key. */
+const Lists = createContext(new Map<string, string[]>());
 
 const CHIP = "gap-1 rounded-[6px] px-1.5 py-0 text-[11px] font-normal text-muted-foreground";
 const ROW_BUTTON =
@@ -72,6 +103,48 @@ const Mark = ({ title, children }: { title: string; children: ReactNode }) => (
     {children}
   </span>
 );
+
+type RefFn = (el: Element | null) => void;
+type Sort = { id: string; list: string; index: number; name: string };
+
+/** A unit gets sort props only when its list has two or more units. */
+const sortOf = (lists: Map<string, string[]>, list: string, id: string, name: string): Sort | undefined => {
+  const ids = lists.get(list);
+  return ids && ids.length > 1 ? { id, list, index: ids.indexOf(id), name } : undefined;
+};
+
+function SortHook({ sort, children }: { sort: Sort; children: (ref: RefFn, handleRef: RefFn) => ReactNode }) {
+  const { ref, handleRef } = useSortable({
+    id: sort.id,
+    index: sort.index,
+    group: sort.list,
+    type: sort.list,
+    accept: sort.list,
+    data: { name: sort.name },
+  });
+  return children(ref, handleRef);
+}
+
+/** Renders `children` with the sort refs of `sort`, or with none when `sort` is unset. */
+const Sortable = ({ sort, children }: { sort?: Sort; children: (ref?: RefFn, handleRef?: RefFn) => ReactNode }) =>
+  sort ? <SortHook sort={sort}>{children}</SortHook> : children();
+
+const DragHandle = ({ handleRef, name, className }: { handleRef?: RefFn; name: string; className?: string }) =>
+  handleRef && (
+    <Button
+      ref={handleRef}
+      variant="ghost"
+      size="icon"
+      aria-label={`Move ${name}`}
+      className={cn(
+        ROW_BUTTON,
+        "cursor-grab opacity-0 group-hover/row:opacity-100 focus-visible:opacity-100 pointer-coarse:opacity-100",
+        className,
+      )}
+    >
+      <GripVertical className="size-3.5" />
+    </Button>
+  );
 
 function PrChip({ p }: { p: PrNode }) {
   return (
@@ -213,18 +286,18 @@ function DetailBlock({ t }: { t: ThreadNode }) {
   );
 }
 
-function ThreadRow({ t, chip }: { t: ThreadNode; chip?: string }) {
+function ThreadRow({ t, chip, sort }: { t: ThreadNode; chip?: string; sort?: Sort }) {
   const now = useContext(Now);
   const { open, toggle, show } = useContext(Details);
   const dim = useContext(NeedsOnly) && !needsYou(t.status);
   const linear = useContext(Linear);
   const chipHref = chip ? linearHref(chip, linear) : null;
   const pulse = useChanges(t.status);
-  return (
+  const render = (ref?: RefFn, handleRef?: RefFn) => (
     <Collapsible asChild open={open.has(t.id)} onOpenChange={() => toggle(t.id)}>
-      <li className="my-px">
+      <li ref={ref} className="my-px">
         <div
-          className="thread-row flex min-h-9 min-w-0 items-center gap-x-2 rounded-[8px] px-2 text-[13px] leading-5 max-[720px]:flex-wrap max-[720px]:py-1"
+          className="thread-row group/row flex min-h-9 min-w-0 items-center gap-x-2 rounded-[8px] px-2 text-[13px] leading-5 max-[720px]:flex-wrap max-[720px]:py-1"
           data-status={t.status}
         >
           <StatusIcon t={t} />
@@ -312,6 +385,11 @@ function ThreadRow({ t, chip }: { t: ThreadNode; chip?: string }) {
                 <ChevronDown className="size-3.5 group-data-[state=open]:rotate-180" />
               </Button>
             </CollapsibleTrigger>
+            {handleRef ? (
+              <DragHandle handleRef={handleRef} name={t.title || t.id} />
+            ) : (
+              <span aria-hidden className="size-5 flex-none pointer-coarse:min-h-11 pointer-coarse:min-w-11" />
+            )}
           </span>
         </div>
         <CollapsibleContent>
@@ -327,6 +405,7 @@ function ThreadRow({ t, chip }: { t: ThreadNode; chip?: string }) {
       </li>
     </Collapsible>
   );
+  return <Sortable sort={sort}>{render}</Sortable>;
 }
 
 const Chevron = ({ open }: { open: boolean }) => {
@@ -345,16 +424,17 @@ const Icons = ({ b }: { b: Branch }) => (
 
 type Fold = { closed: Set<string>; toggle: (id: string) => void };
 
-function GroupRow({ b, closed, toggle }: { b: Branch } & Fold) {
+function GroupRow({ b, closed, toggle, sort }: { b: Branch; sort?: Sort } & Fold) {
   const open = !closed.has(b.id);
   const one = folded(b);
   const linear = useContext(Linear);
+  const lists = useContext(Lists);
   const groupHref = isKeyGroup(b) ? linearHref(b.label, linear) : null;
-  if (one) return <ThreadRow t={one} chip={b.label} />;
-  return (
+  if (one) return <ThreadRow t={one} chip={b.label} sort={sort} />;
+  const render = (ref?: RefFn, handleRef?: RefFn) => (
     <Collapsible asChild open={open} onOpenChange={() => toggle(b.id)}>
-      <li className="my-px">
-        <div className="flex h-7 min-w-0 items-center gap-2 rounded-[8px] px-2 hover:bg-accent max-[720px]:h-auto max-[720px]:min-h-7 max-[720px]:flex-wrap">
+      <li ref={ref} className="my-px">
+        <div className="group/row flex h-7 min-w-0 items-center gap-2 rounded-[8px] px-2 hover:bg-accent max-[720px]:h-auto max-[720px]:min-h-7 max-[720px]:flex-wrap">
           <CollapsibleTrigger className="flex min-w-0 cursor-pointer items-center gap-2 select-none max-[720px]:min-h-11">
             <Chevron open={open} />
             <span
@@ -376,28 +456,36 @@ function GroupRow({ b, closed, toggle }: { b: Branch } & Fold) {
             </a>
           )}
           {!open && <Icons b={b} />}
+          <DragHandle handleRef={handleRef} name={b.label} className="ml-auto" />
         </div>
         <CollapsibleContent asChild>
           <ul className="m-0 list-none pl-4">
             {b.branches.map((c) => (
-              <GroupRow key={c.id} b={c} closed={closed} toggle={toggle} />
+              <GroupRow
+                key={c.id}
+                b={c}
+                closed={closed}
+                toggle={toggle}
+                sort={sortOf(lists, groupsKey(b.id), c.id, c.label)}
+              />
             ))}
             {b.threads.map((t) => (
-              <ThreadRow key={t.id} t={t} />
+              <ThreadRow key={t.id} t={t} sort={sortOf(lists, threadsKey(b.id), threadUnitId(t), t.title || t.id)} />
             ))}
           </ul>
         </CollapsibleContent>
       </li>
     </Collapsible>
   );
+  return <Sortable sort={sort}>{render}</Sortable>;
 }
 
 /** Key groups of one PR stack, in one rail with a label row. */
-function StackRail({ run, closed, toggle }: { run: Branch[] } & Fold) {
+function StackRail({ run, closed, toggle, sort }: { run: Branch[]; sort?: Sort } & Fold) {
   const { total, base } = run[0].stack!;
-  return (
-    <li className="stack-rail my-1">
-      <div className="flex min-h-6 flex-wrap items-center gap-x-1.5 px-2 text-xs text-muted-foreground">
+  const render = (ref?: RefFn, handleRef?: RefFn) => (
+    <li ref={ref} className="stack-rail my-1">
+      <div className="group/row flex min-h-6 flex-wrap items-center gap-x-1.5 px-2 text-xs text-muted-foreground">
         <Layers className="size-3 flex-none" aria-hidden />
         <span>
           PR stack · {total} PRs
@@ -408,6 +496,7 @@ function StackRail({ run, closed, toggle }: { run: Branch[] } & Fold) {
             </>
           )}
         </span>
+        <DragHandle handleRef={handleRef} name={`PR stack of ${run[0].label}`} className="ml-auto" />
       </div>
       <ul className="m-0 list-none p-0">
         {run.map((c) => (
@@ -416,15 +505,17 @@ function StackRail({ run, closed, toggle }: { run: Branch[] } & Fold) {
       </ul>
     </li>
   );
+  return <Sortable sort={sort}>{render}</Sortable>;
 }
 
 function ProjectCard({ b, closed, toggle }: { b: Branch } & Fold) {
   const open = !closed.has(b.id);
-  return (
-    <li>
+  const lists = useContext(Lists);
+  const render = (ref?: RefFn, handleRef?: RefFn) => (
+    <li ref={ref}>
       <Collapsible asChild open={open} onOpenChange={() => toggle(b.id)}>
         <Card className="gap-0 overflow-hidden rounded-[12px] py-0 shadow-none">
-          <CardHeader className="project-head flex min-h-10 flex-wrap items-center gap-x-2 gap-y-1 px-3 py-1">
+          <CardHeader className="project-head group/row flex min-h-10 flex-wrap items-center gap-x-2 gap-y-1 px-3 py-1">
             <CollapsibleTrigger className="flex min-w-0 cursor-pointer items-center gap-2 select-none max-[720px]:min-h-11">
               <Chevron open={open} />
               <span
@@ -439,17 +530,26 @@ function ProjectCard({ b, closed, toggle }: { b: Branch } & Fold) {
             </CollapsibleTrigger>
             {b.repo && <CardDescription className="truncate font-mono text-xs">{b.repo}</CardDescription>}
             {!open && <Icons b={b} />}
+            <DragHandle handleRef={handleRef} name={b.label} className="ml-auto" />
           </CardHeader>
           <CollapsibleContent asChild>
             <CardContent className="p-1.5">
               <ul className="m-0 list-none p-0">
-                {stackRuns(b.branches).map((run) =>
-                  run[0].stack ? (
-                    <StackRail key={`rail:${run[0].id}`} run={run} closed={closed} toggle={toggle} />
+                {stackRuns(b.branches).map((run) => {
+                  const sort = !isTail(run[0])
+                    ? sortOf(
+                        lists,
+                        groupsKey(b.id),
+                        runUnitId(b.id, run),
+                        run[0].stack ? `PR stack of ${run[0].label}` : run[0].label,
+                      )
+                    : undefined;
+                  return run[0].stack ? (
+                    <StackRail key={`rail:${run[0].id}`} run={run} closed={closed} toggle={toggle} sort={sort} />
                   ) : (
-                    <GroupRow key={run[0].id} b={run[0]} closed={closed} toggle={toggle} />
-                  ),
-                )}
+                    <GroupRow key={run[0].id} b={run[0]} closed={closed} toggle={toggle} sort={sort} />
+                  );
+                })}
               </ul>
             </CardContent>
           </CollapsibleContent>
@@ -457,6 +557,7 @@ function ProjectCard({ b, closed, toggle }: { b: Branch } & Fold) {
       </Collapsible>
     </li>
   );
+  return <Sortable sort={sortOf(lists, PROJECTS, b.id, b.label)}>{render}</Sortable>;
 }
 
 function App() {
@@ -471,6 +572,8 @@ function App() {
   const [clis, setClis] = useState<Offered | null>(null);
   const [cli, setCli] = useState(load(CLI_KEY) as Cli | null);
   const [hideBrief, setHideBrief] = useState(false);
+  const [orders, setOrders] = useState(() => parseOrders(load(ORDER_KEY)));
+  const [freeze, setFreeze] = useState<Freeze>();
 
   useEffect(() => {
     fetch("/brief/clis")
@@ -534,7 +637,68 @@ function App() {
   const live = new Map((tree?.projects ?? []).flatMap(allThreads).map((t) => [t.id, t]));
   const counts = countAttention(tree?.projects ?? []);
   const connecting = !tree || tree.conn === "connecting";
-  const projects = connecting ? undefined : needsOnly ? onlyNeedsYou(tree.projects) : tree.projects;
+  /** The user order on the whole tree, then the filter, then the drag freeze on what shows. */
+  const full = arrange(tree?.projects ?? [], orders);
+  const view = arrange(needsOnly ? onlyNeedsYou(full.projects) : full.projects, {}, freeze);
+  const latest = useRef({ full, view });
+  useEffect(() => {
+    latest.current = { full, view };
+  });
+  const projects = connecting ? undefined : view.projects;
+
+  const plugins = useCallback((defaults: typeof defaultPreset.plugins) => {
+    /** The name and the "position i of n" text of a sortable `source`; n is the rendered list size. */
+    const spot = (source: Draggable | null) => {
+      if (!isSortable(source)) return undefined;
+      const n = latest.current.view.lists.get(String(source.sortable.group))?.length ?? 0;
+      return { name: String(source.data.name), at: `position ${source.sortable.index + 1} of ${n}` };
+    };
+    return [
+      ...defaults.filter((p) => p !== Accessibility),
+      Accessibility.configure({
+        announcements: {
+          dragstart: ({ operation }: DragStartEvent) => {
+            const s = spot(operation.source);
+            return s && `Picked up ${s.name}. ${s.at}.`;
+          },
+          dragover: ({ operation }: DragOverEvent) => {
+            const s = spot(operation.source);
+            return s && `${s.name} is at ${s.at}.`;
+          },
+          dragend: ({ operation, canceled }: DragEndEvent) => {
+            const s = spot(operation.source);
+            return s && (canceled ? `Move canceled. ${s.name} is back at ${s.at}.` : `${s.name} dropped at ${s.at}.`);
+          },
+        },
+      }),
+    ];
+  }, []);
+  const dragStart = ({ operation: { source } }: DragStartEvent) => {
+    if (!isSortable(source)) return;
+    const list = String(source.sortable.group);
+    const ids = latest.current.view.lists.get(list);
+    const units = latest.current.view.units.get(list);
+    if (ids && units) setFreeze({ list, ids, units });
+  };
+  const dragEnd = ({ operation: { source }, canceled }: DragEndEvent) => {
+    setFreeze(undefined);
+    if (canceled || !isSortable(source)) return;
+    const list = String(source.sortable.group);
+    const all = latest.current.full.lists.get(list);
+    const visible = latest.current.view.lists.get(list);
+    if (!all || !visible) return;
+    const moved = reorder(all, visible, source.sortable.initialIndex, source.sortable.index);
+    const lists = latest.current.full.lists;
+    setOrders((prev) => {
+      const next = prune({ ...prev, [list]: moved }, lists);
+      save(ORDER_KEY, JSON.stringify(next));
+      return next;
+    });
+  };
+  const resetOrder = () => {
+    setOrders({});
+    forget(ORDER_KEY);
+  };
 
   return (
     <TooltipProvider>
@@ -581,6 +745,11 @@ function App() {
           run={runBrief}
         />
         <div className="ml-auto flex items-center gap-2">
+          {Object.keys(orders).length > 0 && (
+            <Button variant="ghost" size="sm" onClick={resetOrder}>
+              Reset order
+            </Button>
+          )}
           <Switch id="settled" checked={settled} onCheckedChange={setSettled} />
           <Label htmlFor="settled" className="font-normal">
             show settled
@@ -627,38 +796,42 @@ function App() {
       <Details value={details}>
         <NeedsOnly value={needsOnly}>
           <Linear value={tree?.linear ?? null}>
-            <Now value={now}>
-              <div
-                className={!connecting && tree.conn !== "up" ? "grayscale" : ""}
-                data-conn={!connecting && tree.conn !== "up" ? "down" : undefined}
-              >
-                {projects?.length === 0 && <p className="text-muted-foreground">No active threads.</p>}
-                {projects ? (
-                  <ul className="m-0 flex list-none flex-col gap-3 p-0">
-                    {projects.map((p) => (
-                      <ProjectCard key={p.id} b={p} closed={closed} toggle={toggle} />
-                    ))}
-                  </ul>
-                ) : (
-                  <>
-                    <p className="mb-2 text-sm text-muted-foreground" role="status">
-                      Connecting to T3…
-                    </p>
-                    <Card
-                      className="gap-0 rounded-[12px] py-0 shadow-none"
-                      aria-busy="true"
-                      aria-label="Loading threads"
-                    >
-                      <CardContent className="flex flex-col gap-0.5 p-1.5">
-                        {[0, 1, 2].map((i) => (
-                          <Skeleton key={i} className="h-9 rounded-[8px] motion-reduce:animate-none" />
+            <Lists value={view.lists}>
+              <Now value={now}>
+                <div
+                  className={!connecting && tree.conn !== "up" ? "grayscale" : ""}
+                  data-conn={!connecting && tree.conn !== "up" ? "down" : undefined}
+                >
+                  {projects?.length === 0 && <p className="text-muted-foreground">No active threads.</p>}
+                  {projects ? (
+                    <DragDropProvider plugins={plugins} onDragStart={dragStart} onDragEnd={dragEnd}>
+                      <ul className="m-0 flex list-none flex-col gap-3 p-0">
+                        {projects.map((p) => (
+                          <ProjectCard key={p.id} b={p} closed={closed} toggle={toggle} />
                         ))}
-                      </CardContent>
-                    </Card>
-                  </>
-                )}
-              </div>
-            </Now>
+                      </ul>
+                    </DragDropProvider>
+                  ) : (
+                    <>
+                      <p className="mb-2 text-sm text-muted-foreground" role="status">
+                        Connecting to T3…
+                      </p>
+                      <Card
+                        className="gap-0 rounded-[12px] py-0 shadow-none"
+                        aria-busy="true"
+                        aria-label="Loading threads"
+                      >
+                        <CardContent className="flex flex-col gap-0.5 p-1.5">
+                          {[0, 1, 2].map((i) => (
+                            <Skeleton key={i} className="h-9 rounded-[8px] motion-reduce:animate-none" />
+                          ))}
+                        </CardContent>
+                      </Card>
+                    </>
+                  )}
+                </div>
+              </Now>
+            </Lists>
           </Linear>
         </NeedsOnly>
       </Details>
