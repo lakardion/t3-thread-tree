@@ -24,6 +24,8 @@ Tree changes animate instead of jumping, and the element under the pointer (or k
 
 <!-- one line per closed map ticket -->
 
+- [Which animation primitive animates the tree and holds the floating row?](tickets/01-animation-primitive.md): hand-written FLIP on the Web Animations API, spring via CSS `linear()`; no dependency. View Transitions and `motion` cannot hold a hovered element.
+
 Decided at charting (by the user):
 
 - **Shifts in scope:** (a) re-sort on a live push, (b) rows added or removed on a live push, (c) a row that changes height in place, (d) the user's own expand and collapse.
@@ -36,9 +38,9 @@ Decided at charting (by the user):
 
 ## Not yet specified
 
-- **Build slicing:** animation primitive, floating hold, add/remove motion, expand/collapse motion. Graduates into build tickets when the research and prototype tickets close.
-- **Expand and collapse motion:** Radix Collapsible exposes a content height variable, and `tw-animate-css` is installed. Check if that covers (d) without the primitive from the research ticket.
-- **A removed row that floats:** a hovered thread that settles or leaves the "Needs you" filter. Probably it stays until the pointer leaves, then fades out.
+- **Build slicing:** FLIP primitive, floating hold, add/remove motion, expand/collapse motion (`tw-animate-css` on Radix Collapsible). Graduates into build tickets when the research and prototype tickets close.
+- **A removed row:** the app must keep a removed row's data for an exit animation. A hovered row that settles or leaves the "Needs you" filter probably stays until the pointer leaves, then fades out.
+- **Card clipping:** `ProjectCard` has `overflow-hidden`, so it clips a held row that ends up outside its card. The prototype shows if this matters.
 - **SPEC.md / DESIGN-SPEC.md section** for the behavior, written from the closed tickets.
 
 ## Out of scope
