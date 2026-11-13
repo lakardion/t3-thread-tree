@@ -391,7 +391,7 @@ export function briefService(o: {
           const { code, threads } = o.input(new URL(req.url).searchParams.get("settled") === "1");
           const cliId = cli!;
           if (threads.length === 0) {
-            set({ status: "done", cli: cliId, generatedAt: new Date().toISOString(), ...code });
+            set({ status: "done", cli: cliId, generatedAt: new Date().toISOString(), rulesOnly: true, ...code });
             return new Response(null, { status: 202 });
           }
           const before = state;

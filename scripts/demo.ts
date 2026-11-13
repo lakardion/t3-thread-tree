@@ -233,7 +233,7 @@ const SAMPLE: BriefAction[] = [
 ];
 const titles = Object.fromEntries(threads.map((th) => [th.id, th.title]));
 
-/** Stub runner: `BRIEF=failed|empty` picks the outcome, `CLIS=0` offers no CLI. */
+/** Stub runner: `BRIEF=failed|empty|rules` picks the outcome, `CLIS=0` offers no CLI. */
 function stubRun(cli: Cli): { done: Promise<Outcome | null>; cancel: () => void } {
   const outcome = (): Outcome =>
     process.env.BRIEF === "failed"
@@ -270,7 +270,10 @@ const brief = briefService({
           { id: "codex", label: "Codex Luna" },
         ],
   ),
-  input: (settled) => briefInput(projectsFor(settled), () => new Map(), now),
+  input: (settled) => {
+    const i = briefInput(projectsFor(settled), () => new Map(), now);
+    return process.env.BRIEF === "rules" ? { ...i, threads: [] } : i;
+  },
   onChange: () => listeners.forEach((l) => l("brief", JSON.stringify(brief.state()))),
   run: stubRun,
 });
