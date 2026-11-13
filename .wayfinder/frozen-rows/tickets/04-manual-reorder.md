@@ -2,7 +2,7 @@
 title: Let the user drag projects, groups and threads into their own order
 type: wayfinder:task
 status: open
-assignee:
+assignee: claude (frozen-rows-04)
 blocked-by: [01-drag-library, 02-stable-order]
 ---
 
