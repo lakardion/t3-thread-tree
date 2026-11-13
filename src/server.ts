@@ -1,5 +1,6 @@
 import index from "./page/index.html";
 import type { Conn, Tree } from "./shared/tree.ts";
+import { briefInput, briefService, detectClis } from "./server/brief.ts";
 import { buildTree } from "./server/build-tree.ts";
 import { mayBeLaunched, openLineage } from "./server/lineage.ts";
 import { connectShell, readEnvironmentId, type Project, type Thread } from "./server/t3.ts";
@@ -38,7 +39,7 @@ function resolveSpawners() {
   }, 2000);
 }
 
-type Client = { settled: boolean; send: (data: string) => void };
+type Client = { settled: boolean; send: (data: string, event?: string) => void };
 const clients = new Set<Client>();
 
 const linearWorkspace = process.env.LINEAR_WORKSPACE?.trim();
@@ -104,11 +105,21 @@ connectShell({
   },
 });
 
+const brief = briefService({
+  clis: detectClis(),
+  input: (settled) => briefInput(treeFor(settled).projects, lineage.lastMessages, Date.now()),
+  onChange: () => {
+    const data = JSON.stringify(brief.state());
+    for (const c of clients) c.send(data, "brief");
+  },
+});
+
 const server = Bun.serve({
   hostname: "127.0.0.1",
   port: 4773,
   routes: {
     "/": index,
+    ...brief.routes,
     "/events": (req) => {
       server.timeout(req, 0);
       const settled = new URL(req.url).searchParams.get("settled") === "1";
@@ -117,9 +128,13 @@ const server = Bun.serve({
       return new Response(
         new ReadableStream({
           start(ctrl) {
-            client = { settled, send: (d) => ctrl.enqueue(enc.encode(`data: ${d}\n\n`)) };
+            client = {
+              settled,
+              send: (d, event) => ctrl.enqueue(enc.encode(`${event ? `event: ${event}\n` : ""}data: ${d}\n\n`)),
+            };
             clients.add(client);
             client.send(JSON.stringify(treeFor(settled)));
+            client.send(JSON.stringify(brief.state()), "brief");
           },
           cancel() {
             clients.delete(client);

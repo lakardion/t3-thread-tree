@@ -228,3 +228,48 @@ export function runBrief(cli: Cli, threads: InputThread[], now = () => new Date(
     },
   };
 }
+
+type Offered = { id: Cli; label: string }[];
+
+/** The one in-memory brief state, its routes, and one run at a time. */
+export function briefService(o: {
+  clis: Promise<Offered>;
+  input: (settled: boolean) => InputThread[];
+  onChange: () => void;
+  run?: (cli: Cli, threads: InputThread[]) => Run;
+}) {
+  const run = o.run ?? runBrief;
+  let state: BriefState = { status: "idle" };
+  let active: Run | undefined;
+  const set = (s: BriefState) => ((state = s), o.onChange());
+  return {
+    state: () => state,
+    routes: {
+      "/brief/clis": { GET: async () => Response.json(await o.clis) },
+      "/brief/run": {
+        POST: async (req: Request) => {
+          const { cli } = ((await req.json().catch(() => null)) ?? {}) as { cli?: Cli };
+          if (!(await o.clis).some((c) => c.id === cli)) return new Response("This CLI is not offered.", { status: 400 });
+          if (active) return new Response("A run is active.", { status: 409 });
+          const threads = o.input(new URL(req.url).searchParams.get("settled") === "1");
+          const before = state;
+          const r = (active = run(cli!, threads));
+          set({ status: "running", cli: cli!, threadCount: threads.length, startedAt: new Date().toISOString() });
+          r.done
+            .catch((e): Outcome => ({ status: "failed", cli: cli!, error: String(e?.message ?? e), stderrTail: "" }))
+            .then((out) => {
+              active = undefined;
+              set(out ?? before);
+            });
+          return new Response(null, { status: 202 });
+        },
+      },
+      "/brief/cancel": {
+        POST: () => {
+          active?.cancel();
+          return new Response(null, { status: 204 });
+        },
+      },
+    },
+  };
+}

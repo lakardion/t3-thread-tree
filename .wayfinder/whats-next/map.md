@@ -36,6 +36,8 @@ The thread tree page has a "What's next" button. A click runs a local agent CLI 
 
 - [Build the brief runner (input, CLI run, parse)](tickets/06-brief-runner.md): `src/server/brief.ts` gives `detectClis`, `briefInput`, `runBrief` → `{ done, cancel }`; SQLite `lastMessages` in `lineage.ts`; both CLIs smoke-tested.
 
+- [Add the brief endpoints (detect, run, cancel, last brief)](tickets/07-brief-endpoints.md): `briefService` in `brief.ts` serves `/brief/clis`, `/brief/run` (202/400/409), `/brief/cancel`, and the named SSE event `brief`; the demo has a stub runner with `BRIEF=failed|empty` and `CLIS=0`.
+
 Decided at charting (by the user):
 
 - **Model route:** the backend runs a local agent CLI as a subprocess (`claude -p`, `codex exec`). It uses the existing logins, needs no API key, and writes nothing to T3. The app stays read-only.

@@ -1,5 +1,7 @@
 /** Serves the page with made-up threads, run through the real tree rules. No T3 needed. */
 import index from "../src/page/index.html";
+import type { BriefAction, Cli } from "../src/shared/brief.ts";
+import { briefInput, briefService, type Outcome } from "../src/server/brief.ts";
 import { buildTree } from "../src/server/build-tree.ts";
 import type { Pr, Project, Thread } from "../src/server/t3.ts";
 
@@ -130,24 +132,79 @@ const projects = new Map<string, Project>([
   ["docs", { title: "docs-site", repo: null }],
 ]);
 
+const projectsFor = (settled: boolean) =>
+  buildTree({ threads, projects, spawnerOf: (id) => spawners[id], environmentId: "demo", settled, now });
 const treeFor = (settled: boolean) =>
   JSON.stringify({
     conn: process.env.CONN ?? "up",
     lastUpdate: new Date(now).toISOString(),
     linear: { workspace: "acme", teams: ["SHOP"] },
-    projects: buildTree({ threads, projects, spawnerOf: (id) => spawners[id], environmentId: "demo", settled, now }),
+    projects: projectsFor(settled),
   });
 const trees = { open: treeFor(false), settled: treeFor(true) };
+
+/** The sample brief from the layout prototype. `demo-27` is settled, so its link shows struck through. */
+const SAMPLE: BriefAction[] = [
+  { kind: "answer", title: "Pick the default saved card", reason: "The agent asks which card is the default when two cards exist.", threadIds: ["demo-2"], prompt: "Use the card added last as the default." },
+  { kind: "answer", title: "Approve the pagination plan", reason: "The plan is ready and waits 30 minutes for approval.", threadIds: ["demo-20"], prompt: "The plan is good. Implement it." },
+  { kind: "merge", title: "Merge the 4.2 version bump", reason: "PR #3001 is approved, checks pass and it has no conflicts.", threadIds: ["demo-24"], prompt: null },
+  { kind: "unblock", title: "Rebase the order summary PR", reason: "PR #2107 conflicts with main and blocks the top of the 4-PR stack.", threadIds: ["demo-4", "demo-1"], prompt: "Rebase on main, resolve the conflicts, and push." },
+  { kind: "fix", title: "Fix the failing order summary checks", reason: "Checks fail and the reviewer requested changes on #2107.", threadIds: ["demo-4"], prompt: "Fix the failing checks, address the review comments, and push." },
+  { kind: "review", title: "Mark the Apple Pay draft ready", reason: "The agent finished its turn 2 hours ago and the PR is still a draft.", threadIds: ["demo-3"], prompt: "Mark PR #2104 ready for review and request a reviewer." },
+  { kind: "clean-up", title: "Settle the finished docs threads", reason: "The getting-started guide is done and the tutorial archive is settled.", threadIds: ["demo-17", "demo-27"], prompt: null },
+];
+const titles = Object.fromEntries(threads.map((t) => [t.id, t.title]));
+
+/** Stub runner: `BRIEF=failed|empty` picks the outcome, `CLIS=0` offers no CLI. */
+function stubRun(cli: Cli): { done: Promise<Outcome | null>; cancel: () => void } {
+  const outcome = (): Outcome =>
+    process.env.BRIEF === "failed"
+      ? { status: "failed", cli, error: "Overloaded", stderrTail: "Error: API Error: 529 overloaded_error\nclaude exited with code 1" }
+      : { status: "done", cli, generatedAt: new Date().toISOString(), actions: process.env.BRIEF === "empty" ? [] : SAMPLE, titles };
+  let cancel = () => {};
+  const done = new Promise<Outcome | null>((resolve) => {
+    const timer = setTimeout(() => resolve(outcome()), 2500);
+    cancel = () => (clearTimeout(timer), resolve(null));
+  });
+  return { done, cancel };
+}
+
+const listeners = new Set<(event: string, data: string) => void>();
+const brief = briefService({
+  clis: Promise.resolve(
+    process.env.CLIS === "0" ? [] : [{ id: "claude", label: "Claude Haiku" }, { id: "codex", label: "Codex Luna" }],
+  ),
+  input: (settled) => briefInput(projectsFor(settled), () => new Map(), now),
+  onChange: () => listeners.forEach((l) => l("brief", JSON.stringify(brief.state()))),
+  run: stubRun,
+});
 
 const server = Bun.serve({
   hostname: "127.0.0.1",
   port: Number(process.env.PORT ?? 4774),
   routes: {
     "/": index,
+    ...brief.routes,
     "/events": async (req) => {
+      server.timeout(req, 0);
       await Bun.sleep(Number(process.env.DELAY ?? 0));
       const tree = new URL(req.url).searchParams.get("settled") === "1" ? trees.settled : trees.open;
-      return new Response(`data: ${tree}\n\n`, { headers: { "Content-Type": "text/event-stream" } });
+      const enc = new TextEncoder();
+      let send: (event: string, data: string) => void;
+      return new Response(
+        new ReadableStream({
+          start(ctrl) {
+            send = (event, data) => ctrl.enqueue(enc.encode(`${event ? `event: ${event}\n` : ""}data: ${data}\n\n`));
+            listeners.add(send);
+            send("", tree);
+            send("brief", JSON.stringify(brief.state()));
+          },
+          cancel() {
+            listeners.delete(send);
+          },
+        }),
+        { headers: { "Content-Type": "text/event-stream", "Cache-Control": "no-store" } },
+      );
     },
   },
 });

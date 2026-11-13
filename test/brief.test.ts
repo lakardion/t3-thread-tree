@@ -1,5 +1,6 @@
 import { describe, expect, test } from "bun:test";
-import { briefInput, capMessage, filterAnswer, parseAnswer } from "../src/server/brief.ts";
+import { briefInput, briefService, capMessage, filterAnswer, parseAnswer, type InputThread, type Outcome } from "../src/server/brief.ts";
+import type { BriefAction } from "../src/shared/brief.ts";
 import type { Branch, ThreadNode } from "../src/shared/tree.ts";
 
 const NOW = Date.parse("2026-11-13T12:00:00.000Z");
@@ -112,5 +113,71 @@ describe("filterAnswer", () => {
   test("an answer with no actions list is an error", () => {
     expect(filterAnswer({}, threads)).toEqual({ error: "The answer has no actions list." });
     expect(filterAnswer(null, threads)).toEqual({ error: "The answer has no actions list." });
+  });
+});
+
+describe("briefService", () => {
+  const CLIS = Promise.resolve([{ id: "claude" as const, label: "Claude Haiku" }]);
+  const post = (path: string, body?: unknown) =>
+    new Request(`http://x${path}`, { method: "POST", body: body === undefined ? undefined : JSON.stringify(body) });
+  const done = (actions: BriefAction[] = []): Outcome => ({ status: "done", cli: "claude", generatedAt: "t", actions, titles: {} });
+
+  /** A run that ends when the test calls `finish`, or with `null` on cancel. */
+  function setup() {
+    let finish!: (o: Outcome | null) => void;
+    const changes: string[] = [];
+    const svc = briefService({
+      clis: CLIS,
+      input: (settled) => [{ id: settled ? "s" : "o" } as InputThread],
+      onChange: () => changes.push(svc.state().status),
+      run: () => {
+        const p = new Promise<Outcome | null>((r) => (finish = r));
+        return { done: p, cancel: () => finish(null) };
+      },
+    });
+    const flush = () => Bun.sleep(0);
+    return { svc, changes, finish: (o: Outcome | null) => finish(o), flush };
+  }
+
+  test("runs, refuses a second run, then keeps the result", async () => {
+    const { svc, changes, finish, flush } = setup();
+    expect((await svc.routes["/brief/run"].POST(post("/brief/run?settled=1", { cli: "claude" }))).status).toBe(202);
+    expect(svc.state()).toMatchObject({ status: "running", cli: "claude", threadCount: 1 });
+    expect((await svc.routes["/brief/run"].POST(post("/brief/run", { cli: "claude" }))).status).toBe(409);
+    finish(done());
+    await flush();
+    expect(svc.state().status).toBe("done");
+    expect(changes).toEqual(["running", "done"]);
+  });
+
+  test("refuses a CLI that is not offered", async () => {
+    const { svc } = setup();
+    expect((await svc.routes["/brief/run"].POST(post("/brief/run", { cli: "codex" }))).status).toBe(400);
+    expect((await svc.routes["/brief/run"].POST(post("/brief/run"))).status).toBe(400);
+    expect(svc.state().status).toBe("idle");
+  });
+
+  test("a cancel returns to the state before the run", async () => {
+    const { svc, finish, flush } = setup();
+    await svc.routes["/brief/run"].POST(post("/brief/run", { cli: "claude" }));
+    finish(done());
+    await flush();
+    const before = svc.state();
+    await svc.routes["/brief/run"].POST(post("/brief/run", { cli: "claude" }));
+    svc.routes["/brief/cancel"].POST();
+    await flush();
+    expect(svc.state()).toBe(before);
+  });
+
+  test("a thrown run becomes a failed state", async () => {
+    const svc = briefService({
+      clis: CLIS,
+      input: () => [],
+      onChange: () => {},
+      run: () => ({ done: Promise.reject(new Error("boom")), cancel: () => {} }),
+    });
+    await svc.routes["/brief/run"].POST(post("/brief/run", { cli: "claude" }));
+    await Bun.sleep(0);
+    expect(svc.state()).toMatchObject({ status: "failed", error: "boom" });
   });
 });
