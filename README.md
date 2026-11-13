@@ -33,11 +33,13 @@ _Screenshots use made-up data from `bun run demo`._
 - **Live.** Changes arrive as T3 streams them. No polling, no reload.
 - **The page remembers your choices.** Closed projects and groups (they show one status icon per thread), the filter, "show settled" and the theme (System, Light or Dark) stay after a reload.
 - **Settled threads on demand.** The "show settled" switch adds them. Archived threads never show.
+- **What's next.** A click on "What's next" shows a ranked list of next steps over the active threads, each with links to its threads. Code makes the obvious steps at once: answer a waiting agent, fix a PR with failing checks, conflicts or requested changes, and merge an approved PR. A local `claude` or `codex` CLI on a cheap model ranks the rest, and it does not run when nothing is left. A step can have a prompt that you copy with one click. The dropdown next to the button selects the CLI. A thread that is no longer active shows struck through.
 
 ## Requirements
 
 - [Bun](https://bun.sh) 1.3 or later
 - T3 Code running on the same machine (the app reads `~/.t3/userdata`)
+- Optional, for "What's next": the `claude` or `codex` CLI, logged in
 
 ## Setup
 
@@ -70,7 +72,7 @@ Open <http://127.0.0.1:4773>.
 - The app starts even when T3 is not running. It retries every 3 s. Until T3 is back, the page shows the last tree, greyed, with the time of the last update.
 - If T3 rejects the token, the page shows the command to issue a new one.
 
-To see the UI without T3, run `bun run demo` and open <http://127.0.0.1:4774>.
+To see the UI without T3, run `bun run demo` and open <http://127.0.0.1:4774>. The demo uses a stub brief runner: set `BRIEF=failed`, `BRIEF=empty` or `BRIEF=rules` to see the other outcomes, and `CLIS=0` to offer no CLI.
 
 ## How it works
 
@@ -80,7 +82,8 @@ statev2.sqlite (read-only) ──launch lineage──────────▶
 ```
 
 - `src/server/t3.ts` holds the T3 stream: a small hand-written Effect RPC client with JSON frames, and a lenient decoder. T3's protocol is internal, so all protocol code stays in this one module.
-- `src/server/lineage.ts` finds the spawner of a launched thread from the launch tool calls in `statev2.sqlite`, opened read-only.
+- `src/server/lineage.ts` finds the spawner of a launched thread from the launch tool calls in `statev2.sqlite`, opened read-only. It also reads the last assistant message of each thread for the brief.
+- `src/server/brief.ts` makes the next-step brief: the code-ranked steps, a compact text digest for the model, and the CLI run with its tools off. It serves `/brief/clis`, `/brief/run` and `/brief/cancel`, and pushes the brief state as the SSE `brief` event. `src/server/next-step-prompt.md` is the ranking guide for the model.
 - `src/server/build-tree.ts` applies the tree rules: visibility, placement, stack order and the eleven statuses. It is a pure function, and `bun test` covers it.
 - `src/server.ts` keeps the thread map. It builds the whole tree again on each change, and pushes it as JSON over Server-Sent Events.
 - `src/page/` is a React, Tailwind and shadcn page, bundled by Bun's HTML imports (Tailwind runs through `bunfig.toml`). There is no Vite and no build step. The fold, the filter, the attention counts and the elapsed times run on the page (`attention.ts`, `format.ts`).
@@ -92,7 +95,7 @@ The app never writes to T3. It uses a token with the `orchestration:read` scope 
 ## Develop
 
 ```sh
-bun test           # tree rules, attention counts, formats
+bun test           # tree rules, brief, lineage, attention counts, formats
 bun run typecheck  # types
 bun run lint       # oxlint
 bun run fmt        # oxfmt, writes fixes
