@@ -33,13 +33,27 @@ export function launchedIds(result: unknown): string[] {
 /** Launched-thread ids look like `mcp:…`, `thread:mcp:…` or `thread:delegated-task:command%3Amcp%3A…`. */
 export const mayBeLaunched = (id: string) => /mcp(:|%3A)/i.test(id);
 
+const LAST_MESSAGES = `
+  SELECT ids.value AS id,
+    (SELECT json_extract(m.payload_json, '$.text')
+     FROM orchestration_v2_projection_messages m
+     WHERE m.thread_id = ids.value AND m.role = 'assistant' AND m.streaming = 0
+     ORDER BY m.created_at DESC, m.message_id DESC
+     LIMIT 1) AS text
+  FROM json_each(?1) AS ids`;
+
 export function openLineage(path = join(USERDATA, "statev2.sqlite")) {
   const db = new Database(path, { readonly: true });
   const calls = db.query<{ caller: string; result: string | null }, []>(CALLS);
   const sender = db.query<{ sender: string | null }, [string]>(SENDER);
+  const last = db.query<{ id: string; text: string | null }, [string]>(LAST_MESSAGES);
   let callers = new Map<string, string>();
 
   return {
+    /** The newest complete assistant text per thread; `null` when it has none. */
+    lastMessages(ids: string[]): Map<string, string | null> {
+      return new Map(last.all(JSON.stringify(ids)).map((r) => [r.id, r.text]));
+    },
     /** Re-reads every launch tool call. One full scan, so call it only for an unknown launched thread. */
     reload() {
       const next = new Map<string, string>();

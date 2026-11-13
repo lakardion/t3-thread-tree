@@ -34,6 +34,8 @@ The thread tree page has a "What's next" button. A click runs a local agent CLI 
 
 - [Write the "What's next" section of SPEC.md](tickets/05-spec-section.md): `SPEC.md` holds the build source; the brief state goes to the page as an SSE `brief` event on `/events`, with `GET /brief/clis`, `POST /brief/run`, `POST /brief/cancel`.
 
+- [Build the brief runner (input, CLI run, parse)](tickets/06-brief-runner.md): `src/server/brief.ts` gives `detectClis`, `briefInput`, `runBrief` → `{ done, cancel }`; SQLite `lastMessages` in `lineage.ts`; both CLIs smoke-tested.
+
 Decided at charting (by the user):
 
 - **Model route:** the backend runs a local agent CLI as a subprocess (`claude -p`, `codex exec`). It uses the existing logins, needs no API key, and writes nothing to T3. The app stays read-only.
