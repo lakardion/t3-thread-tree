@@ -616,4 +616,7 @@ function App() {
   );
 }
 
-createRoot(document.getElementById("root")!).render(<App />);
+/** Hot reload re-runs this module; reuse the root so two roots never share one container. */
+const container = document.getElementById("root")!;
+const root = import.meta.hot ? (import.meta.hot.data.root ??= createRoot(container)) : createRoot(container);
+root.render(<App />);
