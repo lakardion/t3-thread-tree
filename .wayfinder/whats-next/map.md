@@ -24,6 +24,8 @@ The thread tree page has a "What's next" button. A click runs a local agent CLI 
 
 <!-- one line per closed map ticket -->
 
+- [Where does the backend read the last assistant message of a thread?](tickets/02-thread-messages-source.md): from `statev2.sqlite` with one batched query (the stream field is always null). Cap each message at 1500 characters, head and tail.
+
 Decided at charting (by the user):
 
 - **Model route:** the backend runs a local agent CLI as a subprocess (`claude -p`, `codex exec`). It uses the existing logins, needs no API key, and writes nothing to T3. The app stays read-only.
