@@ -84,6 +84,9 @@ A **top-level thread** has no native `parentThreadId`. A **subagent** has `relat
    - In a project: issue-key groups (by their oldest thread, oldest first, with stack mates kept together at the slot of the oldest member), then Reviews, then No issue key.
    - Threads and nested threads are sorted by `createdAt`, oldest first. A tie goes to the thread id.
    - A new item goes at the end of its list. A status change, a new PR or a new run does not move a row.
+   - The user can reorder project cards, key groups (a stack run moves as one block), review groups and top-level threads by drag. The page stores the order of each list in `localStorage`. An id that is not in the stored list goes after the stored ones, in base order. Ids that no longer exist drop out. Reviews and No issue key stay last. Subthreads keep the base order. No drag crosses lists.
+   - A save keeps only the ids of the current view. With "show settled" off, settled items drop from the stored order and come back at the end, in base order.
+   - A live push during a drag does not change the dragged list until the drop.
 
 ## UI
 

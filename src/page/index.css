@@ -129,6 +129,10 @@
   .project-head {
     background: linear-gradient(100deg, var(--muted), var(--card) 75%);
   }
+  [data-dnd-dragging] {
+    background: var(--card);
+    border-radius: var(--radius);
+  }
   .stack-rail {
     position: relative;
     padding-left: 10px;
