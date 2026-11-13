@@ -17,6 +17,7 @@ import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip
 import { cn } from "@/lib/utils";
 
 import type { Status, ThreadNode } from "../shared/tree.ts";
+import { Swap } from "./swap.tsx";
 
 export const STATUS: Record<Status, { icon: LucideIcon; shape: string; text: string }> = {
   "needs-input": { icon: Diamond, shape: "text-status-needs-input", text: "text-status-needs-input-fg" },
@@ -38,10 +39,13 @@ export const StatusIcon = ({ t }: { t: ThreadNode }) => {
     <Tooltip>
       <TooltipTrigger asChild>
         <span className="inline-flex flex-none" role="img" aria-label={t.phrase}>
-          <Icon
-            className={cn("status-icon size-3", shape)}
-            fill={t.status === "needs-input" ? "currentColor" : "none"}
-          />
+          <Swap
+            k={t.status}
+            enter="swap-scale"
+            className={cn(shape, "transition-colors duration-300 motion-reduce:transition-none")}
+          >
+            <Icon className="status-icon size-3" fill={t.status === "needs-input" ? "currentColor" : "none"} />
+          </Swap>
         </span>
       </TooltipTrigger>
       <TooltipContent>
