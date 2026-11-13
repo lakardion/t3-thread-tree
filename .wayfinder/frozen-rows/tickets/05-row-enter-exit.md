@@ -1,7 +1,7 @@
 ---
 title: Animate rows that enter and leave
 type: wayfinder:task
-status: open
+status: in-review
 assignee: claude (frozen-rows-05)
 blocked-by: []
 ---
