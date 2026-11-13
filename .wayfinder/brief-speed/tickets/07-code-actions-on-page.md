@@ -1,7 +1,7 @@
 ---
 title: Show the code actions while the model runs
 type: wayfinder:task
-status: in-review
+status: closed
 assignee: claude
 blocked-by: [06-code-ranked-actions-build]
 ---
