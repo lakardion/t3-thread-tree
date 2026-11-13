@@ -1,7 +1,7 @@
 ---
 title: Build the compact digest input
 type: wayfinder:task
-status: open
+status: closed
 assignee: claude
 blocked-by: []
 ---
