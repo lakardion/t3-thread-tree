@@ -1,4 +1,5 @@
 import { describe, expect, test } from "bun:test";
+
 import {
   briefInput,
   briefService,
@@ -51,14 +52,14 @@ describe("briefInput", () => {
     ];
     let asked: string[] = [];
     const input = briefInput(tree, (ids) => ((asked = ids), new Map([["A", "done"]])), NOW);
-    expect(asked.sort()).toEqual(["A", "L"]);
+    expect(asked.toSorted()).toEqual(["A", "L"]);
     expect(input.map((t) => [t.id, t.title])).toEqual([
       ["A", "Thread A"],
       ["L", "Thread L"],
     ]);
     expect(input.map((t) => t.ref)).toEqual(["t1", "t2"]);
-    expect(input[1]!.digest).toBe("t2 · Your turn 3h · Thread L");
-    expect(input[0]!.digest).toBe("t1 · Your turn 3h · Thread A\n  done");
+    expect(input[1].digest).toBe("t2 · Your turn 3h · Thread L");
+    expect(input[0].digest).toBe("t1 · Your turn 3h · Thread A\n  done");
   });
 });
 

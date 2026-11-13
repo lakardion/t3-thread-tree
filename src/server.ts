@@ -1,9 +1,9 @@
 import index from "./page/index.html";
-import type { Conn, Tree } from "./shared/tree.ts";
 import { briefInput, briefService, detectClis } from "./server/brief.ts";
 import { buildTree } from "./server/build-tree.ts";
 import { mayBeLaunched, needsScan, openLineage } from "./server/lineage.ts";
 import { connectShell, readEnvironmentId, type Project, type Thread } from "./server/t3.ts";
+import type { Conn, Tree } from "./shared/tree.ts";
 
 const threads = new Map<string, Thread>();
 const projects = new Map<string, Project>();

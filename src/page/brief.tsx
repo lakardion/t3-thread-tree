@@ -1,14 +1,16 @@
-import { useEffect, useState } from "react";
 import { Check, Copy, RotateCw, Sparkles, X } from "lucide-react";
-import type { ActionKind, BriefAction, BriefState, Cli } from "../shared/brief.ts";
-import type { ThreadNode } from "../shared/tree.ts";
+import { useEffect, useState } from "react";
+
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
-import { StatusIcon } from "./app.tsx";
+
+import type { ActionKind, BriefAction, BriefState, Cli } from "../shared/brief.ts";
+import type { ThreadNode } from "../shared/tree.ts";
+import { StatusIcon } from "./status-icon.tsx";
 
 export type Offered = { id: Cli; label: string }[];
 
@@ -42,6 +44,7 @@ export function BriefControls(p: {
       {none ? (
         <Tooltip>
           <TooltipTrigger asChild>
+            {/* oxlint-disable-next-line jsx-a11y/no-noninteractive-tabindex -- a disabled button gets no focus, so the wrapper takes it to show the tooltip */}
             <span tabIndex={0}>{button}</span>
           </TooltipTrigger>
           <TooltipContent>No logged-in claude or codex CLI found</TooltipContent>
@@ -128,7 +131,7 @@ function CopyPrompt({ prompt }: { prompt: string }) {
 function LoadingText({ text }: { text: string }) {
   return (
     <span className="brief-loading" role="status" aria-label={text}>
-      {[...text].map((c, i) => (
+      {Array.from(new Intl.Segmenter().segment(text), (s) => s.segment).map((c, i) => (
         <span key={i} aria-hidden style={{ animationDelay: `${i * 60}ms` }}>
           {c}
         </span>

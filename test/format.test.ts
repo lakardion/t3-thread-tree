@@ -1,4 +1,5 @@
 import { describe, expect, test } from "bun:test";
+
 import { ago, folded, linearHref, phraseWith, stackRuns, stripKey } from "../src/page/format.ts";
 import type { Branch, ThreadNode } from "../src/shared/tree.ts";
 

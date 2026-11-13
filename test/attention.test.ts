@@ -1,4 +1,5 @@
 import { describe, expect, test } from "bun:test";
+
 import { countAttention, needsYou, onlyNeedsYou } from "../src/page/attention.ts";
 import type { Branch, Status, ThreadNode } from "../src/shared/tree.ts";
 
@@ -67,20 +68,20 @@ describe("needsYou", () => {
 describe("onlyNeedsYou", () => {
   test("drops a thread with no match", () => {
     const out = onlyNeedsYou([branch("p", [thread("a", "working"), thread("b", "your-turn")])]);
-    expect(ids(out[0]!.threads)).toEqual(["b"]);
+    expect(ids(out[0].threads)).toEqual(["b"]);
   });
 
   test("keeps a spawner when a nested thread matches, with only the matches", () => {
     const spawner = thread("s", "idle", [thread("m1", "working"), thread("m2", "your-turn")]);
     const out = onlyNeedsYou([branch("p", [spawner])]);
-    expect(ids(out[0]!.threads)).toEqual(["s"]);
-    expect(ids(out[0]!.threads[0]!.children)).toEqual(["m2"]);
+    expect(ids(out[0].threads)).toEqual(["s"]);
+    expect(ids(out[0].threads[0].children)).toEqual(["m2"]);
   });
 
   test("keeps a matching thread and drops its children that do not match", () => {
     const out = onlyNeedsYou([branch("p", [thread("a", "needs-input", [thread("c", "working")])])]);
-    expect(ids(out[0]!.threads)).toEqual(["a"]);
-    expect(out[0]!.threads[0]!.children).toEqual([]);
+    expect(ids(out[0].threads)).toEqual(["a"]);
+    expect(out[0].threads[0].children).toEqual([]);
   });
 
   test("drops a group with no thread left, and a project with no group left", () => {
@@ -91,9 +92,9 @@ describe("onlyNeedsYou", () => {
   test("keeps the nested group and the project of a match", () => {
     const tree = [branch("p", [], [branch("g", [thread("a", "plan-ready")])])];
     const out = onlyNeedsYou(tree);
-    expect(out[0]!.id).toBe("p");
-    expect(out[0]!.branches[0]!.id).toBe("g");
-    expect(ids(out[0]!.branches[0]!.threads)).toEqual(["a"]);
+    expect(out[0].id).toBe("p");
+    expect(out[0].branches[0].id).toBe("g");
+    expect(ids(out[0].branches[0].threads)).toEqual(["a"]);
   });
 
   test("does not change the input", () => {

@@ -4,6 +4,7 @@
  */
 import { homedir } from "node:os";
 import { join } from "node:path";
+
 import type { Conn } from "../shared/tree.ts";
 
 export const USERDATA = join(homedir(), ".t3", "userdata");
@@ -297,6 +298,6 @@ export function connectShell(opts: {
     sock.onerror = () => sock.close();
   };
 
-  attempt();
+  void attempt();
   setInterval(attempt, 3000);
 }

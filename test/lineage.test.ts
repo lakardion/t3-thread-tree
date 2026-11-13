@@ -1,4 +1,5 @@
 import { expect, test } from "bun:test";
+
 import { needsScan } from "../src/server/lineage.ts";
 
 const t = (id: string, settled = false, gone = false) => ({ id, settledAt: settled ? "2026-01-01" : null, gone });

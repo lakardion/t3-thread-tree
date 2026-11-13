@@ -1,27 +1,7 @@
+import { Check, ChevronDown, ChevronRight, ExternalLink, Layers, TriangleAlert, X } from "lucide-react";
 import { createContext, useContext, useEffect, useState, type ReactNode } from "react";
-import {
-  Check,
-  ChevronDown,
-  ChevronRight,
-  Circle,
-  CircleCheck,
-  CircleDashed,
-  CirclePause,
-  CircleX,
-  Diamond,
-  ExternalLink,
-  Layers,
-  ListChecks,
-  LoaderCircle,
-  Moon,
-  Square,
-  TriangleAlert,
-  X,
-  type LucideIcon,
-} from "lucide-react";
 import { createRoot } from "react-dom/client";
-import type { BriefState, Cli } from "../shared/brief.ts";
-import { allThreads, type Branch, type PrNode, type Status, type ThreadNode, type Tree } from "../shared/tree.ts";
+
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -34,25 +14,16 @@ import { Switch } from "@/components/ui/switch";
 import { ToggleGroup, ToggleGroupItem } from "@/components/ui/toggle-group";
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
 import { cn } from "@/lib/utils";
+
+import type { BriefState, Cli } from "../shared/brief.ts";
+import { allThreads, type Branch, type PrNode, type ThreadNode, type Tree } from "../shared/tree.ts";
 import { countAttention, needsYou, onlyNeedsYou } from "./attention.ts";
 import { BriefControls, BriefPanel, type Offered } from "./brief.tsx";
 import { ago, folded, isKeyGroup, linearHref, phraseWith, stackRuns, stripKey } from "./format.ts";
+import { STATUS, StatusIcon } from "./status-icon.tsx";
 
 const TOKEN_CMD =
   "~/.t3/bin/t3 auth session issue --scope orchestration:read --label thread-tree --ttl 52w --token-only";
-const STATUS: Record<Status, { icon: LucideIcon; shape: string; text: string }> = {
-  "needs-input": { icon: Diamond, shape: "text-status-needs-input", text: "text-status-needs-input-fg" },
-  working: { icon: LoaderCircle, shape: "text-status-working", text: "text-status-working-fg" },
-  starting: { icon: CircleDashed, shape: "text-status-working", text: "text-status-working-fg" },
-  waiting: { icon: CirclePause, shape: "text-status-working", text: "text-status-working-fg" },
-  "plan-ready": { icon: ListChecks, shape: "text-status-plan", text: "text-status-plan-fg" },
-  "your-turn": { icon: CircleCheck, shape: "text-status-done", text: "text-status-done-fg" },
-  done: { icon: Check, shape: "text-status-done", text: "text-status-done-fg" },
-  failed: { icon: CircleX, shape: "text-status-failed", text: "text-status-failed-fg" },
-  interrupted: { icon: Square, shape: "text-status-failed", text: "text-status-failed-fg" },
-  snoozed: { icon: Moon, shape: "text-status-idle", text: "text-muted-foreground" },
-  idle: { icon: Circle, shape: "text-status-idle", text: "text-muted-foreground" },
-};
 const CLOSED_KEY = "thread-tree:closed";
 const SETTLED_KEY = "thread-tree:settled";
 const FILTER_KEY = "thread-tree:filter";
@@ -86,25 +57,6 @@ const Details = createContext<{ open: Set<string>; toggle: (id: string) => void;
 });
 const NeedsOnly = createContext(false);
 const Linear = createContext<Tree["linear"]>(null);
-
-export const StatusIcon = ({ t }: { t: ThreadNode }) => {
-  const { icon: Icon, shape } = STATUS[t.status];
-  return (
-    <Tooltip>
-      <TooltipTrigger asChild>
-        <span className="inline-flex flex-none" role="img" aria-label={t.phrase}>
-          <Icon
-            className={cn("status-icon size-3", shape)}
-            fill={t.status === "needs-input" ? "currentColor" : "none"}
-          />
-        </span>
-      </TooltipTrigger>
-      <TooltipContent>
-        {t.phrase} · {t.raw}
-      </TooltipContent>
-    </Tooltip>
-  );
-};
 
 const CHIP = "gap-1 rounded-[6px] px-1.5 py-0 text-[11px] font-normal text-muted-foreground";
 const ROW_BUTTON =
@@ -337,7 +289,7 @@ function ThreadRow({ t, chip }: { t: ThreadNode; chip?: string }) {
             )}
             <Tooltip>
               <TooltipTrigger asChild>
-                <span className="font-mono text-[11px] tabular-nums text-muted-foreground">
+                <span className="font-mono text-[11px] text-muted-foreground tabular-nums">
                   {ago(t.updatedAt, now)}
                 </span>
               </TooltipTrigger>
@@ -430,7 +382,7 @@ function GroupRow({ b, closed, toggle }: { b: Branch } & Fold) {
 
 /** Key groups of one PR stack, in one rail with a label row. */
 function StackRail({ run, closed, toggle }: { run: Branch[] } & Fold) {
-  const { total, base } = run[0]!.stack!;
+  const { total, base } = run[0].stack!;
   return (
     <li className="stack-rail my-1">
       <div className="flex min-h-6 flex-wrap items-center gap-x-1.5 px-2 text-xs text-muted-foreground">
@@ -480,10 +432,10 @@ function ProjectCard({ b, closed, toggle }: { b: Branch } & Fold) {
             <CardContent className="p-1.5">
               <ul className="m-0 list-none p-0">
                 {stackRuns(b.branches).map((run) =>
-                  run[0]!.stack ? (
-                    <StackRail key={`rail:${run[0]!.id}`} run={run} closed={closed} toggle={toggle} />
+                  run[0].stack ? (
+                    <StackRail key={`rail:${run[0].id}`} run={run} closed={closed} toggle={toggle} />
                   ) : (
-                    <GroupRow key={run[0]!.id} b={run[0]!} closed={closed} toggle={toggle} />
+                    <GroupRow key={run[0].id} b={run[0]} closed={closed} toggle={toggle} />
                   ),
                 )}
               </ul>
@@ -565,7 +517,7 @@ function App() {
   const runBrief = () => {
     if (!pick) return;
     setHideBrief(false);
-    fetch(`/brief/run?settled=${settled ? 1 : 0}`, { method: "POST", body: JSON.stringify({ cli: pick }) });
+    void fetch(`/brief/run?settled=${settled ? 1 : 0}`, { method: "POST", body: JSON.stringify({ cli: pick }) });
   };
   const live = new Map((tree?.projects ?? []).flatMap(allThreads).map((t) => [t.id, t]));
   const counts = countAttention(tree?.projects ?? []);

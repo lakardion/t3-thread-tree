@@ -1,8 +1,9 @@
 import { describe, expect, test } from "bun:test";
-import { buildTree, issueKey, statusOf, type BuildInput } from "../src/server/build-tree.ts";
 import { homedir } from "node:os";
-import { decodeItem, decodeThread, type Thread } from "../src/server/t3.ts";
+
+import { buildTree, issueKey, statusOf, type BuildInput } from "../src/server/build-tree.ts";
 import { launchedIds } from "../src/server/lineage.ts";
+import { decodeItem, decodeThread, type Thread } from "../src/server/t3.ts";
 import type { Branch, Status, ThreadNode } from "../src/shared/tree.ts";
 
 const NOW = Date.parse("2026-11-12T12:00:00.000Z");
@@ -104,7 +105,7 @@ describe("visibility", () => {
         lineage: { parentThreadId: null, relationshipToParent: null, rootThreadId: "f", sideChat: true },
       }),
     ]);
-    expect(labels(tree[0]!.branches)).toEqual(["SHOP-1"]);
+    expect(labels(tree[0].branches)).toEqual(["SHOP-1"]);
   });
 
   test("settled toggle shows settled threads, never archived ones", () => {
@@ -117,14 +118,14 @@ describe("visibility", () => {
       {},
       { settled: true },
     );
-    expect(labels(tree[0]!.branches).sort()).toEqual(["SHOP-1", "SHOP-2"]);
+    expect(labels(tree[0].branches).toSorted()).toEqual(["SHOP-1", "SHOP-2"]);
   });
 
   test("snoozed threads stay visible, with their wake time", () => {
     const until = "2026-11-13T09:00:00.000Z";
-    const [t] = build([shell("a", "SHOP-1", { snoozedUntil: until, status: "completed" })])[0]!.branches[0]!.threads;
-    expect(t!.status).toBe("snoozed");
-    expect(t!.snoozedUntil).toBe(until);
+    const [t] = build([shell("a", "SHOP-1", { snoozedUntil: until, status: "completed" })])[0].branches[0].threads;
+    expect(t.status).toBe("snoozed");
+    expect(t.snoozedUntil).toBe(until);
   });
 
   test("an archive-location update removes the thread", () => {
@@ -176,7 +177,7 @@ describe("placement", () => {
       shell("k", "SHOP-4319 build the thing"),
       shell("n", "loose thread"),
     ]);
-    const p = tree[0]!;
+    const p = tree[0];
     expect(labels(p.branches)).toEqual(["SHOP-4319", "Reviews", "No issue key"]);
     expect(labels(child(tree, "frontend", "Reviews").branches)).toEqual(["No issue key", "SHOP-4319"]);
     expect(titles(child(tree, "frontend", "Reviews", "SHOP-4319").threads)).toEqual(["Review #15708 SHOP-4319"]);
@@ -192,20 +193,20 @@ describe("placement", () => {
       { "mcp:t1": "launcher", launcher: "map" },
     );
     const [map] = child(tree, "frontend", "No issue key").threads;
-    expect(map!.title).toBe("Wayfinder map");
-    expect(titles(map!.children)).toEqual(["ticket 001"]);
+    expect(map.title).toBe("Wayfinder map");
+    expect(titles(map.children)).toEqual(["ticket 001"]);
   });
 
   test("keyed thread stays under its key even with a visible spawner", () => {
     const tree = build([shell("a", "SHOP-4312 parent"), shell("mcp:b", "SHOP-4313 child")], { "mcp:b": "a" });
-    expect(labels(tree[0]!.branches).sort()).toEqual(["SHOP-4312", "SHOP-4313"]);
+    expect(labels(tree[0].branches).toSorted()).toEqual(["SHOP-4312", "SHOP-4313"]);
   });
 
   test("spawner in another project is not followed", () => {
     const tree = build([shell("a", "Adapt planning"), shell("mcp:b", "t3exp work", { projectId: "p2" })], {
       "mcp:b": "a",
     });
-    expect(labels(tree).sort()).toEqual(["backend", "frontend"]);
+    expect(labels(tree).toSorted()).toEqual(["backend", "frontend"]);
     expect(titles(child(tree, "backend", "No issue key").threads)).toEqual(["t3exp work"]);
   });
 
@@ -260,7 +261,7 @@ describe("PR stack", () => {
 
   test("badge position and total", () => {
     const tree = build(stacked());
-    const pos = (k: string) => child(tree, "frontend", k).threads[0]!.stack;
+    const pos = (k: string) => child(tree, "frontend", k).threads[0].stack;
     expect(pos("WEB-1")).toEqual({ pos: 1, total: 3 });
     expect(pos("WEB-2")).toEqual({ pos: 2, total: 3 });
     expect(pos("WEB-3")).toEqual({ pos: 3, total: 3 });
@@ -268,7 +269,7 @@ describe("PR stack", () => {
   });
 
   test("stack-mate groups sit together in stack order, at the newest member's slot", () => {
-    expect(labels(build(stacked())[0]!.branches)).toEqual(["WEB-1", "WEB-2", "WEB-3", "WEB-9"]);
+    expect(labels(build(stacked())[0].branches)).toEqual(["WEB-1", "WEB-2", "WEB-3", "WEB-9"]);
   });
 
   test("the decoder reads the stack base", () => {
@@ -306,8 +307,8 @@ describe("PR stack", () => {
       ...stacked(),
       shell("c", "WEB-5 closed", { pullRequests: [pr(20, "created", "merged"), pr(21, "stack", "merged")] }),
     ]);
-    expect(child(tree, "frontend", "WEB-2").threads[0]!.prs.map((p) => p.n)).toEqual([11, 99]);
-    const closed = child(tree, "frontend", "WEB-5").threads[0]!;
+    expect(child(tree, "frontend", "WEB-2").threads[0].prs.map((p) => p.n)).toEqual([11, 99]);
+    const closed = child(tree, "frontend", "WEB-5").threads[0];
     expect(closed.stack).toBeNull();
     expect(closed.prs).toEqual([
       {
@@ -442,9 +443,9 @@ describe("status", () => {
       ],
       {},
       { settled: true },
-    )[0]!.branches[0]!.threads;
+    )[0].branches[0].threads;
     expect(t).toMatchObject({ key: "SHOP-1", settled: true, input: true, updatedAt: expect.any(String) });
-    expect(t!.prs).toEqual([
+    expect(t.prs).toEqual([
       {
         n: 7,
         url: "https://github.com/org/repo/pull/7",

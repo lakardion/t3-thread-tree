@@ -1,9 +1,9 @@
 /** Serves the page with made-up threads, run through the real tree rules. No T3 needed. */
 import index from "../src/page/index.html";
-import type { BriefAction, Cli } from "../src/shared/brief.ts";
 import { briefInput, briefService, type Outcome } from "../src/server/brief.ts";
 import { buildTree } from "../src/server/build-tree.ts";
 import type { Pr, Project, Thread } from "../src/server/t3.ts";
+import type { BriefAction, Cli } from "../src/shared/brief.ts";
 
 const now = Date.now();
 const ago = (min: number) => new Date(now - min * 60_000).toISOString();
@@ -259,7 +259,7 @@ const SAMPLE: BriefAction[] = [
     prompt: null,
   },
 ];
-const titles = Object.fromEntries(threads.map((t) => [t.id, t.title]));
+const titles = Object.fromEntries(threads.map((th) => [th.id, th.title]));
 
 /** Stub runner: `BRIEF=failed|empty` picks the outcome, `CLIS=0` offers no CLI. */
 function stubRun(cli: Cli): { done: Promise<Outcome | null>; cancel: () => void } {
@@ -278,7 +278,7 @@ function stubRun(cli: Cli): { done: Promise<Outcome | null>; cancel: () => void 
           actions: process.env.BRIEF === "empty" ? [] : SAMPLE,
           titles,
         };
-  let cancel = () => {};
+  let cancel!: () => void;
   const done = new Promise<Outcome | null>((resolve) => {
     const timer = setTimeout(() => resolve(outcome()), 2500);
     cancel = () => (clearTimeout(timer), resolve(null));
