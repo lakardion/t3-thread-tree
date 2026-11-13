@@ -2,7 +2,7 @@
 title: Order the tree by creation, new items at the bottom
 type: wayfinder:task
 status: open
-assignee:
+assignee: claude (frozen-rows-02)
 blocked-by: []
 ---
 
