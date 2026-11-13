@@ -43,6 +43,7 @@ import {
   threadsKey,
   type Freeze,
 } from "./order.ts";
+import { Presence, useMotion } from "./presence.tsx";
 import { STATUS, StatusIcon } from "./status-icon.tsx";
 import { Swap, useChanges } from "./swap.tsx";
 
@@ -107,13 +108,15 @@ const Mark = ({ title, children }: { title: string; children: ReactNode }) => (
 type RefFn = (el: Element | null) => void;
 type Sort = { id: string; list: string; index: number; name: string };
 
-/** A unit gets sort props only when its list has two or more units. */
+/** A unit gets sort props only when its list has two or more units and it is in the list. */
 const sortOf = (lists: Map<string, string[]>, list: string, id: string, name: string): Sort | undefined => {
   const ids = lists.get(list);
-  return ids && ids.length > 1 ? { id, list, index: ids.indexOf(id), name } : undefined;
+  const index = ids?.indexOf(id) ?? -1;
+  return ids && ids.length > 1 && index >= 0 ? { id, list, index, name } : undefined;
 };
 
 function SortHook({ sort, children }: { sort: Sort; children: (ref: RefFn, handleRef: RefFn) => ReactNode }) {
+  const motion = useMotion();
   const { ref, handleRef } = useSortable({
     id: sort.id,
     index: sort.index,
@@ -122,12 +125,23 @@ function SortHook({ sort, children }: { sort: Sort; children: (ref: RefFn, handl
     accept: sort.list,
     data: { name: sort.name },
   });
-  return children(ref, handleRef);
+  const both = useCallback<RefFn>(
+    (el) => {
+      ref(el);
+      motion(el);
+    },
+    [ref, motion],
+  );
+  return children(both, handleRef);
 }
 
-/** Renders `children` with the sort refs of `sort`, or with none when `sort` is unset. */
-const Sortable = ({ sort, children }: { sort?: Sort; children: (ref?: RefFn, handleRef?: RefFn) => ReactNode }) =>
-  sort ? <SortHook sort={sort}>{children}</SortHook> : children();
+function MotionHook({ children }: { children: (ref: RefFn) => ReactNode }) {
+  return children(useMotion());
+}
+
+/** Renders `children` with the sort refs of `sort`, or with only the motion ref when `sort` is unset. */
+const Sortable = ({ sort, children }: { sort?: Sort; children: (ref: RefFn, handleRef?: RefFn) => ReactNode }) =>
+  sort ? <SortHook sort={sort}>{children}</SortHook> : <MotionHook>{children}</MotionHook>;
 
 const DragHandle = ({ handleRef, name, className }: { handleRef?: RefFn; name: string; className?: string }) =>
   handleRef && (
@@ -293,7 +307,7 @@ function ThreadRow({ t, chip, sort }: { t: ThreadNode; chip?: string; sort?: Sor
   const linear = useContext(Linear);
   const chipHref = chip ? linearHref(chip, linear) : null;
   const pulse = useChanges(t.status);
-  const render = (ref?: RefFn, handleRef?: RefFn) => (
+  const render = (ref: RefFn, handleRef?: RefFn) => (
     <Collapsible asChild open={open.has(t.id)} onOpenChange={() => toggle(t.id)}>
       <li ref={ref} className="my-px">
         <div
@@ -397,9 +411,9 @@ function ThreadRow({ t, chip, sort }: { t: ThreadNode; chip?: string; sort?: Sor
         </CollapsibleContent>
         {t.children.length > 0 && (
           <ul className="m-0 list-none pl-4">
-            {t.children.map((c) => (
-              <ThreadRow key={c.id} t={c} />
-            ))}
+            <Presence items={t.children} keyOf={(c) => c.id}>
+              {(c) => <ThreadRow t={c} />}
+            </Presence>
           </ul>
         )}
       </li>
@@ -431,7 +445,7 @@ function GroupRow({ b, closed, toggle, sort }: { b: Branch; sort?: Sort } & Fold
   const lists = useContext(Lists);
   const groupHref = isKeyGroup(b) ? linearHref(b.label, linear) : null;
   if (one) return <ThreadRow t={one} chip={b.label} sort={sort} />;
-  const render = (ref?: RefFn, handleRef?: RefFn) => (
+  const render = (ref: RefFn, handleRef?: RefFn) => (
     <Collapsible asChild open={open} onOpenChange={() => toggle(b.id)}>
       <li ref={ref} className="my-px">
         <div className="group/row flex h-7 min-w-0 items-center gap-2 rounded-[8px] px-2 hover:bg-accent max-[720px]:h-auto max-[720px]:min-h-7 max-[720px]:flex-wrap">
@@ -460,18 +474,14 @@ function GroupRow({ b, closed, toggle, sort }: { b: Branch; sort?: Sort } & Fold
         </div>
         <CollapsibleContent asChild>
           <ul className="m-0 list-none pl-4">
-            {b.branches.map((c) => (
-              <GroupRow
-                key={c.id}
-                b={c}
-                closed={closed}
-                toggle={toggle}
-                sort={sortOf(lists, groupsKey(b.id), c.id, c.label)}
-              />
-            ))}
-            {b.threads.map((t) => (
-              <ThreadRow key={t.id} t={t} sort={sortOf(lists, threadsKey(b.id), threadUnitId(t), t.title || t.id)} />
-            ))}
+            <Presence items={b.branches} keyOf={(c) => c.id}>
+              {(c) => (
+                <GroupRow b={c} closed={closed} toggle={toggle} sort={sortOf(lists, groupsKey(b.id), c.id, c.label)} />
+              )}
+            </Presence>
+            <Presence items={b.threads} keyOf={(t) => t.id}>
+              {(t) => <ThreadRow t={t} sort={sortOf(lists, threadsKey(b.id), threadUnitId(t), t.title || t.id)} />}
+            </Presence>
           </ul>
         </CollapsibleContent>
       </li>
@@ -483,7 +493,7 @@ function GroupRow({ b, closed, toggle, sort }: { b: Branch; sort?: Sort } & Fold
 /** Key groups of one PR stack, in one rail with a label row. */
 function StackRail({ run, closed, toggle, sort }: { run: Branch[]; sort?: Sort } & Fold) {
   const { total, base } = run[0].stack!;
-  const render = (ref?: RefFn, handleRef?: RefFn) => (
+  const render = (ref: RefFn, handleRef?: RefFn) => (
     <li ref={ref} className="stack-rail my-1">
       <div className="group/row flex min-h-6 flex-wrap items-center gap-x-1.5 px-2 text-xs text-muted-foreground">
         <Layers className="size-3 flex-none" aria-hidden />
@@ -499,9 +509,9 @@ function StackRail({ run, closed, toggle, sort }: { run: Branch[]; sort?: Sort }
         <DragHandle handleRef={handleRef} name={`PR stack of ${run[0].label}`} className="ml-auto" />
       </div>
       <ul className="m-0 list-none p-0">
-        {run.map((c) => (
-          <GroupRow key={c.id} b={c} closed={closed} toggle={toggle} />
-        ))}
+        <Presence items={run} keyOf={(c) => c.id}>
+          {(c) => <GroupRow b={c} closed={closed} toggle={toggle} />}
+        </Presence>
       </ul>
     </li>
   );
@@ -511,8 +521,8 @@ function StackRail({ run, closed, toggle, sort }: { run: Branch[]; sort?: Sort }
 function ProjectCard({ b, closed, toggle }: { b: Branch } & Fold) {
   const open = !closed.has(b.id);
   const lists = useContext(Lists);
-  const render = (ref?: RefFn, handleRef?: RefFn) => (
-    <li ref={ref}>
+  const render = (ref: RefFn, handleRef?: RefFn) => (
+    <li ref={ref} className="not-last:mb-3">
       <Collapsible asChild open={open} onOpenChange={() => toggle(b.id)}>
         <Card className="gap-0 overflow-hidden rounded-[12px] py-0 shadow-none">
           <CardHeader className="project-head group/row flex min-h-10 flex-wrap items-center gap-x-2 gap-y-1 px-3 py-1">
@@ -535,21 +545,26 @@ function ProjectCard({ b, closed, toggle }: { b: Branch } & Fold) {
           <CollapsibleContent asChild>
             <CardContent className="p-1.5">
               <ul className="m-0 list-none p-0">
-                {stackRuns(b.branches).map((run) => {
-                  const sort = !isTail(run[0])
-                    ? sortOf(
-                        lists,
-                        groupsKey(b.id),
-                        runUnitId(b.id, run),
-                        run[0].stack ? `PR stack of ${run[0].label}` : run[0].label,
-                      )
-                    : undefined;
-                  return run[0].stack ? (
-                    <StackRail key={`rail:${run[0].id}`} run={run} closed={closed} toggle={toggle} sort={sort} />
-                  ) : (
-                    <GroupRow key={run[0].id} b={run[0]} closed={closed} toggle={toggle} sort={sort} />
-                  );
-                })}
+                <Presence
+                  items={stackRuns(b.branches)}
+                  keyOf={(run) => (run[0].stack ? `rail:${run[0].id}` : run[0].id)}
+                >
+                  {(run) => {
+                    const sort = !isTail(run[0])
+                      ? sortOf(
+                          lists,
+                          groupsKey(b.id),
+                          runUnitId(b.id, run),
+                          run[0].stack ? `PR stack of ${run[0].label}` : run[0].label,
+                        )
+                      : undefined;
+                    return run[0].stack ? (
+                      <StackRail run={run} closed={closed} toggle={toggle} sort={sort} />
+                    ) : (
+                      <GroupRow b={run[0]} closed={closed} toggle={toggle} sort={sort} />
+                    );
+                  }}
+                </Presence>
               </ul>
             </CardContent>
           </CollapsibleContent>
@@ -805,10 +820,10 @@ function App() {
                   {projects?.length === 0 && <p className="text-muted-foreground">No active threads.</p>}
                   {projects ? (
                     <DragDropProvider plugins={plugins} onDragStart={dragStart} onDragEnd={dragEnd}>
-                      <ul className="m-0 flex list-none flex-col gap-3 p-0">
-                        {projects.map((p) => (
-                          <ProjectCard key={p.id} b={p} closed={closed} toggle={toggle} />
-                        ))}
+                      <ul className="m-0 flex list-none flex-col p-0">
+                        <Presence items={projects} keyOf={(p) => p.id}>
+                          {(p) => <ProjectCard b={p} closed={closed} toggle={toggle} />}
+                        </Presence>
                       </ul>
                     </DragDropProvider>
                   ) : (

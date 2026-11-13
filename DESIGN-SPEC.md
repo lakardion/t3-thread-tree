@@ -245,6 +245,16 @@ A component animates a value change only while it is mounted. A first load and a
 - The row flashes once in the new status color. The flash goes from 2 × `--wash` to 0 over 1 s with ease-out.
 - With reduced motion, none of this runs. The new value shows at once.
 
+A project card, a group or a thread row that a push adds or removes also moves.
+
+- A new row grows from 0 to its full height in 200 ms with ease-out. Its opacity, margins and padding go from 0 to their values in the same time.
+- A removed row stays in its place and collapses to 0 height in 200 ms with ease-out, with the same fade. Then it leaves the page. A row inside a removed row leaves with it.
+- A removed row that comes back before it has gone grows in again from 0.
+- A group that folds into one row, or one row that unfolds into a group, changes at once. The thread that the fold adds or removes does not move.
+- A change that arrives during a drag applies at once, in every list. The drag source and the rows around the drop never move. This holds until the drop animation ends.
+- With reduced motion, rows appear and disappear at once.
+- A first load and a group that opens do not animate.
+
 ```css
 .swap-in {
   animation: swap-in 200ms ease-out;
