@@ -18,14 +18,14 @@ _Screenshots use made-up data from `bun run demo`._
 - **PR marks.** Each row shows its first two PRs. A PR chip shows checks (dot or ring), review (check or cross), conflicts (warning), draft (dashed border), merged (violet) and closed (struck through).
 - **Status at a glance.** Each row starts with an icon, a phrase and the elapsed time, for example "Working 12m" or "Approval · 3m". Color is never the only sign.
 
-  | Color | Statuses |
-  |---|---|
-  | amber, edge breathes | needs input: approval, question, sign-in or guest message |
-  | blue | working (icon turns), starting or queued, waiting on another thread |
-  | violet | plan ready |
-  | green | your turn (bold title), done |
-  | red | failed, interrupted or cancelled |
-  | grey | idle, or snoozed (title muted, with the wake time) |
+  | Color                | Statuses                                                            |
+  | -------------------- | ------------------------------------------------------------------- |
+  | amber, edge breathes | needs input: approval, question, sign-in or guest message           |
+  | blue                 | working (icon turns), starting or queued, waiting on another thread |
+  | violet               | plan ready                                                          |
+  | green                | your turn (bold title), done                                        |
+  | red                  | failed, interrupted or cancelled                                    |
+  | grey                 | idle, or snoozed (title muted, with the wake time)                  |
 
 - **What needs you.** The header counts the threads that need you, are working, are your turn, or stopped. The "Needs you" filter keeps only the threads with needs input, plan ready or your turn.
 - **Details on demand.** The chevron at the end of a row opens a details block: request, error, usage limit, model, branch, worktree, launched by, goal, tags and all PRs with their checks and size.
@@ -94,7 +94,12 @@ The app never writes to T3. It uses a token with the `orchestration:read` scope 
 ```sh
 bun test           # tree rules, attention counts, formats
 bun run typecheck  # types
+bun run lint       # oxlint
+bun run fmt        # oxfmt, writes fixes
+bun run check      # all of the above, as CI runs it
 ```
+
+CI runs `bun run check` on every pull request. A pull request merges only when it passes.
 
 ## Status
 

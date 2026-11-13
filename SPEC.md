@@ -109,10 +109,10 @@ A click on "What's next" runs a local agent CLI on a cheap model. The CLI return
 
 ### CLIs
 
-| Pick | Label | Model | Effort |
-|---|---|---|---|
-| `claude` | Claude Haiku | `haiku` (`claude-haiku-5-5`) | `--effort medium` |
-| `codex` | Codex Luna | `gpt-6-luna` | `-c model_reasoning_effort=medium` |
+| Pick     | Label        | Model                        | Effort                             |
+| -------- | ------------ | ---------------------------- | ---------------------------------- |
+| `claude` | Claude Haiku | `haiku` (`claude-haiku-5-5`) | `--effort medium`                  |
+| `codex`  | Codex Luna   | `gpt-6-luna`                 | `-c model_reasoning_effort=medium` |
 
 - **Detection:** at start, run `claude auth status` and `codex login status`. Exit 0 means logged in. A CLI that is not on `PATH` (spawn gives `ENOENT`) or not logged in is not offered.
 - **Run:** use the tested command lines in ticket 01 (research file on branch `research/headless-cli`), with the prompt on stdin. Do not use `claude --bare`: it ignores the OAuth login. Codex runs with `-C` set to an empty temp folder and reads the schema from a temp file.
@@ -134,10 +134,10 @@ The JSON schema for both CLIs (strict: every property required, `additionalPrope
 ```ts
 type Action = {
   kind: "answer" | "merge" | "fix" | "review" | "clean-up" | "unblock";
-  title: string;          /** imperative, ≤ 8 words */
-  reason: string;         /** one sentence */
-  threadIds: string[];    /** ≥ 1 */
-  prompt: string | null;  /** paste-ready message for the first thread's agent */
+  title: string /** imperative, ≤ 8 words */;
+  reason: string /** one sentence */;
+  threadIds: string[] /** ≥ 1 */;
+  prompt: string | null /** paste-ready message for the first thread's agent */;
 };
 type Answer = { actions: Action[] }; /** 0–7, in rank order */
 ```

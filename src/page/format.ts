@@ -36,7 +36,8 @@ export function stripKey(title: string, key: string): string {
 export const isKeyGroup = (b: Branch): boolean => b.threads.length > 0 && b.threads.every((t) => t.key === b.label);
 
 /** The one thread of a key group that folds into its row, else null. */
-export const folded = (b: Branch): ThreadNode | null => (isKeyGroup(b) && b.threads.length === 1 ? b.threads[0]! : null);
+export const folded = (b: Branch): ThreadNode | null =>
+  isKeyGroup(b) && b.threads.length === 1 ? b.threads[0]! : null;
 
 /** The Linear issue URL when the key prefix is a configured team, else null. */
 export function linearHref(key: string, linear: Tree["linear"]): string | null {

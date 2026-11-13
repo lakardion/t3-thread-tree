@@ -113,7 +113,11 @@ export function decodeThread(raw: unknown): Thread | null {
     status: str(t.status) ?? "idle",
     parentThreadId: str(lineage.parentThreadId),
     sideChat: lineage.sideChat === true,
-    pending: pending && { kind: str(pending.kind), createdAt: str(pending.createdAt), blocking: bool(pending.blocking) },
+    pending: pending && {
+      kind: str(pending.kind),
+      createdAt: str(pending.createdAt),
+      blocking: bool(pending.blocking),
+    },
     guestMessages: num(t.pendingGuestMessageCount),
     activityRunStatus: str(t.activityRunStatus),
     blockedOnThreadWait: t.blockedOnThreadWait === true,
@@ -167,7 +171,10 @@ export function decodeThread(raw: unknown): Thread | null {
     createdBy: str(t.createdBy),
     creationSource: str(t.creationSource),
     createdAt: str(t.createdAt),
-    goal: typeof goal.objective === "string" && typeof goal.status === "string" ? { objective: goal.objective, status: goal.status } : null,
+    goal:
+      typeof goal.objective === "string" && typeof goal.status === "string"
+        ? { objective: goal.objective, status: goal.status }
+        : null,
     tags: Array.isArray(t.tags) ? t.tags.filter((x): x is string => typeof x === "string") : [],
     pinned: typeof t.pinnedAt === "string",
   };
@@ -268,7 +275,10 @@ export function connectShell(opts: {
           opts.onConn("up");
           for (const v of Array.isArray(m.values) ? m.values : []) {
             const e = decodeItem(v);
-            if (e?.kind === "snapshot") (e.fresh = fresh), (fresh = false);
+            if (e?.kind === "snapshot") {
+              e.fresh = fresh;
+              fresh = false;
+            }
             if (e) opts.onEvent(e);
           }
           /** The server sends the next chunk only after an Ack. */

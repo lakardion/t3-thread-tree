@@ -137,10 +137,22 @@ function LoadingText({ text }: { text: string }) {
   );
 }
 
-function Row({ a, i, live, titles }: { a: BriefAction; i: number; live: Map<string, ThreadNode>; titles: Record<string, string> }) {
+function Row({
+  a,
+  i,
+  live,
+  titles,
+}: {
+  a: BriefAction;
+  i: number;
+  live: Map<string, ThreadNode>;
+  titles: Record<string, string>;
+}) {
   return (
     <li className="flex items-start gap-2.5 rounded-[8px] px-2 py-1.5 hover:bg-accent">
-      <span className="w-4 flex-none pt-px text-right font-mono text-[11px] text-muted-foreground tabular-nums">{i + 1}</span>
+      <span className="w-4 flex-none pt-px text-right font-mono text-[11px] text-muted-foreground tabular-nums">
+        {i + 1}
+      </span>
       <KindChip kind={a.kind} />
       <div className="min-w-0 flex-1">
         <div className="flex flex-wrap items-baseline gap-x-2">
@@ -178,7 +190,13 @@ export function BriefPanel(p: {
             generated {hhmm(s.generatedAt)} · {label}
           </span>
         )}
-        <Button variant="ghost" size="icon-xs" className="ml-auto text-muted-foreground" aria-label="Hide" onClick={p.close}>
+        <Button
+          variant="ghost"
+          size="icon-xs"
+          className="ml-auto text-muted-foreground"
+          aria-label="Hide"
+          onClick={p.close}
+        >
           <X />
         </Button>
       </div>

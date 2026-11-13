@@ -84,10 +84,7 @@ describe("onlyNeedsYou", () => {
   });
 
   test("drops a group with no thread left, and a project with no group left", () => {
-    const tree = [
-      branch("p1", [], [branch("g1", [thread("a", "working")])]),
-      branch("p2", [thread("b", "done")]),
-    ];
+    const tree = [branch("p1", [], [branch("g1", [thread("a", "working")])]), branch("p2", [thread("b", "done")])];
     expect(onlyNeedsYou(tree)).toEqual([]);
   });
 

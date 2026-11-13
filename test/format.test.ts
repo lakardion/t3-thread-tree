@@ -47,7 +47,12 @@ describe("stripKey", () => {
 
 describe("folded", () => {
   const thread = (key: string | null) => ({ id: `t-${key}`, key }) as ThreadNode;
-  const group = (label: string, threads: ThreadNode[], branches: Branch[] = []): Branch => ({ id: label, label, branches, threads });
+  const group = (label: string, threads: ThreadNode[], branches: Branch[] = []): Branch => ({
+    id: label,
+    label,
+    branches,
+    threads,
+  });
 
   test("a key group with one thread folds into it", () => {
     const t = thread("SHOP-1");

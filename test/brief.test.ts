@@ -1,5 +1,13 @@
 import { describe, expect, test } from "bun:test";
-import { briefInput, briefService, capMessage, filterAnswer, parseAnswer, type InputThread, type Outcome } from "../src/server/brief.ts";
+import {
+  briefInput,
+  briefService,
+  capMessage,
+  filterAnswer,
+  parseAnswer,
+  type InputThread,
+  type Outcome,
+} from "../src/server/brief.ts";
 import type { BriefAction } from "../src/shared/brief.ts";
 import type { Branch, ThreadNode } from "../src/shared/tree.ts";
 
@@ -43,9 +51,24 @@ describe("capMessage", () => {
 describe("briefInput", () => {
   test("takes every node of the tree, launched children included, with its last message", () => {
     const launched = node("L");
-    const tree = [branch([node("A", { children: [launched] })], [branch([node("B", { key: "ABC-1", detail: { request: "Approve rm" } as ThreadNode["detail"] })])])];
+    const tree = [
+      branch(
+        [node("A", { children: [launched] })],
+        [branch([node("B", { key: "ABC-1", detail: { request: "Approve rm" } as ThreadNode["detail"] })])],
+      ),
+    ];
     let asked: string[] = [];
-    const input = briefInput(tree, (ids) => ((asked = ids), new Map([["A", "done"], ["L", null]])), NOW);
+    const input = briefInput(
+      tree,
+      (ids) => (
+        (asked = ids),
+        new Map([
+          ["A", "done"],
+          ["L", null],
+        ])
+      ),
+      NOW,
+    );
     expect(asked.sort()).toEqual(["A", "B", "L"]);
     const a = input.find((t) => t.id === "A")!;
     expect(a).toMatchObject({ title: "Thread A", status: "your-turn", age: "3h", subthreads: 1, lastMessage: "done" });
@@ -53,7 +76,19 @@ describe("briefInput", () => {
   });
 
   test("keeps only the PR fields the ranking needs", () => {
-    const pr = { n: 7, url: "u", state: "open", draft: false, checks: "failing", review: null, conflicting: true, title: "t", additions: 1, deletions: 2, changedFiles: 3 } as const;
+    const pr = {
+      n: 7,
+      url: "u",
+      state: "open",
+      draft: false,
+      checks: "failing",
+      review: null,
+      conflicting: true,
+      title: "t",
+      additions: 1,
+      deletions: 2,
+      changedFiles: 3,
+    } as const;
     const [t] = briefInput([branch([node("A", { prs: [pr] })])], () => new Map(), NOW);
     expect(t!.prs).toEqual([{ n: 7, state: "open", draft: false, checks: "failing", review: null, conflicting: true }]);
   });
@@ -75,12 +110,18 @@ describe("parseAnswer", () => {
       { type: "item.completed", item: { type: "agent_message", text: "{}" } },
       { type: "item.completed", item: { type: "agent_message", text: JSON.stringify(ok) } },
       { type: "turn.completed" },
-    ].map((l) => JSON.stringify(l)).join("\n");
+    ]
+      .map((l) => JSON.stringify(l))
+      .join("\n");
     expect(parseAnswer("codex", out)).toEqual({ answer: ok });
   });
   test("codex: turn.failed gives its message", () => {
-    const out = [{ type: "error", message: "e" }, { type: "turn.failed", error: { message: "model not supported" } }]
-      .map((l) => JSON.stringify(l)).join("\n");
+    const out = [
+      { type: "error", message: "e" },
+      { type: "turn.failed", error: { message: "model not supported" } },
+    ]
+      .map((l) => JSON.stringify(l))
+      .join("\n");
     expect(parseAnswer("codex", out)).toEqual({ error: "model not supported" });
   });
   test("codex: bad JSON is a parse error", () => {
@@ -94,8 +135,17 @@ describe("parseAnswer", () => {
 });
 
 describe("filterAnswer", () => {
-  const threads = [{ id: "A", title: "Alpha" }, { id: "B", title: "Beta" }];
-  const action = (threadIds: string[], prompt: string | null = null) => ({ kind: "fix", title: "t", reason: "r", threadIds, prompt });
+  const threads = [
+    { id: "A", title: "Alpha" },
+    { id: "B", title: "Beta" },
+  ];
+  const action = (threadIds: string[], prompt: string | null = null) => ({
+    kind: "fix",
+    title: "t",
+    reason: "r",
+    threadIds,
+    prompt,
+  });
 
   test("drops unknown ids and actions with none left, keeps the order, saves titles", () => {
     const out = filterAnswer({ actions: [action(["B", "X"], "go"), action(["X"]), action(["A"])] }, threads);
@@ -120,7 +170,13 @@ describe("briefService", () => {
   const CLIS = Promise.resolve([{ id: "claude" as const, label: "Claude Haiku" }]);
   const post = (path: string, body?: unknown) =>
     new Request(`http://x${path}`, { method: "POST", body: body === undefined ? undefined : JSON.stringify(body) });
-  const done = (actions: BriefAction[] = []): Outcome => ({ status: "done", cli: "claude", generatedAt: "t", actions, titles: {} });
+  const done = (actions: BriefAction[] = []): Outcome => ({
+    status: "done",
+    cli: "claude",
+    generatedAt: "t",
+    actions,
+    titles: {},
+  });
 
   /** A run that ends when the test calls `finish`, or with `null` on cancel. */
   function setup() {
