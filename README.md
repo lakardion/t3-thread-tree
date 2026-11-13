@@ -16,6 +16,7 @@ _Screenshots use made-up data from `bun run demo`._
 - **Launch lineage.** A thread that an agent launched, with no issue key, nests under the thread that launched it. T3 does not store this link, so the app reads it from T3's local database.
 - **PR stacks.** Issue groups that share a stack sit next to each other, in stack order, on one rail with the label "PR stack · N PRs · base `main`". Each thread in a stack shows its position, for example `2/4`.
 - **PR marks.** Each row shows its first two PRs. A PR chip shows checks (dot or ring), review (check or cross), conflicts (warning), draft (dashed border), merged (violet) and closed (struck through).
+- **Stable order.** Rows keep their place while threads update. A new thread, group or project shows at the bottom of its list.
 - **Status at a glance.** Each row starts with an icon, a phrase and the elapsed time, for example "Working 12m" or "Approval · 3m". Color is never the only sign.
 
   | Color                | Statuses                                                            |

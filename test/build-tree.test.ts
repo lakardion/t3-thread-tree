@@ -32,7 +32,7 @@ function shell(id: string, title: string, over: Record<string, unknown> = {}) {
     hasActionableProposedPlan: false,
     itemCount: 1,
     visibleItemCount: 1,
-    createdAt: "2026-11-12T08:00:00.000Z",
+    createdAt: new Date(Date.parse("2026-11-12T08:00:00.000Z") + clock * 1000).toISOString(),
     updatedAt: `2026-11-12T09:${String(clock).padStart(2, "0")}:00.000Z`,
     archivedAt: null,
     settledOverride: null,
@@ -179,7 +179,7 @@ describe("placement", () => {
     ]);
     const p = tree[0];
     expect(labels(p.branches)).toEqual(["SHOP-4319", "Reviews", "No issue key"]);
-    expect(labels(child(tree, "frontend", "Reviews").branches)).toEqual(["No issue key", "SHOP-4319"]);
+    expect(labels(child(tree, "frontend", "Reviews").branches)).toEqual(["SHOP-4319", "No issue key"]);
     expect(titles(child(tree, "frontend", "Reviews", "SHOP-4319").threads)).toEqual(["Review #15708 SHOP-4319"]);
   });
 
@@ -231,18 +231,53 @@ describe("placement", () => {
 });
 
 describe("order", () => {
-  test("projects and threads newest first; latest update includes nested threads", () => {
+  test("projects, groups and threads in creation order, oldest first", () => {
     const tree = build(
       [
-        shell("old", "old root"),
         shell("b1", "backend thing", { projectId: "p2" }),
+        shell("old", "old root"),
         shell("new", "new root"),
         shell("mcp:kid", "kid of old"),
       ],
       { "mcp:kid": "old" },
     );
-    expect(labels(tree)).toEqual(["frontend", "backend"]);
+    expect(labels(tree)).toEqual(["backend", "frontend"]);
     expect(titles(child(tree, "frontend", "No issue key").threads)).toEqual(["old root", "new root"]);
+  });
+
+  test("an updatedAt or run change does not move a row", () => {
+    const a = shell("a", "SHOP-1 a");
+    const b = shell("b", "SHOP-2 b");
+    const change = {
+      updatedAt: "2026-11-12T23:00:00.000Z",
+      activityRunStatus: "running",
+      pullRequests: [pr(5, "created")],
+    };
+    const bump = (t: typeof a) => ({ ...t, ...change });
+    expect(labels(build([a, b])[0].branches)).toEqual(["SHOP-1", "SHOP-2"]);
+    expect(labels(build([bump(a), b])[0].branches)).toEqual(["SHOP-1", "SHOP-2"]);
+    expect(labels(build([a, bump(b)])[0].branches)).toEqual(["SHOP-1", "SHOP-2"]);
+  });
+
+  test("same createdAt: the thread id breaks the tie", () => {
+    const at = { createdAt: "2026-11-12T08:00:00.000Z" };
+    const tree = build([shell("b", "second", at), shell("a", "first", at)]);
+    expect(titles(child(tree, "frontend", "No issue key").threads)).toEqual(["first", "second"]);
+  });
+
+  test("a new thread appends at the end of its group", () => {
+    const tree = build([shell("5", "old root"), shell("0", "new root")]);
+    expect(titles(child(tree, "frontend", "No issue key").threads)).toEqual(["old root", "new root"]);
+  });
+
+  test("a new group appends at the end of its section", () => {
+    const tree = build([
+      shell("r", "Review #1 without key"),
+      shell("n", "loose thread"),
+      shell("k1", "SHOP-1 first"),
+      shell("k2", "SHOP-2 second"),
+    ]);
+    expect(labels(tree[0].branches)).toEqual(["SHOP-1", "SHOP-2", "Reviews", "No issue key"]);
   });
 });
 
@@ -268,7 +303,7 @@ describe("PR stack", () => {
     expect(pos("WEB-9")).toBeNull();
   });
 
-  test("stack-mate groups sit together in stack order, at the newest member's slot", () => {
+  test("stack-mate groups sit together in stack order, at the oldest member's slot", () => {
     expect(labels(build(stacked())[0].branches)).toEqual(["WEB-1", "WEB-2", "WEB-3", "WEB-9"]);
   });
 
@@ -505,6 +540,7 @@ describe("details", () => {
 
   test("every field decodes into the detail and the PR counts", () => {
     const full = shell("a", "SHOP-1 x", {
+      createdAt: "2026-11-12T08:00:00.000Z",
       pendingRuntimeRequest: { id: "r", kind: "command", createdAt: "2026-11-12T11:57:00.000Z" },
       lastError: "boom",
       lastErrorClass: "provider",
@@ -552,7 +588,7 @@ describe("details", () => {
   });
 
   test("no optional field gives nulls, false and empty lists", () => {
-    const t = node([shell("a", "SHOP-1 x", { pullRequests: [pr(1, "created")] })], "a");
+    const t = node([shell("a", "SHOP-1 x", { pullRequests: [pr(1, "created")], createdAt: EMPTY.createdAt })], "a");
     expect(t.detail).toEqual(EMPTY);
     expect(t.prs[0]).toMatchObject({ additions: null, deletions: null, changedFiles: null });
   });

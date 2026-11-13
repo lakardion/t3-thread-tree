@@ -52,8 +52,8 @@ export type BuildInput = {
   now: number;
 };
 
-type Node = ThreadNode & { t: Thread; latest: string };
-type Group = { key: string; nodes: Node[]; latest: string };
+type Node = ThreadNode & { t: Thread; first: string };
+type Group = { key: string; nodes: Node[]; first: string };
 type Stack = { set: Set<number>; threads: Thread[]; order: number[] };
 
 const stackPrs = (t: Thread) => t.prs.filter((p) => STACK_SOURCES.has(p.source) && p.state === "open").map((p) => p.n);
@@ -109,7 +109,9 @@ export function detailOf(t: Thread, now: number, all: Map<string, Thread>): Omit
     pinned: t.pinned,
   };
 }
-const byLatest = <T extends { latest: string }>(a: T, b: T) => b.latest.localeCompare(a.latest);
+/** Creation time in ms, zero-padded so a string compare orders it, then the id. A bad date sorts first. */
+const creationKey = (t: Thread) => `${String(Date.parse(t.createdAt ?? "") || 0).padStart(16, "0")} ${t.id}`;
+const byFirst = <T extends { first: string }>(a: T, b: T) => a.first.localeCompare(b.first);
 
 /**
  * Stacks are connected sets of open stack PRs across threads. The order comes from the thread with
@@ -180,7 +182,7 @@ export function buildTree(input: BuildInput): Branch[] {
       prs: t.prs.filter((p) => p.source !== "stack" && p.source !== "stack-dismissed").map(prNode),
       detail: { ...detailOf(t, now, all), launchedBy: null },
       children: [],
-      latest: t.updatedAt,
+      first: creationKey(t),
     });
   }
 
@@ -199,7 +201,7 @@ export function buildTree(input: BuildInput): Branch[] {
   const addTo = (projectId: string, key: string, n: Node) => {
     const g = groups.get(projectId) ?? new Map<string, Group>();
     groups.set(projectId, g);
-    const grp = g.get(key) ?? { key, nodes: [], latest: "" };
+    const grp = g.get(key) ?? { key, nodes: [], first: "" };
     g.set(key, grp);
     grp.nodes.push(n);
   };
@@ -218,23 +220,23 @@ export function buildTree(input: BuildInput): Branch[] {
       n.detail.launchedBy = { title: spawner.title || spawner.id, href: hrefOf(environmentId, spawner.id) };
   }
 
-  /** The latest update of a node includes its nested threads. Sorts children on the way. */
+  /** The creation key of a node is the oldest of its own and its nested threads'. Sorts children on the way. */
   const settle = (n: Node): string => {
-    for (const c of n.children as Node[]) n.latest = [n.latest, settle(c)].toSorted().at(-1)!;
-    (n.children as Node[]).sort(byLatest);
-    return n.latest;
+    for (const c of n.children as Node[]) n.first = [n.first, settle(c)].toSorted()[0]!;
+    (n.children as Node[]).sort(byFirst);
+    return n.first;
   };
 
-  const out: { branch: Branch; latest: string }[] = [];
+  const out: { branch: Branch; first: string }[] = [];
   for (const [projectId, gmap] of groups) {
     const gs = [...gmap.values()];
     for (const g of gs) {
       g.nodes.forEach(settle);
-      g.nodes.sort(byLatest);
-      g.latest = g.nodes[0].latest;
+      g.nodes.sort(byFirst);
+      g.first = g.nodes[0].first;
     }
-    gs.sort(byLatest);
-    /** Groups that share a stack sit together, in stack order, at the slot of the newest member. */
+    gs.sort(byFirst);
+    /** Groups that share a stack sit together, in stack order, at the slot of the oldest member. */
     const stackOf = (g: Group) => g.nodes.map((n) => stackIdOf.get(n.id)).find((s) => s !== undefined);
     const minPos = (g: Group, si: number) =>
       Math.min(...g.nodes.filter((n) => stackIdOf.get(n.id) === si).map((n) => n.stack?.pos ?? 0));
@@ -295,14 +297,14 @@ export function buildTree(input: BuildInput): Branch[] {
         branches,
         threads: [],
       },
-      latest: gs[0].latest,
+      first: gs[0].first,
     });
   }
-  return out.toSorted(byLatest).map((o) => o.branch);
+  return out.toSorted(byFirst).map((o) => o.branch);
 }
 
 /** Strips the build-only fields before the node goes on the wire. */
-const clean = ({ t: _t, latest: _l, children, ...n }: Node): ThreadNode => ({
+const clean = ({ t: _t, first: _f, children, ...n }: Node): ThreadNode => ({
   ...n,
   children: (children as Node[]).map(clean),
 });
