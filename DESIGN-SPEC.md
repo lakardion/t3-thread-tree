@@ -8,18 +8,18 @@ The design merges two proposals: [A, "Harbor"](.wayfinder/design-overhaul/resear
 
 Each row gives the choice and its one reason.
 
-| Part            | Choice                                                                                                                                    | Reason                                                                     |
-| --------------- | ----------------------------------------------------------------------------------------------------------------------------------------- | -------------------------------------------------------------------------- |
-| Palette         | Harbor (A), with the stronger borders of B and no lowered text opacity (B)                                                                | Only Harbor has a dot token and a text token for each status.              |
-| Row             | One line of 36 px with a status column: icon, phrase and elapsed time (merge)                                                             | The tree stays dense and the phrase is in view.                            |
-| Details         | An inline details block below the row, opened by a button (B)                                                                             | It works with keyboard and touch, and it stays open during stream updates. |
-| Details content | The curated set of A: no ids, no housekeeping fields                                                                                      | Each line helps a decision, and the decoder stays small.                   |
-| Motion          | Working: the ring turns (B). Needs input: the left edge breathes (A). All other states are still.                                         | Motion then means "alive" or "waiting for you".                            |
-| Projects        | Cards (A) with a neutral header gradient (B)                                                                                              | Color then always means status.                                            |
-| Gradients       | Color gradients for state and for the stack only (A, reduced)                                                                             | Calm rows stay flat, so a gradient keeps its meaning.                      |
-| Layout          | Fold single-thread key groups (A), stack rail (A), centered column of 1200 px maximum (B), one status shape per thread on closed rows (A) | Fewer rows, a visible stack, and no wide gap between title and chips.      |
-| Header          | Attention summary (A), "Needs you" filter (A), theme choice (B), first-load skeleton (A)                                                  | They answer "what needs me?" before the user reads the tree.               |
-| Inventory       | Row: status phrase, elapsed time, age, PR marks. All other useful fields: details.                                                        | The row holds only what the user scans.                                    |
+| Part            | Choice                                                                                                                                             | Reason                                                                     |
+| --------------- | -------------------------------------------------------------------------------------------------------------------------------------------------- | -------------------------------------------------------------------------- |
+| Palette         | Harbor (A), with the stronger borders of B and no lowered text opacity (B)                                                                         | Only Harbor has a dot token and a text token for each status.              |
+| Row             | One line of 36 px with a status column: icon, phrase and elapsed time (merge)                                                                      | The tree stays dense and the phrase is in view.                            |
+| Details         | An inline details block below the row, opened by a button (B)                                                                                      | It works with keyboard and touch, and it stays open during stream updates. |
+| Details content | The curated set of A: no ids, no housekeeping fields                                                                                               | Each line helps a decision, and the decoder stays small.                   |
+| Motion          | Working: the ring turns (B). Needs input: the left edge breathes (A). All other states are still. A live change fades in and flashes the row once. | Motion then means "alive" or "waiting for you".                            |
+| Projects        | Cards (A) with a neutral header gradient (B)                                                                                                       | Color then always means status.                                            |
+| Gradients       | Color gradients for state and for the stack only (A, reduced)                                                                                      | Calm rows stay flat, so a gradient keeps its meaning.                      |
+| Layout          | Fold single-thread key groups (A), stack rail (A), centered column of 1200 px maximum (B), one status shape per thread on closed rows (A)          | Fewer rows, a visible stack, and no wide gap between title and chips.      |
+| Header          | Attention summary (A), "Needs you" filter (A), theme choice (B), first-load skeleton (A)                                                           | They answer "what needs me?" before the user reads the tree.               |
+| Inventory       | Row: status phrase, elapsed time, age, PR marks. All other useful fields: details.                                                                 | The row holds only what the user scans.                                    |
 
 Rejected from both proposals: the last message of a thread, in any place; subagent and background task counts, in any place; a model chip, tags, pin, limit and stop flags on the row (they are in details); hashed project hues (A); exhaustive details with ids (B); a hover card (A); a popover for extra PR links (B).
 
@@ -235,6 +235,32 @@ Icons are 12 px. If an icon name is not in the installed `lucide-react`, use the
 ```
 
 With reduced motion, the shape, the phrase and the static edge still tell each status apart.
+
+### Change motion
+
+A component animates a value change only while it is mounted. A first load and a group that opens do not animate. After T3 comes back, the rows stay mounted, so each row that changed during the outage animates once. A tick of elapsed time does not animate, because the phrase key leaves out the time.
+
+- The status icon, the phrase and each PR mark (checks, review, conflict, number with state and draft) crossfade. The new content fades in over 200 ms with ease-out. The old content fades out over 150 ms with ease-in.
+- The new status icon also scales from 0.5 to 1 in 200 ms with a small overshoot. Its color and the phrase color change in 300 ms.
+- The row flashes once in the new status color. The flash goes from 2 × `--wash` to 0 over 1 s with ease-out.
+- With reduced motion, none of this runs. The new value shows at once.
+
+```css
+.swap-in {
+  animation: swap-in 200ms ease-out;
+}
+.swap-scale {
+  animation:
+    swap-in 200ms ease-out,
+    swap-scale 200ms cubic-bezier(0.34, 1.56, 0.64, 1);
+}
+.swap-out {
+  animation: swap-out 150ms ease-in forwards;
+}
+.row-pulse {
+  animation: row-pulse 1s ease-out;
+}
+```
 
 ## Gradients
 
@@ -552,4 +578,5 @@ export type Branch = {
 - `bun run demo` in light and dark mode, at 1400 px and at 390 px wide. `scripts/demo.ts` has a thread for each status that the key draws.
 - Keyboard: Tab reaches each link and button, and the focus ring is visible.
 - Reduced motion: no animation runs.
+- `PUSH=1 bun run demo` shows each change transition.
 - A thread with absent optional fields shows no empty line, chip or mark.

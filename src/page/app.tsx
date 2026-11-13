@@ -21,6 +21,7 @@ import { countAttention, needsYou, onlyNeedsYou } from "./attention.ts";
 import { BriefControls, BriefPanel, type Offered } from "./brief.tsx";
 import { ago, folded, isKeyGroup, linearHref, phraseWith, stackRuns, stripKey } from "./format.ts";
 import { STATUS, StatusIcon } from "./status-icon.tsx";
+import { Swap, useChanges } from "./swap.tsx";
 
 const TOKEN_CMD =
   "~/.t3/bin/t3 auth session issue --scope orchestration:read --label thread-tree --ttl 52w --token-only";
@@ -80,43 +81,51 @@ function PrChip({ p }: { p: PrNode }) {
         CHIP,
         "font-mono focus-visible:ring-0",
         p.draft && "border-dashed",
+        "duration-300 motion-reduce:transition-none",
         p.state === "merged" && "text-pr-merged",
-        p.state === "closed" && "line-through",
       )}
       asChild
     >
       <a href={p.url} target="_blank" rel="noreferrer" title={p.draft ? `${p.state} · draft` : p.state}>
-        #{p.n}
-        {p.checks === "passing" && (
-          <Mark title="Checks passing">
-            <span className="size-1.5 rounded-full bg-status-done" />
-          </Mark>
-        )}
-        {p.checks === "failing" && (
-          <Mark title="Checks failing">
-            <span className="size-1.5 rounded-full bg-status-failed" />
-          </Mark>
-        )}
-        {p.checks === "pending" && (
-          <Mark title="Checks pending">
-            <span className="size-1.5 rounded-full border border-status-needs-input" />
-          </Mark>
-        )}
-        {p.review === "approved" && (
-          <Mark title="Approved">
-            <Check className="text-status-done" />
-          </Mark>
-        )}
-        {p.review === "changes-requested" && (
-          <Mark title="Changes requested">
-            <X className="text-status-failed" />
-          </Mark>
-        )}
-        {p.conflicting && (
-          <Mark title="Merge conflict">
-            <TriangleAlert className="text-status-needs-input" />
-          </Mark>
-        )}
+        <Swap k={`${p.state}|${p.draft}`}>
+          <span className={cn(p.state === "closed" && "line-through")}>#{p.n}</span>
+        </Swap>
+        <Swap k={p.checks ?? ""}>
+          {p.checks === "passing" && (
+            <Mark title="Checks passing">
+              <span className="size-1.5 rounded-full bg-status-done" />
+            </Mark>
+          )}
+          {p.checks === "failing" && (
+            <Mark title="Checks failing">
+              <span className="size-1.5 rounded-full bg-status-failed" />
+            </Mark>
+          )}
+          {p.checks === "pending" && (
+            <Mark title="Checks pending">
+              <span className="size-1.5 rounded-full border border-status-needs-input" />
+            </Mark>
+          )}
+        </Swap>
+        <Swap k={p.review ?? ""}>
+          {p.review === "approved" && (
+            <Mark title="Approved">
+              <Check className="text-status-done" />
+            </Mark>
+          )}
+          {p.review === "changes-requested" && (
+            <Mark title="Changes requested">
+              <X className="text-status-failed" />
+            </Mark>
+          )}
+        </Swap>
+        <Swap k={p.conflicting ? "1" : ""}>
+          {p.conflicting && (
+            <Mark title="Merge conflict">
+              <TriangleAlert className="text-status-needs-input" />
+            </Mark>
+          )}
+        </Swap>
       </a>
     </Badge>
   );
@@ -210,6 +219,7 @@ function ThreadRow({ t, chip }: { t: ThreadNode; chip?: string }) {
   const dim = useContext(NeedsOnly) && !needsYou(t.status);
   const linear = useContext(Linear);
   const chipHref = chip ? linearHref(chip, linear) : null;
+  const pulse = useChanges(t.status);
   return (
     <Collapsible asChild open={open.has(t.id)} onOpenChange={() => toggle(t.id)}>
       <li className="my-px">
@@ -218,14 +228,16 @@ function ThreadRow({ t, chip }: { t: ThreadNode; chip?: string }) {
           data-status={t.status}
         >
           <StatusIcon t={t} />
-          <span
+          {pulse > 0 && <span key={pulse} aria-hidden className={cn("row-pulse", STATUS[t.status].shape)} />}
+          <Swap
+            k={`${t.status}|${t.phrase}`}
             className={cn(
-              "w-[120px] flex-none truncate text-xs font-medium",
+              "w-[120px] flex-none grid-cols-[minmax(0,1fr)] text-xs font-medium transition-colors duration-300 motion-reduce:transition-none [&>*]:truncate",
               dim ? "text-muted-foreground" : STATUS[t.status].text,
             )}
           >
             {phraseWith(t, now)}
-          </span>
+          </Swap>
           {chip && (
             <Badge
               variant="outline"

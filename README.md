@@ -17,6 +17,7 @@ _Screenshots use made-up data from `bun run demo`._
 - **PR stacks.** Issue groups that share a stack sit next to each other, in stack order, on one rail with the label "PR stack · N PRs · base `main`". Each thread in a stack shows its position, for example `2/4`.
 - **PR marks.** Each row shows its first two PRs. A PR chip shows checks (dot or ring), review (check or cross), conflicts (warning), draft (dashed border), merged (violet) and closed (struck through).
 - **Stable order.** Rows keep their place while threads update. A new thread, group or project shows at the bottom of its list.
+- **Status changes move.** A new status, phrase or PR mark fades in. The row flashes once in the new status color. With reduced motion, changes show at once.
 - **Status at a glance.** Each row starts with an icon, a phrase and the elapsed time, for example "Working 12m" or "Approval · 3m". Color is never the only sign.
 
   | Color                | Statuses                                                            |
@@ -73,7 +74,7 @@ Open <http://127.0.0.1:4773>.
 - The app starts even when T3 is not running. It retries every 3 s. Until T3 is back, the page shows the last tree, greyed, with the time of the last update.
 - If T3 rejects the token, the page shows the command to issue a new one.
 
-To see the UI without T3, run `bun run demo` and open <http://127.0.0.1:4774>. The demo uses a stub brief runner: set `BRIEF=failed`, `BRIEF=empty` or `BRIEF=rules` to see the other outcomes, and `CLIS=0` to offer no CLI.
+To see the UI without T3, run `bun run demo` and open <http://127.0.0.1:4774>. The demo uses a stub brief runner: set `BRIEF=failed`, `BRIEF=empty` or `BRIEF=rules` to see the other outcomes, `CLIS=0` to offer no CLI, and `PUSH=1` to fake a live change every 3 seconds.
 
 ## How it works
 

@@ -159,9 +159,55 @@
       opacity: 0.45;
     }
   }
+  .swap-in {
+    animation: swap-in 200ms ease-out;
+  }
+  .swap-scale {
+    animation:
+      swap-in 200ms ease-out,
+      swap-scale 200ms cubic-bezier(0.34, 1.56, 0.64, 1);
+  }
+  .swap-out {
+    animation: swap-out 150ms ease-in forwards;
+    pointer-events: none;
+  }
+  .row-pulse {
+    position: absolute;
+    inset: 0;
+    z-index: -1;
+    border-radius: inherit;
+    background: color-mix(in oklch, currentColor calc(var(--wash) * 2), transparent);
+    opacity: 0;
+    pointer-events: none;
+    animation: row-pulse 1s ease-out;
+  }
+  @keyframes swap-in {
+    from {
+      opacity: 0;
+    }
+  }
+  @keyframes swap-out {
+    to {
+      opacity: 0;
+    }
+  }
+  @keyframes swap-scale {
+    from {
+      scale: 0.5;
+    }
+  }
+  @keyframes row-pulse {
+    from {
+      opacity: 1;
+    }
+  }
   @media (prefers-reduced-motion: reduce) {
     .thread-row[data-status="working"] .status-icon,
-    .thread-row[data-status="needs-input"]::before {
+    .thread-row[data-status="needs-input"]::before,
+    .swap-in,
+    .swap-scale,
+    .swap-out,
+    .row-pulse {
       animation: none;
     }
   }
@@ -172,6 +218,7 @@
 
   .thread-row {
     position: relative;
+    isolation: isolate;
   }
   .thread-row[data-status="needs-input"]::before,
   .thread-row[data-status="working"]::before {

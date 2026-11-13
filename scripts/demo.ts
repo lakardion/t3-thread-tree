@@ -205,7 +205,7 @@ const treeFor = (settled: boolean) =>
     linear: { workspace: "acme", teams: ["SHOP"] },
     projects: projectsFor(settled),
   });
-const trees = { open: treeFor(false), settled: treeFor(true) };
+let trees = { open: treeFor(false), settled: treeFor(true) };
 
 /** The model part of the sample brief. Code makes the `answer`, `fix` and `merge` actions from the tree, so these threads have none of them. `demo-27` is settled, so its link shows struck through. */
 const SAMPLE: BriefAction[] = [
@@ -278,6 +278,45 @@ const brief = briefService({
   run: stubRun,
 });
 
+const byId = (id: string) => threads.find((th) => th.id === id)!;
+const setPr = (id: string, n: number, over: Partial<Pr>) => {
+  const th = byId(id);
+  th.prs = th.prs.map((p) => (p.n === n ? { ...p, ...over } : p));
+};
+const touch = (id: string, over: Partial<Thread>) => Object.assign(byId(id), { updatedAt: ago(0) }, over);
+const completedNow = () => ({ status: "completed", activityRunStatus: null, latestRunCompletedAt: ago(0) });
+const runningNow = () => ({ status: "running", latestRunStartedAt: ago(0), activityRunStartedAt: ago(0) });
+
+/** Each step changes threads the way a live push would. The last step undoes the others, so the loop repeats. */
+const STEPS: (() => void)[] = [
+  () => touch("m1", completedNow()),
+  () => setPr("demo-1", 2101, { checks: "passing" }),
+  () => touch("demo-18", runningNow()),
+  () => (setPr("demo-1", 2101, { review: "approved" }), setPr("demo-4", 2107, { mergeability: null })),
+  () => setPr("demo-24", 3004, { draft: null }),
+  () => (setPr("demo-24", 3004, { state: "merged" }), setPr("demo-24", 3001, { state: "closed" })),
+  () => (touch("demo-12", runningNow()), touch("m1", runningNow())),
+  () => {
+    setPr("demo-1", 2101, { checks: "pending", review: null });
+    setPr("demo-4", 2107, { mergeability: "conflicting" });
+    setPr("demo-24", 3004, { draft: true, state: "open" });
+    setPr("demo-24", 3001, { state: "open" });
+    touch("demo-18", { status: "queued", activityRunStatus: null });
+    touch("demo-12", { status: "failed", activityRunStatus: null });
+  },
+];
+
+const pushes = new Set<() => void>();
+/** `PUSH=1` applies one fake live change every 3 s, in a loop, and pushes the new tree to each open stream. */
+if (process.env.PUSH === "1") {
+  let step = 0;
+  setInterval(() => {
+    STEPS[step++ % STEPS.length]();
+    trees = { open: treeFor(false), settled: treeFor(true) };
+    pushes.forEach((push) => push());
+  }, 3000);
+}
+
 const server = Bun.serve({
   hostname: "127.0.0.1",
   port: Number(process.env.PORT ?? 4774),
@@ -287,19 +326,22 @@ const server = Bun.serve({
     "/events": async (req) => {
       server.timeout(req, 0);
       await Bun.sleep(Number(process.env.DELAY ?? 0));
-      const tree = new URL(req.url).searchParams.get("settled") === "1" ? trees.settled : trees.open;
+      const settled = new URL(req.url).searchParams.get("settled") === "1";
       const enc = new TextEncoder();
       let send: (event: string, data: string) => void;
+      const push = () => send("", settled ? trees.settled : trees.open);
       return new Response(
         new ReadableStream({
           start(ctrl) {
             send = (event, data) => ctrl.enqueue(enc.encode(`${event ? `event: ${event}\n` : ""}data: ${data}\n\n`));
             listeners.add(send);
-            send("", tree);
+            pushes.add(push);
+            push();
             send("brief", JSON.stringify(brief.state()));
           },
           cancel() {
             listeners.delete(send);
+            pushes.delete(push);
           },
         }),
         { headers: { "Content-Type": "text/event-stream", "Cache-Control": "no-store" } },
