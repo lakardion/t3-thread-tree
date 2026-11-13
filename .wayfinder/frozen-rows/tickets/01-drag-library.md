@@ -2,7 +2,7 @@
 title: Which drag library reorders the tree?
 type: wayfinder:research
 status: open
-assignee:
+assignee: claude (frozen-rows-01)
 blocked-by: []
 ---
 
