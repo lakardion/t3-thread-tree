@@ -1,6 +1,6 @@
 ---
 label: wayfinder:map
-status: open
+status: closed
 created: 2026-11-13
 ---
 
@@ -37,6 +37,8 @@ The thread tree page has a "What's next" button. A click runs a local agent CLI 
 - [Build the brief runner (input, CLI run, parse)](tickets/06-brief-runner.md): `src/server/brief.ts` gives `detectClis`, `briefInput`, `runBrief` → `{ done, cancel }`; SQLite `lastMessages` in `lineage.ts`; both CLIs smoke-tested.
 
 - [Add the brief endpoints (detect, run, cancel, last brief)](tickets/07-brief-endpoints.md): `briefService` in `brief.ts` serves `/brief/clis`, `/brief/run` (202/400/409), `/brief/cancel`, and the named SSE event `brief`; the demo has a stub runner with `BRIEF=failed|empty` and `CLIS=0`.
+
+- [Build the "What's next" button and the inline brief panel](tickets/08-brief-panel.md): `src/page/brief.tsx` gives the split button and the panel; `App` reads the SSE `brief` event; the close button hides the panel until the next run. Approved by the user.
 
 Decided at charting (by the user):
 

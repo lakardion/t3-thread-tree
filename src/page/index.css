@@ -211,3 +211,38 @@
     background: linear-gradient(135deg, color-mix(in oklch, var(--primary) 10%, var(--card)), var(--card));
   }
 }
+
+@layer components {
+  .brief-loading {
+    background: linear-gradient(90deg, var(--muted-foreground) 30%, var(--primary) 50%, var(--muted-foreground) 70%);
+    background-size: 300% 100%;
+    background-clip: text;
+    color: transparent;
+    animation: brief-shimmer 2.2s linear infinite;
+  }
+  .brief-loading > span {
+    display: inline-block;
+    white-space: pre;
+    animation: brief-weight 1.6s ease-in-out infinite;
+  }
+  @keyframes brief-shimmer {
+    from {
+      background-position: 100% 0;
+    }
+    to {
+      background-position: -50% 0;
+    }
+  }
+  @keyframes brief-weight {
+    50% {
+      font-weight: 700;
+    }
+  }
+  @media (prefers-reduced-motion: reduce) {
+    .brief-loading,
+    .brief-loading > span {
+      animation: none;
+      color: var(--muted-foreground);
+    }
+  }
+}

@@ -20,6 +20,7 @@ import {
   type LucideIcon,
 } from "lucide-react";
 import { createRoot } from "react-dom/client";
+import type { BriefState, Cli } from "../shared/brief.ts";
 import { allThreads, type Branch, type PrNode, type Status, type ThreadNode, type Tree } from "../shared/tree.ts";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { Badge } from "@/components/ui/badge";
@@ -34,6 +35,7 @@ import { ToggleGroup, ToggleGroupItem } from "@/components/ui/toggle-group";
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
 import { cn } from "@/lib/utils";
 import { countAttention, needsYou, onlyNeedsYou } from "./attention.ts";
+import { BriefControls, BriefPanel, type Offered } from "./brief.tsx";
 import { ago, folded, isKeyGroup, linearHref, phraseWith, stackRuns, stripKey } from "./format.ts";
 
 const TOKEN_CMD =
@@ -55,6 +57,7 @@ const CLOSED_KEY = "thread-tree:closed";
 const SETTLED_KEY = "thread-tree:settled";
 const FILTER_KEY = "thread-tree:filter";
 const THEME_KEY = "thread-tree:theme";
+const CLI_KEY = "thread-tree:cli";
 const THEMES = ["system", "light", "dark"] as const;
 type Theme = (typeof THEMES)[number];
 
@@ -84,7 +87,7 @@ const Details = createContext<{ open: Set<string>; toggle: (id: string) => void;
 const NeedsOnly = createContext(false);
 const Linear = createContext<Tree["linear"]>(null);
 
-const StatusIcon = ({ t }: { t: ThreadNode }) => {
+export const StatusIcon = ({ t }: { t: ThreadNode }) => {
   const { icon: Icon, shape } = STATUS[t.status];
   return (
     <Tooltip>
@@ -460,6 +463,16 @@ function App() {
   const [now, setNow] = useState(Date.now);
   const [shown, setShown] = useState(() => new Set<string>());
   const [closed, setClosed] = useState(() => new Set<string>(JSON.parse(load(CLOSED_KEY) ?? "[]") as string[]));
+  const [brief, setBrief] = useState<BriefState>({ status: "idle" });
+  const [clis, setClis] = useState<Offered | null>(null);
+  const [cli, setCli] = useState(load(CLI_KEY) as Cli | null);
+  const [hideBrief, setHideBrief] = useState(false);
+
+  useEffect(() => {
+    fetch("/brief/clis")
+      .then((r) => r.json() as Promise<Offered>)
+      .then(setClis, () => setClis([]));
+  }, []);
 
   useEffect(() => {
     const id = setInterval(() => setNow(Date.now()), 60_000);
@@ -470,6 +483,7 @@ function App() {
     save(SETTLED_KEY, settled ? "1" : "0");
     const es = new EventSource(settled ? "/events?settled=1" : "/events");
     es.onmessage = (e) => setTree(JSON.parse(e.data) as Tree);
+    es.addEventListener("brief", (e) => setBrief(JSON.parse(e.data) as BriefState));
     return () => es.close();
   }, [settled]);
 
@@ -505,6 +519,13 @@ function App() {
       }),
     show: (id: string) => setShown((s) => new Set(s).add(id)),
   };
+  const pick = clis?.find((c) => c.id === cli)?.id ?? clis?.[0]?.id;
+  const runBrief = () => {
+    if (!pick) return;
+    setHideBrief(false);
+    fetch(`/brief/run?settled=${settled ? 1 : 0}`, { method: "POST", body: JSON.stringify({ cli: pick }) });
+  };
+  const live = new Map((tree?.projects ?? []).flatMap(allThreads).map((t) => [t.id, t]));
   const counts = countAttention(tree?.projects ?? []);
   const connecting = !tree || tree.conn === "connecting";
   const projects = connecting ? undefined : needsOnly ? onlyNeedsYou(tree.projects) : tree.projects;
@@ -546,6 +567,13 @@ function App() {
             Needs you
           </ToggleGroupItem>
         </ToggleGroup>
+        <BriefControls
+          clis={clis}
+          cli={pick}
+          setCli={(c) => (setCli(c), save(CLI_KEY, c))}
+          running={brief.status === "running"}
+          run={runBrief}
+        />
         <div className="ml-auto flex items-center gap-2">
           <Switch id="settled" checked={settled} onCheckedChange={setSettled} />
           <Label htmlFor="settled" className="font-normal">
@@ -579,6 +607,16 @@ function App() {
             <code className="text-xs select-all">{TOKEN_CMD}</code>
           </AlertDescription>
         </Alert>
+      )}
+      {!hideBrief && brief.status !== "idle" && (
+        <BriefPanel
+          state={brief}
+          clis={clis}
+          live={live}
+          run={runBrief}
+          cancel={() => fetch("/brief/cancel", { method: "POST" })}
+          close={() => setHideBrief(true)}
+        />
       )}
       <Details value={details}>
       <NeedsOnly value={needsOnly}>
