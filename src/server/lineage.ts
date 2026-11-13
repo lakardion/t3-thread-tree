@@ -61,6 +61,11 @@ export function openLineage(path = join(USERDATA, "statev2.sqlite")) {
         for (const child of launchedIds(row.result)) if (!next.has(child)) next.set(child, row.caller);
       callers = next;
     },
+    /** Carry the scan result across a Worker boundary. */
+    entries: () => [...callers],
+    seed(e: [string, string][]) {
+      callers = new Map(e);
+    },
     /** Tool-call caller first, then the sender of the thread's initial message. */
     spawner(id: string): string | null {
       return callers.get(id) ?? sender.get(id)?.sender ?? null;

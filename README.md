@@ -66,6 +66,7 @@ bun start
 
 Open <http://127.0.0.1:4773>.
 
+- The page is served at once. It shows "Connecting to T3…" until the first tree is ready.
 - The app starts even when T3 is not running. It retries every 3 s. Until T3 is back, the page shows the last tree, greyed, with the time of the last update.
 - If T3 rejects the token, the page shows the command to issue a new one.
 
