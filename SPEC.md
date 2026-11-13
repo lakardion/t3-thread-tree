@@ -80,9 +80,10 @@ A **top-level thread** has no native `parentThreadId`. A **subagent** has `relat
    - Stack membership: the thread's open PRs with `source` `created`, `stack` or `agent`.
    - Stack order: as computed by `build.py` on branch `prototype/005-tree-ui`.
 9. **Order:**
-   - Projects are sorted by their latest update, newest first.
-   - In a project: issue-key groups (newest first, with stack mates kept together), then Reviews, then No issue key.
-   - Threads in a group are sorted by their latest update, newest first. The latest update includes nested threads.
+   - Projects are sorted by their oldest thread, oldest first.
+   - In a project: issue-key groups (by their oldest thread, oldest first, with stack mates kept together at the slot of the oldest member), then Reviews, then No issue key.
+   - Threads and nested threads are sorted by `createdAt`, oldest first. A tie goes to the thread id.
+   - A new item goes at the end of its list. A status change, a new PR or a new run does not move a row.
 
 ## UI
 
