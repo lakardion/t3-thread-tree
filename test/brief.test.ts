@@ -386,6 +386,7 @@ describe("briefService", () => {
       actions: [act("Q", "answer"), act("A", "review")],
       titles: { Q: "Thread Q", A: "Thread A" },
     });
+    expect(svc.state()).not.toHaveProperty("rulesOnly");
   });
 
   test("a model failure keeps the code actions", async () => {
@@ -406,6 +407,6 @@ describe("briefService", () => {
     });
     expect((await svc.routes["/brief/run"].POST(post("/brief/run", { cli: "claude" }))).status).toBe(202);
     expect(ran).toBe(false);
-    expect(svc.state()).toMatchObject({ status: "done", cli: "claude", ...CODE });
+    expect(svc.state()).toMatchObject({ status: "done", cli: "claude", rulesOnly: true, ...CODE });
   });
 });

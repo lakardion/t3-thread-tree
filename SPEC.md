@@ -180,7 +180,14 @@ type BriefState =
       actions: BriefAction[];
       titles: Record<string, string>;
     }
-  | { status: "done"; cli: Cli; generatedAt: string; actions: BriefAction[]; titles: Record<string, string> }
+  | {
+      status: "done";
+      cli: Cli;
+      generatedAt: string;
+      rulesOnly?: true;
+      actions: BriefAction[];
+      titles: Record<string, string>;
+    }
   | {
       status: "failed";
       cli: Cli;
@@ -191,7 +198,7 @@ type BriefState =
     };
 ```
 
-`BriefAction` is `Action` after the id filter. The state type lives in a shared module, like `Tree`. In `running` and `failed`, `actions` and `titles` hold the code actions only, so the page can show them at once and after a model failure. In `done`, `actions` holds the code actions first, then the model actions. A new run replaces the last brief only when it ends; a cancel returns to the state before the run.
+`BriefAction` is `Action` after the id filter. The state type lives in a shared module, like `Tree`. In `running` and `failed`, `actions` and `titles` hold the code actions only, so the page can show them at once and after a model failure. In `done`, `actions` holds the code actions first, then the model actions. `rulesOnly` is set when no thread went to the model, so the actions come from code alone. A new run replaces the last brief only when it ends; a cancel returns to the state before the run.
 
 - `GET /brief/clis`: the offered CLIs, as `{ id, label }[]`.
 - `POST /brief/run?settled=0|1` with `{ cli }`: starts a run. 409 when a run is active, 400 for a CLI that is not offered.
@@ -199,15 +206,15 @@ type BriefState =
 - `GET /events` also sends the brief state as a named SSE event `brief`: once when the connection opens, and again at each change. The page does not poll.
 - **Error text:** the CLI error message (Claude `result`, Codex `turn.failed` message), or "timed out" or the parse error. `stderrTail` is the last 2 KB of stderr.
 
-`bun run demo` uses a stub runner. It returns a sample of the model part after a short delay; code makes the other actions from the demo tree, so the page works with no CLI.
+`bun run demo` uses a stub runner. `BRIEF=failed`, `BRIEF=empty` and `BRIEF=rules` pick the failed, empty and rules-only states. It returns a sample of the model part after a short delay; code makes the other actions from the demo tree, so the page works with no CLI.
 
 ### Page
 
 The full look is in ticket 04. In short:
 
 - **Controls:** in the header, after the filter, a split control: a primary "What's next" button (Sparkles icon) joined to a model `Select`. The choice is saved in `localStorage`. With no CLI offered, the button is disabled with a tooltip. The button is disabled while a run is active.
-- **Panel:** an inline card between the header and the tree. It shows only after the first click, or when the brief state is not `idle` at load. The head has "Next steps", a mono stamp "generated HH:MM · <label>", and a close button that hides the panel.
-- **States:** loading ("Reading N threads…" with the letter wave, and "Cancel"); error (alert, "The brief failed.", "Retry", the stderr tail); empty ("Nothing needs you right now."); the ranked actions.
+- **Panel:** an inline card between the header and the tree. It shows only after the first click, or when the brief state is not `idle` at load. The head has "Next steps", a mono stamp "generated HH:MM · <label>" ("generated HH:MM · rules only" when the model did not run), and a close button that hides the panel.
+- **States:** loading ("Reading N threads…" with the letter wave, and "Cancel"); error (alert, "The brief failed.", "Retry", the stderr tail); empty ("Nothing needs you right now."); the ranked actions. In `running`, the code actions show at once as rows above the loading line. In `failed`, they show above the error. In `done`, all rows run in one rank order.
 - **Action row:** rank, kind chip, title with the reason, thread links, and a copy icon for `prompt` (none when `prompt` is `null`).
 - **Kind chips:** answer = `needs-input`, merge = `done`, unblock = `plan`, fix = `failed`, review = `working`, clean-up = `idle`.
 - **Thread links:** each link shows the live `StatusIcon` and title from the current tree, and opens the thread in T3. A thread that is not in the live tree shows its saved title struck through. The brief text does not change.

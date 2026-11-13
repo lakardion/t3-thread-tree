@@ -183,6 +183,13 @@ export function BriefPanel(p: {
 }) {
   const s = p.state;
   const label = s.status !== "idle" ? (p.clis?.find((c) => c.id === s.cli)?.label ?? s.cli) : "";
+  const rows = s.status !== "idle" && s.actions.length > 0 && (
+    <ol className="m-0 list-none p-1.5">
+      {s.actions.map((a, i) => (
+        <Row key={i} a={a} i={i} live={p.live} titles={s.titles} />
+      ))}
+    </ol>
+  );
   return (
     <Card className="mb-3 gap-0 overflow-hidden rounded-[12px] py-0 shadow-none">
       <div className="project-head flex min-h-10 items-center gap-2 px-3">
@@ -190,7 +197,7 @@ export function BriefPanel(p: {
         <h2 className="m-0 text-sm font-semibold whitespace-nowrap">Next steps</h2>
         {s.status === "done" && (
           <span className="font-mono text-[11px] text-muted-foreground">
-            generated {hhmm(s.generatedAt)} · {label}
+            generated {hhmm(s.generatedAt)} · {s.rulesOnly ? "rules only" : label}
           </span>
         )}
         <Button
@@ -203,8 +210,9 @@ export function BriefPanel(p: {
           <X />
         </Button>
       </div>
+      {rows}
       {s.status === "running" && (
-        <div className="flex items-center gap-3 px-3 py-3">
+        <div className={`flex items-center gap-3 px-3 py-3 ${s.actions.length > 0 ? "border-t" : ""}`}>
           <LoadingText text={`Reading ${s.threadCount} threads…`} />
           <Button variant="ghost" size="xs" className="ml-auto text-muted-foreground" onClick={p.cancel}>
             Cancel
@@ -233,13 +241,6 @@ export function BriefPanel(p: {
       )}
       {s.status === "done" && s.actions.length === 0 && (
         <p className="m-0 px-3 py-3 text-muted-foreground">Nothing needs you right now.</p>
-      )}
-      {s.status === "done" && s.actions.length > 0 && (
-        <ol className="m-0 list-none p-1.5">
-          {s.actions.map((a, i) => (
-            <Row key={i} a={a} i={i} live={p.live} titles={s.titles} />
-          ))}
-        </ol>
       )}
     </Card>
   );

@@ -21,7 +21,14 @@ export type BriefState =
       actions: BriefAction[];
       titles: Record<string, string>;
     }
-  | { status: "done"; cli: Cli; generatedAt: string; actions: BriefAction[]; titles: Record<string, string> }
+  | {
+      status: "done";
+      cli: Cli;
+      generatedAt: string;
+      rulesOnly?: true;
+      actions: BriefAction[];
+      titles: Record<string, string>;
+    }
   | {
       status: "failed";
       cli: Cli;
