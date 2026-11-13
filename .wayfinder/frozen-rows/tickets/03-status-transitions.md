@@ -1,7 +1,7 @@
 ---
 title: Animate status, phrase and PR mark changes
 type: wayfinder:task
-status: in-review
+status: closed
 assignee: claude (frozen-rows-03)
 blocked-by: []
 ---
