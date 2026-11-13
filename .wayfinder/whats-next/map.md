@@ -30,6 +30,8 @@ The thread tree page has a "What's next" button. A click runs a local agent CLI 
 
 - [What makes a good next step, and what is the shape of a brief?](tickets/03-ranking-rules-and-brief-shape.md): the model ranks up to 7 actions (kind, title, reason, threadIds, nullable paste-ready prompt) by a guide in `src/server/next-step-prompt.md`; top-level threads only; code drops unknown ids.
 
+- [Where and how does the brief show on the page?](tickets/04-brief-layout-prototype.md): an inline panel above the tree; a split "What's next" button with the model dropdown; a copy icon per prompt; kind chips on status tokens; the brief saves thread titles so stale links show struck through.
+
 Decided at charting (by the user):
 
 - **Model route:** the backend runs a local agent CLI as a subprocess (`claude -p`, `codex exec`). It uses the existing logins, needs no API key, and writes nothing to T3. The app stays read-only.
@@ -43,8 +45,7 @@ Decided at charting (by the user):
 
 ## Not yet specified
 
-- **Build slicing:** backend run endpoint (spawn, cancel, parse, keep the last brief), CLI detection, page button + dropdown + brief view. Graduates into build tickets when 03 and 04 close.
-- **SPEC.md section** for the feature, written from the closed tickets.
+<!-- empty: the build slices are tickets 05–08 -->
 
 ## Out of scope
 
