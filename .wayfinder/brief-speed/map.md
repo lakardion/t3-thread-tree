@@ -1,6 +1,6 @@
 ---
 label: wayfinder:map
-status: open
+status: closed
 created: 2026-11-13
 ---
 
@@ -47,11 +47,15 @@ The destination is reached when every route key is done and no map ticket is ope
 - [Where does a brief run spend its time?](tickets/01-measure-brief-run.md): folded into the second route key, which measures before and after its change.
 - [Write the digest and code-ranked actions into SPEC.md](tickets/04-spec-section.md): folded into the route keys; each updates its part of the spec.
 
+- [Build the compact digest input](tickets/05-compact-digest.md): text digest with short refs (`t1`, `t2`, …) in place of thread ids, because Haiku changed long ids; PR #5.
+- [Rank the obvious actions in code and skip the model when it has nothing to judge](tickets/06-code-ranked-actions-build.md): code makes `answer`, `fix`, `merge`; claude median 26.9 s → 18.2 s, codex unchanged (fixed CLI cost); PR #7.
+- [Show the code actions while the model runs](tickets/07-code-actions-on-page.md): the panel shows code actions at once, model actions below when the run ends; PR #8.
+
 Decided at charting (by the user): latency is the main problem; memory is code-built only, no background model calls, in memory only; code removes the threads that need no action before the model runs.
 
 ## Not yet specified
 
-- **CLI start-up tuning.** If the measurement shows that a flag or a model setting cuts the fixed cost, this becomes a route key.
+<!-- empty: destination reached -->
 
 ## Out of scope
 
@@ -59,3 +63,4 @@ Decided at charting (by the user): latency is the main problem; memory is code-b
 - A stored digest cache, in memory or on disk.
 - Run the brief before the click, in the background.
 - Smaller or streamed model output, as a separate lever.
+- CLI start-up tuning (flags, reasoning effort). The measurement did not test it. Codex time is mostly fixed CLI cost, so this is the next lever, as a fresh effort.
