@@ -1,6 +1,6 @@
+import { ago } from "../page/format.ts";
 /** The tree rules: visibility, placement, stack order and status. Pure, so `bun test` covers it. */
 import type { Branch, Detail, PrNode, Status, ThreadNode } from "../shared/tree.ts";
-import { ago } from "../page/format.ts";
 import type { Project, Thread } from "./t3.ts";
 
 const KEY = /\b[A-Z][A-Z0-9]+-\d+\b/;
@@ -16,30 +16,31 @@ const REQUEST = new Map([
   ["auth_refresh", "Sign in"],
 ]);
 
+const verdict = (status: Status, phrase: string, since: string | null = null) => ({ status, phrase, since });
+
 /** The first matching rule wins; the order is the contract. */
 export function statusOf(t: Thread, now: number): { status: Status; phrase: string; since: string | null } {
   const run = t.activityRunStatus ?? t.status;
-  const out = (status: Status, phrase: string, since: string | null = null) => ({ status, phrase, since });
   const blocking = t.pending && t.pending.blocking !== false ? t.pending : null;
-  if (blocking) return out("needs-input", REQUEST.get(blocking.kind ?? "") ?? "Input", blocking.createdAt);
-  if ((t.guestMessages ?? 0) > 0) return out("needs-input", "Guest message");
-  if (t.snoozedUntil && Date.parse(t.snoozedUntil) > now) return out("snoozed", "Snoozed");
+  if (blocking) return verdict("needs-input", REQUEST.get(blocking.kind ?? "") ?? "Input", blocking.createdAt);
+  if ((t.guestMessages ?? 0) > 0) return verdict("needs-input", "Guest message");
+  if (t.snoozedUntil && Date.parse(t.snoozedUntil) > now) return verdict("snoozed", "Snoozed");
   if (run === "running" || run === "waiting")
     return t.blockedOnThreadWait
-      ? out("waiting", "Waiting")
-      : out("working", "Working", t.activityRunStartedAt ?? t.latestRunStartedAt);
+      ? verdict("waiting", "Waiting")
+      : verdict("working", "Working", t.activityRunStartedAt ?? t.latestRunStartedAt);
   if (run === "queued" || run === "preparing" || run === "starting")
-    return out("starting", run === "queued" ? "Queued" : "Starting");
+    return verdict("starting", run === "queued" ? "Queued" : "Starting");
   if (run === "completed") {
-    if (t.interactionMode === "plan" && t.hasPlan) return out("plan-ready", "Plan ready");
+    if (t.interactionMode === "plan" && t.hasPlan) return verdict("plan-ready", "Plan ready");
     const unseen =
       t.latestRunCompletedAt && (!t.lastVisitedAt || Date.parse(t.lastVisitedAt) < Date.parse(t.latestRunCompletedAt));
-    return unseen ? out("your-turn", "Your turn") : out("done", "Done");
+    return unseen ? verdict("your-turn", "Your turn") : verdict("done", "Done");
   }
-  if (run === "failed") return out("failed", "Failed");
+  if (run === "failed") return verdict("failed", "Failed");
   if (run === "interrupted" || run === "cancelled" || run === "rolled_back")
-    return out("interrupted", run === "cancelled" ? "Cancelled" : "Interrupted");
-  return out("idle", "Idle");
+    return verdict("interrupted", run === "cancelled" ? "Cancelled" : "Interrupted");
+  return verdict("idle", "Idle");
 }
 
 export type BuildInput = {
@@ -134,7 +135,7 @@ export function computeStacks(threads: Thread[]): Stack[] {
     const order = best.prs
       .filter((p) => (p.source === "stack" || p.source === "agent") && p.state === "open")
       .map((p) => p.n);
-    for (const p of best.prs.filter((p) => p.source === "created")) {
+    for (const p of best.prs.filter((x) => x.source === "created")) {
       let k = 0;
       order.forEach((x, j) => x < p.n && (k = j + 1));
       order.splice(k, 0, p.n);
@@ -161,7 +162,7 @@ export function buildTree(input: BuildInput): Branch[] {
   for (const t of visible.values()) {
     const si = stackIdOf.get(t.id);
     const created = t.prs.find((p) => p.source === "created")?.n;
-    const st = si === undefined ? null : stacks[si]!;
+    const st = si === undefined ? null : stacks[si];
     const pos = st && created !== undefined && st.order.includes(created) ? st.order.indexOf(created) + 1 : null;
     nodes.set(t.id, {
       t,
@@ -219,7 +220,7 @@ export function buildTree(input: BuildInput): Branch[] {
 
   /** The latest update of a node includes its nested threads. Sorts children on the way. */
   const settle = (n: Node): string => {
-    for (const c of n.children as Node[]) n.latest = [n.latest, settle(c)].sort().at(-1)!;
+    for (const c of n.children as Node[]) n.latest = [n.latest, settle(c)].toSorted().at(-1)!;
     (n.children as Node[]).sort(byLatest);
     return n.latest;
   };
@@ -230,7 +231,7 @@ export function buildTree(input: BuildInput): Branch[] {
     for (const g of gs) {
       g.nodes.forEach(settle);
       g.nodes.sort(byLatest);
-      g.latest = g.nodes[0]!.latest;
+      g.latest = g.nodes[0].latest;
     }
     gs.sort(byLatest);
     /** Groups that share a stack sit together, in stack order, at the slot of the newest member. */
@@ -247,7 +248,7 @@ export function buildTree(input: BuildInput): Branch[] {
           ? [g]
           : gs
               .filter((h) => h.nodes.some((n) => stackIdOf.get(n.id) === si))
-              .sort((a, b) => minPos(a, si) - minPos(b, si));
+              .toSorted((a, b) => minPos(a, si) - minPos(b, si));
       for (const h of mates)
         if (!placed.has(h)) {
           placed.add(h);
@@ -294,10 +295,10 @@ export function buildTree(input: BuildInput): Branch[] {
         branches,
         threads: [],
       },
-      latest: gs[0]!.latest,
+      latest: gs[0].latest,
     });
   }
-  return out.sort(byLatest).map((o) => o.branch);
+  return out.toSorted(byLatest).map((o) => o.branch);
 }
 
 /** Strips the build-only fields before the node goes on the wire. */

@@ -1,6 +1,7 @@
 /** Launched-thread lineage from `statev2.sqlite`, opened read-only. All SQLite code lives here. */
 import { Database } from "bun:sqlite";
 import { join } from "node:path";
+
 import { USERDATA } from "./t3.ts";
 
 const CALLS = `
@@ -74,9 +75,8 @@ export function openLineage(path = join(USERDATA, "statev2.sqlite")) {
 
   return {
     /** The newest complete assistant text per thread; `null` when it has none. */
-    lastMessages(ids: string[]): Map<string, string | null> {
-      return new Map(last.all(JSON.stringify(ids)).map((r) => [r.id, r.text]));
-    },
+    lastMessages: (ids: string[]): Map<string, string | null> =>
+      new Map(last.all(JSON.stringify(ids)).map((r) => [r.id, r.text])),
     /** Re-reads every launch tool call. One full scan, so run it only in a Worker. */
     reload() {
       const next = new Map<string, string>();

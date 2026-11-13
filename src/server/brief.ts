@@ -2,9 +2,10 @@
 import { mkdirSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
+
+import { ago, phraseWith, stripKey } from "../page/format.ts";
 import type { BriefAction, BriefState, Cli } from "../shared/brief.ts";
 import { allThreads, type Branch, type ThreadNode } from "../shared/tree.ts";
-import { ago, phraseWith, stripKey } from "../page/format.ts";
 
 export const CLIS: Record<Cli, { label: string; status: string[] }> = {
   claude: { label: "Claude Haiku", status: ["claude", "auth", "status"] },
@@ -157,7 +158,18 @@ export function stdinFor(cli: Cli, guide: string, threads: InputThread[]): strin
   return cli === "claude" ? blocks : `${guide}\n\n## Threads\n\n${blocks}`;
 }
 
-const jsonLines = (out: string): Record<string, any>[] =>
+/** The fields read from Claude and Codex JSON output lines. */
+type JsonLine = {
+  type?: string;
+  is_error?: boolean;
+  result?: string;
+  structured_output?: unknown;
+  message?: string;
+  error?: { message?: string };
+  item?: { type?: string; text?: string };
+};
+
+const jsonLines = (out: string): JsonLine[] =>
   out.split("\n").flatMap((l) => {
     if (!l.startsWith("{")) return [];
     try {
@@ -173,17 +185,17 @@ export function parseAnswer(cli: Cli, stdout: string): { answer: unknown } | { e
   if (cli === "claude") {
     const r = lines.findLast((l) => l.type === "result");
     if (!r) return null;
-    return r.is_error ? { error: String(r.result ?? "Claude failed.") } : { answer: r.structured_output };
+    return r.is_error ? { error: r.result ?? "Claude failed." } : { answer: r.structured_output };
   }
   const failed = lines.findLast((l) => l.type === "turn.failed");
-  if (failed) return { error: String(failed.error?.message ?? "Codex failed.") };
+  if (failed) return { error: failed.error?.message ?? "Codex failed." };
   const msg = lines.findLast((l) => l.type === "item.completed" && l.item?.type === "agent_message");
   if (!msg) {
     const err = lines.findLast((l) => l.type === "error");
     return err ? { error: String(err.message) } : null;
   }
   try {
-    return { answer: JSON.parse(msg.item.text) };
+    return { answer: JSON.parse(msg.item?.text ?? "") };
   } catch (e) {
     return { error: `Cannot parse the answer: ${(e as Error).message}` };
   }
@@ -306,7 +318,7 @@ export function briefService(o: {
           const before = state;
           const r = (active = run(cli!, threads));
           set({ status: "running", cli: cli!, threadCount: threads.length, startedAt: new Date().toISOString() });
-          r.done
+          void r.done
             .catch((e): Outcome => ({ status: "failed", cli: cli!, error: String(e?.message ?? e), stderrTail: "" }))
             .then((out) => {
               active = undefined;
