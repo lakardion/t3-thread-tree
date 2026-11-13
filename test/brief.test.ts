@@ -2,9 +2,10 @@ import { describe, expect, test } from "bun:test";
 import {
   briefInput,
   briefService,
-  capMessage,
+  digestOf,
   filterAnswer,
   parseAnswer,
+  stdinFor,
   type InputThread,
   type Outcome,
 } from "../src/server/brief.ts";
@@ -37,60 +38,91 @@ function node(id: string, over: Partial<ThreadNode> = {}): ThreadNode {
 
 const branch = (threads: ThreadNode[], branches: Branch[] = []): Branch => ({ id: "b", label: "b", branches, threads });
 
-describe("capMessage", () => {
-  test("keeps a short message whole", () => {
-    expect(capMessage("x".repeat(1500))).toBe("x".repeat(1500));
-    expect(capMessage(null)).toBeNull();
-  });
-  test("keeps the first 1000 and the last 500 characters of a long one", () => {
-    const out = capMessage("a".repeat(1000) + "b".repeat(100) + "c".repeat(500))!;
-    expect(out).toBe(`${"a".repeat(1000)}…${"c".repeat(500)}`);
+describe("briefInput", () => {
+  test("drops working, starting, waiting and snoozed threads before the message query; keeps launched children", () => {
+    const tree = [
+      branch([
+        node("A", { children: [node("L")] }),
+        node("W", { status: "working" }),
+        node("S", { status: "starting" }),
+        node("T", { status: "waiting" }),
+        node("Z", { status: "snoozed" }),
+      ]),
+    ];
+    let asked: string[] = [];
+    const input = briefInput(tree, (ids) => ((asked = ids), new Map([["A", "done"]])), NOW);
+    expect(asked.sort()).toEqual(["A", "L"]);
+    expect(input.map((t) => [t.id, t.title])).toEqual([
+      ["A", "Thread A"],
+      ["L", "Thread L"],
+    ]);
+    expect(input.map((t) => t.ref)).toEqual(["t1", "t2"]);
+    expect(input[1]!.digest).toBe("t2 · Your turn 3h · Thread L");
+    expect(input[0]!.digest).toBe("t1 · Your turn 3h · Thread A\n  done");
   });
 });
 
-describe("briefInput", () => {
-  test("takes every node of the tree, launched children included, with its last message", () => {
-    const launched = node("L");
-    const tree = [
-      branch(
-        [node("A", { children: [launched] })],
-        [branch([node("B", { key: "ABC-1", detail: { request: "Approve rm" } as ThreadNode["detail"] })])],
-      ),
-    ];
-    let asked: string[] = [];
-    const input = briefInput(
-      tree,
-      (ids) => (
-        (asked = ids),
-        new Map([
-          ["A", "done"],
-          ["L", null],
-        ])
-      ),
-      NOW,
-    );
-    expect(asked.sort()).toEqual(["A", "B", "L"]);
-    const a = input.find((t) => t.id === "A")!;
-    expect(a).toMatchObject({ title: "Thread A", status: "your-turn", age: "3h", subthreads: 1, lastMessage: "done" });
-    expect(input.find((t) => t.id === "B")).toMatchObject({ key: "ABC-1", request: "Approve rm", lastMessage: null });
-  });
-
-  test("keeps only the PR fields the ranking needs", () => {
-    const pr = {
-      n: 7,
+describe("digestOf", () => {
+  const pr = (over: object) =>
+    ({
+      n: 12,
       url: "u",
       state: "open",
       draft: false,
-      checks: "failing",
+      checks: null,
       review: null,
-      conflicting: true,
+      conflicting: false,
       title: "t",
-      additions: 1,
-      deletions: 2,
-      changedFiles: 3,
-    } as const;
-    const [t] = briefInput([branch([node("A", { prs: [pr] })])], () => new Map(), NOW);
-    expect(t!.prs).toEqual([{ n: 7, state: "open", draft: false, checks: "failing", review: null, conflicting: true }]);
+      additions: 0,
+      deletions: 0,
+      changedFiles: 0,
+      ...over,
+    }) as ThreadNode["prs"][number];
+
+  test("full line with key, PRs, stack, request and a cut message tail", () => {
+    const n = node("A", {
+      key: "ABC-1",
+      title: "ABC-1 · Fix it",
+      since: "2026-11-13T11:00:00.000Z",
+      phrase: "Approval",
+      status: "needs-input",
+      prs: [
+        pr({ review: "approved", checks: "passing" }),
+        pr({ n: 13, draft: true, checks: "failing", conflicting: true }),
+      ],
+      stack: { pos: 2, total: 3 },
+      detail: { request: "Approve rm" } as ThreadNode["detail"],
+    });
+    const msg = "x".repeat(300) + "\n" + "y".repeat(700);
+    const [head, ...rest] = digestOf(n, "t1", msg, NOW).split("\n");
+    expect(head).toBe(
+      "t1 · Approval · 1h · ABC-1 Fix it · PRs (#12 approved passing, #13 draft failing conflicting) · stack 2/3 · request: Approve rm",
+    );
+    expect(rest).toEqual(["  …" + "y".repeat(600)]);
+  });
+  test("minimal line: no key, PRs, stack, request or message", () => {
+    expect(digestOf(node("A"), "t1", null, NOW)).toBe("t1 · Your turn 3h · Thread A");
+  });
+  test("stack of N when pos is null; state shows when not open", () => {
+    const n = node("A", { stack: { pos: null, total: 4 }, prs: [pr({ state: "merged" })] });
+    expect(digestOf(n, "t1", null, NOW)).toBe("t1 · Your turn 3h · Thread A · PRs (#12 merged) · stack of 4");
+  });
+  test("a multi-line message tail is indented on every line", () => {
+    expect(digestOf(node("A"), "t1", "a\nb", NOW)).toContain("\n  a\n  b");
+  });
+});
+
+describe("stdinFor", () => {
+  const threads = [
+    { id: "A", ref: "t1", title: "a", digest: "t1 line" },
+    { id: "B", ref: "t2", title: "b", digest: "t2 line" },
+  ];
+  test("claude gets the blocks only; an empty list gives No threads.", () => {
+    expect(stdinFor("claude", "G", threads)).toBe("t1 line\n\nt2 line");
+    expect(stdinFor("claude", "G", [])).toBe("No threads.");
+  });
+  test("codex gets the guide, a Threads heading and the blocks", () => {
+    expect(stdinFor("codex", "G", threads)).toBe("G\n\n## Threads\n\nt1 line\n\nt2 line");
   });
 });
 
@@ -136,8 +168,8 @@ describe("parseAnswer", () => {
 
 describe("filterAnswer", () => {
   const threads = [
-    { id: "A", title: "Alpha" },
-    { id: "B", title: "Beta" },
+    { id: "A", ref: "t1", title: "Alpha" },
+    { id: "B", ref: "t2", title: "Beta" },
   ];
   const action = (threadIds: string[], prompt: string | null = null) => ({
     kind: "fix",
@@ -148,7 +180,7 @@ describe("filterAnswer", () => {
   });
 
   test("drops unknown ids and actions with none left, keeps the order, saves titles", () => {
-    const out = filterAnswer({ actions: [action(["B", "X"], "go"), action(["X"]), action(["A"])] }, threads);
+    const out = filterAnswer({ actions: [action(["t2", "X"], "go"), action(["X"]), action(["t1"])] }, threads);
     expect(out).toEqual({
       actions: [
         { kind: "fix", title: "t", reason: "r", threadIds: ["B"], prompt: "go" },
@@ -156,6 +188,9 @@ describe("filterAnswer", () => {
       ],
       titles: { B: "Beta", A: "Alpha" },
     });
+  });
+  test("a real id in place of a ref is dropped", () => {
+    expect(filterAnswer({ actions: [action(["A"])] }, threads)).toEqual({ actions: [], titles: {} });
   });
   test("0 actions is valid", () => {
     expect(filterAnswer({ actions: [] }, threads)).toEqual({ actions: [], titles: {} });

@@ -3,8 +3,8 @@ import { mkdirSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import type { BriefAction, BriefState, Cli } from "../shared/brief.ts";
-import { allThreads, type Branch } from "../shared/tree.ts";
-import { ago, phraseWith } from "../page/format.ts";
+import { allThreads, type Branch, type ThreadNode } from "../shared/tree.ts";
+import { ago, phraseWith, stripKey } from "../page/format.ts";
 
 export const CLIS: Record<Cli, { label: string; status: string[] }> = {
   claude: { label: "Claude Haiku", status: ["claude", "auth", "status"] },
@@ -25,60 +25,46 @@ export async function detectClis(): Promise<{ id: Cli; label: string }[]> {
   return (Object.keys(CLIS) as Cli[]).filter((_, i) => ok[i]).map((id) => ({ id, label: CLIS[id].label }));
 }
 
-const CAP_HEAD = 1000;
-const CAP_TAIL = 500;
-/** The first 1000 and the last 500 characters of a long message. */
-export const capMessage = (text: string | null): string | null =>
-  text && text.length > CAP_HEAD + CAP_TAIL ? `${text.slice(0, CAP_HEAD)}…${text.slice(-CAP_TAIL)}` : text;
+export type InputThread = { id: string; ref: string; title: string; digest: string };
 
-export type InputThread = {
-  id: string;
-  title: string;
-  key: string | null;
-  status: string;
-  phrase: string;
-  age: string;
-  prs: {
-    n: number;
-    state: string;
-    draft: boolean;
-    checks: string | null;
-    review: string | null;
-    conflicting: boolean;
-  }[];
-  stack: { pos: number | null; total: number } | null;
-  request: string | null;
-  subthreads: number;
-  lastMessage: string | null;
-};
+const MSG_TAIL = 600;
+const NO_ACTION = new Set(["working", "starting", "waiting", "snoozed"]);
 
-/** Every thread node of the visible tree, launched threads included. */
+/** One thread as text: a line of facts, then the indented tail of the last assistant message. */
+export function digestOf(n: ThreadNode, ref: string, message: string | null, now: number): string {
+  const prs = n.prs.map((p) =>
+    [`#${p.n}`, p.state !== "open" && p.state, p.draft && "draft", p.review, p.checks, p.conflicting && "conflicting"]
+      .filter(Boolean)
+      .join(" "),
+  );
+  const line = [
+    ref,
+    phraseWith(n, now) + (n.since ? "" : ` ${ago(n.updatedAt, now)}`),
+    n.key ? `${n.key} ${stripKey(n.title, n.key)}` : n.title,
+    prs.length && `PRs (${prs.join(", ")})`,
+    n.stack && (n.stack.pos === null ? `stack of ${n.stack.total}` : `stack ${n.stack.pos}/${n.stack.total}`),
+    n.detail.request && `request: ${n.detail.request}`,
+  ]
+    .filter(Boolean)
+    .join(" · ");
+  if (!message) return line;
+  const tail = message.length > MSG_TAIL ? `…${message.slice(-MSG_TAIL)}` : message;
+  return `${line}\n${tail.replace(/^/gm, "  ")}`;
+}
+
+/** Every thread node of the visible tree, launched threads included, except those that need no action. */
 export function briefInput(
   projects: Branch[],
   lastMessages: (ids: string[]) => Map<string, string | null>,
   now: number,
 ): InputThread[] {
-  const nodes = projects.flatMap(allThreads);
+  const nodes = projects.flatMap(allThreads).filter((n) => !NO_ACTION.has(n.status));
   const msgs = lastMessages(nodes.map((n) => n.id));
-  return nodes.map((n) => ({
+  return nodes.map((n, i) => ({
     id: n.id,
+    ref: `t${i + 1}`,
     title: n.title,
-    key: n.key,
-    status: n.status,
-    phrase: phraseWith(n, now),
-    age: ago(n.updatedAt, now),
-    prs: n.prs.map(({ n: num, state, draft, checks, review, conflicting }) => ({
-      n: num,
-      state,
-      draft,
-      checks,
-      review,
-      conflicting,
-    })),
-    stack: n.stack,
-    request: n.detail.request,
-    subthreads: n.children.length,
-    lastMessage: capMessage(msgs.get(n.id) ?? null),
+    digest: digestOf(n, `t${i + 1}`, msgs.get(n.id) ?? null, now),
   }));
 }
 
@@ -166,8 +152,10 @@ export function cliArgs(cli: Cli, guide: string, schemaFile: string, cwd: string
 }
 
 /** Codex has no system prompt flag, so the guide goes before the threads on stdin. */
-export const stdinFor = (cli: Cli, guide: string, threads: InputThread[]): string =>
-  cli === "claude" ? JSON.stringify(threads) : `${guide}\n\n## Threads\n\n${JSON.stringify(threads)}`;
+export function stdinFor(cli: Cli, guide: string, threads: InputThread[]): string {
+  const blocks = threads.map((t) => t.digest).join("\n\n") || "No threads.";
+  return cli === "claude" ? blocks : `${guide}\n\n## Threads\n\n${blocks}`;
+}
 
 const jsonLines = (out: string): Record<string, any>[] =>
   out.split("\n").flatMap((l) => {
@@ -201,21 +189,27 @@ export function parseAnswer(cli: Cli, stdout: string): { answer: unknown } | { e
   }
 }
 
-/** Drops thread ids not in the input, then actions with no ids left. Keeps the model's order. */
+/** Maps each ref back to its thread id, drops unknown refs, then drops actions with none left. Keeps the model's order. */
 export function filterAnswer(
   answer: unknown,
-  threads: Pick<InputThread, "id" | "title">[],
+  threads: Pick<InputThread, "id" | "ref" | "title">[],
 ): { actions: BriefAction[]; titles: Record<string, string> } | { error: string } {
   const list = (answer as { actions?: unknown } | null)?.actions;
   if (!Array.isArray(list)) return { error: "The answer has no actions list." };
-  const titleOf = new Map(threads.map((t) => [t.id, t.title]));
+  const byRef = new Map(threads.map((t) => [t.ref, t]));
   const actions: BriefAction[] = [];
   const titles: Record<string, string> = {};
   for (const a of list as BriefAction[]) {
-    const ids = (Array.isArray(a?.threadIds) ? a.threadIds : []).filter((id) => titleOf.has(id));
-    if (ids.length === 0) continue;
-    for (const id of ids) titles[id] = titleOf.get(id)!;
-    actions.push({ kind: a.kind, title: a.title, reason: a.reason, threadIds: ids, prompt: a.prompt ?? null });
+    const hit = (Array.isArray(a?.threadIds) ? a.threadIds : []).flatMap((r) => byRef.get(r) ?? []);
+    if (hit.length === 0) continue;
+    for (const t of hit) titles[t.id] = t.title;
+    actions.push({
+      kind: a.kind,
+      title: a.title,
+      reason: a.reason,
+      threadIds: hit.map((t) => t.id),
+      prompt: a.prompt ?? null,
+    });
   }
   return { actions, titles };
 }

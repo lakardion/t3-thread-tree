@@ -122,10 +122,10 @@ A click on "What's next" runs a local agent CLI on a cheap model. The CLI return
 
 ### Input
 
-- **Threads:** the visible top-level threads of the tree for the settled setting of the page that started the run (launched threads included). No subthreads.
-- **Per thread**, as compact JSON: id, title, issue key, status, phrase, age, PRs (with checks and review), stack position, pending request, subthread count, and the last assistant message.
-- **Last assistant message:** one batched read-only query on `statev2.sqlite` per run, from `orchestration_v2_projection_messages` (`role = 'assistant'`, newest row with `streaming = 0` per thread). The tested query is in the ticket 02 research file. Cap each message at 1500 characters: the first 1000, `…`, the last 500. `null` when the thread has no assistant message. The shell stream field `latestVisibleMessage` is always `null`; do not use it.
-- **Prompt:** the system prompt is [src/server/next-step-prompt.md](src/server/next-step-prompt.md). It holds the ranking guide. The thread JSON is the user prompt.
+- **Threads:** the visible top-level threads of the tree for the settled setting of the page that started the run (launched threads included). No subthreads. The code removes the threads that are `working`, `starting`, `waiting` or `snoozed`: they need no action.
+- **Per thread**, one **Digest** block of text. The first line holds, split by `·`: short thread ref (`t1`, `t2`, … in tree order), status phrase with its age, title (with the issue key), PRs (number, state, draft, review, checks, conflicts), stack position, and pending request. A part with no value is left out. Then the tail of the last assistant message, each line indented by 2 spaces.
+- **Last assistant message:** one batched read-only query on `statev2.sqlite` per run, from `orchestration_v2_projection_messages` (`role = 'assistant'`, newest row with `streaming = 0` per thread). The tested query is in the ticket 02 research file. Keep the last 600 characters of each message, with `…` first when the text is cut. `null` when the thread has no assistant message. The shell stream field `latestVisibleMessage` is always `null`; do not use it.
+- **Prompt:** the system prompt is [src/server/next-step-prompt.md](src/server/next-step-prompt.md). It holds the ranking guide. The digest text is the user prompt. With no threads, the prompt is `No threads.`.
 
 ### Brief shape
 
@@ -143,7 +143,7 @@ type Answer = { actions: Action[] }; /** 0–7, in rank order */
 ```
 
 - The code keeps the model's order.
-- **Unknown ids:** the code removes each thread id that is not in the input. It removes an action with no ids left. It does not reject the answer.
+- **Unknown ids:** the model writes the short refs of the digest in `threadIds`. The code maps each ref back to the thread id and removes each ref that is not in the input. It removes an action with no ids left. It does not reject the answer.
 - **Saved titles:** the code saves the title of each linked thread with the brief, so a thread that leaves the tree still has a name.
 - An answer with 0 actions is valid.
 
