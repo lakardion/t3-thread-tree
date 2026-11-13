@@ -2,7 +2,7 @@
 title: Build the "What's next" button and the inline brief panel
 type: task
 status: open
-assignee:
+assignee: claude
 blocked-by: [07-brief-endpoints]
 ---
 
