@@ -2,32 +2,37 @@
 
 A live, read-only map of your [T3 Code](https://github.com/pingdotgg/t3code) threads.
 
-T3 Code shows threads as a flat list. When agents launch threads, review PRs and work through PR stacks, a flat list does not tell you how the work fits together. This app shows the active threads as one tree, **Project › issue key › thread**, with a status dot and the PR stack on each row. Click a thread to open it in T3 Code.
+T3 Code shows threads as a flat list. When agents launch threads, review PRs and work through PR stacks, a flat list does not tell you how the work fits together. This app shows the active threads as one tree, **Project › issue key › thread**, with a status and the PR marks on each row. Click a thread to open it in T3 Code.
 
 ![The thread tree in light mode](docs/tree-light.png)
 
-![The thread tree in dark mode, with some groups closed](docs/tree-dark.png)
+![The thread tree in dark mode, with one project closed and one details block open](docs/tree-dark.png)
 
 _Screenshots use made-up data from `bun run demo`._
 
 ## What you get
 
-- **One tree for all projects.** Threads group by the first issue key in the title (`SHOP-412`, `API-81`, …). Review threads (`Review #…`) go in their own Reviews group.
+- **One card for each project.** The card header shows the repository (`owner/name`). Threads group by the first issue key in the title (`SHOP-412`, `API-81`, …). A key group with one thread folds into its row, which shows the key as a chip. Review threads (`Review #…`) go in their own Reviews group.
 - **Launch lineage.** A thread that an agent launched, with no issue key, nests under the thread that launched it. T3 does not store this link, so the app reads it from T3's local database.
-- **PR stacks.** Each thread in a stack shows its position, for example `⧉ 2/4`. Issue groups that share a stack sit next to each other, in stack order.
-- **Status at a glance.**
+- **PR stacks.** Issue groups that share a stack sit next to each other, in stack order, on one rail with the label "PR stack · N PRs · base `main`". Each thread in a stack shows its position, for example `2/4`.
+- **PR marks.** Each row shows its first two PRs. A PR chip shows checks (dot or ring), review (check or cross), conflicts (warning), draft (dashed border), merged (violet) and closed (struck through).
+- **Status at a glance.** Each row starts with an icon, a phrase and the elapsed time, for example "Working 12m" or "Approval · 3m". Color is never the only sign.
 
-  | Dot | Means |
+  | Color | Statuses |
   |---|---|
-  | orange | needs input: a pending question or approval |
-  | blue, pulsing | running, queued or starting |
-  | green | done, your turn |
-  | red | cancelled, failed or interrupted |
+  | amber, edge breathes | needs input: approval, question, sign-in or guest message |
+  | blue | working (icon turns), starting or queued, waiting on another thread |
+  | violet | plan ready |
+  | green | your turn (bold title), done |
+  | red | failed, interrupted or cancelled |
   | grey | idle, or snoozed (title muted, with the wake time) |
 
+- **What needs you.** The header counts the threads that need you, are working, are your turn, or stopped. The "Needs you" filter keeps only the threads with needs input, plan ready or your turn.
+- **Details on demand.** The chevron at the end of a row opens a details block: request, error, usage limit, model, branch, worktree, launched by, goal, tags and all PRs with their checks and size.
+- **Linear links.** When you configure Linear (see [Setup](#setup)), issue keys of your Linear teams link to the issue.
 - **Live.** Changes arrive as T3 streams them. No polling, no reload.
-- **Closed groups stay closed.** A closed group shows one dot per thread. The page remembers which groups you closed.
-- **Settled threads on demand.** The "show settled" toggle adds them. Archived threads never show.
+- **The page remembers your choices.** Closed projects and groups (they show one status icon per thread), the filter, "show settled" and the theme (System, Light or Dark) stay after a reload.
+- **Settled threads on demand.** The "show settled" switch adds them. Archived threads never show.
 
 ## Requirements
 
@@ -75,9 +80,10 @@ statev2.sqlite (read-only) ──launch lineage──────────▶
 
 - `src/server/t3.ts` holds the T3 stream: a small hand-written Effect RPC client with JSON frames, and a lenient decoder. T3's protocol is internal, so all protocol code stays in this one module.
 - `src/server/lineage.ts` finds the spawner of a launched thread from the launch tool calls in `statev2.sqlite`, opened read-only.
-- `src/server/build-tree.ts` applies the tree rules: visibility, placement, stack order and status. It is a pure function, and `bun test` covers it.
+- `src/server/build-tree.ts` applies the tree rules: visibility, placement, stack order and the eleven statuses. It is a pure function, and `bun test` covers it.
 - `src/server.ts` keeps the thread map. It builds the whole tree again on each change, and pushes it as JSON over Server-Sent Events.
-- `src/page/` is a React, Tailwind and shadcn page, bundled by Bun's HTML imports (Tailwind runs through `bunfig.toml`). There is no Vite and no build step.
+- `src/page/` is a React, Tailwind and shadcn page, bundled by Bun's HTML imports (Tailwind runs through `bunfig.toml`). There is no Vite and no build step. The fold, the filter, the attention counts and the elapsed times run on the page (`attention.ts`, `format.ts`).
+- [DESIGN-SPEC.md](DESIGN-SPEC.md) defines the visual design. [SPEC.md](SPEC.md) defines the tree rules, and [CONTEXT.md](CONTEXT.md) defines the terms.
 - `src/shared/tree.ts` holds the `Tree` type that the server and the page share.
 
 The app never writes to T3. It uses a token with the `orchestration:read` scope only, and it opens the database read-only.
@@ -85,10 +91,10 @@ The app never writes to T3. It uses a token with the `orchestration:read` scope 
 ## Develop
 
 ```sh
-bun test           # tree rules
-bunx tsc --noEmit  # types
+bun test           # tree rules, attention counts, formats
+bun run typecheck  # types
 ```
 
 ## Status
 
-First version. It shows the threads of the local T3 environment only, and it has no write actions (settle, snooze, send).
+It shows the threads of the local T3 environment only, and it has no write actions (settle, snooze, send).
