@@ -2,7 +2,7 @@
 title: Rank the obvious actions in code and skip the model when it has nothing to judge
 type: wayfinder:task
 status: open
-assignee:
+assignee: claude
 blocked-by: [05-compact-digest]
 ---
 
