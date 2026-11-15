@@ -16,7 +16,7 @@ The page can write to T3 in three ways, each through a preview dialog with an ed
 - Send a free message to any thread, from its row.
 - Start a new thread in a project from a step, with the step prompt as the first message.
 
-Every route key is merged to `main`. Autopilot threads build it, one `/start-issue-auto` thread per ticket.
+Every route key is merged to `main`, together, as one stack. Autopilot threads build it, one `/start-issue-auto` thread per ticket.
 
 ## Route
 
@@ -39,7 +39,7 @@ The destination is reached when every route key is done and no map ticket is ope
 - Mode: autopilot
 - **Run to completion.** Do not stop for the user, except for a real decision that the tickets and the spec do not answer. Then stop and ask (grilling). A choice the spec leaves open but that has a clear default is not a stop: take the default and name it in the PR body.
 - **Stack, do not wait.** When a key's PR opens, upkeep launches the next key at once, stacked on that key's branch (`stack on <branch>`). No key waits for a merge.
-- **Auto-merge when green.** When `bun run check` passes, mark the PR ready and squash-merge it, lowest PR of the chain first. GitHub then sets the next PR's base to `main`; that branch merges `origin/main` (never a rebase or a force-push). A failing check is a stop only after you cannot fix it.
+- **No merge until the end.** Each PR stays open in one stack (`main ← 02 ← 03 ← 04 ← 05`), managed with `gh stack`. Nobody merges a key alone; the user merges the whole stack as one feature when the last key is in review. A failing check is a stop only after you cannot fix it.
 - **Execution lives in this map** (override of plan, don't do): route keys deliver code and PRs.
 - **Spec:** each route ticket, then `SPEC.md`, `DESIGN-SPEC.md` and `CONTEXT.md`. A ticket wins over the spec; each key updates the spec for its own part. Each key that adds a visible feature updates `README.md` (see `CLAUDE.md`).
 - **The app stops being read-only.** `SPEC.md` (scope line), `README.md` ("never writes to T3", Status) and `CONTEXT.md` change in ticket 01.
