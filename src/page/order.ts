@@ -28,8 +28,8 @@ export const threadUnitId = (t: ThreadNode) => `t:${t.id}`;
 export const runUnitId = (projectId: string, run: Branch[]) =>
   run[0].stack ? `stack:${projectId}:${run[0].stack.id}` : run[0].id;
 
-/** Reviews and No issue key: they stay after the key groups and do not move. */
-export const isTail = (b: Branch): boolean => b.label === REVIEWS || b.label === NO_KEY;
+/** Reviews and No issue key: Reviews stays first, No issue key stays last, and neither moves. */
+export const isPinned = (b: Branch): boolean => b.label === REVIEWS || b.label === NO_KEY;
 
 const isRun = (u: Unit): u is Branch[] => Array.isArray(u);
 const isBranch = (u: Unit): u is Branch => !Array.isArray(u) && "branches" in u;
@@ -70,7 +70,7 @@ function applyFreeze<T extends Unit>(
 
 /**
  * The tree with the user order applied at each level, and the ids and units of each list.
- * Reviews and No issue key stay after the key groups. Subthreads keep the base order. The input is not changed.
+ * Reviews stays first and No issue key last. Subthreads keep the base order. The input is not changed.
  */
 export function arrange(projects: Branch[], orders: Orders, freeze?: Freeze): Arranged {
   const lists = new Map<string, string[]>();
@@ -91,12 +91,15 @@ export function arrange(projects: Branch[], orders: Orders, freeze?: Freeze): Ar
     branches: put(groupsKey(b.id), b.branches, (c) => c.id, isBranch).map(group),
   });
   const project = (p: Branch): Branch => {
-    const tail = p.branches.filter(isTail);
-    const keys = p.branches.filter((b) => !tail.includes(b));
+    const keys = p.branches.filter((b) => !isPinned(b));
     const runs = put(groupsKey(p.id), stackRuns(keys), (r) => runUnitId(p.id, r), isRun);
     return {
       ...p,
-      branches: [...runs.flat().map(group), ...tail.map((b) => (b.label === REVIEWS ? reviews(b) : group(b)))],
+      branches: [
+        ...p.branches.filter((b) => b.label === REVIEWS).map(reviews),
+        ...runs.flat().map(group),
+        ...p.branches.filter((b) => b.label === NO_KEY).map(group),
+      ],
     };
   };
   const ordered = put(PROJECTS, projects, (b) => b.id, isBranch).map(project);

@@ -263,7 +263,7 @@ export function buildTree(input: BuildInput): Branch[] {
           ordered.push(h);
         }
     }
-    const rank = (g: Group) => (g.key === REVIEWS ? 1 : g.key === NO_KEY ? 2 : 0);
+    const rank = (g: Group) => (g.key === REVIEWS ? -1 : g.key === NO_KEY ? 1 : 0);
     ordered.sort((a, b) => rank(a) - rank(b));
 
     const gid = (key: string) => `g:${projectId}:${key}`;
