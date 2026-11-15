@@ -1,5 +1,5 @@
 import { LoaderCircle, Send } from "lucide-react";
-import { useState, type ReactNode } from "react";
+import { createContext, useContext, useState, type ReactNode } from "react";
 
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { Button } from "@/components/ui/button";
@@ -17,8 +17,110 @@ import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip
 
 import type { CliStatus, SendError } from "../shared/send.ts";
 import type { ThreadNode } from "../shared/tree.ts";
-import { isBusy, postSend } from "./send.ts";
+import { isBusy, postSend, type Result } from "./send.ts";
 import { StatusIcon } from "./status-icon.tsx";
+
+type Frame = { busy: boolean; setBusy: (v: boolean) => void; close: () => void };
+
+/** Set by `ActionDialog`, read by `ActionForm`. */
+const FrameContext = createContext<Frame>(null!);
+
+/** While an action runs, nothing closes the dialog. Children mount only while open. */
+export function ActionDialog({
+  open,
+  onOpenChange,
+  children,
+}: {
+  open: boolean;
+  onOpenChange: (open: boolean) => void;
+  children: ReactNode;
+}) {
+  const [busy, setBusy] = useState(false);
+  return (
+    <Dialog open={open} onOpenChange={(o) => !busy && onOpenChange(o)}>
+      <DialogContent showCloseButton={!busy}>
+        <FrameContext.Provider value={{ busy, setBusy, close: () => onOpenChange(false) }}>
+          {children}
+        </FrameContext.Provider>
+      </DialogContent>
+    </Dialog>
+  );
+}
+
+/** Header, fields, failure alert and buttons of an action dialog. A `<fieldset>` disables the fields while `run` is in flight. */
+export function ActionForm({
+  title,
+  description,
+  label,
+  icon,
+  ready,
+  run,
+  children,
+}: {
+  title: string;
+  description: string;
+  label: string;
+  icon: ReactNode;
+  ready: boolean;
+  run: () => Promise<Result>;
+  children: ReactNode;
+}) {
+  const { busy, setBusy, close } = useContext(FrameContext);
+  const [err, setErr] = useState<SendError>();
+
+  const submit = async () => {
+    if (!ready || busy) return;
+    setBusy(true);
+    setErr(undefined);
+    const r = await run();
+    setBusy(false);
+    if (r.ok) close();
+    else setErr(r.err);
+  };
+
+  return (
+    <>
+      <DialogHeader>
+        <DialogTitle>{title}</DialogTitle>
+        <DialogDescription>{description}</DialogDescription>
+      </DialogHeader>
+      {/* oxlint-disable-next-line jsx-a11y/no-noninteractive-element-interactions -- the keydown only catches Cmd/Ctrl+Enter bubbling up from the fields */}
+      <fieldset
+        disabled={busy}
+        className="contents"
+        onKeyDown={(e) => {
+          if (e.key === "Enter" && (e.metaKey || e.ctrlKey)) {
+            e.preventDefault();
+            void submit();
+          }
+        }}
+      >
+        {children}
+      </fieldset>
+      {err && (
+        <Alert className="border-l-[3px] border-l-status-failed">
+          <AlertDescription className="block text-foreground">
+            {err.error}
+            {err.exitCode !== null && <span className="text-muted-foreground"> exit {err.exitCode}</span>}
+            {err.stderrTail && (
+              <pre className="mt-1.5 max-h-24 overflow-auto rounded-[6px] bg-muted p-2 font-mono text-[11px] leading-4 whitespace-pre-wrap text-muted-foreground">
+                {err.stderrTail}
+              </pre>
+            )}
+          </AlertDescription>
+        </Alert>
+      )}
+      <DialogFooter>
+        <Button variant="ghost" disabled={busy} onClick={close}>
+          Cancel
+        </Button>
+        <Button disabled={!ready || busy} onClick={() => void submit()}>
+          {busy ? <LoaderCircle className="animate-spin" /> : icon} {label}
+        </Button>
+      </DialogFooter>
+    </>
+  );
+}
 
 type Props = {
   threadIds: string[];
@@ -31,40 +133,29 @@ type Props = {
   onSent?: (threadId: string) => void;
 };
 
-type FormProps = Props & { sending: boolean; setSending: (v: boolean) => void };
-
 /** Mounted only while open, so each open starts from the initial draft and target. */
-function SendForm({ threadIds, live, titles, message, fixed, onOpenChange, onSent, sending, setSending }: FormProps) {
+function SendForm({ threadIds, live, titles, message, fixed, onSent }: Props) {
   const [target, setTarget] = useState(() => threadIds.find((id) => live.has(id)) ?? "");
   const [draft, setDraft] = useState(message);
-  const [err, setErr] = useState<SendError>();
   const [fixedTitle] = useState(() => {
     const t = live.get(threadIds[0]);
     return t?.title || threadIds[0];
   });
   const selected = live.get(target);
-  const canSend = !!selected && draft.trim() !== "" && !sending;
-
-  const send = async () => {
-    if (!canSend) return;
-    setSending(true);
-    setErr(undefined);
-    const r = await postSend(target, draft);
-    setSending(false);
-    if (r.ok) {
-      onSent?.(target);
-      onOpenChange(false);
-    } else setErr(r.err);
-  };
 
   return (
-    <>
-      <DialogHeader>
-        <DialogTitle>Send message</DialogTitle>
-        <DialogDescription>
-          {fixed ? "Send this message to the thread." : "Send this message to a thread."}
-        </DialogDescription>
-      </DialogHeader>
+    <ActionForm
+      title="Send message"
+      description={fixed ? "Send this message to the thread." : "Send this message to a thread."}
+      label="Confirm send"
+      icon={<Send />}
+      ready={!!selected && draft.trim() !== ""}
+      run={async () => {
+        const r = await postSend(target, draft);
+        if (r.ok) onSent?.(target);
+        return r;
+      }}
+    >
       {fixed ? (
         <div className="flex min-w-0 items-center gap-2 text-sm">
           {selected ? (
@@ -77,7 +168,7 @@ function SendForm({ threadIds, live, titles, message, fixed, onOpenChange, onSen
           )}
         </div>
       ) : (
-        <Select value={target} onValueChange={setTarget} disabled={sending}>
+        <Select value={target} onValueChange={setTarget}>
           <SelectTrigger className="w-full" aria-label="Thread">
             <SelectValue placeholder="No active thread">{selected?.title || selected?.id}</SelectValue>
           </SelectTrigger>
@@ -109,37 +200,9 @@ function SendForm({ threadIds, live, titles, message, fixed, onOpenChange, onSen
         aria-label="Message"
         className="max-h-60 min-h-32"
         value={draft}
-        disabled={sending}
         onChange={(e) => setDraft(e.target.value)}
-        onKeyDown={(e) => {
-          if (e.key === "Enter" && (e.metaKey || e.ctrlKey)) {
-            e.preventDefault();
-            void send();
-          }
-        }}
       />
-      {err && (
-        <Alert className="border-l-[3px] border-l-status-failed">
-          <AlertDescription className="block text-foreground">
-            {err.error}
-            {err.exitCode !== null && <span className="text-muted-foreground"> exit {err.exitCode}</span>}
-            {err.stderrTail && (
-              <pre className="mt-1.5 max-h-24 overflow-auto rounded-[6px] bg-muted p-2 font-mono text-[11px] leading-4 whitespace-pre-wrap text-muted-foreground">
-                {err.stderrTail}
-              </pre>
-            )}
-          </AlertDescription>
-        </Alert>
-      )}
-      <DialogFooter>
-        <Button variant="ghost" disabled={sending} onClick={() => onOpenChange(false)}>
-          Cancel
-        </Button>
-        <Button disabled={!canSend} onClick={() => void send()}>
-          {sending ? <LoaderCircle className="animate-spin" /> : <Send />} Confirm send
-        </Button>
-      </DialogFooter>
-    </>
+    </ActionForm>
   );
 }
 
@@ -157,14 +220,10 @@ export function CliGate({ t3cli, children }: { t3cli: CliStatus | null; children
   );
 }
 
-/** While a send runs, nothing closes the dialog. */
 export function SendDialog(p: Props & { open: boolean }) {
-  const [sending, setSending] = useState(false);
   return (
-    <Dialog open={p.open} onOpenChange={(o) => !sending && p.onOpenChange(o)}>
-      <DialogContent showCloseButton={!sending}>
-        <SendForm {...p} sending={sending} setSending={setSending} />
-      </DialogContent>
-    </Dialog>
+    <ActionDialog open={p.open} onOpenChange={p.onOpenChange}>
+      <SendForm {...p} />
+    </ActionDialog>
   );
 }
