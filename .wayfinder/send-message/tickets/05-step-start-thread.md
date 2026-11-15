@@ -24,3 +24,7 @@ Let a "What's next" step start a new thread in a project, with the step prompt a
 ## Handed over from send-message-03
 
 `SendDialog` (`src/page/send-dialog.tsx`, PR #26) has no shared frame. The in-flight guard (Escape, outside click, close X and Cancel blocked), the failure alert and the Cmd/Ctrl+Enter key live inside it. Extract them for the start dialog here instead of a copy.
+
+## Handed over from send-message-04
+
+`CliGate` (`src/page/send-dialog.tsx`, PR #28) wraps a control that is disabled when no `t3` CLI is found and shows the tooltip. Use it for the "Start thread" icon. `SendDialog` has a `fixed` mode now; the extracted frame must keep it.
