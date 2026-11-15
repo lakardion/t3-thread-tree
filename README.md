@@ -37,7 +37,7 @@ _Screenshots use made-up data from `bun run demo`._
 - **Live.** Changes arrive as T3 streams them. No polling, no reload.
 - **The page remembers your choices.** Closed projects and groups (they show one status icon per thread), the filter, "show settled" and the theme (System, Light or Dark) stay after a reload.
 - **Settled threads on demand.** The "show settled" switch adds them. Archived threads never show.
-- **What's next.** A click on "What's next" shows a ranked list of next steps over the active threads, each with links to its threads. Code makes the obvious steps at once: answer a waiting agent, fix a PR with failing checks, conflicts or requested changes, and merge an approved PR. A local `claude` or `codex` CLI on a cheap model ranks the rest, and it does not run when nothing is left. A step can have a prompt that you copy with one click. The dropdown next to the button selects the CLI. A thread that is no longer active shows struck through.
+- **What's next.** A click on "What's next" shows a ranked list of next steps over the active threads, each with links to its threads. Code makes the obvious steps at once: answer a waiting agent, fix a PR with failing checks, conflicts or requested changes, and merge an approved PR. A local `claude` or `codex` CLI on a cheap model ranks the rest, and it does not run when nothing is left. A step can have a prompt that you copy with one click. The chevron next to the button opens a menu that selects the model. Each option shows its provider icon. The current model shows next to the button. A thread that is no longer active shows struck through.
 
 ## Requirements
 

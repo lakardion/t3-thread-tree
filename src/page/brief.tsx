@@ -1,15 +1,24 @@
-import { Check, Copy, RotateCw, Sparkles, X } from "lucide-react";
+import { Check, ChevronDown, Copy, RotateCw, Sparkles, X } from "lucide-react";
 import { useEffect, useState } from "react";
 
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
+import { ButtonGroup, ButtonGroupSeparator } from "@/components/ui/button-group";
 import { Card } from "@/components/ui/card";
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuLabel,
+  DropdownMenuRadioGroup,
+  DropdownMenuRadioItem,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 
 import type { ActionKind, BriefAction, BriefState, Cli } from "../shared/brief.ts";
 import type { ThreadNode } from "../shared/tree.ts";
+import { ProviderIcon } from "./provider-icon.tsx";
 import { StatusIcon } from "./status-icon.tsx";
 
 export type Offered = { id: Cli; label: string }[];
@@ -40,30 +49,43 @@ export function BriefControls(p: {
     </Button>
   );
   return (
-    <div className="flex items-center">
-      {none ? (
-        <Tooltip>
-          <TooltipTrigger asChild>
-            {/* oxlint-disable-next-line jsx-a11y/no-noninteractive-tabindex -- a disabled button gets no focus, so the wrapper takes it to show the tooltip */}
-            <span tabIndex={0}>{button}</span>
-          </TooltipTrigger>
-          <TooltipContent>No logged-in claude or codex CLI found</TooltipContent>
-        </Tooltip>
-      ) : (
-        button
-      )}
-      <Select value={p.cli ?? ""} onValueChange={(v) => p.setCli(v as Cli)} disabled={!p.clis?.length}>
-        <SelectTrigger size="sm" aria-label="Model" className="rounded-l-none border-l-0">
-          <SelectValue placeholder="No model" />
-        </SelectTrigger>
-        <SelectContent>
-          {p.clis?.map((c) => (
-            <SelectItem key={c.id} value={c.id}>
-              {c.label}
-            </SelectItem>
-          ))}
-        </SelectContent>
-      </Select>
+    <div className="flex items-center gap-2">
+      <ButtonGroup>
+        {none ? (
+          <Tooltip>
+            <TooltipTrigger asChild>
+              {/* oxlint-disable-next-line jsx-a11y/no-noninteractive-tabindex -- a disabled button gets no focus, so the wrapper takes it to show the tooltip */}
+              <span tabIndex={0}>{button}</span>
+            </TooltipTrigger>
+            <TooltipContent>No logged-in claude or codex CLI found</TooltipContent>
+          </Tooltip>
+        ) : (
+          button
+        )}
+        <ButtonGroupSeparator className="bg-primary-foreground/30" />
+        <DropdownMenu modal={false}>
+          <DropdownMenuTrigger asChild disabled={!p.clis?.length}>
+            <Button size="icon-sm" className="w-7" aria-label="Model">
+              <ChevronDown />
+            </Button>
+          </DropdownMenuTrigger>
+          <DropdownMenuContent align="end" className="min-w-44">
+            <DropdownMenuLabel className="text-xs text-muted-foreground">Model</DropdownMenuLabel>
+            <DropdownMenuRadioGroup value={p.cli ?? ""} onValueChange={(v) => p.setCli(v as Cli)}>
+              {p.clis?.map((c) => (
+                <DropdownMenuRadioItem key={c.id} value={c.id}>
+                  <ProviderIcon cli={c.id} className="size-3.5" />
+                  {c.label}
+                </DropdownMenuRadioItem>
+              ))}
+            </DropdownMenuRadioGroup>
+          </DropdownMenuContent>
+        </DropdownMenu>
+      </ButtonGroup>
+      <span className="flex items-center gap-1 text-xs text-muted-foreground">
+        {p.cli && <ProviderIcon cli={p.cli} className="size-3" />}
+        {p.clis?.find((c) => c.id === p.cli)?.label ?? "No model"}
+      </span>
     </div>
   );
 }
