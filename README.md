@@ -1,6 +1,6 @@
 # T3 thread tree
 
-A live, read-only map of your [T3 Code](https://github.com/pingdotgg/t3code) threads.
+A live map of your [T3 Code](https://github.com/pingdotgg/t3code) threads.
 
 T3 Code shows threads as a flat list. When agents launch threads, review PRs and work through PR stacks, a flat list does not tell you how the work fits together. This app shows the active threads as one tree, **Project › issue key › thread**, with a status and the PR marks on each row. Click a thread to open it in T3 Code.
 
@@ -96,7 +96,7 @@ statev2.sqlite (read-only) ──launch lineage──────────▶
 - [DESIGN-SPEC.md](DESIGN-SPEC.md) defines the visual design. [SPEC.md](SPEC.md) defines the tree rules, and [CONTEXT.md](CONTEXT.md) defines the terms.
 - `src/shared/tree.ts` holds the `Tree` type that the server and the page share.
 
-The app never writes to T3. It uses a token with the `orchestration:read` scope only, and it opens the database read-only.
+The app writes to T3 only when you confirm a send or a start in a dialog. It runs the `t3` CLI for that, with the T3 login. The stream token keeps the `orchestration:read` scope only, and the app opens the database read-only.
 
 ## Develop
 
@@ -112,4 +112,4 @@ CI runs `bun run check` on every pull request. A pull request merges only when i
 
 ## Status
 
-It shows the threads of the local T3 environment only, and it has no write actions (settle, snooze, send).
+It shows the threads of the local T3 environment only. Its write actions are send a message and start a thread. It has no settle, snooze or interrupt.
