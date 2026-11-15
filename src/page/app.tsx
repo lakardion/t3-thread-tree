@@ -351,7 +351,8 @@ function DetailBlock({ t }: { t: ThreadNode }) {
   );
 }
 
-function ThreadRow({ t, chip, sort, hideStack }: { t: ThreadNode; chip?: string; sort?: Sort; hideStack?: boolean }) {
+/** `inStack`: the row sits on a stack rail, which holds no drag handles and shows the stack itself. */
+function ThreadRow({ t, chip, sort, inStack }: { t: ThreadNode; chip?: string; sort?: Sort; inStack?: boolean }) {
   const now = useContext(Now);
   const { open, toggle, show } = useContext(Details);
   const dim = useContext(NeedsOnly) && !needsYou(t.status);
@@ -365,7 +366,7 @@ function ThreadRow({ t, chip, sort, hideStack }: { t: ThreadNode; chip?: string;
           className="thread-row group/row flex min-h-9 min-w-0 items-center gap-x-2 rounded-[8px] px-2 py-1 text-[13px] leading-5 max-[720px]:flex-wrap"
           data-status={t.status}
         >
-          <DragHandle handleRef={handleRef} name={t.title || t.id} className="-ml-1.5" />
+          {!inStack && <DragHandle handleRef={handleRef} name={t.title || t.id} className="-ml-1.5" />}
           <StatusIcon t={t} now={now} />
           {pulse > 0 && <span key={pulse} aria-hidden className={cn("row-pulse", STATUS[t.status].shape)} />}
           {chip && (
@@ -410,7 +411,7 @@ function ThreadRow({ t, chip, sort, hideStack }: { t: ThreadNode; chip?: string;
                 Settled
               </Badge>
             )}
-            {t.stack && !hideStack && (
+            {t.stack && !inStack && (
               <Badge variant="outline" className={cn(CHIP, "chip-stack")} title="PR stack">
                 <Layers />
                 {t.stack.pos ? `${t.stack.pos}/${t.stack.total}` : `base · ${t.stack.total}`}
@@ -450,7 +451,7 @@ function ThreadRow({ t, chip, sort, hideStack }: { t: ThreadNode; chip?: string;
         {t.children.length > 0 && (
           <ul className="m-0 list-none pl-2.5">
             <Presence items={t.children} keyOf={(c) => c.id}>
-              {(c) => <ThreadRow t={c} hideStack={hideStack} />}
+              {(c) => <ThreadRow t={c} inStack={inStack} />}
             </Presence>
           </ul>
         )}
@@ -577,9 +578,11 @@ function StackRail({ run, closed, toggle, sort }: { run: Branch[]; sort?: Sort }
   );
   const render = (ref: RefFn, handleRef?: RefFn) => (
     <Collapsible asChild open={open} onOpenChange={() => toggle(`rail:${id}`)}>
-      <li ref={ref} className="my-1 rounded-[10px] border border-dashed border-border">
-        <div className="group/row flex min-h-8 flex-wrap items-center gap-2 px-2 text-xs">
-          <DragHandle handleRef={handleRef} name={`PR stack of ${run[0].label}`} className="-ml-1.5" />
+      <li ref={ref} className="relative my-1 ml-7 rounded-[10px] border border-dashed border-border">
+        <div className="group/row flex min-h-7 flex-wrap items-center gap-2 px-2 text-xs">
+          {handleRef && (
+            <DragHandle handleRef={handleRef} name={`PR stack of ${run[0].label}`} className="absolute top-1 -left-7" />
+          )}
           <CollapsibleTrigger
             className="flex cursor-pointer items-center gap-1 text-muted-foreground select-none max-[720px]:min-h-11"
             aria-label={`PR stack · ${total} PRs`}
@@ -617,13 +620,13 @@ function StackRail({ run, closed, toggle, sort }: { run: Branch[]; sort?: Sort }
           </span>
         </div>
         <CollapsibleContent asChild>
-          <ul className="m-0 list-none p-0 pb-1 pl-3">
+          <ul className="m-0 list-none p-0 pb-1 pl-1">
             <Presence items={rows} keyOf={(r) => r.t.id}>
               {(r) => (
                 <li className="relative pl-6">
                   <RailNode y={18} color={r.color} above={r.t !== rows[0].t} below={r.t !== rows.at(-1)!.t} n={r.n} />
                   <ul className="m-0 list-none p-0">
-                    <ThreadRow t={r.t} chip={r.g.label} hideStack />
+                    <ThreadRow t={r.t} chip={r.g.label} inStack />
                   </ul>
                 </li>
               )}
