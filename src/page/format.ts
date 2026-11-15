@@ -57,3 +57,10 @@ export function linearHref(key: string, linear: Tree["linear"]): string | null {
   if (!linear || !linear.teams.includes(key.slice(0, key.lastIndexOf("-")))) return null;
   return `https://linear.app/${linear.workspace}/issue/${key}`;
 }
+
+/** The fold ids of a group and of the groups in it. A group that folds into its one thread has none. */
+export const groupIds = (g: Branch): string[] => (folded(g) ? [] : [g.id, ...g.branches.flatMap(groupIds)]);
+
+/** The fold ids of the rows in a project: its groups and its PR stacks. */
+export const foldIds = (project: Branch): string[] =>
+  stackRuns(project.branches).flatMap((run) => (run[0].stack ? [`rail:${run[0].stack.id}`] : groupIds(run[0])));

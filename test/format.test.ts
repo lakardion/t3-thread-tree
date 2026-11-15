@@ -1,6 +1,16 @@
 import { describe, expect, test } from "bun:test";
 
-import { ago, folded, linearHref, phraseWith, prTone, stackRuns, stripKey } from "../src/page/format.ts";
+import {
+  ago,
+  folded,
+  foldIds,
+  groupIds,
+  linearHref,
+  phraseWith,
+  prTone,
+  stackRuns,
+  stripKey,
+} from "../src/page/format.ts";
 import type { Branch, PrNode, ThreadNode } from "../src/shared/tree.ts";
 
 const NOW = Date.parse("2026-11-12T12:00:00.000Z");
@@ -88,6 +98,40 @@ describe("stackRuns", () => {
   });
   test("an empty list gives no runs", () => {
     expect(stackRuns([])).toEqual([]);
+  });
+});
+
+describe("foldIds", () => {
+  const thread = (key: string | null) => ({ id: `t-${key}`, key }) as ThreadNode;
+  const b = (id: string, threads: ThreadNode[], branches: Branch[] = [], stack?: string): Branch => ({
+    id,
+    label: id,
+    branches,
+    threads,
+    ...(stack && { stack: { id: stack, total: 2, base: null } }),
+  });
+
+  test("a project lists its groups, nested groups and one id per stack run", () => {
+    const nested = b(
+      "Reviews",
+      [],
+      [b("SHOP-1", [thread("SHOP-1"), thread("SHOP-1")]), b("SHOP-2", [thread("SHOP-2")])],
+    );
+    const p = b(
+      "p",
+      [],
+      [
+        nested,
+        b("API-1", [thread("API-1")], [], "s1"),
+        b("API-2", [thread("API-2")], [], "s1"),
+        b("No issue key", [thread(null)]),
+      ],
+    );
+    expect(foldIds(p)).toEqual(["Reviews", "SHOP-1", "rail:s1", "No issue key"]);
+    expect(groupIds(nested)).toEqual(["Reviews", "SHOP-1"]);
+  });
+  test("a group that folds into one thread has no fold id", () => {
+    expect(groupIds(b("SHOP-1", [thread("SHOP-1")]))).toEqual([]);
   });
 });
 

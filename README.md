@@ -20,6 +20,7 @@ _Screenshots use made-up data from `bun run demo`._
 - **Stable order.** Rows keep their place while threads update. A new thread, group or project shows at the bottom of its list.
 - **Status changes move.** A new status icon or PR mark fades in. The row flashes once in the new status color. With reduced motion, changes show at once.
 - **Rows come and go.** A new project, group or thread grows in. A removed one collapses out. A change that arrives during a drag shows at once. With reduced motion, rows appear and disappear at once.
+- **Fold all at once.** The button in the header closes or opens all projects, groups and PR stacks. A project or group row with groups or PR stacks in it has its own button at its end (shown on hover): it closes all rows in it, or opens the row and all rows in it. The icon morphs between the two arrow pairs.
 - **Folds slide.** A project, group, PR stack or details panel slides open and shut, and its chevron turns. With reduced motion, it opens and shuts at once.
 - **Status at a glance.** Each row starts with one status icon, so the issue key and title start close to it. Each kind of status has its own icon: for example, a shield for an approval, a question bubble for a question, and a chat bubble with a dot for "your turn" (a result you did not open yet). Hover the icon to see the phrase and the elapsed time, for example "Working 12m". The help button (?) in the header opens a legend of all icons. Color is never the only sign.
 
