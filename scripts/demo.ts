@@ -2,6 +2,7 @@
 import index from "../src/page/index.html";
 import { briefInput, briefService, type Outcome } from "../src/server/brief.ts";
 import { buildTree } from "../src/server/build-tree.ts";
+import { cliPath, type CliRun, sendService } from "../src/server/send.ts";
 import type { Pr, Project, Thread } from "../src/server/t3.ts";
 import type { BriefAction, Cli } from "../src/shared/brief.ts";
 
@@ -280,6 +281,21 @@ const brief = briefService({
   run: stubRun,
 });
 
+/** Waits 1 s, then answers like the CLI. `SEND=failed` fails with the wrapper text. */
+const stubCli: CliRun = async (argv) => {
+  await Bun.sleep(1000);
+  if (process.env.SEND === "failed")
+    return { code: 1, stdout: "", stderr: "Sending the message.\nThread demo-1 is not reachable.\n", timedOut: false };
+  const stdout = argv[2] === "send" ? '{"delivery":"queued"}' : '{"threadId":"demo-started"}';
+  return { code: 0, stdout, stderr: "", timedOut: false };
+};
+const sender = sendService({
+  cli: Promise.resolve({ available: process.env.T3CLI !== "0", path: cliPath() }),
+  hasThread: (id) => threads.some((th) => th.id === id && !th.gone),
+  hasProject: (id) => projects.has(id),
+  run: stubCli,
+});
+
 const byId = (id: string) => threads.find((th) => th.id === id)!;
 const setPr = (id: string, n: number, over: Partial<Pr>) => {
   const th = byId(id);
@@ -324,11 +340,14 @@ if (process.env.PUSH === "1") {
 }
 
 const server = Bun.serve({
+  /** Above the 30 s CLI timeout, so a slow send still gets its 502 body. */
+  idleTimeout: 40,
   hostname: "127.0.0.1",
   port: Number(process.env.PORT ?? 4774),
   routes: {
     "/": index,
     ...brief.routes,
+    ...sender.routes,
     "/events": async (req) => {
       server.timeout(req, 0);
       await Bun.sleep(Number(process.env.DELAY ?? 0));
