@@ -34,7 +34,7 @@ The destination is reached when every route key is done and no map ticket is ope
 
 ## Stacks
 
-- `main ← send-message-02-add-send-endpoints (#25) ← send-message-03-build-send-dialog (#26) ← send-message-04-row-send (#28)` (GitHub stack #27)
+- `main ← send-message-02-add-send-endpoints (#25) ← send-message-03-build-send-dialog (#26) ← send-message-04-row-send (#28) ← send-message-05-start-thread-from-step (#29)` (GitHub stack #27)
 
 ## Notes
 
