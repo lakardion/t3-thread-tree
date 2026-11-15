@@ -231,7 +231,7 @@ const SAMPLE: BriefAction[] = [
     title: "Settle the finished docs threads",
     reason: "The getting-started guide is done and the tutorial archive is settled.",
     threadIds: ["demo-17", "demo-27"],
-    prompt: null,
+    prompt: "Settle the getting-started guide and the tutorial archive threads.",
   },
 ];
 const titles = Object.fromEntries(threads.map((th) => [th.id, th.title]));

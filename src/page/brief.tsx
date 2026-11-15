@@ -1,4 +1,4 @@
-import { Check, ChevronDown, Copy, RotateCw, Sparkles, X } from "lucide-react";
+import { Check, ChevronDown, Copy, RotateCw, Send, Sparkles, X } from "lucide-react";
 import { useEffect, useState } from "react";
 
 import { Alert, AlertDescription } from "@/components/ui/alert";
@@ -17,8 +17,11 @@ import {
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 
 import type { ActionKind, BriefAction, BriefState, Cli } from "../shared/brief.ts";
+import type { CliStatus } from "../shared/send.ts";
 import type { ThreadNode } from "../shared/tree.ts";
 import { ProviderIcon } from "./provider-icon.tsx";
+import { SendDialog } from "./send-dialog.tsx";
+import { markKey } from "./send.ts";
 import { StatusIcon } from "./status-icon.tsx";
 
 export type Offered = { id: Cli; label: string }[];
@@ -149,6 +152,54 @@ function CopyPrompt({ prompt }: { prompt: string }) {
   );
 }
 
+function SendPrompt(p: {
+  a: BriefAction;
+  prompt: string;
+  live: Map<string, ThreadNode>;
+  titles: Record<string, string>;
+  t3cli: CliStatus | null;
+  onSent: (key: string, threadId: string) => void;
+}) {
+  const [open, setOpen] = useState(false);
+  const off = p.t3cli?.available === false;
+  const button = (
+    <Button
+      variant="ghost"
+      size="icon-xs"
+      className="flex-none text-muted-foreground"
+      aria-label="Send prompt"
+      disabled={off}
+      onClick={() => setOpen(true)}
+    >
+      <Send />
+    </Button>
+  );
+  return (
+    <>
+      {off ? (
+        <Tooltip>
+          <TooltipTrigger asChild>
+            {/* oxlint-disable-next-line jsx-a11y/no-noninteractive-tabindex -- a disabled button gets no focus, so the wrapper takes it to show the tooltip */}
+            <span tabIndex={0}>{button}</span>
+          </TooltipTrigger>
+          <TooltipContent>No t3 CLI at {p.t3cli?.path}. Set T3_BIN in .env.</TooltipContent>
+        </Tooltip>
+      ) : (
+        button
+      )}
+      <SendDialog
+        open={open}
+        onOpenChange={setOpen}
+        threadIds={p.a.threadIds}
+        live={p.live}
+        titles={p.titles}
+        message={p.prompt}
+        onSent={(id) => p.onSent(markKey(p.a), id)}
+      />
+    </>
+  );
+}
+
 /** Per-letter weight wave with a shimmer. */
 function LoadingText({ text }: { text: string }) {
   return (
@@ -167,11 +218,17 @@ function Row({
   i,
   live,
   titles,
+  t3cli,
+  sent,
+  onSent,
 }: {
   a: BriefAction;
   i: number;
   live: Map<string, ThreadNode>;
   titles: Record<string, string>;
+  t3cli: CliStatus | null;
+  sent: string[] | undefined;
+  onSent: (key: string, threadId: string) => void;
 }) {
   return (
     <li className="flex items-start gap-2.5 rounded-[8px] px-2 py-1.5 hover:bg-accent">
@@ -184,13 +241,24 @@ function Row({
           <span className="font-[650]">{a.title}</span>
           <span className="text-xs text-muted-foreground">{a.reason}</span>
         </div>
+        {sent && (
+          <div className="mt-0.5 flex items-center gap-1 text-xs text-muted-foreground">
+            <Check className="size-3" aria-hidden />
+            Sent to {sent.map((id) => live.get(id)?.title || titles[id] || id).join(", ")}
+          </div>
+        )}
         <div className="mt-0.5 flex flex-wrap gap-x-3 gap-y-0.5">
           {a.threadIds.map((id) => (
             <ThreadLink key={id} id={id} live={live} saved={titles[id]} />
           ))}
         </div>
       </div>
-      {a.prompt && <CopyPrompt prompt={a.prompt} />}
+      {a.prompt && (
+        <>
+          <SendPrompt a={a} prompt={a.prompt} live={live} titles={titles} t3cli={t3cli} onSent={onSent} />
+          <CopyPrompt prompt={a.prompt} />
+        </>
+      )}
     </li>
   );
 }
@@ -199,6 +267,9 @@ export function BriefPanel(p: {
   state: BriefState;
   clis: Offered | null;
   live: Map<string, ThreadNode>;
+  t3cli: CliStatus | null;
+  sent: Map<string, string[]>;
+  onSent: (key: string, threadId: string) => void;
   run: () => void;
   cancel: () => void;
   close: () => void;
@@ -208,7 +279,16 @@ export function BriefPanel(p: {
   const rows = s.status !== "idle" && s.actions.length > 0 && (
     <ol className="m-0 list-none p-1.5">
       {s.actions.map((a, i) => (
-        <Row key={i} a={a} i={i} live={p.live} titles={s.titles} />
+        <Row
+          key={i}
+          a={a}
+          i={i}
+          live={p.live}
+          titles={s.titles}
+          t3cli={p.t3cli}
+          sent={p.sent.get(markKey(a))}
+          onSent={p.onSent}
+        />
       ))}
     </ol>
   );
