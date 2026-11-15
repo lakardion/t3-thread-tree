@@ -31,7 +31,7 @@ import type { BriefState, Cli } from "../shared/brief.ts";
 import { allThreads, type Branch, type PrNode, type ThreadNode, type Tree } from "../shared/tree.ts";
 import { countAttention, needsYou, onlyNeedsYou } from "./attention.ts";
 import { BriefControls, BriefPanel, type Offered } from "./brief.tsx";
-import { ago, folded, isKeyGroup, linearHref, phraseWith, stackRuns, stripKey } from "./format.ts";
+import { ago, folded, isKeyGroup, linearHref, ownPr, phraseWith, prTone, stackRuns, stripKey } from "./format.ts";
 import {
   PROJECTS,
   arrange,
@@ -334,7 +334,7 @@ function DetailBlock({ t }: { t: ThreadNode }) {
   );
 }
 
-function ThreadRow({ t, chip, sort }: { t: ThreadNode; chip?: string; sort?: Sort }) {
+function ThreadRow({ t, chip, sort, hideStack }: { t: ThreadNode; chip?: string; sort?: Sort; hideStack?: boolean }) {
   const now = useContext(Now);
   const { open, toggle, show } = useContext(Details);
   const dim = useContext(NeedsOnly) && !needsYou(t.status);
@@ -402,7 +402,7 @@ function ThreadRow({ t, chip, sort }: { t: ThreadNode; chip?: string; sort?: Sor
                 Settled
               </Badge>
             )}
-            {t.stack && (
+            {t.stack && !hideStack && (
               <Badge variant="outline" className={cn(CHIP, "chip-stack")} title="PR stack">
                 <Layers />
                 {t.stack.pos ? `${t.stack.pos}/${t.stack.total}` : `base · ${t.stack.total}`}
@@ -442,7 +442,7 @@ function ThreadRow({ t, chip, sort }: { t: ThreadNode; chip?: string; sort?: Sor
         {t.children.length > 0 && (
           <ul className="m-0 list-none pl-2.5">
             <Presence items={t.children} keyOf={(c) => c.id}>
-              {(c) => <ThreadRow t={c} />}
+              {(c) => <ThreadRow t={c} hideStack={hideStack} />}
             </Presence>
           </ul>
         )}
@@ -520,30 +520,106 @@ function GroupRow({ b, closed, toggle, sort }: { b: Branch; sort?: Sort } & Fold
   return <Sortable sort={sort}>{render}</Sortable>;
 }
 
-/** Key groups of one PR stack, in one rail with a label row. */
+/** A node on the rail line at `y` px, with line segments above and below it. A node with no `n` is hollow. */
+function RailNode({
+  y,
+  color,
+  above,
+  below,
+  n,
+}: {
+  y: number;
+  color: string;
+  above: boolean;
+  below: boolean;
+  n?: number;
+}) {
+  const line = `color-mix(in oklch, ${color} 45%, transparent)`;
+  return (
+    <span aria-hidden className="pointer-events-none absolute inset-y-0 left-0 w-5">
+      {above && <span className="absolute left-[9px] w-0.5" style={{ top: 0, height: y, background: line }} />}
+      {below && <span className="absolute bottom-0 left-[9px] w-0.5" style={{ top: y, background: line }} />}
+      <span
+        className={cn(
+          "absolute flex -translate-y-1/2 items-center justify-center rounded-full text-[9px] font-bold text-background",
+          n ? "left-px size-[18px]" : "left-1 size-3 border-2 border-muted-foreground bg-card",
+        )}
+        style={{ top: y, background: n ? color : undefined }}
+      >
+        {n}
+      </span>
+    </span>
+  );
+}
+
+/**
+ * Key groups of one PR stack. The header is a line of stops from the base to the top PR; the body lists the
+ * threads on a numbered line, one number per PR. Both are colored by PR state.
+ */
 function StackRail({ run, closed, toggle, sort }: { run: Branch[]; sort?: Sort } & Fold) {
-  const { total, base } = run[0].stack!;
+  const { id, total, base } = run[0].stack!;
+  const open = !closed.has(`rail:${id}`);
+  const stops = run.map((g) => ({ g, p: ownPr(g) }));
+  const rows = stops.flatMap(({ g, p }, i) =>
+    g.threads.map((t, j) => ({ t, g, color: prTone(p), n: j ? undefined : i + 1 })),
+  );
   const render = (ref: RefFn, handleRef?: RefFn) => (
-    <li ref={ref} className="stack-rail my-1">
-      <div className="group/row flex min-h-6 flex-wrap items-center gap-x-1.5 px-2 text-xs text-muted-foreground">
-        <DragHandle handleRef={handleRef} name={`PR stack of ${run[0].label}`} className="-ml-1.5" />
-        <Layers className="size-3 flex-none" aria-hidden />
-        <span>
-          PR stack · {total} PRs
-          {base && (
-            <>
-              {" "}
-              · base <code className="font-mono">{base}</code>
-            </>
-          )}
-        </span>
-      </div>
-      <ul className="m-0 list-none p-0">
-        <Presence items={run} keyOf={(c) => c.id}>
-          {(c) => <GroupRow b={c} closed={closed} toggle={toggle} />}
-        </Presence>
-      </ul>
-    </li>
+    <Collapsible asChild open={open} onOpenChange={() => toggle(`rail:${id}`)}>
+      <li ref={ref} className="my-1 rounded-[10px] border border-dashed border-border">
+        <div className="group/row flex min-h-8 flex-wrap items-center gap-2 px-2 text-xs">
+          <DragHandle handleRef={handleRef} name={`PR stack of ${run[0].label}`} className="-ml-1.5" />
+          <CollapsibleTrigger
+            className="flex cursor-pointer items-center gap-1 text-muted-foreground select-none max-[720px]:min-h-11"
+            aria-label={`PR stack · ${total} PRs`}
+            title={`PR stack · ${total} PRs`}
+          >
+            <Chevron open={open} />
+            <Layers className="size-3.5" aria-hidden />
+          </CollapsibleTrigger>
+          <span className="inline-flex flex-wrap items-center gap-y-1">
+            {base && (
+              <code className="rounded-[5px] bg-muted px-1.5 py-0.5 font-mono text-[11px] text-muted-foreground">
+                {base}
+              </code>
+            )}
+            {stops.map(({ g, p }, i) => (
+              <span key={g.id} className="inline-flex items-center">
+                {(i > 0 || base) && <span className="h-0.5 w-4" style={{ background: prTone(p) }} />}
+                <a
+                  href={p?.url}
+                  target="_blank"
+                  rel="noreferrer"
+                  title={g.label}
+                  className={cn(
+                    "inline-flex items-center gap-1 rounded-full border px-1.5 py-px font-mono text-[11px] hover:underline",
+                    p?.draft && "border-dashed",
+                  )}
+                  style={{ borderColor: prTone(p) }}
+                >
+                  <span className="size-1.5 rounded-full" style={{ background: prTone(p) }} />
+                  {i + 1}
+                  {p && ` · #${p.n}`}
+                </a>
+              </span>
+            ))}
+          </span>
+        </div>
+        <CollapsibleContent asChild>
+          <ul className="m-0 list-none p-0 pb-1 pl-3">
+            <Presence items={rows} keyOf={(r) => r.t.id}>
+              {(r) => (
+                <li className="relative pl-6">
+                  <RailNode y={18} color={r.color} above={r.t !== rows[0].t} below={r.t !== rows.at(-1)!.t} n={r.n} />
+                  <ul className="m-0 list-none p-0">
+                    <ThreadRow t={r.t} chip={r.g.label} hideStack />
+                  </ul>
+                </li>
+              )}
+            </Presence>
+          </ul>
+        </CollapsibleContent>
+      </li>
+    </Collapsible>
   );
   return <Sortable sort={sort}>{render}</Sortable>;
 }

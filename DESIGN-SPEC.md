@@ -321,22 +321,6 @@ Five gradients, all static. No gradient on text, on the page background, or on a
   border-radius: 1px;
 }
 
-/* Stack rail: from the base of the stack (blue) to its top (violet). */
-.stack-rail {
-  position: relative;
-  padding-left: 10px;
-}
-.stack-rail::before {
-  content: "";
-  position: absolute;
-  left: 0;
-  top: 0;
-  bottom: 0;
-  width: 3px;
-  border-radius: 2px;
-  background: linear-gradient(180deg, var(--primary), var(--status-plan));
-}
-
 /* Stack position chip. */
 .chip-stack {
   background: linear-gradient(135deg, color-mix(in oklch, var(--primary) 10%, var(--card)), var(--card));
@@ -390,7 +374,12 @@ The hover background of a row is `--accent`. It replaces the wash while the poin
 
 ### Stack rail
 
-Key groups of one project that share a PR stack sit together (tree rule 8). The page wraps them in one `.stack-rail` block with a label row above the first group: the `Layers` icon, then "PR stack · N PRs · base `<base>`" in 12 px muted text. The base part shows only when T3 sends it. The stack chip stays on each thread row.
+Key groups of one project that share a PR stack sit together (tree rule 8). The page wraps them in one block with a dashed border.
+
+- **Header.** A fold trigger (chevron and `Layers` icon, label "PR stack · N PRs"), then a metro line: the base in a `code` pill, then one stop for each PR from the bottom of the stack to the top. A stop reads "2 · #2102", links to the PR, and has a dashed border for a draft. The base shows only when T3 sends it. The header stays when the block is closed.
+- **Body.** One row for each top-level thread of the groups, with no group headers and the issue key as the row chip. The rows sit 12 px in, on a vertical line. The first row of each group has a filled node with the stack position; other rows have a hollow node. Thread rows in the block have no stack chip.
+- **Color.** Stops, nodes and line segments take the color of their PR: `--status-failed-fg` when checks fail, the PR conflicts or a review asks for changes; `--status-done-fg` when approved; `--muted-foreground` for a draft; `--status-working-fg` otherwise. These tokens keep 4.5:1 contrast with the `--background` number text in both themes.
+- **Fold.** The open or closed state is saved with the other folds.
 
 ### Thread row
 
@@ -410,7 +399,7 @@ One line when the title fits, `min-height: 36px`, radius 8 px, 13 px text with a
 | "Input" chip   | Outline. Only when a request with `blocking: false` is pending.                                                                                                               |
 | "until" note   | "until Fri 10:42" in an outline chip, when `snoozedUntil` is in the future. It also shows on a `needs-input` row of a snoozed thread.                                         |
 | "Settled" chip | Outline, muted. Only with "show settled" on, on a settled thread.                                                                                                             |
-| Stack chip     | `.chip-stack`, the `Layers` icon and "2/4", or "base · 4" when the thread created no PR in the stack.                                                                         |
+| Stack chip     | `.chip-stack`, the `Layers` icon and "2/4", or "base · 4" when the thread created no PR in the stack. Not shown on rows in a stack block.                                     |
 | PR chips       | The first two PRs, then a "+N" button that opens the details block.                                                                                                           |
 | Age            | Relative age of `updatedAt`, mono 11 px, muted, `tabular-nums`. The tooltip shows "Updated" and the exact time.                                                               |
 | Details button | Ghost icon button with `ChevronDown`, `aria-expanded`, label "Details".                                                                                                       |
