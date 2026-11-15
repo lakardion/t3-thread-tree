@@ -20,7 +20,7 @@ import type { ActionKind, BriefAction, BriefState, Cli } from "../shared/brief.t
 import type { CliStatus } from "../shared/send.ts";
 import type { ThreadNode } from "../shared/tree.ts";
 import { ProviderIcon } from "./provider-icon.tsx";
-import { SendDialog } from "./send-dialog.tsx";
+import { CliGate, SendDialog } from "./send-dialog.tsx";
 import { markKey } from "./send.ts";
 import { StatusIcon } from "./status-icon.tsx";
 
@@ -176,17 +176,7 @@ function SendPrompt(p: {
   );
   return (
     <>
-      {off ? (
-        <Tooltip>
-          <TooltipTrigger asChild>
-            {/* oxlint-disable-next-line jsx-a11y/no-noninteractive-tabindex -- a disabled button gets no focus, so the wrapper takes it to show the tooltip */}
-            <span tabIndex={0}>{button}</span>
-          </TooltipTrigger>
-          <TooltipContent>No t3 CLI at {p.t3cli?.path}. Set T3_BIN in .env.</TooltipContent>
-        </Tooltip>
-      ) : (
-        button
-      )}
+      <CliGate t3cli={p.t3cli}>{button}</CliGate>
       <SendDialog
         open={open}
         onOpenChange={setOpen}
