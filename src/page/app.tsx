@@ -46,6 +46,8 @@ import {
 import { Presence, useMotion } from "./presence.tsx";
 import { STATUS, StatusIcon } from "./status-icon.tsx";
 import { Swap, useChanges } from "./swap.tsx";
+import { PrototypeSwitcher } from "./prototype-switcher.tsx";
+import { STACK_VARIANTS, StackRailPrototype } from "./stack-rail.prototype.tsx";
 
 const TOKEN_CMD =
   "~/.t3/bin/t3 auth session issue --scope orchestration:read --label thread-tree --ttl 52w --token-only";
@@ -105,8 +107,8 @@ const Mark = ({ title, children }: { title: string; children: ReactNode }) => (
   </span>
 );
 
-type RefFn = (el: Element | null) => void;
-type Sort = { id: string; list: string; index: number; name: string };
+export type RefFn = (el: Element | null) => void;
+export type Sort = { id: string; list: string; index: number; name: string };
 
 /** A unit gets sort props only when its list has two or more units and it is in the list. */
 const sortOf = (lists: Map<string, string[]>, list: string, id: string, name: string): Sort | undefined => {
@@ -140,10 +142,10 @@ function MotionHook({ children }: { children: (ref: RefFn) => ReactNode }) {
 }
 
 /** Renders `children` with the sort refs of `sort`, or with only the motion ref when `sort` is unset. */
-const Sortable = ({ sort, children }: { sort?: Sort; children: (ref: RefFn, handleRef?: RefFn) => ReactNode }) =>
+export const Sortable = ({ sort, children }: { sort?: Sort; children: (ref: RefFn, handleRef?: RefFn) => ReactNode }) =>
   sort ? <SortHook sort={sort}>{children}</SortHook> : <MotionHook>{children}</MotionHook>;
 
-const DragHandle = ({ handleRef, name, className }: { handleRef?: RefFn; name: string; className?: string }) =>
+export const DragHandle = ({ handleRef, name, className }: { handleRef?: RefFn; name: string; className?: string }) =>
   handleRef && (
     <Button
       ref={handleRef}
@@ -300,7 +302,7 @@ function DetailBlock({ t }: { t: ThreadNode }) {
   );
 }
 
-function ThreadRow({ t, chip, sort }: { t: ThreadNode; chip?: string; sort?: Sort }) {
+export function ThreadRow({ t, chip, sort, hideStack }: { t: ThreadNode; chip?: string; sort?: Sort; hideStack?: boolean }) {
   const now = useContext(Now);
   const { open, toggle, show } = useContext(Details);
   const dim = useContext(NeedsOnly) && !needsYou(t.status);
@@ -367,7 +369,7 @@ function ThreadRow({ t, chip, sort }: { t: ThreadNode; chip?: string; sort?: Sor
                 Settled
               </Badge>
             )}
-            {t.stack && (
+            {t.stack && !hideStack && (
               <Badge variant="outline" className={cn(CHIP, "chip-stack")} title="PR stack">
                 <Layers />
                 {t.stack.pos ? `${t.stack.pos}/${t.stack.total}` : `base · ${t.stack.total}`}
@@ -422,13 +424,13 @@ function ThreadRow({ t, chip, sort }: { t: ThreadNode; chip?: string; sort?: Sor
   return <Sortable sort={sort}>{render}</Sortable>;
 }
 
-const Chevron = ({ open }: { open: boolean }) => {
+export const Chevron = ({ open }: { open: boolean }) => {
   const Icon = open ? ChevronDown : ChevronRight;
   return <Icon className="size-3.5 flex-none text-muted-foreground" />;
 };
 
 /** One status icon for each thread of a closed branch, in tree order. */
-const Icons = ({ b }: { b: Branch }) => (
+export const Icons = ({ b }: { b: Branch }) => (
   <span className="inline-flex flex-wrap items-center gap-[3px]">
     {allThreads(b).map((t) => (
       <StatusIcon key={t.id} t={t} />
@@ -436,9 +438,9 @@ const Icons = ({ b }: { b: Branch }) => (
   </span>
 );
 
-type Fold = { closed: Set<string>; toggle: (id: string) => void };
+export type Fold = { closed: Set<string>; toggle: (id: string) => void };
 
-function GroupRow({ b, closed, toggle, sort }: { b: Branch; sort?: Sort } & Fold) {
+export function GroupRow({ b, closed, toggle, sort }: { b: Branch; sort?: Sort } & Fold) {
   const open = !closed.has(b.id);
   const one = folded(b);
   const linear = useContext(Linear);
@@ -559,7 +561,7 @@ function ProjectCard({ b, closed, toggle }: { b: Branch } & Fold) {
                         )
                       : undefined;
                     return run[0].stack ? (
-                      <StackRail run={run} closed={closed} toggle={toggle} sort={sort} />
+                      <StackRailPrototype run={run} closed={closed} toggle={toggle} sort={sort} />
                     ) : (
                       <GroupRow b={run[0]} closed={closed} toggle={toggle} sort={sort} />
                     );
@@ -850,6 +852,7 @@ function App() {
           </Linear>
         </NeedsOnly>
       </Details>
+      <PrototypeSwitcher variants={STACK_VARIANTS} />
     </TooltipProvider>
   );
 }

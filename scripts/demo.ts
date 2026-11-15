@@ -58,7 +58,7 @@ function t(title: string, over: Partial<Thread> = {}): Thread {
 }
 
 /** A four-PR stack spread over four issue keys. */
-const STACK = [2101, 2102, 2104, 2107];
+const STACK = [2101, 2102, 2104, 2107, 2110, 2112, 2115];
 const pr = (n: number, source: string, state = "open", over: Partial<Pr> = {}): Pr => ({
   n,
   url: gh(n),
@@ -116,6 +116,13 @@ const threads: Thread[] = [
     forkedFromThreadId: "demo-1",
     prs: stacked(2107, { checks: "failing", review: "changes-requested", mergeability: "conflicting" }),
   }),
+  t("SHOP-420 · Gift card field on the payment step", {
+    status: "running",
+    activityRunStartedAt: ago(3),
+    prs: stacked(2110, { checks: "pending" }),
+  }),
+  t("SHOP-421 · Promo code validation errors", { ...completed, prs: stacked(2112, { checks: "passing", review: "approved" }) }),
+  t("SHOP-423 · Confirmation page with order tracking link", { ...completed, prs: stacked(2115, { draft: true }) }),
   t("Review #2088 SHOP-398", { prs: [pr(2088, "agent")] }),
   t("Review #2093 SHOP-401", { status: "running", prs: [pr(2093, "agent")] }),
   t("Review #2095 SHOP-401", { prs: [pr(2095, "agent", "merged")] }),
