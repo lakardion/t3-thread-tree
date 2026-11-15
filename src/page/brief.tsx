@@ -1,4 +1,4 @@
-import { Check, ChevronDown, Copy, RotateCw, Send, Sparkles, X } from "lucide-react";
+import { Check, ChevronDown, Copy, MessageSquarePlus, RotateCw, Send, Sparkles, X } from "lucide-react";
 import { useEffect, useState } from "react";
 
 import { Alert, AlertDescription } from "@/components/ui/alert";
@@ -18,10 +18,11 @@ import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip
 
 import type { ActionKind, BriefAction, BriefState, Cli } from "../shared/brief.ts";
 import type { CliStatus } from "../shared/send.ts";
-import type { ThreadNode } from "../shared/tree.ts";
+import type { Branch, ThreadNode } from "../shared/tree.ts";
 import { ProviderIcon } from "./provider-icon.tsx";
 import { CliGate, SendDialog } from "./send-dialog.tsx";
 import { markKey } from "./send.ts";
+import { StartDialog } from "./start-dialog.tsx";
 import { StatusIcon } from "./status-icon.tsx";
 
 export type Offered = { id: Cli; label: string }[];
@@ -190,6 +191,34 @@ function SendPrompt(p: {
   );
 }
 
+function StartPrompt(p: {
+  a: BriefAction;
+  prompt: string;
+  live: Map<string, ThreadNode>;
+  projects: Branch[];
+  t3cli: CliStatus | null;
+}) {
+  const [open, setOpen] = useState(false);
+  const button = (
+    <Button
+      variant="ghost"
+      size="icon-xs"
+      className="flex-none text-muted-foreground"
+      aria-label="Start thread"
+      disabled={p.t3cli?.available === false}
+      onClick={() => setOpen(true)}
+    >
+      <MessageSquarePlus />
+    </Button>
+  );
+  return (
+    <>
+      <CliGate t3cli={p.t3cli}>{button}</CliGate>
+      <StartDialog open={open} onOpenChange={setOpen} a={p.a} prompt={p.prompt} live={p.live} projects={p.projects} />
+    </>
+  );
+}
+
 /** Per-letter weight wave with a shimmer. */
 function LoadingText({ text }: { text: string }) {
   return (
@@ -208,6 +237,7 @@ function Row({
   i,
   live,
   titles,
+  projects,
   t3cli,
   sent,
   onSent,
@@ -216,6 +246,7 @@ function Row({
   i: number;
   live: Map<string, ThreadNode>;
   titles: Record<string, string>;
+  projects: Branch[];
   t3cli: CliStatus | null;
   sent: string[] | undefined;
   onSent: (key: string, threadId: string) => void;
@@ -246,6 +277,7 @@ function Row({
       {a.prompt && (
         <>
           <SendPrompt a={a} prompt={a.prompt} live={live} titles={titles} t3cli={t3cli} onSent={onSent} />
+          <StartPrompt a={a} prompt={a.prompt} live={live} projects={projects} t3cli={t3cli} />
           <CopyPrompt prompt={a.prompt} />
         </>
       )}
@@ -257,6 +289,7 @@ export function BriefPanel(p: {
   state: BriefState;
   clis: Offered | null;
   live: Map<string, ThreadNode>;
+  projects: Branch[];
   t3cli: CliStatus | null;
   sent: Map<string, string[]>;
   onSent: (key: string, threadId: string) => void;
@@ -275,6 +308,7 @@ export function BriefPanel(p: {
           i={i}
           live={p.live}
           titles={s.titles}
+          projects={p.projects}
           t3cli={p.t3cli}
           sent={p.sent.get(markKey(a))}
           onSent={p.onSent}

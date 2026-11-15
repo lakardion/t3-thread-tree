@@ -1059,6 +1059,7 @@ function App() {
           state={brief}
           clis={clis}
           live={live}
+          projects={tree?.projects ?? []}
           t3cli={t3cli}
           sent={sent}
           onSent={(key, id) =>
