@@ -2,7 +2,7 @@
 title: Send a message from a thread row
 type: wayfinder:task
 status: open
-assignee:
+assignee: claude (send-message-04)
 blocked-by: [03-brief-send]
 ---
 
