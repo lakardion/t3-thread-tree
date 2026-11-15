@@ -1,13 +1,13 @@
 # T3 thread tree: build spec
 
-A local, read-only webapp. It shows the active T3 Code threads as one live tree: Project › issue key › thread. Each node shows its status and its PR stack. A click on a node opens the thread in T3 Code.
+A local webapp. It shows the active T3 Code threads as one live tree: Project › issue key › thread. Each node shows its status and its PR stack. A click on a node opens the thread in T3 Code. The app writes to T3 only through a send or a start that the user confirms.
 
 Terms are defined in [CONTEXT.md](CONTEXT.md). Each section links the ticket that holds the full decision and its reasons. When this spec and a ticket do not agree, this spec wins: it includes the later changes.
 
 ## Scope
 
-- In scope: the threads of the local T3 environment (`~/.t3/userdata`), live updates, and "open in T3".
-- Out of scope: write actions (settle, snooze, send, interrupt, launch); threads from linked T3 environments on other machines; any change to T3 Code itself.
+- In scope: the threads of the local T3 environment (`~/.t3/userdata`), live updates, "open in T3", and a send of a message to one thread and a start of a thread in a project, through the `t3` CLI.
+- Out of scope: settle, snooze, interrupt, approve or deny a request, archive; a send to several threads at once; threads from linked T3 environments on other machines; any change to T3 Code itself.
 
 ## Runtime and stack
 
@@ -109,7 +109,7 @@ The header has a System / Light / Dark choice. The full design is in [DESIGN-SPE
 
 Source: map [whats-next](.wayfinder/whats-next/map.md), tickets [How do we run claude and codex headless, with no tools, on a cheap model?](.wayfinder/whats-next/tickets/01-headless-cli-invocation.md) (research on branch `research/headless-cli`), [Where does the backend read the last assistant message of a thread?](.wayfinder/whats-next/tickets/02-thread-messages-source.md) (research on branch `research/thread-messages`), [What makes a good next step, and what is the shape of a brief?](.wayfinder/whats-next/tickets/03-ranking-rules-and-brief-shape.md), [Where and how does the brief show on the page?](.wayfinder/whats-next/tickets/04-brief-layout-prototype.md) (prototype on branch `prototype/brief-layout`).
 
-A click on "What's next" runs a local agent CLI on a cheap model. Code makes the obvious **Actions** (`answer`, `fix`, `merge`). The CLI returns the rest of the **Next-step brief**: up to 7 ranked **Actions** over the threads that code did not cover. The app stays read-only: the CLI runs with its tools off and writes nothing to T3.
+A click on "What's next" runs a local agent CLI on a cheap model. Code makes the obvious **Actions** (`answer`, `fix`, `merge`). The CLI returns the rest of the **Next-step brief**: up to 7 ranked **Actions** over the threads that code did not cover. The CLI runs with its tools off and writes nothing to T3.
 
 ### CLIs
 
@@ -223,6 +223,115 @@ The full look is in ticket 04. In short:
 - **Kind chips:** answer = `needs-input`, merge = `done`, unblock = `plan`, fix = `failed`, review = `working`, clean-up = `idle`.
 - **Thread links:** each link shows the live `StatusIcon` and title from the current tree, and opens the thread in T3. A thread that is not in the live tree shows its saved title struck through. The brief text does not change.
 
+## Send message
+
+Source: map [send-message](.wayfinder/send-message/map.md), decisions at charting and grilling.
+
+The user can send a message to one thread, and start a thread in a project, from the page. Each action opens a dialog, and nothing goes to T3 until the user confirms.
+
+### Transport
+
+The server runs the T3 CLI as a child process (`Bun.spawn`), like the brief runner. It uses T3's own login. The `orchestration:read` token and the read-only database do not change.
+
+- **Send:** `<bin> thread send --json <threadId> -`.
+- **Start:** `<bin> thread start --json --title=<title> <projectId> -`.
+- **Message:** it goes on stdin only, never in argv. The title goes in argv as one `--title=<title>` item, so a title that starts with `-` is not read as a flag.
+- **Output:** each command prints one JSON value on stdout. The server parses all of stdout as one JSON value. From `send`, it reads `delivery`; from `start`, it reads `threadId`. It ignores the other fields.
+- **Flags:** no `--wait`, no `--worktree`, no `--provider` and no `--model`. The project defaults apply.
+- **Find the CLI:** `T3_BIN` from `.env`, else `~/.t3/bin/t3` (`os.homedir()`). At server start, the server checks that the file exists and is executable (`fs.access` with `X_OK`). The result holds until a restart.
+- **Timeout:** 30 s, then SIGTERM. The request fails with "timed out".
+- **No lock:** sends and starts can run at the same time.
+- **Started thread placement:** the CLI starts the thread with `t3_thread_launch`, so it is a **Launched thread**. Its first message has no `senderThreadId`, and no launch tool call names it, so it has no spawner. The tree rules place it by the issue key in its title. The title default carries the key for that reason.
+
+### HTTP contract
+
+Ids go in the JSON body, not in the path, because ids hold `:` and `%`. The module `src/server/send.ts` exports a service with `routes`, as `briefService` does. The response types live in `src/shared/send.ts`.
+
+| Route            | Body                                                    | Success                                                               |
+| ---------------- | ------------------------------------------------------- | --------------------------------------------------------------------- |
+| `GET /t3/cli`    | none                                                    | `200 { available: boolean, path: string }`                            |
+| `POST /t3/send`  | `{ threadId: string, message: string }`                 | `200 { delivery: "started" \| "queued" \| "steered" \| "restarted" }` |
+| `POST /t3/start` | `{ projectId: string, title: string, message: string }` | `200 { threadId: string }`                                            |
+
+`delivery` comes from the `send --json` output. `threadId` comes from the `start --json` output.
+
+Every failure has the body `{ error: string, exitCode: number | null, stderrTail: string }`:
+
+- `400`: the body is not JSON, a field is missing, or `message` or `title` is empty after trim. `error` names the field.
+- `404`: `threadId` is not in the live thread map, or `projectId` is not in the project map. Archived threads are not in the thread map. The CLI does not run. `error` is "Unknown thread" or "Unknown project".
+- `503`: the CLI is missing. `available` was false at start, or spawn gives `ENOENT` or `EACCES`. `error` is "No t3 CLI at <path>. Set T3_BIN in .env."
+- `502`: the CLI ran and failed. This covers a non-zero exit, a timeout, and stdout that is not the expected JSON.
+  - `exitCode`: the exit code, or `null` on a timeout or a parse error.
+  - `error`: the last non-empty stderr line, "timed out", or the parse error.
+  - `stderrTail`: the last 2 KB of stderr.
+
+The wrapper exit code 127 ("T3 Code has moved…") is a `502`, so the user sees its text. When T3 is not running, the CLI is still there. `available` stays true, and a send fails as a `502` with the CLI stderr.
+
+### CLI-available flag
+
+The page reads `GET /t3/cli` once at load. When `available` is false, every send and start control shows disabled, with the tooltip "No t3 CLI at <path>. Set T3_BIN in .env." This is the same disabled-with-tooltip pattern as the "What's next" button.
+
+### Send dialog
+
+One reusable component on the shadcn Dialog (Radix).
+
+- **Opens from:**
+  - A "What's next" step that has a `prompt`: a send icon next to the copy icon. The copy icon stays.
+  - A thread row, top-level or subthread: a send icon at the row end, next to the details chevron. It shows on hover and on keyboard focus within the row. On touch devices (`(hover: none)`), at every width, it always shows. The icon stops propagation, so it does not open the thread and does not start a drag.
+- **Target, from a step:** a picker (shadcn Select) with the threads of the step. Each option shows the live `StatusIcon` and the title. A thread that is not in the current tree shows its saved title struck through and is disabled. The first enabled thread is selected at open. With no enabled thread, Confirm send is disabled.
+- **Target, from a row:** fixed. The dialog shows the icon and title of the row, with no picker.
+- **Message:** a textarea, editable. From a step, it starts with the step prompt. From a row, it is empty. Confirm send is disabled while the message is empty after trim.
+- **Busy note:** when the target status is `working`, `starting` or `waiting`, a muted line under the target says "This thread is working. The message waits for its next turn." Other statuses show no note.
+- **Buttons:** Cancel and Confirm send.
+- **Keys:** Cmd/Ctrl+Enter sends, Escape cancels, and Enter makes a new line.
+- **In flight:** Confirm send shows a spinner. Until the request ends, the fields, Cancel, Escape and the outside click do nothing. Thus a cancel never hides a message that was sent.
+- **Success:** the dialog closes. From a step, the step shows the mark (see "Sent to" mark). From a row, there is no mark: the row status changes through the stream.
+- **Failure:** the dialog stays open, with the draft and the target. An inline alert above the buttons shows:
+  - `error`;
+  - "exit <code>", when `exitCode` is set;
+  - `stderrTail` in mono, when it is not empty.
+
+  Confirm send tries again. A network error shows "The server did not answer."
+
+### Start dialog
+
+The same dialog frame, with "Start thread" as the title and as the confirm label.
+
+- **Opens from:** a "Start thread" icon on a "What's next" step that has a `prompt`, next to the send icon.
+- **Project:** a Select with the projects of the current tree (project icon and label). At open, it selects the project of the first thread of the step that is in the tree, else the first project.
+- **Title:** a text input. The default is the issue key of the first linked thread of the step, a space, then the step title. When the thread has no key or is not in the tree, the default is the step title alone. The page sends the title as the user wrote it, trimmed, with no length cap. Confirm is disabled while the title is empty after trim.
+- **Message:** a textarea with the step prompt, editable. Confirm is disabled while it is empty after trim.
+- **No worktree field and no model field.**
+- **Keys, in flight and failure:** as in the send dialog.
+- **Success:** the dialog closes. The new thread shows in the tree through the stream. The page does not add it. The step gets no mark.
+
+### "Sent to" mark
+
+After a send from a step succeeds, the step row shows "Sent to <thread title>" in muted text under its reason, with a check icon. Several sends list each thread once, in send order: "Sent to A, B".
+
+The marks live in page memory. The key of a mark is the `kind`, `title` and `threadIds` of the step. Thus a mark holds in every brief state, also in `running` and `failed`, which show code steps. Each change of the brief state to `running` clears them. A reload clears them.
+
+### Demo stub
+
+`scripts/demo.ts` passes a stub runner to the send service, as it does for the brief. It never runs the real `t3`.
+
+- The stub answers after 1 s. A send returns `{ delivery: "queued" }`. A start returns `{ threadId: "demo-started" }`. The demo tree does not change.
+- `SEND=failed`: both routes return `502` with `exitCode: 1`, `error: "Thread demo-1 is not reachable."` and a stderr tail of two sample lines.
+- `T3CLI=0`: `GET /t3/cli` returns `available: false`, so the controls show disabled.
+- The `400` and `404` checks run in the demo too, against the demo threads and projects.
+
+### Smoke run
+
+Tickets 02 and 05 each run one smoke test against the real T3, with `bun start`:
+
+1. Start: `POST /t3/start` in the project of this repo, with a title that starts with `Smoke test` and a short message such as "Reply with OK.". Expect `200` with a `threadId`, and the new thread shows in the tree.
+2. Send: `POST /t3/send` to that new thread. Expect `200`, and the message shows in the thread in T3 Code.
+3. Clean up: archive the smoke thread in T3 Code.
+
+### README
+
+[Ticket 02](.wayfinder/send-message/tickets/02-send-endpoints.md) adds `T3_BIN` to Setup in `README.md` and the demo knobs to Run. [Ticket 03](.wayfinder/send-message/tickets/03-brief-send.md), [ticket 04](.wayfinder/send-message/tickets/04-row-send.md) and [ticket 05](.wayfinder/send-message/tickets/05-step-start-thread.md) add their "What you get" entries.
+
 ## Check at build
 
 These facts are not confirmed against a real stream. The research used the MCP thread list and SQLite.
@@ -232,3 +341,4 @@ These facts are not confirmed against a real stream. The research used the MCP t
 - `pendingRuntimeRequest` as the "needs input" signal (the prototype used `orchestration_v2_projection_runtime_requests` with `status = 'pending'`). Also check how the `waiting` run status fits the table.
 - `toolName` for callers that are not Claude (for example Codex) in the lineage lookup.
 - Whether `codex exec --ignore-user-config` skips a global `~/.codex/AGENTS.md`. If not, the brief run sees it.
+- The `send --json` and `start --json` stdout shapes come from the T3 source, and nobody has run them yet. The smoke run of ticket 02 confirms them.
