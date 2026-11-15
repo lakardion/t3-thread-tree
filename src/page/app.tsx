@@ -121,7 +121,7 @@ const FILTER_ITEM =
   "pointer-coarse:min-h-11 pointer-coarse:min-w-11 focus-visible:ring-0 focus-visible:outline-solid focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring";
 
 const Mark = ({ title, children }: { title: string; children: ReactNode }) => (
-  <span title={title} className="inline-flex [&>svg]:size-3">
+  <span title={title} className="flex [&>svg]:size-3">
     {children}
   </span>
 );
