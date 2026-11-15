@@ -19,6 +19,7 @@ import {
   Eye,
   GripVertical,
   Layers,
+  Send,
   TriangleAlert,
   X,
 } from "lucide-react";
@@ -76,6 +77,7 @@ import {
 } from "./order.ts";
 import { Presence, useMotion } from "./presence.tsx";
 import { ProjectIcon, projectHex } from "./project-icon.tsx";
+import { CliGate, SendDialog } from "./send-dialog.tsx";
 import { LEGEND, LegendIcon, STATUS, StatusIcon } from "./status-icon.tsx";
 import { Swap, useChanges } from "./swap.tsx";
 
@@ -119,6 +121,8 @@ const Details = createContext<{ open: Set<string>; toggle: (id: string) => void;
   toggle: () => {},
   show: () => {},
 });
+/** Opens the send dialog for a thread. Null where rows cannot send. */
+const SendTo = createContext<{ t3cli: CliStatus | null; open: (id: string) => void } | null>(null);
 const NeedsOnly = createContext(false);
 const Linear = createContext<Tree["linear"]>(null);
 /** The rendered ids of each list, by list key. */
@@ -127,6 +131,8 @@ const Lists = createContext(new Map<string, string[]>());
 const CHIP = "gap-1 rounded-[6px] px-1.5 py-0 text-[11px] font-normal text-muted-foreground";
 const ROW_BUTTON =
   "size-5 rounded-[6px] text-muted-foreground motion-reduce:transition-none pointer-coarse:min-h-11 pointer-coarse:min-w-11 focus-visible:border-transparent focus-visible:ring-0 focus-visible:outline-2 focus-visible:outline-solid focus-visible:outline-offset-2 focus-visible:outline-ring";
+const SEND_REVEAL =
+  "opacity-0 group-hover/row:opacity-100 group-focus-within/row:opacity-100 [@media(hover:none)]:opacity-100";
 const NEED_CHIP =
   "border-transparent bg-[color-mix(in_oklch,var(--status-needs-input)_var(--wash),transparent)] text-status-needs-input-fg";
 const FILTER_ITEM =
@@ -369,6 +375,7 @@ function ThreadRow({ t, chip, sort, inStack }: { t: ThreadNode; chip?: string; s
   const { open, toggle, show } = useContext(Details);
   const dim = useContext(NeedsOnly) && !needsYou(t.status);
   const linear = useContext(Linear);
+  const sendTo = useContext(SendTo);
   const chipHref = chip ? linearHref(chip, linear) : null;
   const pulse = useChanges(t.status);
   const render = (ref: RefFn, handleRef?: RefFn) => (
@@ -450,6 +457,23 @@ function ThreadRow({ t, chip, sort, inStack }: { t: ThreadNode; chip?: string; s
               </TooltipTrigger>
               <TooltipContent>Updated {new Date(t.updatedAt).toLocaleString()}</TooltipContent>
             </Tooltip>
+            {sendTo && (
+              <CliGate t3cli={sendTo.t3cli}>
+                <Button
+                  variant="ghost"
+                  size="icon"
+                  className={cn(ROW_BUTTON, SEND_REVEAL)}
+                  aria-label="Send message"
+                  disabled={sendTo.t3cli?.available === false}
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    sendTo.open(t.id);
+                  }}
+                >
+                  <Send className="size-3.5" />
+                </Button>
+              </CliGate>
+            )}
             <CollapsibleTrigger asChild>
               <Button variant="ghost" size="icon" className={cn(ROW_BUTTON, "group")} aria-label="Details">
                 <ChevronDown className="size-3.5 transition-transform duration-200 group-data-[state=open]:rotate-180 motion-reduce:transition-none" />
@@ -799,6 +823,7 @@ function App() {
   const [hideBrief, setHideBrief] = useState(false);
   const [t3cli, setT3cli] = useState<CliStatus | null>(null);
   const [sent, setSent] = useState(() => new Map<string, string[]>());
+  const [sendTo, setSendTo] = useState({ id: "", open: false });
   const briefStatus = useRef<BriefState["status"]>("idle");
   const [orders, setOrders] = useState(() => parseOrders(load(ORDER_KEY)));
   const [freeze, setFreeze] = useState<Freeze>();
@@ -1061,9 +1086,11 @@ function App() {
                     <DragDropProvider plugins={plugins} onDragStart={dragStart} onDragEnd={dragEnd}>
                       <Card className="gap-0 overflow-hidden rounded-[12px] py-0 shadow-none">
                         <ul className="m-0 list-none p-0">
-                          <Presence items={projects} keyOf={(p) => p.id}>
-                            {(p) => <ProjectBlock b={p} closed={closed} toggle={toggle} fold={fold} />}
-                          </Presence>
+                          <SendTo value={{ t3cli, open: (id) => setSendTo({ id, open: true }) }}>
+                            <Presence items={projects} keyOf={(p) => p.id}>
+                              {(p) => <ProjectBlock b={p} closed={closed} toggle={toggle} fold={fold} />}
+                            </Presence>
+                          </SendTo>
                         </ul>
                       </Card>
                     </DragDropProvider>
@@ -1091,6 +1118,14 @@ function App() {
           </Linear>
         </NeedsOnly>
       </Details>
+      <SendDialog
+        fixed
+        open={sendTo.open}
+        threadIds={[sendTo.id]}
+        live={live}
+        message=""
+        onOpenChange={(open) => setSendTo((s) => ({ ...s, open }))}
+      />
     </TooltipProvider>
   );
 }

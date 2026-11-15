@@ -1,5 +1,5 @@
 import { LoaderCircle, Send } from "lucide-react";
-import { useState } from "react";
+import { useState, type ReactNode } from "react";
 
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { Button } from "@/components/ui/button";
@@ -13,8 +13,9 @@ import {
 } from "@/components/ui/dialog";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Textarea } from "@/components/ui/textarea";
+import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 
-import type { SendError } from "../shared/send.ts";
+import type { CliStatus, SendError } from "../shared/send.ts";
 import type { ThreadNode } from "../shared/tree.ts";
 import { isBusy, postSend } from "./send.ts";
 import { StatusIcon } from "./status-icon.tsx";
@@ -22,19 +23,25 @@ import { StatusIcon } from "./status-icon.tsx";
 type Props = {
   threadIds: string[];
   live: Map<string, ThreadNode>;
-  titles: Record<string, string>;
+  titles?: Record<string, string>;
   message: string;
+  /** Shows the first thread as a fixed target instead of a picker. */
+  fixed?: boolean;
   onOpenChange: (open: boolean) => void;
-  onSent: (threadId: string) => void;
+  onSent?: (threadId: string) => void;
 };
 
 type FormProps = Props & { sending: boolean; setSending: (v: boolean) => void };
 
 /** Mounted only while open, so each open starts from the initial draft and target. */
-function SendForm({ threadIds, live, titles, message, onOpenChange, onSent, sending, setSending }: FormProps) {
+function SendForm({ threadIds, live, titles, message, fixed, onOpenChange, onSent, sending, setSending }: FormProps) {
   const [target, setTarget] = useState(() => threadIds.find((id) => live.has(id)) ?? "");
   const [draft, setDraft] = useState(message);
   const [err, setErr] = useState<SendError>();
+  const [fixedTitle] = useState(() => {
+    const t = live.get(threadIds[0]);
+    return t?.title || threadIds[0];
+  });
   const selected = live.get(target);
   const canSend = !!selected && draft.trim() !== "" && !sending;
 
@@ -45,7 +52,7 @@ function SendForm({ threadIds, live, titles, message, onOpenChange, onSent, send
     const r = await postSend(target, draft);
     setSending(false);
     if (r.ok) {
-      onSent(target);
+      onSent?.(target);
       onOpenChange(false);
     } else setErr(r.err);
   };
@@ -54,30 +61,45 @@ function SendForm({ threadIds, live, titles, message, onOpenChange, onSent, send
     <>
       <DialogHeader>
         <DialogTitle>Send message</DialogTitle>
-        <DialogDescription>Send this message to a thread.</DialogDescription>
+        <DialogDescription>
+          {fixed ? "Send this message to the thread." : "Send this message to a thread."}
+        </DialogDescription>
       </DialogHeader>
-      <Select value={target} onValueChange={setTarget} disabled={sending}>
-        <SelectTrigger className="w-full" aria-label="Thread">
-          <SelectValue placeholder="No active thread">{selected?.title || selected?.id}</SelectValue>
-        </SelectTrigger>
-        <SelectContent>
-          {threadIds.map((id) => {
-            const t = live.get(id);
-            return (
-              <SelectItem key={id} value={id} disabled={!t}>
-                {t ? (
-                  <>
-                    <StatusIcon t={t} />
-                    {t.title || t.id}
-                  </>
-                ) : (
-                  <span className="line-through">{titles[id] ?? id}</span>
-                )}
-              </SelectItem>
-            );
-          })}
-        </SelectContent>
-      </Select>
+      {fixed ? (
+        <div className="flex min-w-0 items-center gap-2 text-sm">
+          {selected ? (
+            <>
+              <StatusIcon t={selected} />
+              <span className="min-w-0 break-words">{selected.title || selected.id}</span>
+            </>
+          ) : (
+            <span className="line-through">{fixedTitle}</span>
+          )}
+        </div>
+      ) : (
+        <Select value={target} onValueChange={setTarget} disabled={sending}>
+          <SelectTrigger className="w-full" aria-label="Thread">
+            <SelectValue placeholder="No active thread">{selected?.title || selected?.id}</SelectValue>
+          </SelectTrigger>
+          <SelectContent>
+            {threadIds.map((id) => {
+              const t = live.get(id);
+              return (
+                <SelectItem key={id} value={id} disabled={!t}>
+                  {t ? (
+                    <>
+                      <StatusIcon t={t} />
+                      {t.title || t.id}
+                    </>
+                  ) : (
+                    <span className="line-through">{titles?.[id] ?? id}</span>
+                  )}
+                </SelectItem>
+              );
+            })}
+          </SelectContent>
+        </Select>
+      )}
       {selected && isBusy(selected.status) && (
         <p className="m-0 text-xs text-muted-foreground">
           This thread is working. The message waits for its next turn.
@@ -118,6 +140,20 @@ function SendForm({ threadIds, live, titles, message, onOpenChange, onSent, send
         </Button>
       </DialogFooter>
     </>
+  );
+}
+
+/** Wraps a send button. Shows a focusable tooltip in its place when no t3 CLI is available. */
+export function CliGate({ t3cli, children }: { t3cli: CliStatus | null; children: ReactNode }) {
+  if (t3cli?.available !== false) return children;
+  return (
+    <Tooltip>
+      <TooltipTrigger asChild>
+        {/* oxlint-disable-next-line jsx-a11y/no-noninteractive-tabindex -- a disabled button gets no focus, so the wrapper takes it to show the tooltip */}
+        <span tabIndex={0}>{children}</span>
+      </TooltipTrigger>
+      <TooltipContent>No t3 CLI at {t3cli.path}. Set T3_BIN in .env.</TooltipContent>
+    </Tooltip>
   );
 }
 
