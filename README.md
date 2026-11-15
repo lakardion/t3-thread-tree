@@ -12,11 +12,11 @@ _Screenshots use made-up data from `bun run demo`._
 
 ## What you get
 
-- **One card for each project.** The card header shows the repository (`owner/name`). Threads group by the first issue key in the title (`SHOP-412`, `API-81`, …). A key group with one thread folds into its row, which shows the key as a chip. Review threads (`Review #…`) go in their own Reviews group.
+- **All projects in one list.** Each project is a block with its name on one header line above its threads, so you see all projects at once. Long thread titles wrap and are never cut, also on a phone. The project has the same icon and color as in T3 Code: two letters on a colored square, and the block has a left edge in that color. Hover the name to see the repository (`owner/name`). Threads group by the first issue key in the title (`SHOP-412`, `API-81`, …). A key group with one thread folds into its row, which shows the key as a chip. Review threads (`Review #…`) go in their own Reviews group.
 - **Launch lineage.** A thread that an agent launched, with no issue key, nests under the thread that launched it. T3 does not store this link, so the app reads it from T3's local database.
 - **PR stacks.** Issue groups that share a stack sit next to each other, in stack order, on one rail with the label "PR stack · N PRs · base `main`". Each thread in a stack shows its position, for example `2/4`.
 - **PR marks.** Each row shows its first two PRs. A PR chip shows checks (dot or ring), review (check or cross), conflicts (warning), draft (dashed border), merged (violet) and closed (struck through).
-- **Your own order.** Drag the handle at the end of a project, group or thread row to move it in its list, or use Space and the arrow keys. A PR stack moves as one block. The order stays after a reload, and "Reset order" clears it.
+- **Your own order.** Drag the handle at the start of a project, group or thread row to move it in its list, or use Space and the arrow keys. A row moves out of the way as soon as the dragged row enters it a little, also when the row is tall. A PR stack moves as one block. The order stays after a reload, and "Reset order" clears it.
 - **Stable order.** Rows keep their place while threads update. A new thread, group or project shows at the bottom of its list.
 - **Status changes move.** A new status, phrase or PR mark fades in. The row flashes once in the new status color. With reduced motion, changes show at once.
 - **Rows come and go.** A new project, group or thread grows in. A removed one collapses out. A change that arrives during a drag shows at once. With reduced motion, rows appear and disappear at once.

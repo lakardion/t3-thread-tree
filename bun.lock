@@ -5,6 +5,7 @@
     "": {
       "name": "t3-thread-tree",
       "dependencies": {
+        "@dnd-kit/abstract": "0.5.3",
         "@dnd-kit/dom": "0.5.3",
         "@dnd-kit/helpers": "0.5.3",
         "@dnd-kit/react": "0.5.3",
