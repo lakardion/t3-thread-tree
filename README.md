@@ -35,7 +35,7 @@ _Screenshots use made-up data from `bun run demo`._
 - **Details on demand.** The chevron at the end of a row opens a details block: request, error, usage limit, model, branch, worktree, launched by, goal, tags and all PRs with their checks and size.
 - **Linear links.** When you configure Linear (see [Setup](#setup)), issue keys of your Linear teams link to the issue.
 - **Live.** Changes arrive as T3 streams them. No polling, no reload.
-- **The page remembers your choices.** Closed projects and groups (they show one status icon per thread), the filter, "show settled" and the theme (System, Light or Dark) stay after a reload.
+- **The page remembers your choices.** Closed projects and groups (they show one status icon per thread), the filter, "show settled" and the theme stay after a reload. The theme button in the header cycles System, Light and Dark, and its icon morphs between a half-filled circle, a sun and a moon.
 - **Settled threads on demand.** The "show settled" switch adds them. Archived threads never show.
 - **What's next.** A click on "What's next" shows a ranked list of next steps over the active threads, each with links to its threads. Code makes the obvious steps at once: answer a waiting agent, fix a PR with failing checks, conflicts or requested changes, and merge an approved PR. A local `claude` or `codex` CLI on a cheap model ranks the rest, and it does not run when nothing is left. A step can have a prompt that you copy with one click. The chevron next to the button opens a menu that selects the model. Each option shows its provider icon. The current model shows next to the button. A thread that is no longer active shows struck through.
 
