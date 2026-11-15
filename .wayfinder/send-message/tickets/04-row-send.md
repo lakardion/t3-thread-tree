@@ -19,3 +19,7 @@ Open the send dialog from a thread row, with a fixed target and an empty message
 ## Done when
 
 `bun run check` passes. In `bun run demo`, light and dark, on desktop and phone width: a send from a top-level thread and from a subthread.
+
+## Handed over from send-message-03
+
+`SendDialog` (`src/page/send-dialog.tsx`, PR #26) takes `threadIds`, `live`, `titles`, `message`, `onOpenChange` and `onSent`. It always shows a picker. The fixed-target mode for a row (icon and title, no picker) is not built: add it here. `postSend` and `isBusy` live in `src/page/send.ts`.

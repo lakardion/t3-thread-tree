@@ -20,3 +20,7 @@ Let a "What's next" step start a new thread in a project, with the step prompt a
 ## Done when
 
 `bun run check` passes. In `bun run demo`, light and dark: a start, a failure. One smoke start against the real T3.
+
+## Handed over from send-message-03
+
+`SendDialog` (`src/page/send-dialog.tsx`, PR #26) has no shared frame. The in-flight guard (Escape, outside click, close X and Cancel blocked), the failure alert and the Cmd/Ctrl+Enter key live inside it. Extract them for the start dialog here instead of a copy.
