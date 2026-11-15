@@ -1,3 +1,4 @@
+import { CollisionPriority, CollisionType } from "@dnd-kit/abstract";
 import {
   Accessibility,
   type defaultPreset,
@@ -17,7 +18,7 @@ import { createRoot } from "react-dom/client";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import { Card, CardContent, CardDescription, CardHeader } from "@/components/ui/card";
+import { Card, CardContent } from "@/components/ui/card";
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
 import { Label } from "@/components/ui/label";
 import { Skeleton } from "@/components/ui/skeleton";
@@ -45,6 +46,7 @@ import {
   type Freeze,
 } from "./order.ts";
 import { Presence, useMotion } from "./presence.tsx";
+import { ProjectIcon, projectHex } from "./project-icon.tsx";
 import { STATUS, StatusIcon } from "./status-icon.tsx";
 import { Swap, useChanges } from "./swap.tsx";
 
@@ -117,6 +119,33 @@ const sortOf = (lists: Map<string, string[]>, list: string, id: string, name: st
   return ids && ids.length > 1 && index >= 0 ? { id, list, index, name } : undefined;
 };
 
+type Detector = NonNullable<Parameters<typeof useSortable>[0]["collisionDetector"]>;
+/** How far, in px, the leading edge of the dragged row must enter a row before that row moves. */
+const SWAP_AT = 12;
+
+/**
+ * A row moves as soon as the leading edge of the dragged row enters it by `SWAP_AT` (or half its height),
+ * so a tall row moves as early as a short one. A row behind the dragged center never collides, so a swap
+ * does not bounce back.
+ */
+const leadingEdge: Detector = ({ dragOperation, droppable }) => {
+  const dir = dragOperation.position.direction;
+  const drag = dragOperation.shape?.current.boundingRectangle;
+  const rect = droppable.shape?.boundingRectangle;
+  if (!drag || !rect || (dir !== "down" && dir !== "up")) return null;
+  const mid = drag.top + drag.height / 2;
+  const enter = Math.min(SWAP_AT, rect.height / 2);
+  const depth = dir === "down" ? drag.bottom - (rect.top + enter) : rect.bottom - enter - drag.top;
+  const ahead = dir === "down" ? rect.top + rect.height / 2 > mid : rect.top + rect.height / 2 < mid;
+  if (!ahead || depth < 0) return null;
+  return {
+    id: droppable.id,
+    value: 1 / (1 + depth),
+    type: CollisionType.Collision,
+    priority: CollisionPriority.Normal,
+  };
+};
+
 function SortHook({ sort, children }: { sort: Sort; children: (ref: RefFn, handleRef: RefFn) => ReactNode }) {
   const motion = useMotion();
   const { ref, handleRef } = useSortable({
@@ -126,6 +155,7 @@ function SortHook({ sort, children }: { sort: Sort; children: (ref: RefFn, handl
     type: sort.list,
     accept: sort.list,
     data: { name: sort.name },
+    collisionDetector: leadingEdge,
   });
   const both = useCallback<RefFn>(
     (el) => {
@@ -146,7 +176,9 @@ const Sortable = ({ sort, children }: { sort?: Sort; children: (ref: RefFn, hand
   sort ? <SortHook sort={sort}>{children}</SortHook> : <MotionHook>{children}</MotionHook>;
 
 const DragHandle = ({ handleRef, name, className }: { handleRef?: RefFn; name: string; className?: string }) =>
-  handleRef && (
+  !handleRef ? (
+    <span aria-hidden className="size-5 flex-none pointer-coarse:min-h-11 pointer-coarse:min-w-11" />
+  ) : (
     <Button
       ref={handleRef}
       variant="ghost"
@@ -239,7 +271,7 @@ function DetailBlock({ t }: { t: ThreadNode }) {
     .join(" · ");
   const tags = [d.tags.join(", "), d.pinned && "Pinned"].filter(Boolean).join(" · ");
   return (
-    <dl className="m-0 grid grid-cols-[auto_1fr] gap-x-3 gap-y-0.5 py-1 pl-[156px] text-xs max-[720px]:pl-7">
+    <dl className="m-0 grid grid-cols-[auto_1fr] gap-x-3 gap-y-0.5 py-1 pl-[178px] text-xs max-[720px]:pl-7">
       {d.request && <Line label="Request">{d.request}</Line>}
       {d.error && (
         <Line label="Error">
@@ -316,6 +348,7 @@ function ThreadRow({ t, chip, sort }: { t: ThreadNode; chip?: string; sort?: Sor
           className="thread-row group/row flex min-h-9 min-w-0 items-center gap-x-2 rounded-[8px] px-2 text-[13px] leading-5 max-[720px]:flex-wrap max-[720px]:py-1"
           data-status={t.status}
         >
+          <DragHandle handleRef={handleRef} name={t.title || t.id} className="-ml-1.5" />
           <StatusIcon t={t} />
           {pulse > 0 && <span key={pulse} aria-hidden className={cn("row-pulse", STATUS[t.status].shape)} />}
           <Swap
@@ -401,11 +434,6 @@ function ThreadRow({ t, chip, sort }: { t: ThreadNode; chip?: string; sort?: Sor
                 <ChevronDown className="size-3.5 group-data-[state=open]:rotate-180" />
               </Button>
             </CollapsibleTrigger>
-            {handleRef ? (
-              <DragHandle handleRef={handleRef} name={t.title || t.id} />
-            ) : (
-              <span aria-hidden className="size-5 flex-none pointer-coarse:min-h-11 pointer-coarse:min-w-11" />
-            )}
           </span>
         </div>
         <CollapsibleContent>
@@ -451,6 +479,7 @@ function GroupRow({ b, closed, toggle, sort }: { b: Branch; sort?: Sort } & Fold
     <Collapsible asChild open={open} onOpenChange={() => toggle(b.id)}>
       <li ref={ref} className="my-px">
         <div className="group/row flex h-7 min-w-0 items-center gap-2 rounded-[8px] px-2 hover:bg-accent max-[720px]:h-auto max-[720px]:min-h-7 max-[720px]:flex-wrap">
+          <DragHandle handleRef={handleRef} name={b.label} className="-ml-1.5" />
           <CollapsibleTrigger className="flex min-w-0 cursor-pointer items-center gap-2 select-none max-[720px]:min-h-11">
             <Chevron open={open} />
             <span
@@ -472,7 +501,6 @@ function GroupRow({ b, closed, toggle, sort }: { b: Branch; sort?: Sort } & Fold
             </a>
           )}
           {!open && <Icons b={b} />}
-          <DragHandle handleRef={handleRef} name={b.label} className="ml-auto" />
         </div>
         <CollapsibleContent asChild>
           <ul className="m-0 list-none pl-4">
@@ -498,6 +526,7 @@ function StackRail({ run, closed, toggle, sort }: { run: Branch[]; sort?: Sort }
   const render = (ref: RefFn, handleRef?: RefFn) => (
     <li ref={ref} className="stack-rail my-1">
       <div className="group/row flex min-h-6 flex-wrap items-center gap-x-1.5 px-2 text-xs text-muted-foreground">
+        <DragHandle handleRef={handleRef} name={`PR stack of ${run[0].label}`} className="-ml-1.5" />
         <Layers className="size-3 flex-none" aria-hidden />
         <span>
           PR stack · {total} PRs
@@ -508,7 +537,6 @@ function StackRail({ run, closed, toggle, sort }: { run: Branch[]; sort?: Sort }
             </>
           )}
         </span>
-        <DragHandle handleRef={handleRef} name={`PR stack of ${run[0].label}`} className="ml-auto" />
       </div>
       <ul className="m-0 list-none p-0">
         <Presence items={run} keyOf={(c) => c.id}>
@@ -520,32 +548,36 @@ function StackRail({ run, closed, toggle, sort }: { run: Branch[]; sort?: Sort }
   return <Sortable sort={sort}>{render}</Sortable>;
 }
 
-function ProjectCard({ b, closed, toggle }: { b: Branch } & Fold) {
+/** A project as one block of the shared list, with its icon and name in a left column. */
+function ProjectBlock({ b, closed, toggle }: { b: Branch } & Fold) {
   const open = !closed.has(b.id);
   const lists = useContext(Lists);
+  const color = projectHex(b.label);
   const render = (ref: RefFn, handleRef?: RefFn) => (
-    <li ref={ref} className="not-last:mb-3">
+    <li
+      ref={ref}
+      className="grid grid-cols-[180px_minmax(0,1fr)] border-l-[3px] not-last:border-b max-[720px]:grid-cols-1"
+      style={{ borderLeftColor: color }}
+    >
       <Collapsible asChild open={open} onOpenChange={() => toggle(b.id)}>
-        <Card className="gap-0 overflow-hidden rounded-[12px] py-0 shadow-none">
-          <CardHeader className="project-head group/row flex min-h-10 flex-wrap items-center gap-x-2 gap-y-1 px-3 py-1">
-            <CollapsibleTrigger className="flex min-w-0 cursor-pointer items-center gap-2 select-none max-[720px]:min-h-11">
+        <div className="contents">
+          <div className="group/row sticky top-0 flex min-w-0 items-start gap-1.5 self-start px-2 py-2">
+            <DragHandle handleRef={handleRef} name={b.label} className="-ml-1" />
+            <CollapsibleTrigger className="flex min-w-0 cursor-pointer items-center gap-1.5 select-none">
               <Chevron open={open} />
-              <span
-                aria-hidden
-                className="flex size-5 flex-none items-center justify-center rounded-[5px] bg-muted text-[11px] font-semibold text-muted-foreground uppercase"
-              >
-                {b.label[0]}
-              </span>
-              <span data-slot="card-title" className="truncate text-sm leading-5 font-semibold">
+              <ProjectIcon name={b.label} />
+              <span className="min-w-0 truncate text-[13px] font-semibold" title={b.repo ?? b.label}>
                 {b.label}
               </span>
             </CollapsibleTrigger>
-            {b.repo && <CardDescription className="truncate font-mono text-xs">{b.repo}</CardDescription>}
-            {!open && <Icons b={b} />}
-            <DragHandle handleRef={handleRef} name={b.label} className="ml-auto" />
-          </CardHeader>
-          <CollapsibleContent asChild>
-            <CardContent className="p-1.5">
+          </div>
+          <div className="min-w-0 p-1">
+            {!open && (
+              <div className="flex min-h-9 items-center px-2">
+                <Icons b={b} />
+              </div>
+            )}
+            <CollapsibleContent asChild>
               <ul className="m-0 list-none p-0">
                 <Presence
                   items={stackRuns(b.branches)}
@@ -568,9 +600,9 @@ function ProjectCard({ b, closed, toggle }: { b: Branch } & Fold) {
                   }}
                 </Presence>
               </ul>
-            </CardContent>
-          </CollapsibleContent>
-        </Card>
+            </CollapsibleContent>
+          </div>
+        </div>
       </Collapsible>
     </li>
   );
@@ -821,11 +853,13 @@ function App() {
                   {projects?.length === 0 && <p className="text-muted-foreground">No active threads.</p>}
                   {projects ? (
                     <DragDropProvider plugins={plugins} onDragStart={dragStart} onDragEnd={dragEnd}>
-                      <ul className="m-0 flex list-none flex-col p-0">
-                        <Presence items={projects} keyOf={(p) => p.id}>
-                          {(p) => <ProjectCard b={p} closed={closed} toggle={toggle} />}
-                        </Presence>
-                      </ul>
+                      <Card className="gap-0 overflow-hidden rounded-[12px] py-0 shadow-none">
+                        <ul className="m-0 list-none p-0">
+                          <Presence items={projects} keyOf={(p) => p.id}>
+                            {(p) => <ProjectBlock b={p} closed={closed} toggle={toggle} />}
+                          </Presence>
+                        </ul>
+                      </Card>
                     </DragDropProvider>
                   ) : (
                     <>
