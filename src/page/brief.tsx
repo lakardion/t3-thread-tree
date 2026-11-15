@@ -63,7 +63,7 @@ export function BriefControls(p: {
           button
         )}
         <ButtonGroupSeparator className="bg-primary-foreground/30" />
-        <DropdownMenu>
+        <DropdownMenu modal={false}>
           <DropdownMenuTrigger asChild disabled={!p.clis?.length}>
             <Button size="icon-sm" className="w-7" aria-label="Model">
               <ChevronDown />
