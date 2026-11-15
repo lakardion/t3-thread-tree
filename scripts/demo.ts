@@ -188,6 +188,22 @@ const threads: Thread[] = [
   }),
   t("Rewrite the install page", { id: "launched", projectId: "docs" }),
   t("DOC-16 · Archive the old tutorial", { projectId: "docs", settledAt: ago(60) }),
+  /** PROTOTYPE: more projects, so a far-down project shows the layout problem. */
+  t("MOB-30 · Push notification opt-in screen", { projectId: "mobile", status: "running" }),
+  t("MOB-31 · Deep links for order tracking", { projectId: "mobile", ...completed, lastVisitedAt: ago(2) }),
+  t("MOB-33 · Crash on Android 15 cold start", { projectId: "mobile", status: "failed", lastError: "Process exited 1" }),
+  t("MOB-34 · Offline cart sync", { projectId: "mobile", hasPlan: true, interactionMode: "plan", ...completed }),
+  t("Review #511 MOB-29", { projectId: "mobile", prs: [pr(511, "agent", "open", { checks: "passing" })] }),
+  t("INFRA-7 · Terraform the staging Redis", { projectId: "infra", status: "running" }),
+  t("INFRA-8 · Rotate the CI deploy keys", { projectId: "infra", status: "queued" }),
+  t("INFRA-9 · Cut Grafana alert noise", { projectId: "infra", ...completed }),
+  t("Bump the base Docker image", { projectId: "infra", snoozedUntil: later(8) }),
+  t("DATA-3 · Backfill the orders warehouse table", { projectId: "data", status: "running" }),
+  t("DATA-4 · dbt model for refunds", { projectId: "data", ...completed, prs: [pr(4101, "created", "open", { checks: "failing" })] }),
+  t("DATA-5 · Drop the legacy events schema", { projectId: "data", status: "running", pending: request("command") }),
+  t("ADM-2 · Audit log filter by actor", { projectId: "admin", ...completed }),
+  t("ADM-3 · Bulk-disable users", { projectId: "admin", status: "running", pending: request("user_input") }),
+  t("ADM-4 · CSV export of seats", { projectId: "admin", status: "interrupted" }),
 ];
 /** The thread that the push steps add to API-77 and remove again. */
 const extra = t("API-77 · Add a per-key quota dashboard", { projectId: "api" });
@@ -196,6 +212,10 @@ const projects = new Map<string, Project>([
   ["storefront", { title: "storefront", repo: "acme/storefront" }],
   ["api", { title: "api-gateway", repo: "acme/api-gateway" }],
   ["docs", { title: "docs-site", repo: null }],
+  ["mobile", { title: "mobile-app", repo: "acme/mobile-app" }],
+  ["infra", { title: "infra", repo: "acme/infra" }],
+  ["data", { title: "data-pipelines", repo: "acme/data-pipelines" }],
+  ["admin", { title: "admin-console", repo: "acme/admin-console" }],
 ]);
 
 const projectsFor = (settled: boolean) =>
