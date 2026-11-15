@@ -440,7 +440,7 @@ function ThreadRow({ t, chip, sort, inStack }: { t: ThreadNode; chip?: string; s
             </Tooltip>
             <CollapsibleTrigger asChild>
               <Button variant="ghost" size="icon" className={cn(ROW_BUTTON, "group")} aria-label="Details">
-                <ChevronDown className="size-3.5 group-data-[state=open]:rotate-180" />
+                <ChevronDown className="size-3.5 transition-transform duration-200 group-data-[state=open]:rotate-180 motion-reduce:transition-none" />
               </Button>
             </CollapsibleTrigger>
           </span>
@@ -461,10 +461,14 @@ function ThreadRow({ t, chip, sort, inStack }: { t: ThreadNode; chip?: string; s
   return <Sortable sort={sort}>{render}</Sortable>;
 }
 
-const Chevron = ({ open }: { open: boolean }) => {
-  const Icon = open ? ChevronDown : ChevronRight;
-  return <Icon className="size-3.5 flex-none text-muted-foreground" />;
-};
+const Chevron = ({ open }: { open: boolean }) => (
+  <ChevronRight
+    className={cn(
+      "size-3.5 flex-none text-muted-foreground transition-transform duration-200 motion-reduce:transition-none",
+      open && "rotate-90",
+    )}
+  />
+);
 
 /** One status icon for each thread of a closed branch, in tree order. */
 const Icons = ({ b }: { b: Branch }) => (
