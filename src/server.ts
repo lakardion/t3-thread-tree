@@ -2,6 +2,7 @@ import index from "./page/index.html";
 import { briefInput, briefService, detectClis } from "./server/brief.ts";
 import { buildTree } from "./server/build-tree.ts";
 import { mayBeLaunched, needsScan, openLineage } from "./server/lineage.ts";
+import { checkCli, cliPath, sendService } from "./server/send.ts";
 import { connectShell, readEnvironmentId, type Project, type Thread } from "./server/t3.ts";
 import type { Conn, Tree } from "./shared/tree.ts";
 
@@ -167,12 +168,23 @@ const brief = briefService({
   },
 });
 
+const t3Cli = checkCli(cliPath());
+void t3Cli.then((c) => c.available || log(`no t3 CLI at ${c.path}, sending is off`));
+const send = sendService({
+  cli: t3Cli,
+  hasThread: (id) => threads.get(id)?.gone === false,
+  hasProject: (id) => projects.has(id),
+});
+
 const server = Bun.serve({
+  /** Above the 30 s CLI timeout, so a slow send still gets its 502 body. */
+  idleTimeout: 40,
   hostname: "127.0.0.1",
   port: Number(process.env.PORT) || 4773,
   routes: {
     "/": index,
     ...brief.routes,
+    ...send.routes,
     "/events": (req) => {
       server.timeout(req, 0);
       const settled = new URL(req.url).searchParams.get("settled") === "1";

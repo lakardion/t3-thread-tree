@@ -341,4 +341,3 @@ These facts are not confirmed against a real stream. The research used the MCP t
 - `pendingRuntimeRequest` as the "needs input" signal (the prototype used `orchestration_v2_projection_runtime_requests` with `status = 'pending'`). Also check how the `waiting` run status fits the table.
 - `toolName` for callers that are not Claude (for example Codex) in the lineage lookup.
 - Whether `codex exec --ignore-user-config` skips a global `~/.codex/AGENTS.md`. If not, the brief run sees it.
-- The `send --json` and `start --json` stdout shapes come from the T3 source, and nobody has run them yet. The smoke run of ticket 02 confirms them.

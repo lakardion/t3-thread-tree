@@ -66,6 +66,12 @@ LINEAR_WORKSPACE=join-com   # the slug in linear.app/<workspace>
 LINEAR_TEAMS=JED,ENG,MOR    # team keys that are Linear keys
 ```
 
+Optional: set the path of the `t3` CLI, which the app runs to send messages and start threads. Add this to `.env`. The default is `~/.t3/bin/t3`:
+
+```sh
+T3_BIN=/path/to/t3
+```
+
 ## Run
 
 ```sh
@@ -78,7 +84,7 @@ Open <http://127.0.0.1:4773>.
 - The app starts even when T3 is not running. It retries every 3 s. Until T3 is back, the page shows the last tree, greyed, with the time of the last update.
 - If T3 rejects the token, the page shows the command to issue a new one.
 
-To see the UI without T3, run `bun run demo` and open <http://127.0.0.1:4774>. The demo uses a stub brief runner: set `BRIEF=failed`, `BRIEF=empty` or `BRIEF=rules` to see the other outcomes, `CLIS=0` to offer no CLI, and `PUSH=1` to fake a live change every 3 seconds.
+To see the UI without T3, run `bun run demo` and open <http://127.0.0.1:4774>. The demo uses a stub brief runner: set `BRIEF=failed`, `BRIEF=empty` or `BRIEF=rules` to see the other outcomes, `CLIS=0` to offer no CLI, `PUSH=1` to fake a live change every 3 seconds, `SEND=failed` to make a send fail, and `T3CLI=0` to show the `t3` CLI as missing.
 
 ## How it works
 
