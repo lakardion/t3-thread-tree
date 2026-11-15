@@ -10,9 +10,20 @@ import {
 import { DragDropProvider } from "@dnd-kit/react";
 import { isSortable, useSortable } from "@dnd-kit/react/sortable";
 import { Contrast, Moon, Sun } from "lucide";
-import { Check, ChevronDown, ChevronRight, ExternalLink, GripVertical, Layers, TriangleAlert, X } from "lucide-react";
+import {
+  Check,
+  ChevronDown,
+  ChevronRight,
+  CircleHelp,
+  ExternalLink,
+  Eye,
+  GripVertical,
+  Layers,
+  TriangleAlert,
+  X,
+} from "lucide-react";
 import { MorphIcon } from "morphicons/react";
-import { createContext, useCallback, useContext, useEffect, useRef, useState, type ReactNode } from "react";
+import { createContext, Fragment, useCallback, useContext, useEffect, useRef, useState, type ReactNode } from "react";
 import { createRoot } from "react-dom/client";
 
 import { Alert, AlertDescription } from "@/components/ui/alert";
@@ -20,6 +31,12 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuLabel,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
 import { Label } from "@/components/ui/label";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Switch } from "@/components/ui/switch";
@@ -28,14 +45,14 @@ import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/comp
 import { cn } from "@/lib/utils";
 
 import type { BriefState, Cli } from "../shared/brief.ts";
-import { allThreads, type Branch, type PrNode, type ThreadNode, type Tree } from "../shared/tree.ts";
+import { allThreads, REVIEWS, type Branch, type PrNode, type ThreadNode, type Tree } from "../shared/tree.ts";
 import { countAttention, needsYou, onlyNeedsYou } from "./attention.ts";
 import { BriefControls, BriefPanel, type Offered } from "./brief.tsx";
-import { ago, folded, isKeyGroup, linearHref, ownPr, phraseWith, prTone, stackRuns, stripKey } from "./format.ts";
+import { ago, folded, isKeyGroup, linearHref, ownPr, prTone, stackRuns, stripKey } from "./format.ts";
 import {
   PROJECTS,
   arrange,
-  isTail,
+  isPinned,
   parseOrders,
   prune,
   groupsKey,
@@ -47,7 +64,7 @@ import {
 } from "./order.ts";
 import { Presence, useMotion } from "./presence.tsx";
 import { ProjectIcon, projectHex } from "./project-icon.tsx";
-import { STATUS, StatusIcon } from "./status-icon.tsx";
+import { LEGEND, LegendIcon, STATUS, StatusIcon } from "./status-icon.tsx";
 import { Swap, useChanges } from "./swap.tsx";
 
 const TOKEN_CMD =
@@ -349,17 +366,8 @@ function ThreadRow({ t, chip, sort, hideStack }: { t: ThreadNode; chip?: string;
           data-status={t.status}
         >
           <DragHandle handleRef={handleRef} name={t.title || t.id} className="-ml-1.5" />
-          <StatusIcon t={t} />
+          <StatusIcon t={t} now={now} />
           {pulse > 0 && <span key={pulse} aria-hidden className={cn("row-pulse", STATUS[t.status].shape)} />}
-          <Swap
-            k={`${t.status}|${t.phrase}`}
-            className={cn(
-              "w-[120px] flex-none grid-cols-[minmax(0,1fr)] text-xs font-medium transition-colors duration-300 motion-reduce:transition-none [&>*]:truncate",
-              dim ? "text-muted-foreground" : STATUS[t.status].text,
-            )}
-          >
-            {phraseWith(t, now)}
-          </Swap>
           {chip && (
             <Badge
               variant="outline"
@@ -482,8 +490,12 @@ function GroupRow({ b, closed, toggle, sort }: { b: Branch; sort?: Sort } & Fold
           <DragHandle handleRef={handleRef} name={b.label} className="-ml-1.5" />
           <CollapsibleTrigger className="flex min-w-0 cursor-pointer items-center gap-2 select-none max-[720px]:min-h-11">
             <Chevron open={open} />
+            {b.label === REVIEWS && <Eye className="size-3.5 flex-none text-review" aria-hidden />}
             <span
-              className={cn("truncate text-xs font-semibold", isKeyGroup(b) ? "font-mono" : "text-muted-foreground")}
+              className={cn(
+                "truncate text-xs font-semibold",
+                b.label === REVIEWS ? "text-review" : isKeyGroup(b) ? "font-mono" : "text-muted-foreground",
+              )}
             >
               {b.label}
             </span>
@@ -503,7 +515,7 @@ function GroupRow({ b, closed, toggle, sort }: { b: Branch; sort?: Sort } & Fold
           {!open && <Icons b={b} />}
         </div>
         <CollapsibleContent asChild>
-          <ul className="m-0 list-none pl-2.5">
+          <ul className={cn("m-0 list-none", isPinned(b) ? "pl-6" : "pl-2.5")}>
             <Presence items={b.branches} keyOf={(c) => c.id}>
               {(c) => (
                 <GroupRow b={c} closed={closed} toggle={toggle} sort={sortOf(lists, groupsKey(b.id), c.id, c.label)} />
@@ -652,7 +664,7 @@ function ProjectBlock({ b, closed, toggle }: { b: Branch } & Fold) {
                   keyOf={(run) => (run[0].stack ? `rail:${run[0].id}` : run[0].id)}
                 >
                   {(run) => {
-                    const sort = !isTail(run[0])
+                    const sort = !isPinned(run[0])
                       ? sortOf(
                           lists,
                           groupsKey(b.id),
@@ -676,6 +688,31 @@ function ProjectBlock({ b, closed, toggle }: { b: Branch } & Fold) {
   );
   return <Sortable sort={sortOf(lists, PROJECTS, b.id, b.label)}>{render}</Sortable>;
 }
+
+/** The meaning of each status icon, opened from a help button. */
+const StatusLegend = () => (
+  <DropdownMenu modal={false}>
+    <DropdownMenuTrigger asChild>
+      <Button variant="ghost" size="icon-sm" aria-label="Status icons" title="Status icons">
+        <CircleHelp />
+      </Button>
+    </DropdownMenuTrigger>
+    <DropdownMenuContent align="end" className="w-80 p-2">
+      <DropdownMenuLabel className="px-1 text-xs text-muted-foreground">Status icons</DropdownMenuLabel>
+      <dl className="m-0 grid grid-cols-[auto_minmax(0,1fr)] items-center gap-x-2.5 gap-y-1.5 px-1 text-xs">
+        {LEGEND.map(([status, phrase, meaning]) => (
+          <Fragment key={phrase}>
+            <dt className="flex items-center gap-1.5 font-medium text-foreground">
+              <LegendIcon status={status} phrase={phrase} />
+              {phrase}
+            </dt>
+            <dd className="m-0 text-muted-foreground">{meaning}</dd>
+          </Fragment>
+        ))}
+      </dl>
+    </DropdownMenuContent>
+  </DropdownMenu>
+);
 
 function App() {
   const [tree, setTree] = useState<Tree | null>(null);
@@ -872,6 +909,7 @@ function App() {
             show settled
           </Label>
         </div>
+        <StatusLegend />
         <Button
           variant="ghost"
           size="icon-sm"

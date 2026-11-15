@@ -67,19 +67,21 @@ describe("arrange", () => {
 
   test("moves a stack run as one block and keeps its inner order", () => {
     const { projects, lists } = arrange(sample(), { "groups:p:a": ["g:a4", "stack:p:a:s0", "g:a1"] });
-    expect(ids(projects[0].branches)).toEqual(["g:a4", "g:a2", "g:a3", "g:a1", REVIEWS, NO_KEY]);
+    expect(ids(projects[0].branches)).toEqual([REVIEWS, "g:a4", "g:a2", "g:a3", "g:a1", NO_KEY]);
     expect(lists.get("groups:p:a")).toEqual(["g:a4", "stack:p:a:s0", "g:a1"]);
   });
 
-  test("keeps Reviews and No issue key last whatever the stored order", () => {
+  test("keeps Reviews first and No issue key last whatever the stored order", () => {
     const { projects } = arrange(sample(), { "groups:p:a": [NO_KEY, REVIEWS, "g:a4"] });
-    expect(ids(projects[0].branches).slice(-2)).toEqual([REVIEWS, NO_KEY]);
+    const got = ids(projects[0].branches);
+    expect([got[0], got.at(-1)]).toEqual([REVIEWS, NO_KEY]);
   });
 
   test("reorders top-level threads, not subthreads", () => {
     const { projects } = arrange(sample(), { "threads:g:a1": ["t:t2", "t:t1"] });
-    expect(ids(projects[0].branches[0].threads)).toEqual(["t2", "t1"]);
-    expect(ids(projects[0].branches[0].threads[0].children)).toEqual(["c1", "c2"]);
+    const a1 = projects[0].branches.find((b) => b.id === "g:a1")!;
+    expect(ids(a1.threads)).toEqual(["t2", "t1"]);
+    expect(ids(a1.threads[0].children)).toEqual(["c1", "c2"]);
   });
 
   test("reorders the groups of Reviews", () => {

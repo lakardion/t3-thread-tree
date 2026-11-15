@@ -170,7 +170,7 @@ describe("project repository", () => {
 });
 
 describe("placement", () => {
-  test("Reviews group by key, keyed groups, No issue key last", () => {
+  test("Reviews first and grouped by key, then keyed groups, No issue key last", () => {
     const tree = build([
       shell("r1", "Review #15708 SHOP-4319"),
       shell("r2", "Review #15709 without key"),
@@ -178,7 +178,7 @@ describe("placement", () => {
       shell("n", "loose thread"),
     ]);
     const p = tree[0];
-    expect(labels(p.branches)).toEqual(["SHOP-4319", "Reviews", "No issue key"]);
+    expect(labels(p.branches)).toEqual(["Reviews", "SHOP-4319", "No issue key"]);
     expect(labels(child(tree, "frontend", "Reviews").branches)).toEqual(["SHOP-4319", "No issue key"]);
     expect(titles(child(tree, "frontend", "Reviews", "SHOP-4319").threads)).toEqual(["Review #15708 SHOP-4319"]);
   });
@@ -277,7 +277,7 @@ describe("order", () => {
       shell("k1", "SHOP-1 first"),
       shell("k2", "SHOP-2 second"),
     ]);
-    expect(labels(tree[0].branches)).toEqual(["SHOP-1", "SHOP-2", "Reviews", "No issue key"]);
+    expect(labels(tree[0].branches)).toEqual(["Reviews", "SHOP-1", "SHOP-2", "No issue key"]);
   });
 });
 
