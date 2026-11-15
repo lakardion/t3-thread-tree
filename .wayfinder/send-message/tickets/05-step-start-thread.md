@@ -1,7 +1,7 @@
 ---
 title: Start a thread from a brief step
 type: wayfinder:task
-status: in-review
+status: closed
 assignee: claude (send-message-05)
 blocked-by: [04-row-send]
 ---

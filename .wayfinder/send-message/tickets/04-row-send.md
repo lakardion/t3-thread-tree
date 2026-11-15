@@ -1,7 +1,7 @@
 ---
 title: Send a message from a thread row
 type: wayfinder:task
-status: in-review
+status: closed
 assignee: claude (send-message-04)
 blocked-by: [03-brief-send]
 ---

@@ -1,7 +1,7 @@
 ---
 title: Add the send and start endpoints (t3 CLI subprocess)
 type: wayfinder:task
-status: in-review
+status: closed
 assignee: claude (send-message-02)
 blocked-by: [01-send-spec]
 ---

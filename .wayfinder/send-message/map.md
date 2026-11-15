@@ -1,6 +1,6 @@
 ---
 label: wayfinder:map
-status: open
+status: closed
 created: 2026-11-15
 ---
 
@@ -34,8 +34,6 @@ The destination is reached when every route key is done and no map ticket is ope
 
 ## Stacks
 
-- `main ← send-message-02-add-send-endpoints (#25) ← send-message-03-build-send-dialog (#26) ← send-message-04-row-send (#28) ← send-message-05-start-thread-from-step (#29)` (GitHub stack #27)
-
 ## Notes
 
 - Mode: autopilot
@@ -53,6 +51,10 @@ The destination is reached when every route key is done and no map ticket is ope
 <!-- one line per closed map ticket -->
 
 - send-message-01 (#24): the spec is in `SPEC.md` › "Send message". Routes `/t3/cli`, `/t3/send`, `/t3/start`; 30 s CLI timeout; ids in the JSON body; a start leaves no mark.
+- send-message-02 (#25): `/t3/cli`, `/t3/send`, `/t3/start` run the `t3` CLI, message on stdin.
+- send-message-03 (#26): the send dialog and the send icon on a What's next step.
+- send-message-04 (#28): a send icon on each thread row.
+- send-message-05 (#29): a start thread icon on a What's next step.
 
 Decided at charting (by the user):
 
@@ -68,6 +70,8 @@ Decided at charting (by the user):
 - **Busy threads:** `t3 thread send` queues the message as the next turn and interrupts nothing. The dialog says so when the target is working.
 
 ## Not yet specified
+
+<!-- empty: destination reached -->
 
 ## Out of scope
 
