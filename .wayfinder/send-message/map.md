@@ -49,6 +49,8 @@ The destination is reached when every route key is done and no map ticket is ope
 
 <!-- one line per closed map ticket -->
 
+- send-message-01 (#24): the spec is in `SPEC.md` › "Send message". Routes `/t3/cli`, `/t3/send`, `/t3/start`; 30 s CLI timeout; ids in the JSON body; a start leaves no mark.
+
 Decided at charting (by the user):
 
 - **Transport:** the server spawns the T3 CLI: `t3 thread send <thread> -` and `t3 thread start <project> -`, with the message on stdin. It uses T3's own auth. The `orchestration:read` token stays as it is. Same subprocess pattern as the brief runner in `src/server/brief.ts`.

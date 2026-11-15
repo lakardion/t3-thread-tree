@@ -1,7 +1,7 @@
 ---
 title: Write the "Send message" spec
 type: wayfinder:task
-status: in-review
+status: closed
 assignee: claude (send-message-01)
 blocked-by: []
 ---
