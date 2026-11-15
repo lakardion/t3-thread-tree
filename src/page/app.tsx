@@ -9,7 +9,7 @@ import {
 } from "@dnd-kit/dom";
 import { DragDropProvider } from "@dnd-kit/react";
 import { isSortable, useSortable } from "@dnd-kit/react/sortable";
-import { Contrast, Moon, Sun } from "lucide";
+import { ChevronsDownUp, ChevronsUpDown, Contrast, Moon, Sun } from "lucide";
 import {
   Check,
   ChevronDown,
@@ -48,7 +48,18 @@ import type { BriefState, Cli } from "../shared/brief.ts";
 import { allThreads, REVIEWS, type Branch, type PrNode, type ThreadNode, type Tree } from "../shared/tree.ts";
 import { countAttention, needsYou, onlyNeedsYou } from "./attention.ts";
 import { BriefControls, BriefPanel, type Offered } from "./brief.tsx";
-import { ago, folded, isKeyGroup, linearHref, ownPr, prTone, stackRuns, stripKey } from "./format.ts";
+import {
+  ago,
+  folded,
+  foldIds,
+  groupIds,
+  isKeyGroup,
+  linearHref,
+  ownPr,
+  prTone,
+  stackRuns,
+  stripKey,
+} from "./format.ts";
 import {
   PROJECTS,
   arrange,
@@ -479,9 +490,42 @@ const Icons = ({ b }: { b: Branch }) => (
   </span>
 );
 
-type Fold = { closed: Set<string>; toggle: (id: string) => void };
+type Fold = { closed: Set<string>; toggle: (id: string) => void; fold: (ids: string[], shut: boolean) => void };
 
-function GroupRow({ b, closed, toggle, sort }: { b: Branch; sort?: Sort } & Fold) {
+/** Opens `self` and all `inner` ids when one of them is closed, else closes all `inner` ids. Hidden with no `inner` ids. */
+function FoldAll({
+  inner,
+  self,
+  name,
+  closed,
+  fold,
+  className,
+}: { inner: string[]; self?: string; name?: string; className?: string } & Omit<Fold, "toggle">) {
+  if (inner.length === 0) return null;
+  const all = self ? [self, ...inner] : inner;
+  const shut = all.every((id) => !closed.has(id));
+  const label = `${shut ? "Collapse" : "Expand"} all${name ? ` in ${name}` : ""}`;
+  return (
+    <Button
+      variant="ghost"
+      size={name ? "icon" : "icon-sm"}
+      aria-label={label}
+      title={label}
+      className={className}
+      onClick={() => fold(shut ? inner : all, shut)}
+    >
+      <MorphIcon icon={shut ? ChevronsDownUp : ChevronsUpDown} size={name ? 14 : 16} reducedMotion="user" />
+    </Button>
+  );
+}
+
+/** The row variant of `FoldAll`: on top of the row trigger, shown on hover or focus. */
+const ROW_FOLD = cn(
+  ROW_BUTTON,
+  "relative z-10 ml-auto opacity-0 group-hover/row:opacity-100 focus-visible:opacity-100 pointer-coarse:opacity-100",
+);
+
+function GroupRow({ b, closed, toggle, fold, sort }: { b: Branch; sort?: Sort } & Fold) {
   const open = !closed.has(b.id);
   const one = folded(b);
   const linear = useContext(Linear);
@@ -518,12 +562,26 @@ function GroupRow({ b, closed, toggle, sort }: { b: Branch; sort?: Sort } & Fold
             </a>
           )}
           {!open && <Icons b={b} />}
+          <FoldAll
+            inner={b.branches.flatMap(groupIds)}
+            self={b.id}
+            name={b.label}
+            closed={closed}
+            fold={fold}
+            className={ROW_FOLD}
+          />
         </div>
         <CollapsibleContent asChild>
           <ul className={cn("m-0 list-none", isPinned(b) ? "pl-6" : "pl-2.5")}>
             <Presence items={b.branches} keyOf={(c) => c.id}>
               {(c) => (
-                <GroupRow b={c} closed={closed} toggle={toggle} sort={sortOf(lists, groupsKey(b.id), c.id, c.label)} />
+                <GroupRow
+                  b={c}
+                  closed={closed}
+                  toggle={toggle}
+                  fold={fold}
+                  sort={sortOf(lists, groupsKey(b.id), c.id, c.label)}
+                />
               )}
             </Presence>
             <Presence items={b.threads} keyOf={(t) => t.id}>
@@ -648,7 +706,7 @@ function StackRail({ run, closed, toggle, sort }: { run: Branch[]; sort?: Sort }
 }
 
 /** A project as one block of the shared list: a one-line header, then its groups. */
-function ProjectBlock({ b, closed, toggle }: { b: Branch } & Fold) {
+function ProjectBlock({ b, closed, toggle, fold }: { b: Branch } & Fold) {
   const open = !closed.has(b.id);
   const lists = useContext(Lists);
   const color = projectHex(b.label);
@@ -666,6 +724,7 @@ function ProjectBlock({ b, closed, toggle }: { b: Branch } & Fold) {
               </span>
             </CollapsibleTrigger>
             {!open && <Icons b={b} />}
+            <FoldAll inner={foldIds(b)} self={b.id} name={b.label} closed={closed} fold={fold} className={ROW_FOLD} />
           </div>
           <div className="min-w-0 px-1 pb-1">
             <CollapsibleContent asChild>
@@ -684,9 +743,9 @@ function ProjectBlock({ b, closed, toggle }: { b: Branch } & Fold) {
                         )
                       : undefined;
                     return run[0].stack ? (
-                      <StackRail run={run} closed={closed} toggle={toggle} sort={sort} />
+                      <StackRail run={run} closed={closed} toggle={toggle} fold={fold} sort={sort} />
                     ) : (
-                      <GroupRow b={run[0]} closed={closed} toggle={toggle} sort={sort} />
+                      <GroupRow b={run[0]} closed={closed} toggle={toggle} fold={fold} sort={sort} />
                     );
                   }}
                 </Presence>
@@ -778,6 +837,15 @@ function App() {
     const n = new Set(closed);
     if (n.has(id)) n.delete(id);
     else n.add(id);
+    setClosed(n);
+    save(CLOSED_KEY, JSON.stringify([...n]));
+  };
+  const fold = (ids: string[], shut: boolean) => {
+    const n = new Set(closed);
+    for (const id of ids) {
+      if (shut) n.add(id);
+      else n.delete(id);
+    }
     setClosed(n);
     save(CLOSED_KEY, JSON.stringify([...n]));
   };
@@ -920,6 +988,7 @@ function App() {
             show settled
           </Label>
         </div>
+        {projects && <FoldAll inner={projects.flatMap((p) => [p.id, ...foldIds(p)])} closed={closed} fold={fold} />}
         <StatusLegend />
         <Button
           variant="ghost"
@@ -973,7 +1042,7 @@ function App() {
                       <Card className="gap-0 overflow-hidden rounded-[12px] py-0 shadow-none">
                         <ul className="m-0 list-none p-0">
                           <Presence items={projects} keyOf={(p) => p.id}>
-                            {(p) => <ProjectBlock b={p} closed={closed} toggle={toggle} />}
+                            {(p) => <ProjectBlock b={p} closed={closed} toggle={toggle} fold={fold} />}
                           </Presence>
                         </ul>
                       </Card>
