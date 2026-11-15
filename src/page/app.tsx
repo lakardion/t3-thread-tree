@@ -28,7 +28,8 @@ import { cn } from "@/lib/utils";
 import type { BriefState, Cli } from "../shared/brief.ts";
 import { allThreads, type Branch, type PrNode, type ThreadNode, type Tree } from "../shared/tree.ts";
 import { countAttention, needsYou, onlyNeedsYou } from "./attention.ts";
-import { BriefControls, BriefPanel, type Offered } from "./brief.tsx";
+import { BriefPanel, type Offered } from "./brief.tsx";
+import { BriefControlsPrototype as BriefControls } from "./brief-controls.prototype.tsx";
 import { ago, folded, isKeyGroup, linearHref, phraseWith, stackRuns, stripKey } from "./format.ts";
 import {
   PROJECTS,
