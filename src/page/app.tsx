@@ -45,6 +45,7 @@ import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/comp
 import { cn } from "@/lib/utils";
 
 import type { BriefState, Cli } from "../shared/brief.ts";
+import type { CliStatus } from "../shared/send.ts";
 import { allThreads, REVIEWS, type Branch, type PrNode, type ThreadNode, type Tree } from "../shared/tree.ts";
 import { countAttention, needsYou, onlyNeedsYou } from "./attention.ts";
 import { BriefControls, BriefPanel, type Offered } from "./brief.tsx";
@@ -796,6 +797,9 @@ function App() {
   const [clis, setClis] = useState<Offered | null>(null);
   const [cli, setCli] = useState(load(CLI_KEY) as Cli | null);
   const [hideBrief, setHideBrief] = useState(false);
+  const [t3cli, setT3cli] = useState<CliStatus | null>(null);
+  const [sent, setSent] = useState(() => new Map<string, string[]>());
+  const briefStatus = useRef<BriefState["status"]>("idle");
   const [orders, setOrders] = useState(() => parseOrders(load(ORDER_KEY)));
   const [freeze, setFreeze] = useState<Freeze>();
 
@@ -803,6 +807,9 @@ function App() {
     fetch("/brief/clis")
       .then((r) => r.json() as Promise<Offered>)
       .then(setClis, () => setClis([]));
+    fetch("/t3/cli")
+      .then((r) => r.json() as Promise<CliStatus>)
+      .then(setT3cli, () => setT3cli(null));
   }, []);
 
   useEffect(() => {
@@ -814,7 +821,12 @@ function App() {
     save(SETTLED_KEY, settled ? "1" : "0");
     const es = new EventSource(settled ? "/events?settled=1" : "/events");
     es.onmessage = (e) => setTree(JSON.parse(e.data) as Tree);
-    es.addEventListener("brief", (e) => setBrief(JSON.parse(e.data) as BriefState));
+    es.addEventListener("brief", (e) => {
+      const b = JSON.parse(e.data) as BriefState;
+      if (b.status === "running" && briefStatus.current !== "running") setSent(new Map());
+      briefStatus.current = b.status;
+      setBrief(b);
+    });
     return () => es.close();
   }, [settled]);
 
@@ -1022,6 +1034,14 @@ function App() {
           state={brief}
           clis={clis}
           live={live}
+          t3cli={t3cli}
+          sent={sent}
+          onSent={(key, id) =>
+            setSent((m) => {
+              const ids = m.get(key) ?? [];
+              return ids.includes(id) ? m : new Map(m).set(key, [...ids, id]);
+            })
+          }
           run={runBrief}
           cancel={() => fetch("/brief/cancel", { method: "POST" })}
           close={() => setHideBrief(true)}
