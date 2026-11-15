@@ -8,7 +8,9 @@ import {
 } from "@dnd-kit/dom";
 import { DragDropProvider } from "@dnd-kit/react";
 import { isSortable, useSortable } from "@dnd-kit/react/sortable";
+import { Contrast, Moon, Sun } from "lucide";
 import { Check, ChevronDown, ChevronRight, ExternalLink, GripVertical, Layers, TriangleAlert, X } from "lucide-react";
+import { MorphIcon } from "morphicons/react";
 import { createContext, useCallback, useContext, useEffect, useRef, useState, type ReactNode } from "react";
 import { createRoot } from "react-dom/client";
 
@@ -18,7 +20,6 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader } from "@/components/ui/card";
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
 import { Label } from "@/components/ui/label";
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Switch } from "@/components/ui/switch";
 import { ToggleGroup, ToggleGroupItem } from "@/components/ui/toggle-group";
@@ -57,6 +58,7 @@ const CLI_KEY = "thread-tree:cli";
 const ORDER_KEY = "thread-tree:order";
 const THEMES = ["system", "light", "dark"] as const;
 type Theme = (typeof THEMES)[number];
+const THEME_ICONS = { system: Contrast, light: Sun, dark: Moon };
 
 const load = (k: string): string | null => {
   try {
@@ -770,16 +772,15 @@ function App() {
             show settled
           </Label>
         </div>
-        <Select value={theme} onValueChange={(v) => setTheme(v as Theme)}>
-          <SelectTrigger size="sm" aria-label="Theme">
-            <SelectValue />
-          </SelectTrigger>
-          <SelectContent>
-            <SelectItem value="system">System</SelectItem>
-            <SelectItem value="light">Light</SelectItem>
-            <SelectItem value="dark">Dark</SelectItem>
-          </SelectContent>
-        </Select>
+        <Button
+          variant="ghost"
+          size="icon-sm"
+          aria-label={`Theme: ${theme}`}
+          title={`Theme: ${theme}`}
+          onClick={() => setTheme(THEMES[(THEMES.indexOf(theme) + 1) % THEMES.length])}
+        >
+          <MorphIcon icon={THEME_ICONS[theme]} size={16} reducedMotion="user" />
+        </Button>
       </header>
       {tree?.conn === "down" && (
         <Alert className="mb-3 border-l-[3px] border-l-status-needs-input">
