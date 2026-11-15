@@ -472,7 +472,7 @@ const Chevron = ({ open }: { open: boolean }) => (
 
 /** One status icon for each thread of a closed branch, in tree order. */
 const Icons = ({ b }: { b: Branch }) => (
-  <span className="inline-flex flex-wrap items-center gap-[3px]">
+  <span className="relative z-10 inline-flex flex-wrap items-center gap-[3px]">
     {allThreads(b).map((t) => (
       <StatusIcon key={t.id} t={t} />
     ))}
@@ -491,9 +491,9 @@ function GroupRow({ b, closed, toggle, sort }: { b: Branch; sort?: Sort } & Fold
   const render = (ref: RefFn, handleRef?: RefFn) => (
     <Collapsible asChild open={open} onOpenChange={() => toggle(b.id)}>
       <li ref={ref} className="my-px">
-        <div className="group/row flex h-7 min-w-0 items-center gap-2 rounded-[8px] px-2 hover:bg-accent max-[720px]:h-auto max-[720px]:min-h-7 max-[720px]:flex-wrap">
-          <DragHandle handleRef={handleRef} name={b.label} className="-ml-1.5" />
-          <CollapsibleTrigger className="flex min-w-0 cursor-pointer items-center gap-2 select-none max-[720px]:min-h-11">
+        <div className="group/row relative flex h-7 min-w-0 items-center gap-2 rounded-[8px] px-2 hover:bg-accent max-[720px]:h-auto max-[720px]:min-h-7 max-[720px]:flex-wrap">
+          <DragHandle handleRef={handleRef} name={b.label} className="relative z-10 -ml-1.5" />
+          <CollapsibleTrigger className="flex min-w-0 cursor-pointer items-center gap-2 select-none after:absolute after:inset-0 max-[720px]:min-h-11">
             <Chevron open={open} />
             {b.label === REVIEWS && <Eye className="size-3.5 flex-none text-review" aria-hidden />}
             <span
@@ -512,7 +512,7 @@ function GroupRow({ b, closed, toggle, sort }: { b: Branch; sort?: Sort } & Fold
               rel="noreferrer"
               aria-label={`Open ${b.label} in Linear`}
               title="Open in Linear"
-              className="flex-none text-muted-foreground hover:text-foreground"
+              className="relative z-10 flex-none text-muted-foreground hover:text-foreground"
             >
               <ExternalLink className="size-3" aria-hidden />
             </a>
@@ -583,12 +583,16 @@ function StackRail({ run, closed, toggle, sort }: { run: Branch[]; sort?: Sort }
   const render = (ref: RefFn, handleRef?: RefFn) => (
     <Collapsible asChild open={open} onOpenChange={() => toggle(`rail:${id}`)}>
       <li ref={ref} className="relative my-1 ml-7 rounded-[10px] border border-dashed border-border">
-        <div className="group/row flex min-h-7 flex-wrap items-center gap-2 px-2 text-xs">
+        <div className="group/row relative flex min-h-7 flex-wrap items-center gap-2 px-2 text-xs">
           {handleRef && (
-            <DragHandle handleRef={handleRef} name={`PR stack of ${run[0].label}`} className="absolute top-1 -left-7" />
+            <DragHandle
+              handleRef={handleRef}
+              name={`PR stack of ${run[0].label}`}
+              className="absolute top-1 -left-7 z-10"
+            />
           )}
           <CollapsibleTrigger
-            className="flex cursor-pointer items-center gap-1 text-muted-foreground select-none max-[720px]:min-h-11"
+            className="flex cursor-pointer items-center gap-1 text-muted-foreground select-none after:absolute after:inset-0 max-[720px]:min-h-11"
             aria-label={`PR stack · ${total} PRs`}
             title={`PR stack · ${total} PRs`}
           >
@@ -610,7 +614,7 @@ function StackRail({ run, closed, toggle, sort }: { run: Branch[]; sort?: Sort }
                   rel="noreferrer"
                   title={g.label}
                   className={cn(
-                    "inline-flex items-center gap-1 rounded-full border px-1.5 py-px font-mono text-[11px] hover:underline",
+                    "relative z-10 inline-flex items-center gap-1 rounded-full border px-1.5 py-px font-mono text-[11px] hover:underline",
                     p?.draft && "border-dashed",
                   )}
                   style={{ borderColor: prTone(p) }}
@@ -652,9 +656,9 @@ function ProjectBlock({ b, closed, toggle }: { b: Branch } & Fold) {
     <li ref={ref} className="border-l-[3px] not-last:border-b" style={{ borderLeftColor: color }}>
       <Collapsible asChild open={open} onOpenChange={() => toggle(b.id)}>
         <div>
-          <div className="group/row flex h-8 min-w-0 items-center gap-1.5 px-2 max-[720px]:h-auto max-[720px]:min-h-8">
-            <DragHandle handleRef={handleRef} name={b.label} className="-ml-1" />
-            <CollapsibleTrigger className="flex min-w-0 cursor-pointer items-center gap-1.5 select-none">
+          <div className="group/row relative flex h-8 min-w-0 items-center gap-1.5 px-2 max-[720px]:h-auto max-[720px]:min-h-8">
+            <DragHandle handleRef={handleRef} name={b.label} className="relative z-10 -ml-1" />
+            <CollapsibleTrigger className="flex min-w-0 cursor-pointer items-center gap-1.5 select-none after:absolute after:inset-0">
               <Chevron open={open} />
               <ProjectIcon name={b.label} />
               <span className="min-w-0 truncate text-[13px] font-semibold" title={b.repo ?? b.label}>
