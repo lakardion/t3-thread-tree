@@ -1,7 +1,7 @@
 import { describe, expect, test } from "bun:test";
 
-import { ago, folded, linearHref, phraseWith, stackRuns, stripKey } from "../src/page/format.ts";
-import type { Branch, ThreadNode } from "../src/shared/tree.ts";
+import { ago, folded, linearHref, phraseWith, prTone, stackRuns, stripKey } from "../src/page/format.ts";
+import type { Branch, PrNode, ThreadNode } from "../src/shared/tree.ts";
 
 const NOW = Date.parse("2026-11-12T12:00:00.000Z");
 const before = (sec: number) => new Date(NOW - sec * 1000).toISOString();
@@ -102,5 +102,33 @@ describe("linearHref", () => {
   });
   test("returns null with no Linear config", () => {
     expect(linearHref("JED-12", null)).toBeNull();
+  });
+});
+
+describe("prTone", () => {
+  const pr = (over: Partial<PrNode>): PrNode => ({
+    n: 1,
+    url: "",
+    state: "open",
+    draft: false,
+    checks: null,
+    review: null,
+    conflicting: false,
+    title: null,
+    additions: null,
+    deletions: null,
+    changedFiles: null,
+    ...over,
+  });
+  test.each([
+    ["no PR", undefined, "var(--muted-foreground)"],
+    ["draft", pr({ draft: true, checks: "failing" }), "var(--muted-foreground)"],
+    ["failing checks", pr({ checks: "failing", review: "approved" }), "var(--status-failed-fg)"],
+    ["conflict", pr({ conflicting: true }), "var(--status-failed-fg)"],
+    ["changes requested", pr({ review: "changes-requested" }), "var(--status-failed-fg)"],
+    ["approved", pr({ review: "approved", checks: "passing" }), "var(--status-done-fg)"],
+    ["open", pr({ checks: "pending" }), "var(--status-working-fg)"],
+  ])("%s", (_, p, out) => {
+    expect(prTone(p)).toBe(out);
   });
 });

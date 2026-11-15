@@ -1,4 +1,4 @@
-import type { Branch, ThreadNode, Tree } from "../shared/tree.ts";
+import { allThreads, type Branch, type PrNode, type ThreadNode, type Tree } from "../shared/tree.ts";
 
 /** Adjacent branches with the same stack id form one run. A branch with no stack is a run of one. */
 export function stackRuns(bs: Branch[]): Branch[][] {
@@ -9,6 +9,20 @@ export function stackRuns(bs: Branch[]): Branch[][] {
     else runs.push([b]);
   }
   return runs;
+}
+
+/** The PR a stack group opened: the first PR of its thread with a stack position. */
+export const ownPr = (g: Branch): PrNode | undefined => allThreads(g).find((t) => t.stack?.pos)?.prs[0];
+
+/**
+ * The rail color of a stack PR: grey when draft or unknown, red when blocked, green when approved, blue otherwise.
+ * The `-fg` tokens keep 4.5:1 contrast against `--background` text in both themes.
+ */
+export function prTone(p: PrNode | undefined): string {
+  if (!p || p.draft) return "var(--muted-foreground)";
+  if (p.checks === "failing" || p.conflicting || p.review === "changes-requested") return "var(--status-failed-fg)";
+  if (p.review === "approved") return "var(--status-done-fg)";
+  return "var(--status-working-fg)";
 }
 
 /** "now" below 1 minute, then "12m", "3h", "2d". */
