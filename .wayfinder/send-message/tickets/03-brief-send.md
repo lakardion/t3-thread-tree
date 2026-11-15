@@ -1,7 +1,7 @@
 ---
 title: Build the send dialog and the send button on a brief step
 type: wayfinder:task
-status: open
+status: in-review
 assignee: claude (send-message-03)
 blocked-by: [02-send-endpoints]
 ---
