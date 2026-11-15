@@ -345,7 +345,7 @@ function ThreadRow({ t, chip, sort }: { t: ThreadNode; chip?: string; sort?: Sor
     <Collapsible asChild open={open.has(t.id)} onOpenChange={() => toggle(t.id)}>
       <li ref={ref} className="my-px">
         <div
-          className="thread-row group/row flex min-h-9 min-w-0 items-center gap-x-2 rounded-[8px] px-2 text-[13px] leading-5 max-[720px]:flex-wrap max-[720px]:py-1"
+          className="thread-row group/row flex min-h-9 min-w-0 items-center gap-x-2 rounded-[8px] px-2 py-1 text-[13px] leading-5 max-[720px]:flex-wrap"
           data-status={t.status}
         >
           <DragHandle handleRef={handleRef} name={t.title || t.id} className="-ml-1.5" />
@@ -377,10 +377,10 @@ function ThreadRow({ t, chip, sort }: { t: ThreadNode; chip?: string; sort?: Sor
           )}
           <a
             className={cn(
-              "min-w-0 flex-1 truncate hover:underline max-[720px]:line-clamp-2 max-[720px]:whitespace-normal",
+              "min-w-0 flex-1 break-words hover:underline",
               t.status === "your-turn" ? "font-[650]" : "font-medium",
               (t.status === "snoozed" || t.settled || dim) && "text-muted-foreground",
-              chip && "max-[720px]:basis-full max-[720px]:pl-5",
+              "max-[720px]:basis-full max-[720px]:pl-5",
             )}
             href={t.href}
           >
@@ -440,7 +440,7 @@ function ThreadRow({ t, chip, sort }: { t: ThreadNode; chip?: string; sort?: Sor
           <DetailBlock t={t} />
         </CollapsibleContent>
         {t.children.length > 0 && (
-          <ul className="m-0 list-none pl-4">
+          <ul className="m-0 list-none pl-2.5">
             <Presence items={t.children} keyOf={(c) => c.id}>
               {(c) => <ThreadRow t={c} />}
             </Presence>
@@ -503,7 +503,7 @@ function GroupRow({ b, closed, toggle, sort }: { b: Branch; sort?: Sort } & Fold
           {!open && <Icons b={b} />}
         </div>
         <CollapsibleContent asChild>
-          <ul className="m-0 list-none pl-4">
+          <ul className="m-0 list-none pl-2.5">
             <Presence items={b.branches} keyOf={(c) => c.id}>
               {(c) => (
                 <GroupRow b={c} closed={closed} toggle={toggle} sort={sortOf(lists, groupsKey(b.id), c.id, c.label)} />
@@ -548,20 +548,16 @@ function StackRail({ run, closed, toggle, sort }: { run: Branch[]; sort?: Sort }
   return <Sortable sort={sort}>{render}</Sortable>;
 }
 
-/** A project as one block of the shared list, with its icon and name in a left column. */
+/** A project as one block of the shared list: a one-line header, then its groups. */
 function ProjectBlock({ b, closed, toggle }: { b: Branch } & Fold) {
   const open = !closed.has(b.id);
   const lists = useContext(Lists);
   const color = projectHex(b.label);
   const render = (ref: RefFn, handleRef?: RefFn) => (
-    <li
-      ref={ref}
-      className="grid grid-cols-[180px_minmax(0,1fr)] border-l-[3px] not-last:border-b max-[720px]:grid-cols-1"
-      style={{ borderLeftColor: color }}
-    >
+    <li ref={ref} className="border-l-[3px] not-last:border-b" style={{ borderLeftColor: color }}>
       <Collapsible asChild open={open} onOpenChange={() => toggle(b.id)}>
-        <div className="contents">
-          <div className="group/row sticky top-0 flex min-w-0 items-start gap-1.5 self-start px-2 py-2">
+        <div>
+          <div className="group/row flex h-8 min-w-0 items-center gap-1.5 px-2 max-[720px]:h-auto max-[720px]:min-h-8">
             <DragHandle handleRef={handleRef} name={b.label} className="-ml-1" />
             <CollapsibleTrigger className="flex min-w-0 cursor-pointer items-center gap-1.5 select-none">
               <Chevron open={open} />
@@ -570,13 +566,9 @@ function ProjectBlock({ b, closed, toggle }: { b: Branch } & Fold) {
                 {b.label}
               </span>
             </CollapsibleTrigger>
+            {!open && <Icons b={b} />}
           </div>
-          <div className="min-w-0 p-1">
-            {!open && (
-              <div className="flex min-h-9 items-center px-2">
-                <Icons b={b} />
-              </div>
-            )}
+          <div className="min-w-0 px-1 pb-1">
             <CollapsibleContent asChild>
               <ul className="m-0 list-none p-0">
                 <Presence

@@ -15,7 +15,7 @@ Each row gives the choice and its one reason.
 | Details         | An inline details block below the row, opened by a button (B)                                                                                      | It works with keyboard and touch, and it stays open during stream updates. |
 | Details content | The curated set of A: no ids, no housekeeping fields                                                                                               | Each line helps a decision, and the decoder stays small.                   |
 | Motion          | Working: the ring turns (B). Needs input: the left edge breathes (A). All other states are still. A live change fades in and flashes the row once. | Motion then means "alive" or "waiting for you".                            |
-| Projects        | One shared card. Each project is a block with its T3 monogram in a left column and a left edge in the project color                                | All projects show in less height, and the user finds a project by color.   |
+| Projects        | One shared card. Each project is a block with a one-line header (T3 monogram and name) and a left edge in the project color                        | All projects show in less height, and the user finds a project by color.   |
 | Gradients       | Color gradients for state and for the stack only (A, reduced)                                                                                      | Calm rows stay flat, so a gradient keeps its meaning.                      |
 | Layout          | Fold single-thread key groups (A), stack rail (A), centered column of 1200 px maximum (B), one status shape per thread on closed rows (A)          | Fewer rows, a visible stack, and no wide gap between title and chips.      |
 | Header          | Attention summary (A), "Needs you" filter (A), theme choice (B), first-load skeleton (A)                                                           | They answer "what needs me?" before the user reads the tree.               |
@@ -374,19 +374,19 @@ The hover background of a row is `--accent`. It replaces the wash while the poin
 ### Project block
 
 - All projects are in one `Card`, radius 12 px. A 1 px border separates two projects.
-- Each project is a block of two columns. The left column is 180 px wide and stays at the top of the block while the page scrolls: handle, disclosure chevron, monogram, project name (13 px, semibold). The repository `owner/name` is the name tooltip. On a narrow screen the left column goes above the groups.
+- Each project is a block with a header row of 32 px above its groups: handle, disclosure chevron, monogram, project name (13 px, semibold). The name stays on one line and truncates. The repository `owner/name` is the name tooltip.
 - The monogram and the project color come from the T3 Code rule, so a project looks the same as in T3: two letters on a 16 px rounded square, in the project color on a 14% wash of it. The color is one of 18 Tailwind hues, from a hash of the project name.
 - The block has a 3 px left edge in the project color. The project color is never on a row, so color on a row still means status.
-- A closed project shows one status icon for each thread in the right column, in tree order.
-- Right column: the groups, 4 px padding.
+- A closed project shows one status icon for each thread in the header row, in tree order.
+- Below the header: the groups, 4 px padding.
 
 ### Groups
 
-- A key group with two or more top-level threads has a header row: 28 px high, chevron, key in mono 12 px semibold. Its threads indent 16 px.
+- A key group with two or more top-level threads has a header row: 28 px high, chevron, key in mono 12 px semibold. Its threads indent 10 px.
 - A key group with one top-level thread folds: it has no header row. The thread row shows the key as a chip, and the title loses its key prefix (the key and the separators after it: spaces, `·`, `:`, `-`). This also applies to a key group inside Reviews. The fold runs on the page; the backend tree does not change.
 - "Reviews" and "No issue key" have a muted header row (12 px, semibold) and do not fold.
 - A closed group shows one status icon for each thread.
-- Nested launched threads indent 16 px for each level.
+- Nested launched threads indent 10 px for each level.
 
 ### Stack rail
 
@@ -394,27 +394,27 @@ Key groups of one project that share a PR stack sit together (tree rule 8). The 
 
 ### Thread row
 
-One line, `min-height: 36px`, radius 8 px, 13 px text with a 20 px line height.
+One line when the title fits, `min-height: 36px`, radius 8 px, 13 px text with a 20 px line height.
 
 ```
 [icon] [phrase + time  ] [KEY] Title ...............  [Input] [until] [stack] [#PR] [#PR] [+N] [age] [details]
- 12px   120px column      chip  flex, truncates        right group, gap 6px
+ 12px   120px column      chip  flex, wraps            right group, gap 6px
 ```
 
-| Part           | Rule                                                                                                                                                                              |
-| -------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| Icon           | 12 px, in `--status-<name>`. A tooltip shows the raw T3 status.                                                                                                                   |
-| Phrase         | 12 px, weight 500, in the status text color. The column is 120 px wide and does not wrap.                                                                                         |
-| Key chip       | Only on a folded group. Mono 11 px, muted, outline.                                                                                                                               |
-| Title          | The link to T3. Weight 500; weight 650 when the status is `your-turn`. `--muted-foreground` when the status is `snoozed` or the thread is settled. It truncates with an ellipsis. |
-| "Input" chip   | Outline. Only when a request with `blocking: false` is pending.                                                                                                                   |
-| "until" note   | "until Fri 10:42" in an outline chip, when `snoozedUntil` is in the future. It also shows on a `needs-input` row of a snoozed thread.                                             |
-| "Settled" chip | Outline, muted. Only with "show settled" on, on a settled thread.                                                                                                                 |
-| Stack chip     | `.chip-stack`, the `Layers` icon and "2/4", or "base · 4" when the thread created no PR in the stack.                                                                             |
-| PR chips       | The first two PRs, then a "+N" button that opens the details block.                                                                                                               |
-| Age            | Relative age of `updatedAt`, mono 11 px, muted, `tabular-nums`. The tooltip shows "Updated" and the exact time.                                                                   |
-| Details button | Ghost icon button with `ChevronDown`, `aria-expanded`, label "Details".                                                                                                           |
-| Handle         | Ghost icon button with `GripVertical`, after the details button. See "Drag to reorder".                                                                                           |
+| Part           | Rule                                                                                                                                                                          |
+| -------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Icon           | 12 px, in `--status-<name>`. A tooltip shows the raw T3 status.                                                                                                               |
+| Phrase         | 12 px, weight 500, in the status text color. The column is 120 px wide and does not wrap.                                                                                     |
+| Key chip       | Only on a folded group. Mono 11 px, muted, outline.                                                                                                                           |
+| Title          | The link to T3. Weight 500; weight 650 when the status is `your-turn`. `--muted-foreground` when the status is `snoozed` or the thread is settled. It wraps and is never cut. |
+| "Input" chip   | Outline. Only when a request with `blocking: false` is pending.                                                                                                               |
+| "until" note   | "until Fri 10:42" in an outline chip, when `snoozedUntil` is in the future. It also shows on a `needs-input` row of a snoozed thread.                                         |
+| "Settled" chip | Outline, muted. Only with "show settled" on, on a settled thread.                                                                                                             |
+| Stack chip     | `.chip-stack`, the `Layers` icon and "2/4", or "base · 4" when the thread created no PR in the stack.                                                                         |
+| PR chips       | The first two PRs, then a "+N" button that opens the details block.                                                                                                           |
+| Age            | Relative age of `updatedAt`, mono 11 px, muted, `tabular-nums`. The tooltip shows "Updated" and the exact time.                                                               |
+| Details button | Ghost icon button with `ChevronDown`, `aria-expanded`, label "Details".                                                                                                       |
+| Handle         | Ghost icon button with `GripVertical`, the first item of the row. See "Drag to reorder".                                                                                      |
 
 **PR chip.** "#2102" in mono 11 px, a link to the PR, with these marks:
 
@@ -432,7 +432,7 @@ One line, `min-height: 36px`, radius 8 px, 13 px text with a 20 px line height.
 
 An absent value shows no mark. Each mark has a `title` with its meaning.
 
-**Narrow screens.** Below 720 px, the right group wraps to a second line below the title, and the title can wrap to two lines. The page never scrolls sideways. On a touch screen, buttons have a 44 px target.
+**Narrow screens.** Below 720 px, the title goes on its own line below the status, and the right group wraps to a line below the title. The title wraps to as many lines as it needs. The page never scrolls sideways. On a touch screen, buttons have a 44 px target.
 
 ### Drag to reorder
 
