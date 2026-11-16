@@ -7,6 +7,7 @@ import {
   notifyEvents,
   onlyNeedsYou,
   type Statuses,
+  waits,
 } from "../src/page/attention.ts";
 import type { Branch, Conn, Status, ThreadNode, Tree } from "../src/shared/tree.ts";
 
@@ -226,5 +227,16 @@ describe("notifyEvents", () => {
     const gone = notifyEvents(last, tree("up", []));
     expect(gone.nextStatuses?.get("a")).toBe("failed");
     expect(notifyEvents(gone.nextStatuses, tree("up", [mk("a", "failed")])).events).toEqual([]);
+  });
+});
+
+describe("waits", () => {
+  test("true when a nested thread needs input or has a plan ready", () => {
+    expect(waits(branch("g", [thread("a", "done", [thread("b", "plan-ready")])]))).toBe(true);
+    expect(waits(branch("p", [], [branch("g", [thread("a", "needs-input")])]))).toBe(true);
+  });
+  test("false for other statuses and for settled threads", () => {
+    expect(waits(branch("g", [thread("a", "working"), thread("b", "your-turn")]))).toBe(false);
+    expect(waits(branch("g", [{ ...thread("a", "needs-input"), settled: true }]))).toBe(false);
   });
 });

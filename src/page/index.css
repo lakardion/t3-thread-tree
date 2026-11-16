@@ -145,7 +145,8 @@
       transform: rotate(360deg);
     }
   }
-  .thread-row[data-status="needs-input"]::before {
+  .thread-row[data-status="needs-input"]::before,
+  [data-waiting]::before {
     animation: breathe 2.4s ease-in-out infinite;
   }
   @keyframes breathe {
@@ -198,6 +199,7 @@
   @media (prefers-reduced-motion: reduce) {
     .thread-row[data-status="working"] .status-icon,
     .thread-row[data-status="needs-input"]::before,
+    [data-waiting]::before,
     .swap-in,
     .swap-scale,
     .swap-out,
@@ -206,7 +208,8 @@
     }
   }
   [data-conn="down"] .thread-row[data-status="working"] .status-icon,
-  [data-conn="down"] .thread-row[data-status="needs-input"]::before {
+  [data-conn="down"] .thread-row[data-status="needs-input"]::before,
+  [data-conn="down"] [data-waiting]::before {
     animation: none;
   }
 
@@ -215,7 +218,8 @@
     isolation: isolate;
   }
   .thread-row[data-status="needs-input"]::before,
-  .thread-row[data-status="working"]::before {
+  .thread-row[data-status="working"]::before,
+  [data-waiting]::before {
     content: "";
     position: absolute;
     left: 0;
@@ -231,8 +235,17 @@
       transparent 45%
     );
   }
-  .thread-row[data-status="needs-input"]::before {
+  .thread-row[data-status="needs-input"]::before,
+  [data-waiting]::before {
     background: var(--status-needs-input);
+  }
+  /** A closed row that hides a waiting thread. `background-image` keeps the row's own background color. */
+  [data-waiting] {
+    background-image: linear-gradient(
+      90deg,
+      color-mix(in oklch, var(--status-needs-input) var(--wash), transparent),
+      transparent 45%
+    );
   }
   .thread-row[data-status="working"] {
     background: linear-gradient(
