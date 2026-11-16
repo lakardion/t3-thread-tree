@@ -15,7 +15,7 @@ Add a menu-bar (tray) entry that shows the Needs-you count and lists the threads
 - Follow `SPEC.md` › "Desktop app" › "Menu-bar entry".
 - A template tray icon (16 and 32 px PNG, black on clear, in the repo). Title: the count, none at 0.
 - A pure function from `NeedsYouThread[]` to the menu items (order, cap of 10, "+N more…"), with tests.
-- Menu: the threads, "Open tree", "Always on Top", "Mute Notifications", "Quit". The two checkboxes share their state with the app menu.
+- Menu: the threads, "Open tree", "Mute Notifications", "Quit". The checkbox shares its state with the app menu.
 - README "What you get": the menu-bar entry.
 
 ## Done when
@@ -25,4 +25,4 @@ Add a menu-bar (tray) entry that shows the Needs-you count and lists the threads
 ## Handed over from desktop-08
 
 - "Open tree" calls `showWindow()` in `src/desktop/main.ts`. It is defined inside the single-instance `else` block; move it to module level if the tray code needs it there.
-- "Always on Top" in the menu-bar menu must stay in sync with the app-menu checkbox, which `setMenu()` builds from `settings.alwaysOnTop`. Call `setMenu()` again after a toggle from either menu.
+- "Always on Top" was dropped from the app; do not add it to the menu-bar menu.
