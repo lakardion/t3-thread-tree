@@ -41,6 +41,15 @@ export function parseNotify(raw: unknown): NotifyEvent[] | null {
   return result.success ? result.output : null;
 }
 
+const UpdatedSchema = v.object({ version: v.string(), notes: v.string(), url: v.string() });
+export type Updated = v.InferOutput<typeof UpdatedSchema>;
+
+/** The saved note on the update the app installed, or `null` when it is missing or bad. */
+export function parseUpdated(raw: unknown): Updated | null {
+  const result = v.safeParse(UpdatedSchema, raw);
+  return result.success ? result.output : null;
+}
+
 export function parseSettings(raw: unknown): Settings {
   return v.parse(SettingsSchema, raw);
 }

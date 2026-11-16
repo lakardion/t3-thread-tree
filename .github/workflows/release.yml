@@ -15,6 +15,6 @@ jobs:
       - run: test "$GITHUB_REF_NAME" = "v$(jq -r .version package.json)"
       - run: bun install --frozen-lockfile
       - run: bun run desktop:dmg --publish never
-      - run: gh release create "$GITHUB_REF_NAME" release/*.dmg --generate-notes
+      - run: gh release create "$GITHUB_REF_NAME" release/*.dmg release/*.zip --generate-notes
         env:
           GH_TOKEN: ${{ github.token }}

@@ -5,6 +5,7 @@ import {
   fallbackPath,
   isNewer,
   parseRelease,
+  releaseNotes,
   pickPort,
   restartDelay,
   shellPath,
@@ -114,14 +115,42 @@ describe("isNewer", () => {
   });
 });
 
+describe("releaseNotes", () => {
+  test("keeps the list items as bullets", () => {
+    const body = [
+      "## What's Changed",
+      "* Add in-app updates by @someone in https://github.com/o/r/pull/50",
+      "* Fix a row (#51)",
+      "",
+      "**Full Changelog**: https://github.com/o/r/compare/v0.1.3...v0.1.4",
+    ].join("\r\n");
+    expect(releaseNotes(body)).toBe("• Add in-app updates\n• Fix a row (#51)");
+  });
+});
+
 describe("parseRelease", () => {
   const url = "https://github.com/lakardion/t3-thread-tree/releases/tag/v0.2.0";
   test("reads the version and page", () => {
-    expect(parseRelease({ tag_name: "v0.2.0", html_url: url })).toEqual({ version: "0.2.0", url });
+    expect(parseRelease({ tag_name: "v0.2.0", html_url: url })).toEqual({
+      version: "0.2.0",
+      url,
+      zip: null,
+      notes: "",
+    });
+  });
+  test("reads the app zip", () => {
+    const zip = "https://github.com/lakardion/t3-thread-tree/releases/download/v0.2.0/app-arm64-mac.zip";
+    const assets = [
+      { name: "app-arm64.dmg", browser_download_url: zip.replace(".zip", ".dmg") },
+      { name: "app-arm64-mac.zip", browser_download_url: zip },
+    ];
+    expect(parseRelease({ tag_name: "v0.2.0", html_url: url, assets })?.zip).toBe(zip);
   });
   test("rejects a bad payload", () => {
     expect(parseRelease({ html_url: url })).toBeNull();
     expect(parseRelease({ tag_name: "v0.2.0", html_url: "https://example.com/x" })).toBeNull();
     expect(parseRelease(null)).toBeNull();
+    const assets = [{ name: "a.zip", browser_download_url: "https://example.com/a.zip" }];
+    expect(parseRelease({ tag_name: "v0.2.0", html_url: url, assets })).toBeNull();
   });
 });

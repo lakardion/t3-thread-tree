@@ -70,13 +70,35 @@ export function isNewer(latest: string, current: string): boolean {
   return i !== -1 && a[i] > b[i];
 }
 
+const GitHubUrl = v.pipe(v.string(), v.startsWith("https://github.com/"));
 const Release = v.object({
   tag_name: v.string(),
-  html_url: v.pipe(v.string(), v.startsWith("https://github.com/")),
+  html_url: GitHubUrl,
+  assets: v.optional(v.array(v.object({ name: v.string(), browser_download_url: GitHubUrl }))),
+  body: v.optional(v.nullable(v.string())),
 });
 
-/** The version and page of a GitHub latest-release payload, or null when it has another shape. */
-export function parseRelease(raw: unknown): { version: string; url: string } | null {
+/**
+ * The version, page, app zip and notes of a GitHub latest-release payload, or null when it has another shape.
+ * `zip` is null when the release has no `.zip` asset.
+ */
+export function parseRelease(raw: unknown): { version: string; url: string; zip: string | null; notes: string } | null {
   const r = v.safeParse(Release, raw);
-  return r.success ? { version: r.output.tag_name.replace(/^v/, ""), url: r.output.html_url } : null;
+  if (!r.success) return null;
+  const zip = r.output.assets?.find((a) => a.name.endsWith(".zip"))?.browser_download_url ?? null;
+  return {
+    version: r.output.tag_name.replace(/^v/, ""),
+    url: r.output.html_url,
+    zip,
+    notes: releaseNotes(r.output.body ?? ""),
+  };
+}
+
+/** The list items of GitHub's generated release notes as plain-text bullets, without the "by @user in <PR url>" tail. */
+export function releaseNotes(body: string): string {
+  return body
+    .split(/\r?\n/)
+    .filter((l) => /^\s*[*-] /.test(l))
+    .map((l) => `• ${l.replace(/^\s*[*-] /, "").replace(/ by @\S+ in https:\/\/\S+$/, "")}`)
+    .join("\n");
 }
