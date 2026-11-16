@@ -86,13 +86,27 @@ export function Presence<T>({
   ));
 }
 
-/** Returns a ref for the row element. The row grows in or collapses out while its `Presence` entry has a phase. */
+/**
+ * Returns a ref for the row element. The row grows in or collapses out while its `Presence` entry has a phase.
+ * A leaving row, and every named row inside it, drops its `view-transition-name`, so a row that moved to another
+ * list never shares a name with its leaving copy. A row that returns to `enter` gets its names back.
+ */
 export function useMotion(): (el: Element | null) => void {
   const phase = useContext(PhaseContext);
   const node = useRef<Element | null>(null);
+  const names = useRef(new Map<HTMLElement, string>());
   useLayoutEffect(() => {
     const el = node.current;
     if (!phase || !el) return;
+    if (phase === "leave") {
+      for (const n of [el as HTMLElement, ...el.querySelectorAll<HTMLElement>('[style*="view-transition-name"]')]) {
+        names.current.set(n, n.style.viewTransitionName);
+        n.style.viewTransitionName = "none";
+      }
+    } else {
+      names.current.forEach((name, n) => (n.style.viewTransitionName = name));
+      names.current.clear();
+    }
     el.getAnimations().forEach((a) => a.cancel());
     (el as HTMLElement).inert = phase === "leave";
     const full = { height: `${(el as HTMLElement).offsetHeight}px`, opacity: 1, overflow: "clip" };

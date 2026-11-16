@@ -58,6 +58,8 @@ export type ThreadNode = {
   /** Raw T3 status, for the icon tooltip. */
   raw: string;
   updatedAt: string;
+  /** Newest of the run start and run end. Not `updatedAt`, which ticks while a thread works. */
+  lastRun: string | null;
   settled: boolean;
   /** A request with `blocking: false` is pending. */
   input: boolean;

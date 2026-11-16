@@ -11,6 +11,7 @@ import { DragDropProvider } from "@dnd-kit/react";
 import { isSortable, useSortable } from "@dnd-kit/react/sortable";
 import { ChevronsDownUp, ChevronsUpDown } from "lucide";
 import {
+  ArrowDownUp,
   Check,
   ChevronDown,
   ChevronRight,
@@ -31,6 +32,7 @@ import {
 } from "lucide-react";
 import { MorphIcon } from "morphicons/react";
 import { createContext, Fragment, useCallback, useContext, useEffect, useRef, useState, type ReactNode } from "react";
+import { flushSync } from "react-dom";
 import { createRoot } from "react-dom/client";
 
 import { Alert, AlertDescription } from "@/components/ui/alert";
@@ -38,6 +40,13 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuRadioGroup,
+  DropdownMenuRadioItem,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Progress } from "@/components/ui/progress";
@@ -93,12 +102,14 @@ import {
   threadUnitId,
   threadsKey,
   type Freeze,
+  type Orders,
 } from "./order.ts";
 import { Presence, useMotion } from "./presence.tsx";
 import { ProjectIcon, projectHex } from "./project-icon.tsx";
 import { CliGate, SendDialog } from "./send-dialog.tsx";
 import { LEGEND, LegendIcon, STATUS, StatusIcon } from "./status-icon.tsx";
 import { Swap, useChanges } from "./swap.tsx";
+import { sortTree, vtName, type SortBy } from "./view.ts";
 
 const TOKEN_CMD =
   "~/.t3/bin/t3 auth session issue --scope orchestration:read --label thread-tree --ttl 52w --token-only";
@@ -109,6 +120,7 @@ const THEME_KEY = "thread-tree:theme";
 const CLI_KEY = "thread-tree:cli";
 const ORDER_KEY = "thread-tree:order";
 const LINEAR_KEY = "thread-tree:linear";
+const SORT_KEY = "thread-tree:sort";
 const THEMES = ["system", "light", "dark"] as const;
 type Theme = (typeof THEMES)[number];
 
@@ -307,6 +319,34 @@ const ThemeToggle = ({ theme, setTheme }: { theme: Theme; setTheme: (t: Theme) =
       </ToggleGroupItem>
     ))}
   </ToggleGroup>
+);
+
+const SORTS: [SortBy, string][] = [
+  ["manual", "Manual"],
+  ["updated", "Last updated"],
+];
+const SortMenu = ({ sortBy, setSortBy }: { sortBy: SortBy; setSortBy: (s: SortBy) => void }) => (
+  <DropdownMenu modal={false}>
+    <Tooltip>
+      <TooltipTrigger asChild>
+        <DropdownMenuTrigger asChild>
+          <Button variant="ghost" size="icon-sm" aria-label="Sort">
+            <ArrowDownUp />
+          </Button>
+        </DropdownMenuTrigger>
+      </TooltipTrigger>
+      <TooltipContent>Sort: {SORTS.find(([s]) => s === sortBy)?.[1]}</TooltipContent>
+    </Tooltip>
+    <DropdownMenuContent align="end" className="min-w-40">
+      <DropdownMenuRadioGroup value={sortBy} onValueChange={(v) => setSortBy(v as SortBy)}>
+        {SORTS.map(([s, name]) => (
+          <DropdownMenuRadioItem key={s} value={s}>
+            {name}
+          </DropdownMenuRadioItem>
+        ))}
+      </DropdownMenuRadioGroup>
+    </DropdownMenuContent>
+  </DropdownMenu>
 );
 
 /** Follows the update state of the main process. Undefined in the browser. */
@@ -582,6 +622,8 @@ const NeedsOnly = createContext(false);
 const Linear = createContext<Tree["linear"]>(null);
 /** The rendered ids of each list, by list key. */
 const Lists = createContext(new Map<string, string[]>());
+/** No list, so no row is sortable. */
+const NO_LISTS = new Map<string, string[]>();
 
 const CHIP = "gap-1 rounded-[6px] px-1.5 py-0 text-[11px] font-normal text-muted-foreground";
 const ROW_BUTTON =
@@ -833,7 +875,7 @@ function ThreadRow({ t, chip, sort, inStack }: { t: ThreadNode; chip?: string; s
   const pulse = useChanges(t.status);
   const render = (ref: RefFn, handleRef?: RefFn) => (
     <Collapsible asChild open={open.has(t.id)} onOpenChange={() => toggle(t.id)}>
-      <li ref={ref} className="my-px">
+      <li ref={ref} className="my-px" style={{ viewTransitionName: vtName("t", t.id) }}>
         <div
           className="thread-row group/row flex min-h-9 min-w-0 items-center gap-x-2 rounded-[8px] px-2 py-1 text-[13px] leading-5 max-[720px]:flex-wrap"
           data-status={t.status}
@@ -1121,7 +1163,11 @@ function StackRail({ run, closed, toggle, sort }: { run: Branch[]; sort?: Sort }
   );
   const render = (ref: RefFn, handleRef?: RefFn) => (
     <Collapsible asChild open={open} onOpenChange={() => toggle(`rail:${id}`)}>
-      <li ref={ref} className="relative my-1 ml-7 rounded-[10px] border border-dashed border-border">
+      <li
+        ref={ref}
+        className="relative my-1 ml-7 rounded-[10px] border border-dashed border-border"
+        style={{ viewTransitionName: vtName("s", run[0].id) }}
+      >
         <div
           className="group/row relative flex min-h-7 flex-wrap items-center gap-2 rounded-[10px] px-2 text-xs"
           data-waiting={!open && run.some(waits) ? "" : undefined}
@@ -1261,11 +1307,34 @@ const Legend = () => (
   </dl>
 );
 
+/** Set while a drag runs. */
+const drag = { on: false };
+
+/** Runs `change` as a View Transition, so the rows slide. Runs it at once when a transition cannot or must not play. */
+const transition = (change: () => void) => {
+  if (
+    !document.startViewTransition ||
+    drag.on ||
+    document.hidden ||
+    window.matchMedia("(prefers-reduced-motion: reduce)").matches
+  )
+    change();
+  else document.startViewTransition(() => flushSync(change));
+};
+
+/** The user order on the whole tree, then the filter, then the drag freeze. `view.projects` is also sorted. */
+const pipeline = (ps: Branch[], orders: Orders, needsOnly: boolean, sortBy: SortBy, freeze?: Freeze) => {
+  const full = arrange(ps, orders);
+  const view = arrange(needsOnly ? onlyNeedsYou(full.projects) : full.projects, {}, freeze);
+  return { full, view: sortBy === "updated" ? { ...view, projects: sortTree(view.projects) } : view };
+};
+
 function App() {
   const [tree, setTree] = useState<Tree | null>(null);
   const [settled, setSettled] = useState(load(SETTLED_KEY) === "1");
   const [needsOnly, setNeedsOnly] = useState(load(FILTER_KEY) === "needs");
   const [theme, setTheme] = useState<Theme>(() => THEMES.find((t) => t === load(THEME_KEY)) ?? "system");
+  const [sortBy, setSortBy] = useState<SortBy>(() => (load(SORT_KEY) === "updated" ? "updated" : "manual"));
   const [now, setNow] = useState(Date.now);
   const [shown, setShown] = useState(() => new Set<string>());
   const [closed, setClosed] = useState(() => new Set<string>(JSON.parse(load(CLOSED_KEY) ?? "[]") as string[]));
@@ -1333,19 +1402,6 @@ function App() {
   }, []);
 
   useEffect(() => {
-    save(SETTLED_KEY, settled ? "1" : "0");
-    const es = new EventSource(settled ? "/events?settled=1" : "/events");
-    es.onmessage = (e) => setTree(JSON.parse(e.data) as Tree);
-    es.addEventListener("brief", (e) => {
-      const b = JSON.parse(e.data) as BriefState;
-      if (b.status === "running" && briefStatus.current !== "running") setSent(new Map());
-      briefStatus.current = b.status;
-      setBrief(b);
-    });
-    return () => es.close();
-  }, [settled]);
-
-  useEffect(() => {
     save(FILTER_KEY, needsOnly ? "needs" : "all");
   }, [needsOnly]);
 
@@ -1397,13 +1453,36 @@ function App() {
   const live = new Map((tree?.projects ?? []).flatMap(allThreads).map((t) => [t.id, t]));
   const counts = countAttention(tree?.projects ?? []);
   const connecting = !tree || tree.conn === "connecting";
-  /** The user order on the whole tree, then the filter, then the drag freeze on what shows. */
-  const full = arrange(tree?.projects ?? [], orders);
-  const view = arrange(needsOnly ? onlyNeedsYou(full.projects) : full.projects, {}, freeze);
-  const latest = useRef({ full, view });
+  const { full, view } = pipeline(tree?.projects ?? [], orders, needsOnly, sortBy, freeze);
+  /** The ids of the rendered rows, in order, for a tree. */
+  const rows = (ps: Branch[]) =>
+    pipeline(ps, orders, needsOnly, sortBy, freeze)
+      .view.projects.flatMap(allThreads)
+      .map((t) => t.id)
+      .join();
+  const latest = useRef({ full, view, rows, projects: tree?.projects ?? [], connecting });
   useEffect(() => {
-    latest.current = { full, view };
+    latest.current = { full, view, rows, projects: tree?.projects ?? [], connecting };
   });
+  useEffect(() => {
+    save(SETTLED_KEY, settled ? "1" : "0");
+    const es = new EventSource(settled ? "/events?settled=1" : "/events");
+    es.onmessage = (e) => {
+      const next = JSON.parse(e.data) as Tree;
+      const cur = latest.current;
+      /** Only a change of the row order plays a transition; a push every second while a thread works does not. */
+      if (cur.connecting || cur.rows(next.projects) === cur.rows(cur.projects)) setTree(next);
+      else transition(() => setTree(next));
+    };
+    es.addEventListener("brief", (e) => {
+      const b = JSON.parse(e.data) as BriefState;
+      if (b.status === "running" && briefStatus.current !== "running") setSent(new Map());
+      briefStatus.current = b.status;
+      setBrief(b);
+    });
+    return () => es.close();
+  }, [settled]);
+
   const projects = connecting ? undefined : view.projects;
 
   const plugins = useCallback((defaults: typeof defaultPreset.plugins) => {
@@ -1435,12 +1514,14 @@ function App() {
   }, []);
   const dragStart = ({ operation: { source } }: DragStartEvent) => {
     if (!isSortable(source)) return;
+    drag.on = true;
     const list = String(source.sortable.group);
     const ids = latest.current.view.lists.get(list);
     const units = latest.current.view.units.get(list);
     if (ids && units) setFreeze({ list, ids, units });
   };
   const dragEnd = ({ operation: { source }, canceled }: DragEndEvent) => {
+    drag.on = false;
     setFreeze(undefined);
     if (canceled || !isSortable(source)) return;
     const list = String(source.sortable.group);
@@ -1492,6 +1573,13 @@ function App() {
           run={runBrief}
         />
         <div className="ml-auto flex items-center gap-1">
+          <SortMenu
+            sortBy={sortBy}
+            setSortBy={(s) => {
+              save(SORT_KEY, s);
+              transition(() => setSortBy(s));
+            }}
+          />
           {projects && <FoldAll inner={projects.flatMap((p) => [p.id, ...foldIds(p)])} closed={closed} fold={fold} />}
           <ViewButton
             update={update}
@@ -1551,7 +1639,7 @@ function App() {
         <Details value={details}>
           <NeedsOnly value={needsOnly}>
             <Linear value={linear}>
-              <Lists value={view.lists}>
+              <Lists value={sortBy === "updated" ? NO_LISTS : view.lists}>
                 <Now value={now}>
                   <div
                     className={!connecting && tree.conn !== "up" ? "grayscale" : ""}
