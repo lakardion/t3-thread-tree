@@ -48,7 +48,7 @@ The destination is reached when every route key is done and no map ticket is ope
 
 ## Stacks
 
-- `main ← desktop-05-spec` (spec, base of the build stack)
+- `main ← desktop-05-spec (#30)` (spec, base of the build stack)
 
 ## Notes
 
