@@ -9,17 +9,17 @@ import {
 } from "@dnd-kit/dom";
 import { DragDropProvider } from "@dnd-kit/react";
 import { isSortable, useSortable } from "@dnd-kit/react/sortable";
-import { ChevronsDownUp, ChevronsUpDown, CircleArrowUp, Contrast, Moon, Sun } from "lucide";
+import { ChevronsDownUp, ChevronsUpDown, CircleArrowUp } from "lucide";
 import {
   Check,
   ChevronDown,
   ChevronRight,
-  CircleHelp,
   ExternalLink,
   Eye,
   GripVertical,
   Layers,
   Send,
+  SlidersHorizontal,
   TriangleAlert,
   X,
 } from "lucide-react";
@@ -32,12 +32,6 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
-import {
-  DropdownMenu,
-  DropdownMenuContent,
-  DropdownMenuLabel,
-  DropdownMenuTrigger,
-} from "@/components/ui/dropdown-menu";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Skeleton } from "@/components/ui/skeleton";
@@ -48,7 +42,15 @@ import { cn } from "@/lib/utils";
 
 import type { BriefState, Cli } from "../shared/brief.ts";
 import type { CliStatus } from "../shared/send.ts";
-import { allThreads, REVIEWS, type Branch, type PrNode, type ThreadNode, type Tree } from "../shared/tree.ts";
+import {
+  allThreads,
+  parseLinear,
+  REVIEWS,
+  type Branch,
+  type PrNode,
+  type ThreadNode,
+  type Tree,
+} from "../shared/tree.ts";
 import { countAttention, needsYou, needsYouThreads, notifyEvents, onlyNeedsYou, type Statuses } from "./attention.ts";
 import { BriefControls, BriefPanel, type Offered } from "./brief.tsx";
 import {
@@ -90,38 +92,43 @@ const FILTER_KEY = "thread-tree:filter";
 const THEME_KEY = "thread-tree:theme";
 const CLI_KEY = "thread-tree:cli";
 const ORDER_KEY = "thread-tree:order";
+const LINEAR_KEY = "thread-tree:linear";
 const THEMES = ["system", "light", "dark"] as const;
 type Theme = (typeof THEMES)[number];
-const THEME_ICONS = { system: Contrast, light: Sun, dark: Moon };
 
-function TokenForm({ bridge }: { bridge: NonNullable<Window["desktopBridge"]> }) {
+/** Sends the token to the server, which saves it and reconnects to T3. */
+function TokenForm() {
   const [value, setValue] = useState("");
   const [saving, setSaving] = useState(false);
   const [message, setMessage] = useState<{ text: string; error: boolean }>();
-  const save = async () => {
+  const submit = async () => {
     setSaving(true);
     try {
-      await bridge.setToken(value);
+      const res = await fetch("/token", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ token: value }),
+      });
+      if (!res.ok) throw new Error((await res.text()) || `Save failed (${res.status})`);
       setValue("");
-      setMessage({ text: "Saved.", error: false });
+      setMessage({ text: "Saved. Reconnecting to T3…", error: false });
     } catch (e) {
-      const text = e instanceof Error ? e.message : String(e);
-      setMessage({ text: text.replace(/^Error invoking remote method '[^']*': (Error: )?/, ""), error: true });
+      setMessage({ text: e instanceof Error ? e.message : String(e), error: true });
     }
     setSaving(false);
   };
   return (
     <form
-      className="mt-2"
       onSubmit={(e) => {
         e.preventDefault();
-        void save();
+        void submit();
       }}
     >
       <div className="flex gap-2">
         <Input
           type="password"
           aria-label="T3 token"
+          placeholder="Paste a token"
           autoComplete="off"
           value={value}
           onChange={(e) => setValue(e.target.value)}
@@ -132,6 +139,151 @@ function TokenForm({ bridge }: { bridge: NonNullable<Window["desktopBridge"]> })
       </div>
       {message && <p className={cn("mt-1 text-xs", message.error && "text-destructive")}>{message.text}</p>}
     </form>
+  );
+}
+
+const HINT = "text-xs text-muted-foreground";
+
+type LinearProps = { linear: Tree["linear"]; setLinear: (workspace: string, teams: string) => void };
+
+/** Mounts with the panel, so the fields start from the current setting each time it opens. */
+function LinearForm({ linear, setLinear }: LinearProps) {
+  const [workspace, setWorkspace] = useState(linear?.workspace ?? "");
+  const [teams, setTeams] = useState(linear?.teams.join(", ") ?? "");
+  const [saved, setSaved] = useState(false);
+  return (
+    <form
+      className="grid gap-3"
+      onSubmit={(e) => {
+        e.preventDefault();
+        setLinear(workspace, teams);
+        setSaved(true);
+      }}
+    >
+      <p className={HINT}>Issue keys in thread titles, like ENG-123, link to their Linear issue.</p>
+      <div className="grid gap-1.5">
+        <Label htmlFor="linear-workspace">Workspace</Label>
+        <Input
+          id="linear-workspace"
+          placeholder="acme"
+          value={workspace}
+          onChange={(e) => setWorkspace(e.target.value)}
+        />
+        <p className={HINT}>
+          The name after <code>linear.app/</code> in any Linear URL. You can paste the URL. Empty turns the links off.
+        </p>
+      </div>
+      <div className="grid gap-1.5">
+        <Label htmlFor="linear-teams">Team keys (optional)</Label>
+        <Input id="linear-teams" placeholder="ENG, OPS" value={teams} onChange={(e) => setTeams(e.target.value)} />
+        <p className={HINT}>
+          The prefix of an issue key: ENG in ENG-123. Separate keys with commas. Empty: every issue key links.
+        </p>
+      </div>
+      <div className="flex items-center justify-end gap-2">
+        {saved && <span className={HINT}>Saved.</span>}
+        <Button type="submit" size="sm">
+          Save
+        </Button>
+      </div>
+    </form>
+  );
+}
+
+const Section = ({ title, children }: { title: string; children: ReactNode }) => (
+  <section className="grid gap-2.5 border-t pt-4 first:border-t-0 first:pt-0">
+    <h3 className="m-0 text-sm font-semibold text-foreground">{title}</h3>
+    {children}
+  </section>
+);
+
+type PanelProps = LinearProps & {
+  close: () => void;
+  settled: boolean;
+  setSettled: (v: boolean) => void;
+  canReset: boolean;
+  resetOrder: () => void;
+  theme: Theme;
+  setTheme: (t: Theme) => void;
+};
+
+/** View options and settings, beside the list so a change shows at once. */
+function SettingsPanel(p: PanelProps) {
+  const { close } = p;
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => e.key === "Escape" && close();
+    addEventListener("keydown", onKey);
+    return () => removeEventListener("keydown", onKey);
+  }, [close]);
+  return (
+    <aside
+      aria-label="View and settings"
+      className="fixed top-0 right-0 z-40 grid h-full w-[380px] max-w-full content-start gap-4 overflow-y-auto border-l bg-card p-4 shadow-xl"
+    >
+      <div className="flex items-center justify-between">
+        <h2 className="m-0 text-[15px] font-semibold">View and settings</h2>
+        <Button variant="ghost" size="icon-sm" aria-label="Close" onClick={close}>
+          <X />
+        </Button>
+      </div>
+      <Section title="View">
+        <div className="flex items-center gap-2">
+          <Switch id="settled" checked={p.settled} onCheckedChange={p.setSettled} />
+          <Label htmlFor="settled" className="font-normal">
+            Show settled threads
+          </Label>
+        </div>
+        <div className="flex items-center gap-2">
+          <Button variant="outline" size="sm" disabled={!p.canReset} onClick={p.resetOrder}>
+            Reset order
+          </Button>
+          <span className={HINT}>Undo the drag-and-drop order.</span>
+        </div>
+      </Section>
+      <Section title="Appearance">
+        <ToggleGroup
+          type="single"
+          size="sm"
+          variant="outline"
+          aria-label="Theme"
+          className="justify-self-start"
+          value={p.theme}
+          onValueChange={(v) => v && p.setTheme(v as Theme)}
+        >
+          {THEMES.map((t) => (
+            <ToggleGroupItem key={t} value={t} className={cn(FILTER_ITEM, "capitalize")}>
+              {t}
+            </ToggleGroupItem>
+          ))}
+        </ToggleGroup>
+      </Section>
+      <Section title="T3 token">
+        <p className={HINT}>
+          The app reads your threads from T3 with this token. Run this command in a terminal to issue one, then paste it
+          below. Paste a new one at any time to replace it.
+        </p>
+        <code className="rounded-[6px] bg-muted p-2 text-xs break-all select-all">{TOKEN_CMD}</code>
+        <TokenForm />
+      </Section>
+      <Section title="Linear links">
+        <LinearForm linear={p.linear} setLinear={p.setLinear} />
+      </Section>
+      <Section title="Status icons">
+        <Legend />
+      </Section>
+      {window.desktopBridge && (
+        <Section title="App">
+          <Button
+            variant="outline"
+            size="sm"
+            className="justify-self-start"
+            onClick={() => window.desktopBridge?.checkUpdates()}
+          >
+            <MorphIcon icon={CircleArrowUp} size={16} reducedMotion="user" /> Check for updates
+          </Button>
+        </Section>
+      )}
+    </aside>
   );
 }
 
@@ -175,8 +327,6 @@ const ROW_BUTTON =
   "size-5 rounded-[6px] text-muted-foreground motion-reduce:transition-none pointer-coarse:min-h-11 pointer-coarse:min-w-11 focus-visible:border-transparent focus-visible:ring-0 focus-visible:outline-2 focus-visible:outline-solid focus-visible:outline-offset-2 focus-visible:outline-ring";
 const SEND_REVEAL =
   "opacity-0 group-hover/row:opacity-100 group-focus-within/row:opacity-100 [@media(hover:none)]:opacity-100";
-const NEED_CHIP =
-  "border-transparent bg-[color-mix(in_oklch,var(--status-needs-input)_var(--wash),transparent)] text-status-needs-input-fg";
 const FILTER_ITEM =
   "pointer-coarse:min-h-11 pointer-coarse:min-w-11 focus-visible:ring-0 focus-visible:outline-solid focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring";
 
@@ -826,29 +976,19 @@ function ProjectBlock({ b, closed, toggle, fold }: { b: Branch } & Fold) {
   return <Sortable sort={sortOf(lists, PROJECTS, b.id, b.label)}>{render}</Sortable>;
 }
 
-/** The meaning of each status icon, opened from a help button. */
-const StatusLegend = () => (
-  <DropdownMenu modal={false}>
-    <DropdownMenuTrigger asChild>
-      <Button variant="ghost" size="icon-sm" aria-label="Status icons" title="Status icons">
-        <CircleHelp />
-      </Button>
-    </DropdownMenuTrigger>
-    <DropdownMenuContent align="end" className="w-80 p-2">
-      <DropdownMenuLabel className="px-1 text-xs text-muted-foreground">Status icons</DropdownMenuLabel>
-      <dl className="m-0 grid grid-cols-[auto_minmax(0,1fr)] items-center gap-x-2.5 gap-y-1.5 px-1 text-xs">
-        {LEGEND.map(([status, phrase, meaning]) => (
-          <Fragment key={phrase}>
-            <dt className="flex items-center gap-1.5 font-medium text-foreground">
-              <LegendIcon status={status} phrase={phrase} />
-              {phrase}
-            </dt>
-            <dd className="m-0 text-muted-foreground">{meaning}</dd>
-          </Fragment>
-        ))}
-      </dl>
-    </DropdownMenuContent>
-  </DropdownMenu>
+/** The meaning of each status icon. */
+const Legend = () => (
+  <dl className="m-0 grid grid-cols-[auto_minmax(0,1fr)] items-center gap-x-2.5 gap-y-1.5 text-xs">
+    {LEGEND.map(([status, phrase, meaning]) => (
+      <Fragment key={phrase}>
+        <dt className="flex items-center gap-1.5 font-medium text-foreground">
+          <LegendIcon status={status} phrase={phrase} />
+          {phrase}
+        </dt>
+        <dd className="m-0 text-muted-foreground">{meaning}</dd>
+      </Fragment>
+    ))}
+  </dl>
 );
 
 function App() {
@@ -868,6 +1008,24 @@ function App() {
   const [sendTo, setSendTo] = useState({ id: "", open: false });
   const briefStatus = useRef<BriefState["status"]>("idle");
   const [orders, setOrders] = useState(() => parseOrders(load(ORDER_KEY)));
+  /** The page setting wins over the server's `.env` config. */
+  const [linearSet, setLinearSet] = useState<Tree["linear"]>(() => {
+    try {
+      const v = JSON.parse(load(LINEAR_KEY) ?? "null") as { workspace?: string; teams?: string } | null;
+      return v && parseLinear(v.workspace, v.teams);
+    } catch {
+      return null;
+    }
+  });
+  const linear = linearSet ?? tree?.linear ?? null;
+  const [settingsOpen, setSettingsOpen] = useState(false);
+  const closeSettings = useCallback(() => setSettingsOpen(false), []);
+  const setLinear = (workspace: string, teams: string) => {
+    const next = parseLinear(workspace, teams);
+    setLinearSet(next);
+    if (next) save(LINEAR_KEY, JSON.stringify({ workspace: next.workspace, teams: next.teams.join(",") }));
+    else forget(LINEAR_KEY);
+  };
   const [freeze, setFreeze] = useState<Freeze>();
   const sentNeedsYou = useRef("");
 
@@ -1032,26 +1190,8 @@ function App() {
 
   return (
     <TooltipProvider>
-      <header className="mb-3.5 flex flex-none flex-wrap items-center gap-x-5 gap-y-3 text-muted-foreground">
+      <header className="mb-3.5 flex flex-none flex-wrap items-center gap-x-4 gap-y-3 text-muted-foreground">
         <h1 className="m-0 text-[15px] font-semibold text-foreground">Thread tree</h1>
-        {tree && (
-          <div className="flex flex-wrap items-center gap-1.5">
-            {counts.needYou > 0 && (
-              <Badge variant="outline" className={cn(CHIP, NEED_CHIP)}>
-                {counts.needYou} need you
-              </Badge>
-            )}
-            <Badge variant="outline" className={CHIP}>
-              {counts.working} working
-            </Badge>
-            <Badge variant="outline" className={CHIP}>
-              {counts.yourTurn} your turn
-            </Badge>
-            <Badge variant="outline" className={CHIP}>
-              {counts.stopped} stopped
-            </Badge>
-          </div>
-        )}
         <ToggleGroup
           type="single"
           size="sm"
@@ -1063,8 +1203,13 @@ function App() {
           <ToggleGroupItem value="all" className={FILTER_ITEM}>
             All
           </ToggleGroupItem>
-          <ToggleGroupItem value="needs" className={FILTER_ITEM}>
+          <ToggleGroupItem value="needs" className={cn(FILTER_ITEM, "gap-1.5 px-2.5")}>
             Needs you
+            {counts.needYou > 0 && (
+              <span className="rounded-[4px] bg-status-needs-input px-1 text-[11px] text-white tabular-nums">
+                {counts.needYou}
+              </span>
+            )}
           </ToggleGroupItem>
         </ToggleGroup>
         <BriefControls
@@ -1074,39 +1219,17 @@ function App() {
           running={brief.status === "running"}
           run={runBrief}
         />
-        <div className="ml-auto flex items-center gap-2">
-          {Object.keys(orders).length > 0 && (
-            <Button variant="ghost" size="sm" onClick={resetOrder}>
-              Reset order
-            </Button>
-          )}
-          <Switch id="settled" checked={settled} onCheckedChange={setSettled} />
-          <Label htmlFor="settled" className="font-normal">
-            show settled
-          </Label>
-        </div>
-        {projects && <FoldAll inner={projects.flatMap((p) => [p.id, ...foldIds(p)])} closed={closed} fold={fold} />}
-        <StatusLegend />
-        {window.desktopBridge && (
+        <div className="ml-auto flex items-center gap-1">
+          {projects && <FoldAll inner={projects.flatMap((p) => [p.id, ...foldIds(p)])} closed={closed} fold={fold} />}
           <Button
-            variant="ghost"
-            size="icon-sm"
-            aria-label="Check for updates"
-            title="Check for updates"
-            onClick={() => window.desktopBridge?.checkUpdates()}
+            variant={settingsOpen ? "secondary" : "ghost"}
+            size="sm"
+            aria-expanded={settingsOpen}
+            onClick={() => setSettingsOpen((o) => !o)}
           >
-            <MorphIcon icon={CircleArrowUp} size={16} reducedMotion="user" />
+            <SlidersHorizontal /> View
           </Button>
-        )}
-        <Button
-          variant="ghost"
-          size="icon-sm"
-          aria-label={`Theme: ${theme}`}
-          title={`Theme: ${theme}`}
-          onClick={() => setTheme(THEMES[(THEMES.indexOf(theme) + 1) % THEMES.length])}
-        >
-          <MorphIcon icon={THEME_ICONS[theme]} size={16} reducedMotion="user" />
-        </Button>
+        </div>
       </header>
       <div className="min-h-0 flex-1 overflow-y-auto">
         {tree?.conn === "down" && (
@@ -1116,21 +1239,13 @@ function App() {
             </AlertDescription>
           </Alert>
         )}
-        {tree?.conn === "unauthorized" && (
+        {(tree?.conn === "no-token" || tree?.conn === "unauthorized") && (
           <Alert className="mb-3 border-l-[3px] border-l-status-needs-input">
-            <AlertDescription className="block text-foreground">
-              T3 rejected the token. Issue one{" "}
-              {window.desktopBridge ? (
-                "with this command, then paste it here:"
-              ) : (
-                <>
-                  and put it in <code className="text-xs select-all">.env</code> as{" "}
-                  <code className="text-xs select-all">T3_TOKEN</code>, then restart:
-                </>
-              )}
-              <br />
-              <code className="text-xs select-all">{TOKEN_CMD}</code>
-              {window.desktopBridge && <TokenForm bridge={window.desktopBridge} />}
+            <AlertDescription className="flex flex-wrap items-center gap-x-2 text-foreground">
+              {tree.conn === "no-token" ? "No T3 token is set." : "T3 rejected the token."}
+              <Button variant="link" size="sm" className="h-auto p-0" onClick={() => setSettingsOpen(true)}>
+                Set the token
+              </Button>
             </AlertDescription>
           </Alert>
         )}
@@ -1155,7 +1270,7 @@ function App() {
         )}
         <Details value={details}>
           <NeedsOnly value={needsOnly}>
-            <Linear value={tree?.linear ?? null}>
+            <Linear value={linear}>
               <Lists value={view.lists}>
                 <Now value={now}>
                   <div
@@ -1200,6 +1315,19 @@ function App() {
           </NeedsOnly>
         </Details>
       </div>
+      {settingsOpen && (
+        <SettingsPanel
+          close={closeSettings}
+          linear={linear}
+          setLinear={setLinear}
+          settled={settled}
+          setSettled={setSettled}
+          canReset={Object.keys(orders).length > 0}
+          resetOrder={resetOrder}
+          theme={theme}
+          setTheme={setTheme}
+        />
+      )}
       <SendDialog
         fixed
         open={sendTo.open}

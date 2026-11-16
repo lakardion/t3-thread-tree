@@ -11,7 +11,7 @@ import {
   stackRuns,
   stripKey,
 } from "../src/page/format.ts";
-import type { Branch, PrNode, ThreadNode } from "../src/shared/tree.ts";
+import { parseLinear, type Branch, type PrNode, type ThreadNode } from "../src/shared/tree.ts";
 
 const NOW = Date.parse("2026-11-12T12:00:00.000Z");
 const before = (sec: number) => new Date(NOW - sec * 1000).toISOString();
@@ -146,6 +146,21 @@ describe("linearHref", () => {
   });
   test("returns null with no Linear config", () => {
     expect(linearHref("JED-12", null)).toBeNull();
+  });
+  test("links every key when no teams are set", () => {
+    expect(linearHref("SHOP-1", { workspace: "acme", teams: [] })).toBe("https://linear.app/acme/issue/SHOP-1");
+  });
+});
+
+describe("parseLinear", () => {
+  test("reads a slug and a team list", () => {
+    expect(parseLinear(" acme ", "jed, ENG,,")).toEqual({ workspace: "acme", teams: ["JED", "ENG"] });
+  });
+  test("reads the workspace from a linear.app URL", () => {
+    expect(parseLinear("https://linear.app/acme/issue/JED-1")?.workspace).toBe("acme");
+  });
+  test("returns null with no workspace", () => {
+    expect(parseLinear("  ", "JED")).toBeNull();
   });
 });
 

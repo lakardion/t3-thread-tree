@@ -1,10 +1,14 @@
+import { homedir } from "node:os";
+import { join } from "node:path";
+
 import index from "./page/index.html";
 import { briefInput, briefService, detectClis } from "./server/brief.ts";
 import { buildTree } from "./server/build-tree.ts";
 import { mayBeLaunched, needsScan, openLineage } from "./server/lineage.ts";
 import { checkCli, cliPath, sendService } from "./server/send.ts";
 import { connectShell, readEnvironmentId, type Project, type Thread } from "./server/t3.ts";
-import type { Conn, Tree } from "./shared/tree.ts";
+import { parseToken, readToken, writeToken } from "./server/token.ts";
+import { parseLinear, type Conn, type Tree } from "./shared/tree.ts";
 
 const threads = new Map<string, Thread>();
 const projects = new Map<string, Project>();
@@ -81,13 +85,7 @@ function resolveSpawners() {
 type Client = { settled: boolean; send: (data: string, event?: string) => void };
 const clients = new Set<Client>();
 
-const linearWorkspace = process.env.LINEAR_WORKSPACE?.trim();
-const linearTeams = (process.env.LINEAR_TEAMS ?? "")
-  .split(",")
-  .map((s) => s.trim())
-  .filter(Boolean);
-const linear: Tree["linear"] =
-  linearWorkspace && linearTeams.length ? { workspace: linearWorkspace, teams: linearTeams } : null;
+const linear = parseLinear(process.env.LINEAR_WORKSPACE, process.env.LINEAR_TEAMS);
 
 const treeFor = (settled: boolean): Tree => ({
   conn: ready ? conn : "connecting",
@@ -117,11 +115,22 @@ function changed() {
 /** Snoozes end on a clock, not on a stream event. */
 setInterval(changed, 30_000);
 
+/** The page saves the token here. `T3_TOKEN` is the fallback when the file has none. */
+const tokenFile = process.env.T3_TOKEN_FILE ?? join(homedir(), ".config", "t3-thread-tree", "token");
+let token = readToken(tokenFile) ?? parseToken(process.env.T3_TOKEN) ?? undefined;
+
 log("connecting to T3…");
-connectShell({
-  token: process.env.T3_TOKEN,
+const shell = connectShell({
+  token: () => token,
   onConn: (c) => {
-    if (c !== conn && c !== "up") log(c === "down" ? "T3 not running, retrying every 3 s" : "T3 rejected the token");
+    if (c !== conn && c !== "up")
+      log(
+        c === "down"
+          ? "T3 not running, retrying every 3 s"
+          : c === "no-token"
+            ? "no T3 token set"
+            : "T3 rejected the token",
+      );
     if (c !== conn) {
       conn = c;
       changed();
@@ -185,6 +194,20 @@ const server = Bun.serve({
     "/": index,
     ...brief.routes,
     ...send.routes,
+    "/token": {
+      /** JSON only: a cross-site form cannot send it without a CORS preflight, which this server does not answer. */
+      POST: async (req) => {
+        if (!req.headers.get("content-type")?.startsWith("application/json"))
+          return new Response(null, { status: 415 });
+        const body = (await req.json().catch(() => null)) as { token?: unknown } | null;
+        const next = parseToken(body?.token);
+        if (!next) return new Response("Not a valid token", { status: 400 });
+        writeToken(tokenFile, next);
+        token = next;
+        shell.reconnect();
+        return new Response(null, { status: 204 });
+      },
+    },
     "/events": (req) => {
       server.timeout(req, 0);
       const settled = new URL(req.url).searchParams.get("settled") === "1";

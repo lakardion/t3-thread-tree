@@ -27,7 +27,7 @@ _Screenshots use made-up data from `bun run demo`._
 - **Rows come and go.** A new project, group or thread grows in. A removed one collapses out. A change that arrives during a drag shows at once. With reduced motion, rows appear and disappear at once.
 - **Fold all at once.** The button in the header closes or opens all projects, groups and PR stacks. A project or group row with groups or PR stacks in it has its own button at its end (shown on hover): it closes all rows in it, or opens the row and all rows in it. The icon morphs between the two arrow pairs.
 - **Folds slide.** A project, group, PR stack or details panel slides open and shut, and its chevron turns. With reduced motion, it opens and shuts at once.
-- **Status at a glance.** Each row starts with one status icon, so the issue key and title start close to it. Each kind of status has its own icon: for example, a shield for an approval, a question bubble for a question, and a chat bubble with a dot for "your turn" (a result you did not open yet). Hover the icon to see the phrase and the elapsed time, for example "Working 12m". The help button (?) in the header opens a legend of all icons. Color is never the only sign.
+- **Status at a glance.** Each row starts with one status icon, so the issue key and title start close to it. Each kind of status has its own icon: for example, a shield for an approval, a question bubble for a question, and a chat bubble with a dot for "your turn" (a result you did not open yet). Hover the icon to see the phrase and the elapsed time, for example "Working 12m". The "View" panel has a legend of all icons. Color is never the only sign.
 
   | Color                | Statuses                                                            |
   | -------------------- | ------------------------------------------------------------------- |
@@ -38,20 +38,25 @@ _Screenshots use made-up data from `bun run demo`._
   | red                  | failed, interrupted or cancelled                                    |
   | grey                 | idle, or snoozed (title muted, with the wake time)                  |
 
-- **What needs you.** The header counts the threads that need you, are working, are your turn, or stopped. The "Needs you" filter keeps only the threads with needs input, plan ready or your turn.
+- **What needs you.** The "Needs you" filter in the header shows how many threads need you. "Needs you" keeps only the threads with needs input, plan ready or your turn.
 - **Details on demand.** The chevron at the end of a row opens a details block: request, error, usage limit, model, branch, worktree, launched by, goal, tags and all PRs with their checks and size.
-- **Linear links.** When you configure Linear (see [Setup](#setup)), issue keys of your Linear teams link to the issue.
+- **View and settings panel.** The "View" button in the header opens a panel on the right. The tree stays visible next to it, so you see each change at once. Escape or the close button closes it. Each field tells you what to type and where to find it.
+  - **View.** Show settled threads, and reset the drag-and-drop order.
+  - **Appearance.** System, Light or Dark theme.
+  - **T3 token.** A password field for the token, with the command that issues one. Paste a new token at any time to replace it. The app saves it and reconnects, with no restart. When the token is missing or T3 rejects it, a banner shows with a link to the panel.
+  - **Linear links.** Type your Linear workspace, and issue keys link to their issue. Add team keys to link only the keys of those teams.
+  - **Status icons.** A legend of all icons.
+  - **App.** In the desktop app, "Check for updates".
 - **Live.** Changes arrive as T3 streams them. No polling, no reload.
-- **The page remembers your choices.** Closed projects and groups (they show one status icon per thread), the filter, "show settled" and the theme stay after a reload. The theme button in the header cycles System, Light and Dark, and its icon morphs between a half-filled circle, a sun and a moon.
-- **Settled threads on demand.** The "show settled" switch adds them. Archived threads never show.
+- **The page remembers your choices.** Closed projects and groups (they show one status icon per thread, and an amber wash with a breathing edge when a hidden thread needs input or has a plan ready), the filter, "show settled" and the theme stay after a reload.
+- **Settled threads on demand.** The "Show settled threads" switch in the "View" panel adds them. Archived threads never show.
 - **What's next.** A click on "What's next" shows a ranked list of next steps over the active threads, each with links to its threads. Code makes the obvious steps at once: answer a waiting agent, fix a PR with failing checks, conflicts or requested changes, and merge an approved PR. A local `claude` or `codex` CLI on a cheap model ranks the rest, and it does not run when nothing is left. A step can have a prompt that you copy with one click. It also has a send icon that opens a dialog with a thread picker and the editable prompt. "Confirm send" sends the message to the thread, and the step then shows "Sent to" with the thread name. The send icon is off when no `t3` CLI is found. A step with a prompt also has a "Start thread" icon. It opens a dialog with a project picker, a title (the issue key and the step title), and the editable prompt. "Start thread" starts a new thread in that project with the prompt as its first message, and the thread then shows in the tree. This icon is also off when no `t3` CLI is found. The chevron next to the button opens a menu that selects the model. Each option shows its provider icon. The current model shows next to the button. A thread that is no longer active shows struck through.
 - **Send from a row.** Each thread row, top-level or subthread, has a send icon at its end. It shows on hover or focus, and always on touch screens. It opens the same dialog with that thread as the fixed target and an empty message. The icon is off when no `t3` CLI is found. The row status changes when the thread takes the message.
-- **Dock badge.** In the desktop app, the Dock icon shows how many threads need you (needs input or plan ready), the same count as the "need you" chip. Settled threads do not count, so with "show settled" on, the badge can be lower than the chip. It updates with the window hidden, and it does not clear when you open the window.
+- **Dock badge.** In the desktop app, the Dock icon shows how many threads need you (needs input or plan ready), the same count as the "Needs you" filter. Settled threads do not count, so with "show settled" on, the badge can be lower than the filter count. It updates with the window hidden, and it does not clear when you open the window.
 - **Notifications.** In the desktop app, you get a notification when a thread starts to need input, has a plan ready or fails. When 3 or more threads change at once, you get one notification, "N threads need you". A click on a thread notification opens the thread in T3 Code. A click on the summary shows the window. A new notification for a thread replaces the earlier one. Nothing is sent for the threads that already need you when the app starts, or for settled threads. "Mute Notifications" in the app menu turns them off. The badge stays on.
 - **Menu-bar entry.** The menu-bar icon shows the Needs-you count, and shows no number at 0. Its menu lists up to 10 threads, longest wait first. A click on a thread opens it in T3 Code. "+N more…" and "Open tree" show the window. "Mute Notifications" is the same switch as in the app menu. When a newer release exists, "Update available: vX.Y.Z…" shows below it, and a click opens the release page. "Quit" quits the app.
 - **Desktop window.** The tree runs in its own macOS window, which you start from Spotlight or the Dock. The app starts the server for you. Closing the window hides it, and the tree keeps running. A click on the Dock icon shows it again, and Cmd-Q quits. The window opens at its last size and place. Links to T3 Code and to PRs open outside the window.
-- **Token in the window.** When T3 rejects the token, the banner has a field to paste a new one. The app saves it and reconnects, with no restart.
-- **Update notice.** The Mac app checks GitHub Releases at start and every 6 hours. When a newer release exists, the app menu and the menu-bar menu show "Update available: vX.Y.Z…". Until then, both menus show "Check for Updates…". The header of the page also has a "Check for updates" button. A click on either checks now and shows the result in a dialog, with a button that opens the release page when a newer release exists. The app does not update itself.
+- **Update notice.** The Mac app checks GitHub Releases at start and every 6 hours. When a newer release exists, the app menu and the menu-bar menu show "Update available: vX.Y.Z…". Until then, both menus show "Check for Updates…". The "View" panel also has a "Check for updates" button. A click on either checks now and shows the result in a dialog, with a button that opens the release page when a newer release exists. The app does not update itself.
 
 ## Requirements
 
@@ -66,19 +71,13 @@ _Screenshots use made-up data from `bun run demo`._
 bun install
 ```
 
-Issue a read-only token once, and put it in `.env` (gitignored):
+Start the app, open the "View" panel and paste a T3 token in the "T3 token" field. The panel shows the command that issues one. The app keeps the token in `~/.config/t3-thread-tree/token`, and the desktop app in `~/Library/Application Support/T3 Thread Tree/token`. A `T3_TOKEN` in `.env` still works as the fallback when no token is saved.
 
-```sh
-echo "T3_TOKEN=$(~/.t3/bin/t3 auth session issue --scope orchestration:read --label thread-tree --ttl 52w --token-only)" > .env
-```
-
-In the desktop app, you can paste the token in the banner instead. The app keeps it in `~/Library/Application Support/T3 Thread Tree/token`. The packaged app reads a `.env` from that folder too.
-
-Optional: link Linear issue keys. Add these to `.env`:
+Optional: link Linear issue keys. Set them in the page settings, or add these to `.env`. The page setting wins over `.env`.
 
 ```sh
 LINEAR_WORKSPACE=join-com   # the slug in linear.app/<workspace>
-LINEAR_TEAMS=JED,ENG,MOR    # team keys that are Linear keys
+LINEAR_TEAMS=JED,ENG,MOR    # optional: link only the keys of these teams
 ```
 
 Optional: set the path of the `t3` CLI, which the app runs to send messages and start threads. Add this to `.env`. The default is `~/.t3/bin/t3`:
@@ -110,7 +109,7 @@ Open <http://127.0.0.1:4773>.
 
 - The page is served at once. It shows "Connecting to T3…" until the first tree is ready.
 - The app starts even when T3 is not running. It retries every 3 s. Until T3 is back, the page shows the last tree, greyed, with the time of the last update.
-- If T3 rejects the token, the page shows the command to issue a new one.
+- If no token is saved or T3 rejects it, a banner links to the "T3 token" field.
 
 To use the desktop window, run `bun run desktop`. It takes the first free port from 4773. It keeps its own data, so it runs beside the installed app. Run `bun run desktop:demo` to see the demo in the window. Closing the window hides it. Cmd-Q quits.
 
@@ -134,7 +133,7 @@ statev2.sqlite (read-only) ──launch lineage──────────▶
 
 The app writes to T3 only when you confirm a send or a start in a dialog. It runs the `t3` CLI for that, with the T3 login. The stream token keeps the `orchestration:read` scope only, and the app opens the database read-only.
 
-The desktop app is Electron. `src/desktop/main.ts` is the main process. It starts the compiled server (the sidecar) as a child process, waits until it answers, and loads the page in the window. A preload bridge gives the page the badge, notifications, the menu-bar entry and the token. electron-builder packages the app with the sidecar in `Resources/server`. It signs the app ad-hoc, with the JIT entitlements that the sidecar needs.
+The desktop app is Electron. `src/desktop/main.ts` is the main process. It starts the compiled server (the sidecar) as a child process, waits until it answers, and loads the page in the window. A preload bridge gives the page the badge, notifications, the menu-bar entry and the update check. electron-builder packages the app with the sidecar in `Resources/server`. It signs the app ad-hoc, with the JIT entitlements that the sidecar needs.
 
 ## Develop
 

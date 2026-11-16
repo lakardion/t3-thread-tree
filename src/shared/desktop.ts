@@ -37,7 +37,6 @@ export type NotifyEvent = v.InferOutput<typeof NotifyList>[number];
 export type NotifyStatus = Extract<NotifyEvent, { kind: "thread" }>["status"];
 
 export type DesktopBridge = {
-  setToken(token: string): Promise<void>;
   setNeedsYou(threads: NeedsYouThread[]): void;
   notify(events: NotifyEvent[]): void;
   checkUpdates(): void;

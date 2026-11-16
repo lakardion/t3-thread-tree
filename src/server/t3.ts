@@ -233,7 +233,7 @@ const readOrigin = async (): Promise<string | null> => {
  * Each new connection starts with a fresh snapshot.
  */
 export function connectShell(opts: {
-  token: string | undefined;
+  token: () => string | undefined;
   onEvent: (e: StreamEvent) => void;
   onConn: (c: Conn) => void;
 }) {
@@ -243,9 +243,10 @@ export function connectShell(opts: {
     if (ws) return;
     const origin = await readOrigin();
     if (!origin) return opts.onConn("down");
-    if (!opts.token) return opts.onConn("unauthorized");
+    const token = opts.token();
+    if (!token) return opts.onConn("no-token");
     const url = `${origin}/ws?orchestrationProtocol=2`;
-    const headers = { Authorization: `Bearer ${opts.token}` };
+    const headers = { Authorization: `Bearer ${token}` };
     /** A WebSocket upgrade failure hides the HTTP status, so probe it with a plain GET first. */
     try {
       const probe = await fetch(url, { headers });
@@ -292,7 +293,9 @@ export function connectShell(opts: {
     };
     sock.onclose = () => {
       clearInterval(ping);
-      if (ws === sock) ws = null;
+      /** A socket that `reconnect` dropped reports nothing. */
+      if (ws !== sock) return;
+      ws = null;
       opts.onConn("down");
     };
     sock.onerror = () => sock.close();
@@ -300,4 +303,13 @@ export function connectShell(opts: {
 
   void attempt();
   setInterval(attempt, 3000);
+  return {
+    /** Drops the open socket and connects again with the current token. */
+    reconnect() {
+      const old = ws;
+      ws = null;
+      old?.close();
+      void attempt();
+    },
+  };
 }

@@ -39,8 +39,9 @@ Source: [How can a local process read T3 thread data live?](.wayfinder/tickets/0
 ### Token
 
 - The user issues the token once with `~/.t3/bin/t3 auth session issue --scope orchestration:read --label thread-tree --ttl 52w --token-only`.
-- The token goes in the gitignored `.env` as `T3_TOKEN`, which Bun loads. The desktop app keeps it in a file instead (see "Desktop app" › "Token").
-- If T3 rejects the token (HTTP 401), the page banner shows this command.
+- The user pastes it in the "T3 token" password field of the "View" panel. The page sends `POST /token` with `{"token": "…"}` (JSON only, so a cross-site form cannot send it). The server checks it (one line, at most 4096 bytes), writes it to the token file (mode `0600`), drops the open socket and connects again. The user can replace it at any time.
+- **Token file:** `T3_TOKEN_FILE`, else `~/.config/t3-thread-tree/token`. When the file holds no token, `T3_TOKEN` from the env is the fallback.
+- With no token, the tree `conn` is `no-token`. If T3 rejects the token (HTTP 401), it is `unauthorized`. Both banners link to the token field.
 
 ### T3 not running, or restarted
 
@@ -91,7 +92,9 @@ A **top-level thread** has no native `parentThreadId`. A **subagent** has `relat
 
 ## UI
 
-The page shows an outline tree: Project, group, thread. Each thread row has a status dot, a title link to `t3code://threads/<environmentId>/<threadId>`, a stack badge and PR links. Closed rows are saved in `localStorage`. A toggle shows settled threads. When `LINEAR_WORKSPACE` and `LINEAR_TEAMS` are set, an issue key of a listed team links to its Linear issue. A banner shows when T3 is down or rejects the token.
+The page shows an outline tree: Project, group, thread. Each thread row has a status dot, a title link to `t3code://threads/<environmentId>/<threadId>`, a stack badge and PR links. Closed rows are saved in `localStorage`. A toggle shows settled threads. When a Linear workspace is set, an issue key links to its Linear issue. With team keys set, only a key of a listed team links. The "View" panel keeps the workspace and teams in `localStorage`; `LINEAR_WORKSPACE` and `LINEAR_TEAMS` give the default. A banner shows when T3 is down, when no token is set, or when T3 rejects the token. The token banners open the "View" panel.
+
+The header holds the title, the filter with the Needs-you count ("All", "Needs you N"), "What's next", fold all, and a "View" button. "View" opens a panel on the right, beside the tree: show settled, reset order, theme, T3 token, Linear links, the status icon legend, and "Check for updates" in the desktop app. Escape closes it.
 
 A pending request wins over snooze. A snoozed thread with a pending request shows as needs input.
 
@@ -395,7 +398,6 @@ type NotifyEvent =
 type DesktopBridge = {
   setNeedsYou(threads: NeedsYouThread[]): void /** badge and menu-bar entry */;
   notify(events: NotifyEvent[]): void;
-  setToken(token: string): Promise<void>;
   openExternal(url: string): void;
 };
 ```
@@ -436,9 +438,7 @@ The page owns the rules. Main shows them, so the mute switch stays in main.
 ### Token
 
 - The packaged app keeps the T3 token in `token` in the app data folder, mode `0600`. No Keychain: an ad-hoc signature changes with each build, so the Keychain would ask after each update.
-- Main reads the file at start and passes it to the child as `T3_TOKEN`. With no file, the child env keeps any `T3_TOKEN` it already has (dev uses `.env`).
-- **Entry:** when the tree is `unauthorized` and the bridge exists, the banner shows the issue command and a password field with "Save". `setToken` writes the file (`0600`), then main restarts the child. The page reconnects to `/events` by itself.
-- The browser version keeps the `.env` banner.
+- Main passes the file path to the child as `T3_TOKEN_FILE`. The server reads and writes it (see "Token" above), so the desktop app and the browser use the same field. With no file, the child env keeps any `T3_TOKEN` it already has (dev uses `.env`).
 
 ### Build and dev
 

@@ -85,15 +85,30 @@ export const REVIEWS = "Reviews";
 export const NO_KEY = "No issue key";
 
 /** `connecting`: the server is up but has no tree yet. */
-export type Conn = "connecting" | "up" | "down" | "unauthorized";
+export type Conn = "connecting" | "up" | "down" | "no-token" | "unauthorized";
 
 export type Tree = {
   conn: Conn;
   lastUpdate: string | null;
-  /** Set when the server knows the Linear workspace and its team keys. */
-  linear: { workspace: string; teams: string[] } | null;
+  /** Set when the server knows the Linear workspace. No teams: every issue key links. */
+  linear: Linear | null;
   projects: Branch[];
 };
+
+export type Linear = { workspace: string; teams: string[] };
+
+/** The Linear config from a workspace slug or any linear.app URL, and a comma list of team keys. Null with no workspace. */
+export function parseLinear(workspace = "", teams = ""): Linear | null {
+  const ws = workspace.trim().match(/linear\.app\/([^/?#\s]+)/)?.[1] ?? workspace.trim();
+  if (!ws) return null;
+  return {
+    workspace: ws,
+    teams: teams
+      .split(",")
+      .map((s) => s.trim().toUpperCase())
+      .filter(Boolean),
+  };
+}
 
 const flat = (t: ThreadNode): ThreadNode[] => [t, ...t.children.flatMap(flat)];
 export const allThreads = (b: Branch): ThreadNode[] => [...b.branches.flatMap(allThreads), ...b.threads.flatMap(flat)];

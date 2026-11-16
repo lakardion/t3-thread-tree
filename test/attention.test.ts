@@ -170,7 +170,7 @@ describe("notifyEvents", () => {
 
   test("a tree that is not up sends nothing and keeps the baseline", () => {
     const last = base(["a", "working"]);
-    for (const conn of ["down", "connecting", "unauthorized"] as const) {
+    for (const conn of ["down", "connecting", "no-token", "unauthorized"] as const) {
       const r = notifyEvents(last, tree(conn, [mk("a", "needs-input")]));
       expect(r.events).toEqual([]);
       expect(r.nextStatuses).toBe(last);
