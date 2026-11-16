@@ -21,3 +21,10 @@ Make the window behave like a macOS utility app: it hides on close, keeps its si
 ## Done when
 
 `bun run check` passes. In `bun run desktop:demo`: close and Dock click bring the window back with its tree; a quit and a new start restore the size and place; "Always on Top" holds after a restart.
+
+## Handed over from desktop-07
+
+- `src/desktop/main.ts` quits on `window-all-closed`. Replace that with hide-on-close and keep the app alive.
+- `second-instance` already restores, shows and focuses `window`. A Dock click (`activate`) does not show it yet.
+- A restarted child does not re-run the ready poll, and the window does not reload. The page reconnects to `/events` by itself.
+- The README Run line says "Closing the window quits the app". Change it.
