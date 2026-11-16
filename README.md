@@ -113,9 +113,10 @@ bun run typecheck  # types
 bun run lint       # oxlint
 bun run fmt        # oxfmt, writes fixes
 bun run check      # all of the above, as CI runs it
+bun run build:sidecar  # compiles the server into dist/sidecar/server (macOS arm64)
 ```
 
-CI runs `bun run check` on every pull request. A pull request merges only when it passes.
+CI runs `bun run check` and `bun run build:sidecar` on every pull request. A pull request merges only when it passes.
 
 ## Status
 

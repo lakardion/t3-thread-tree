@@ -31,14 +31,14 @@ const unresolved = new Map<string, number>();
 const unscanned = new Set<string>();
 
 let scanning = false;
-/** The full scan takes seconds on a cold disk, so it runs in a Worker, and only when a requested view needs it. */
+/** The full scan takes seconds on a cold disk, so it runs in a Worker, and only when a requested view needs it. The worker path resolves from cwd in dev and from the bundle root in the binary. */
 function scanIfNeeded() {
   const settledView = [...clients].some((c) => c.settled);
   if (scanning || !needsScan(unscanned, threads.values(), (id) => spawners.get(id), settledView)) return;
   scanning = true;
   const ids = [...unscanned];
   const started = performance.now();
-  const scan = new Worker(new URL("./server/lineage-scan.ts", import.meta.url));
+  const scan = new Worker("./src/server/lineage-scan.ts");
   scan.onmessage = (e: MessageEvent<[string, string][]>) => {
     scan.terminate();
     scanning = false;
