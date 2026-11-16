@@ -1,7 +1,7 @@
 ---
 title: Save the T3 token from the desktop window
 type: wayfinder:task
-status: open
+status: in-review
 assignee: claude (desktop-09)
 blocked-by: [08-window-lifetime]
 ---
