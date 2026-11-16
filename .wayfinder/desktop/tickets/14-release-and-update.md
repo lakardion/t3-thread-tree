@@ -20,3 +20,7 @@ Publish the `.dmg` on GitHub Releases from a tag, and tell the user in the menus
 ## Done when
 
 `bun run check` passes. The workflow passes `actionlint` (or a dry run on a test tag in a fork or branch, if the user allows it). With a faked older `app.getVersion()`, the update item shows and opens the release page.
+
+## Handed over from desktop-08
+
+- `setMenu()` in `src/desktop/main.ts` builds the app menu. Add "Update available: vX.Y.Z…" to its app submenu, and call `setMenu()` again when an update is found.
