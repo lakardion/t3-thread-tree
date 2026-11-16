@@ -28,3 +28,8 @@ Publish the `.dmg` on GitHub Releases from a tag, and tell the user in the menus
 ## Handed over from desktop-12
 
 - The menu-bar menu is built in `setTrayMenu()` in `src/desktop/main.ts`. Put "Update available: vX.Y.Z…" between "Mute Notifications" and "Quit" (SPEC.md › "Menu-bar entry"), and call `setTrayMenu()` when an update is found.
+
+## Handed over from desktop-13
+
+- `bun run desktop:dmg` writes `release/T3 Thread Tree-<version>-arm64.dmg`, ad-hoc signed through `mac.identity: "-"` in `package.json` `build`. It needs no signing secrets on the runner. `package.json` `version` is `0.1.0`.
+- The README Setup › Install already has the `.dmg` path with the "Open Anyway" and `xattr` step. The release ticket adds only the update item to the README.

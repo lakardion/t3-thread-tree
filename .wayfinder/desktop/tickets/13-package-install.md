@@ -1,8 +1,8 @@
 ---
 title: Package, sign and install the app from source
 type: wayfinder:task
-status: open
-assignee:
+status: in-review
+assignee: claude (desktop-13)
 blocked-by: [12-menu-bar]
 ---
 

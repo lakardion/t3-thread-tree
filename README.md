@@ -44,7 +44,7 @@ _Screenshots use made-up data from `bun run demo`._
 - **Dock badge.** In the desktop app, the Dock icon shows how many threads need you (needs input or plan ready), the same count as the "need you" chip. Settled threads do not count, so with "show settled" on, the badge can be lower than the chip. It updates with the window hidden, and it does not clear when you open the window.
 - **Notifications.** In the desktop app, you get a notification when a thread starts to need input, has a plan ready or fails. When 3 or more threads change at once, you get one notification, "N threads need you". A click on a thread notification opens the thread in T3 Code. A click on the summary shows the window. A new notification for a thread replaces the earlier one. Nothing is sent for the threads that already need you when the app starts, or for settled threads. "Mute Notifications" in the app menu turns them off. The badge stays on.
 - **Menu-bar entry.** The menu-bar icon shows the Needs-you count, and shows no number at 0. Its menu lists up to 10 threads, longest wait first. A click on a thread opens it in T3 Code. "+N more…" and "Open tree" show the window. "Mute Notifications" is the same switch as in the app menu. "Quit" quits the app.
-- **Desktop window.** The tree runs in its own macOS window. The app starts the server for you on the first free port from 4773. Links to T3 Code and to PRs open outside the window. A second start shows the first window. Closing the window hides it, and the tree keeps running. A click on the Dock icon shows it again. Cmd-Q quits the app. The window opens at its last size and place. When T3 rejects the token, the banner has a field to paste a new token. The app saves it and reconnects, with no restart.
+- **Desktop window.** The tree runs in its own macOS window. The app starts the server for you on the first free port from 4773. Links to T3 Code and to PRs open outside the window. A second start shows the first window. Closing the window hides it, and the tree keeps running. A click on the Dock icon shows it again. Cmd-Q quits the app. The window opens at its last size and place. When T3 rejects the token, the banner has a field to paste a new token. The app saves it and reconnects, with no restart. Install it as a Mac app with one command, and start it from Spotlight or the Dock.
 
 ## Requirements
 
@@ -80,6 +80,19 @@ Optional: set the path of the `t3` CLI, which the app runs to send messages and 
 T3_BIN=/path/to/t3
 ```
 
+### Install
+
+Choose one path.
+
+- **`.dmg`:** download the `.dmg` from GitHub Releases and drag the app to `/Applications`. The app has an ad-hoc signature, not a Developer ID. At the first open, macOS blocks it. Open System Settings › Privacy & Security and click "Open Anyway". Or run this command:
+
+  ```sh
+  xattr -dr com.apple.quarantine "/Applications/T3 Thread Tree.app"
+  ```
+
+- **From source:** run `bun run desktop:install`. It builds the server, bundles the app, signs it and copies it to `/Applications/T3 Thread Tree.app`. Quit the app first, because the command replaces it. Run `bun run desktop:dmg` to write the `.dmg` to `release/` instead.
+- **Browser:** run `bun start`. See [Run](#run).
+
 ## Run
 
 ```sh
@@ -114,6 +127,8 @@ statev2.sqlite (read-only) ──launch lineage──────────▶
 
 The app writes to T3 only when you confirm a send or a start in a dialog. It runs the `t3` CLI for that, with the T3 login. The stream token keeps the `orchestration:read` scope only, and the app opens the database read-only.
 
+The desktop app is Electron. `src/desktop/main.ts` is the main process. It starts the compiled server (the sidecar) as a child process, waits until it answers, and loads the page in the window. A preload bridge gives the page the badge, notifications, the menu-bar entry and the token. electron-builder packages the app with the sidecar in `Resources/server`. It signs the app ad-hoc, with the JIT entitlements that the sidecar needs.
+
 ## Develop
 
 ```sh
@@ -123,6 +138,8 @@ bun run lint       # oxlint
 bun run fmt        # oxfmt, writes fixes
 bun run check      # all of the above, as CI runs it
 bun run build:sidecar  # compiles the server into dist/sidecar/server (macOS arm64)
+bun run desktop:install  # builds and installs the app in /Applications (macOS arm64)
+bun run desktop:dmg    # builds the .dmg in release/
 ```
 
 CI runs `bun run check` and `bun run build:sidecar` on every pull request. A pull request merges only when it passes.
@@ -131,4 +148,4 @@ CI runs `bun run check` and `bun run build:sidecar` on every pull request. A pul
 
 It shows the threads of the local T3 environment only. Its write actions are send a message and start a thread. It has no settle, snooze or interrupt.
 
-A macOS desktop app, with a Dock badge, notifications and a menu-bar entry, is in build. [SPEC.md](SPEC.md) › "Desktop app" defines it.
+A macOS desktop app, with a Dock badge, notifications and a menu-bar entry, installs from source with one command, or builds as a `.dmg`. [SPEC.md](SPEC.md) › "Desktop app" defines it.
