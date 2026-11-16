@@ -2,7 +2,7 @@ import { chmodSync, readFileSync, writeFileSync } from "node:fs";
 
 import * as v from "valibot";
 
-import { NeedsYouList, type NeedsYouThread, type NotifyEvent } from "../shared/desktop.ts";
+import { NeedsYouList, type NeedsYouThread, NotifyList, type NotifyEvent } from "../shared/desktop.ts";
 
 const Size = v.object({
   width: v.pipe(v.number(), v.finite(), v.gtValue(0)),
@@ -12,8 +12,11 @@ const Place = v.object({ x: v.pipe(v.number(), v.finite()), y: v.pipe(v.number()
 
 const Token = v.pipe(v.string(), v.trim(), v.regex(/^\S+$/), v.maxBytes(4096));
 
+/** Each field falls back to its default when it is missing or has the wrong type. */
+const SettingsSchema = v.fallback(v.object({ muted: v.fallback(v.boolean(), false) }), { muted: false });
+
 export type Rect = v.InferOutput<typeof Size> & v.InferOutput<typeof Place>;
-export type Settings = { muted: boolean };
+export type Settings = v.InferOutput<typeof SettingsSchema>;
 
 /** The parsed JSON in `file`, or `undefined` when the file is missing or bad. */
 export function readJson(file: string): unknown {
@@ -59,37 +62,12 @@ export function parseNeedsYou(raw: unknown): NeedsYouThread[] | null {
 
 /** A clean copy of the notification events, or `null` when `raw` is not an array of at most 10 well-formed events. */
 export function parseNotify(raw: unknown): NotifyEvent[] | null {
-  if (!Array.isArray(raw) || raw.length > 10) return null;
-  const out: NotifyEvent[] = [];
-  for (const item of raw as unknown[]) {
-    const e = item as Record<string, unknown> | null;
-    if (typeof e !== "object" || e === null) return null;
-    if (e.kind === "summary" && typeof e.count === "number" && Number.isInteger(e.count) && e.count > 0) {
-      out.push({ kind: "summary", count: e.count });
-    } else if (
-      e.kind === "thread" &&
-      typeof e.threadId === "string" &&
-      typeof e.environmentId === "string" &&
-      typeof e.title === "string" &&
-      (e.status === "needs-input" || e.status === "plan-ready" || e.status === "failed")
-    ) {
-      out.push({
-        kind: "thread",
-        threadId: e.threadId,
-        environmentId: e.environmentId,
-        title: e.title,
-        status: e.status,
-      });
-    } else return null;
-  }
-  return out;
+  const result = v.safeParse(NotifyList, raw);
+  return result.success ? result.output : null;
 }
 
 export function parseSettings(raw: unknown): Settings {
-  const r = (raw ?? {}) as Record<string, unknown>;
-  return {
-    muted: typeof r.muted === "boolean" ? r.muted : false,
-  };
+  return v.parse(SettingsSchema, raw);
 }
 
 /** Saved window bounds. The position stays only when the window touches a screen. */
