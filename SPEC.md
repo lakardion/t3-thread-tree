@@ -1,13 +1,14 @@
 # T3 thread tree: build spec
 
-A local webapp. It shows the active T3 Code threads as one live tree: Project › issue key › thread. Each node shows its status and its PR stack. A click on a node opens the thread in T3 Code. The app writes to T3 only through a send or a start that the user confirms.
+A local webapp, also packaged as a macOS desktop app. It shows the active T3 Code threads as one live tree: Project › issue key › thread. Each node shows its status and its PR stack. A click on a node opens the thread in T3 Code. The app writes to T3 only through a send or a start that the user confirms.
 
 Terms are defined in [CONTEXT.md](CONTEXT.md). Each section links the ticket that holds the full decision and its reasons. When this spec and a ticket do not agree, this spec wins: it includes the later changes.
 
 ## Scope
 
 - In scope: the threads of the local T3 environment (`~/.t3/userdata`), live updates, "open in T3", and a send of a message to one thread and a start of a thread in a project, through the `t3` CLI.
-- Out of scope: settle, snooze, interrupt, approve or deny a request, archive; a send to several threads at once; threads from linked T3 environments on other machines; any change to T3 Code itself.
+- In scope, desktop: a macOS (Apple Silicon) app with its own window, a Dock badge, notifications and a menu-bar entry (see "Desktop app").
+- Out of scope: settle, snooze, interrupt, approve or deny a request, archive; a send to several threads at once; threads from linked T3 environments on other machines; any change to T3 Code itself; launch at login; Windows, Linux and Intel Mac builds; Developer ID signing, notarization and auto-update.
 
 ## Runtime and stack
 
@@ -38,7 +39,7 @@ Source: [How can a local process read T3 thread data live?](.wayfinder/tickets/0
 ### Token
 
 - The user issues the token once with `~/.t3/bin/t3 auth session issue --scope orchestration:read --label thread-tree --ttl 52w --token-only`.
-- The token goes in the gitignored `.env` as `T3_TOKEN`, which Bun loads.
+- The token goes in the gitignored `.env` as `T3_TOKEN`, which Bun loads. The desktop app keeps it in a file instead (see "Desktop app" › "Token").
 - If T3 rejects the token (HTTP 401), the page banner shows this command.
 
 ### T3 not running, or restarted
@@ -332,6 +333,139 @@ Tickets 02 and 05 each run one smoke test against the real T3, with `bun start`:
 
 [Ticket 02](.wayfinder/send-message/tickets/02-send-endpoints.md) adds `T3_BIN` to Setup in `README.md` and the demo knobs to Run. [Ticket 03](.wayfinder/send-message/tickets/03-brief-send.md), [ticket 04](.wayfinder/send-message/tickets/04-row-send.md) and [ticket 05](.wayfinder/send-message/tickets/05-step-start-thread.md) add their "What you get" entries.
 
+## Desktop app
+
+Source: map [desktop](.wayfinder/desktop/map.md), tickets [What does the Bun app use, and how does T3 Code ship its desktop app?](.wayfinder/desktop/tickets/01-port-inventory.md) (research in `.wayfinder/desktop/research/01-port-inventory.md`), [Which shell and runtime?](.wayfinder/desktop/tickets/02-shell-and-runtime.md), [What do the badge, the notifications and the menu-bar entry do?](.wayfinder/desktop/tickets/03-desktop-features.md), [How is the app built, run in dev and installed?](.wayfinder/desktop/tickets/04-build-and-install.md).
+
+The **Desktop app** runs the tree in its own macOS window, with a Dock icon, a Dock badge, notifications and a menu-bar entry. It changes where the app runs, not what it does to T3. The browser version (`bun start`) stays as it is.
+
+### Shape
+
+- **Shell:** Electron, a dev dependency. macOS on Apple Silicon (arm64) only.
+- **Main process:** `src/desktop/main.ts`, plain Electron, no Effect. **Preload:** `src/desktop/preload.ts`. Pure logic (port choice, PATH parsing, restart backoff, notification rules, the menu list) lives in modules with no Electron import, so `bun test` covers it.
+- **Server:** the current Bun server, unchanged in role, runs as a child process of main. It is not ported to Node.
+  - Packaged: the compiled sidecar at `process.resourcesPath/server`.
+  - Dev: `bun src/server.ts`, so Bun's HMR stays. With `DESKTOP_DEMO=1`, `bun scripts/demo.ts`.
+  - `app.isPackaged` selects the packaged or the dev command.
+- **Port:** main tries `127.0.0.1:4773`, then each next port, and takes the first one it can listen on. It passes the port to the child as `PORT`. The demo uses the same choice.
+- **Ready:** main polls `GET http://127.0.0.1:<port>/t3/cli` every 100 ms until it answers, for up to 30 s. Then it loads the window.
+- **Restart:** when the child exits and the app is not quitting, main starts it again after `500 ms × 2^attempt`, capped at 10 s. A child that ran for 60 s resets the attempt count. Main stops the child (SIGTERM, then SIGKILL after 5 s) when the app quits.
+- **Working folder:** the child runs in the app data folder, `~/Library/Application Support/T3 Thread Tree/` (Electron `userData`). Bun loads a `.env` from there, so `LINEAR_WORKSPACE`, `LINEAR_TEAMS` and `T3_BIN` work in the packaged app. In dev, the child runs in the repo and reads the repo `.env`.
+- **Single instance:** `app.requestSingleInstanceLock()`. A second start shows the first window and quits.
+
+### Shell PATH
+
+An app started from the Dock or Spotlight does not get the shell PATH, so the brief would not find `claude` or `codex`.
+
+- At start, main runs `$SHELL -l -c env` once, with a 5 s timeout. It takes the `PATH=` line and passes it to the child env.
+- On failure (timeout, non-zero exit, no `PATH=` line), main keeps its own PATH and appends `/opt/homebrew/bin`, `~/.local/bin` and `~/.bun/bin`.
+
+### Window
+
+- One window. It loads `http://127.0.0.1:<port>`. No custom scheme. When the port is not 4773, that run has its own `localStorage`, so the theme and fold state are the defaults. This is a known cost.
+- `show: false`, then show on `ready-to-show`. `contextIsolation: true`, `nodeIntegration: false`, `sandbox: true`, `backgroundThrottling: false`. The standard macOS title bar.
+- The app saves the window size and place in `window.json` in the app data folder, and restores them at start. A saved place that is off all screens is dropped.
+- **Close:** the close button hides the window. The page keeps running and drives the badge, the menu-bar entry and the notifications. A Dock click or "Open tree" shows the window again.
+- **Quit:** Cmd-Q, or "Quit" in the menu-bar menu. Launch at login is not offered.
+- **Always on top:** a menu item in the app menu and in the menu-bar menu. Off by default. Saved in `settings.json` in the app data folder.
+- **App menu:** the role menus (app, edit, view, window). The app menu also holds "Always on Top", "Mute Notifications" and, when one exists, "Update available: vX.Y.Z…".
+- External links (`t3code://`, PRs, Linear) open with `shell.openExternal`, not in the app window.
+
+### Preload bridge
+
+The preload exposes `window.desktopBridge`. The page checks for it. In a browser it is absent, and the page works as today.
+
+```ts
+type NeedsYouThread = { id: string; title: string; environmentId: string; since: string | null };
+type NotifyEvent =
+  | {
+      kind: "thread";
+      threadId: string;
+      environmentId: string;
+      title: string;
+      status: "needs-input" | "plan-ready" | "failed";
+    }
+  | { kind: "summary"; count: number };
+type DesktopBridge = {
+  setNeedsYou(threads: NeedsYouThread[]): void /** badge and menu-bar entry */;
+  notify(events: NotifyEvent[]): void;
+  setToken(token: string): Promise<void>;
+  openExternal(url: string): void;
+};
+```
+
+Main checks each payload by hand (types, sizes, a `t3code:`, `https:` or `http:` URL) before it acts. It accepts IPC only from the main window.
+
+### Needs you
+
+The **Needs you** set is the visible top-level threads with status `needs-input` or `plan-ready`. Settled threads do not count. The page computes it from each tree it gets (the same count as the header chip) and calls `setNeedsYou`. `since` is the start of that status, for the menu order.
+
+### Dock badge
+
+- `app.setBadgeCount(count)` with the Needs-you count. 0 hides the badge.
+- It always shows. It does not clear on window focus.
+
+### Notifications
+
+The page owns the rules. Main shows them, so the mute switch stays in main.
+
+- **Trigger:** a thread enters `needs-input`, `plan-ready` or `failed`. "Enters" means its status in this tree differs from its status in the last tree. A thread that is new in the tree with one of these statuses also enters. No notification for your turn or for PR checks.
+- **Baseline:** the first tree after the page loads sends nothing. A tree with `conn` not `up` sends nothing and does not move the baseline.
+- **Grouping:** 1 or 2 threads enter in one tree: one notification per thread. 3 or more: one summary, "N threads need you".
+- **Text:** title "Needs input", "Plan ready" or "Failed"; body the thread title.
+- **Replace:** a new notification for a thread closes the earlier one for that thread.
+- **Click:** a thread notification opens `t3code://threads/<environmentId>/<threadId>`. The summary shows and focuses the window.
+- **Mute:** "Mute Notifications" in the app menu and in the menu-bar menu. Off by default, saved in `settings.json`. It stops notifications only, not the badge or the menu. macOS Focus covers Do Not Disturb.
+- Main uses Electron `Notification`, silent off. No per-status or per-project rules.
+
+### Menu-bar entry
+
+- A `Tray` with a template icon and the Needs-you count as its title. No title when the count is 0.
+- A click opens a native menu:
+  1. Up to 10 Needs-you threads, the longest wait first (oldest `since`; `null` last). Each item shows the status and the title. A click opens the thread in T3 Code.
+  2. "+N more… (open tree)" when more than 10, which shows the window.
+  3. "Open tree", "Always on Top", "Mute Notifications", "Update available: vX.Y.Z…" when one exists, "Quit".
+- Main builds the menu again on each `setNeedsYou`.
+
+### Token
+
+- The packaged app keeps the T3 token in `token` in the app data folder, mode `0600`. No Keychain: an ad-hoc signature changes with each build, so the Keychain would ask after each update.
+- Main reads the file at start and passes it to the child as `T3_TOKEN`. With no file, the child env keeps any `T3_TOKEN` it already has (dev uses `.env`).
+- **Entry:** when the tree is `unauthorized` and the bridge exists, the banner shows the issue command and a password field with "Save". `setToken` writes the file (`0600`), then main restarts the child. The page reconnects to `/events` by itself.
+- The browser version keeps the `.env` banner.
+
+### Build and dev
+
+- `bun run desktop`: bundles main and preload with `Bun.build({ target: "node", format: "cjs", external: ["electron"] })` into `dist/desktop/`, then starts Electron. No watch for main: restart after a main change. The page keeps HMR.
+- `bun run desktop:demo`: the same, with `DESKTOP_DEMO=1`.
+- `bun run build:sidecar`: `scripts/build-sidecar.ts` calls `Bun.build({ compile: { target: "bun-darwin-arm64" } })` on `src/server.ts` with the Tailwind plugin, into `dist/sidecar/server`. The CLI is not enough: the Tailwind plugin works only through the JS API.
+  - The lineage worker is passed as a string path, so the compiler bundles it as an extra entry point.
+  - `next-step-prompt.md` is imported as text (`with { type: "text" }`), so it is in the binary.
+- `dist/` and `release/` go in `.gitignore`.
+
+### Package, sign and install
+
+- **electron-builder** packages the app into `release/`, `arm64`, with the sidecar through `extraResources` (`dist/sidecar/server` → `server`). Product name "T3 Thread Tree".
+- **Signing:** ad-hoc (`codesign -s -`), with `com.apple.security.cs.allow-jit` and `com.apple.security.cs.allow-unsigned-executable-memory` for the sidecar. No Developer ID, no notarization.
+- **Install paths** (all in the README):
+  - `.dmg` from GitHub Releases. The first open needs System Settings › Privacy & Security › "Open Anyway", or `xattr -dr com.apple.quarantine "/Applications/T3 Thread Tree.app"`.
+  - From source: `bun run desktop:install` builds the sidecar, bundles main and preload, runs electron-builder `--dir`, signs ad-hoc and copies the `.app` to `/Applications`.
+  - Browser: `bun start`, as today.
+
+### Release and updates
+
+- A push of a `v*` tag runs `.github/workflows/release.yml` on `macos-14`. It builds the ad-hoc signed `.dmg` and attaches it to the GitHub Release of that tag. `package.json` holds the version.
+- No auto-update. The packaged app reads the GitHub latest-release API at start and every 6 h. When the latest tag is newer than `app.getVersion()`, it adds "Update available: vX.Y.Z…" to the app menu and the menu-bar menu. A click opens the release page. No notification. A failed check changes nothing.
+
+### CI
+
+- `bun run check` keeps its name. It also formats, lints, typechecks and tests `src/desktop/`.
+- CI also runs `bun run build:sidecar` on ubuntu (cross-compile to `bun-darwin-arm64`). CI does not package the app.
+
+### README
+
+Each build ticket updates the README for its own part: the "What you get" entry, and Requirements, Setup, Run and "How it works" when they change. Ticket 13 adds the install paths.
+
 ## Check at build
 
 These facts are not confirmed against a real stream. The research used the MCP thread list and SQLite.
@@ -341,3 +475,4 @@ These facts are not confirmed against a real stream. The research used the MCP t
 - `pendingRuntimeRequest` as the "needs input" signal (the prototype used `orchestration_v2_projection_runtime_requests` with `status = 'pending'`). Also check how the `waiting` run status fits the table.
 - `toolName` for callers that are not Claude (for example Codex) in the lineage lookup.
 - Whether `codex exec --ignore-user-config` skips a global `~/.codex/AGENTS.md`. If not, the brief run sees it.
+- Whether a `bun-darwin-arm64` cross-compile on ubuntu runs on a Mac, and whether Bun's compiled binary loads `.env` from its working folder.

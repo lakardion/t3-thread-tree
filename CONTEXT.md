@@ -32,6 +32,18 @@ A T3 Code project, usually one repo.
 **Active thread**:
 An unsettled top-level thread (any status, snoozed included), or a subagent whose top-level ancestor is active. The default view shows only active threads.
 
+**Needs you**:
+The threads that wait on the user: status needs input or plan ready. The Dock badge, the header count and the menu-bar list show this set. A notification fires when a thread enters this set, or fails. The "Needs you" filter also keeps your-turn threads.
+_Avoid_: attention, unread
+
+**Desktop app**:
+The tree in its own macOS window, with a Dock icon, a Dock badge, notifications and a menu-bar entry. It shows the same page as the **Browser version** and stays alive when its window closes.
+_Avoid_: native app, Electron app
+
+**Browser version**:
+The tree served on a local port and opened in a browser tab, with no Dock badge, notifications or menu-bar entry.
+_Avoid_: web app, web version
+
 **Next-step brief**:
 A model-written, ranked list of recommended actions over the active threads. Each action links to one or more threads. The user asks for it with the "What's next" button.
 _Avoid_: suggestion, summary, advice
