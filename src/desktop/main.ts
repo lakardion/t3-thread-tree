@@ -140,7 +140,6 @@ function openWindow(port: number) {
       readJson(dataFile("window.json")),
       screen.getAllDisplays().map((d) => d.workArea),
     ),
-    alwaysOnTop: settings.alwaysOnTop,
     show: false,
     webPreferences: {
       /** Bun bakes the source folder into `__dirname`, so the path starts at the app root. */
@@ -183,16 +182,6 @@ function setMenu() {
         submenu: [
           { role: "about" },
           { type: "separator" },
-          {
-            label: "Always on Top",
-            type: "checkbox",
-            checked: settings.alwaysOnTop,
-            click: (item) => {
-              settings = { ...settings, alwaysOnTop: item.checked };
-              window?.setAlwaysOnTop(item.checked);
-              save("settings.json", settings);
-            },
-          },
           {
             label: "Mute Notifications",
             type: "checkbox",
