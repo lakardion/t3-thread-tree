@@ -17,10 +17,25 @@ export const NeedsYouList = v.pipe(
 export type NeedsYouThread = v.InferOutput<typeof NeedsYouList>[number];
 export type NeedsYouStatus = NeedsYouThread["status"];
 
-export type NotifyStatus = "needs-input" | "plan-ready" | "failed";
-export type NotifyEvent =
-  | { kind: "thread"; threadId: string; environmentId: string; title: string; status: NotifyStatus }
-  | { kind: "summary"; count: number };
+/** The bridge payload of `notify`. Unknown keys are dropped. */
+export const NotifyList = v.pipe(
+  v.array(
+    v.variant("kind", [
+      v.object({
+        kind: v.literal("thread"),
+        threadId: v.string(),
+        environmentId: v.string(),
+        title: v.string(),
+        status: v.picklist(["needs-input", "plan-ready", "failed"]),
+      }),
+      v.object({ kind: v.literal("summary"), count: v.pipe(v.number(), v.integer(), v.minValue(1)) }),
+    ]),
+  ),
+  v.maxLength(10),
+);
+
+export type NotifyEvent = v.InferOutput<typeof NotifyList>[number];
+export type NotifyStatus = Extract<NotifyEvent, { kind: "thread" }>["status"];
 
 export type DesktopBridge = {
   setToken(token: string): Promise<void>;
