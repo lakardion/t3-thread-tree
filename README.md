@@ -1,3 +1,5 @@
+<p align="center"><img src="assets/icon.svg" alt="T3 thread tree app icon" width="128" height="128"></p>
+
 # T3 thread tree
 
 A live map of your [T3 Code](https://github.com/pingdotgg/t3code) threads.

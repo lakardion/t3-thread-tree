@@ -1,0 +1,15 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1024" height="1024" viewBox="0 0 1024 1024">
+  <title>Branch grown</title>
+  <desc>A cream capital T grows two curved mint branches on a charcoal rounded square.</desc>
+  <defs>
+    <linearGradient id="body" x1="0" y1="0" x2="0.8" y2="1"><stop stop-color="#303835"/><stop offset="1" stop-color="#141c1a"/></linearGradient>
+    <linearGradient id="leaf" x1="0" y1="0" x2="0" y2="1"><stop stop-color="#b6f8cd"/><stop offset="1" stop-color="#6adca4"/></linearGradient>
+  </defs>
+  <rect x="100" y="100" width="824" height="824" rx="185" fill="url(#body)"/>
+  <rect x="102" y="102" width="820" height="820" rx="183" fill="none" stroke="#ffffff" stroke-opacity=".10" stroke-width="4"/>
+  <!-- Broad crossbar and trunk keep the T readable at Dock sizes. -->
+  <path d="M286 284H738V392H568V756H456V392H286Z" fill="#f6f5e9"/>
+  <!-- Shoots join the trunk and end in blunt, leaf-like thread tips. -->
+  <path d="M480 616C377 616 294 557 294 466H390C390 512 426 533 480 533Z" fill="url(#leaf)"/>
+  <path d="M544 696C653 696 730 630 730 536H634C634 585 599 611 544 611Z" fill="url(#leaf)"/>
+</svg>
