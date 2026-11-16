@@ -2,7 +2,7 @@
 title: Compile the server into a sidecar binary
 type: wayfinder:task
 status: open
-assignee:
+assignee: claude (desktop-06)
 blocked-by: [05-spec-and-route]
 ---
 
