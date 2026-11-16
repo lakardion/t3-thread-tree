@@ -121,7 +121,7 @@
     outline-offset: 2px;
   }
   #root {
-    @apply mx-auto max-w-[1200px];
+    @apply mx-auto flex h-[calc(100dvh-2rem)] max-w-[1200px] flex-col;
   }
   body {
     @apply bg-background p-4 text-[13px] leading-[1.45] text-foreground;
