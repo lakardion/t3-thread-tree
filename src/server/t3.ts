@@ -5,6 +5,8 @@
 import { homedir } from "node:os";
 import { join } from "node:path";
 
+import * as v from "valibot";
+
 import type { Conn } from "../shared/tree.ts";
 
 export const USERDATA = join(homedir(), ".t3", "userdata");
@@ -77,11 +79,30 @@ export type StreamEvent =
   | { kind: "project"; id: string; project: Project }
   | { kind: "project.removed"; id: string };
 
-type Obj = Record<string, unknown>;
-const obj = (v: unknown): Obj => (v && typeof v === "object" ? (v as Obj) : {});
-const str = (v: unknown): string | null => (typeof v === "string" ? v : null);
-const num = (v: unknown): number | null => (typeof v === "number" ? v : null);
-const bool = (v: unknown): boolean | null => (typeof v === "boolean" ? v : null);
+/** Every field below falls back instead of failing: the protocol is internal and changes. */
+const S = v.fallback(v.nullable(v.string()), null);
+const N = v.fallback(v.nullable(v.number()), null);
+const B = v.fallback(v.nullable(v.boolean()), null);
+const Any = v.optional(v.unknown());
+const Id = v.pipe(v.string(), v.minLength(1));
+
+/** An object whose fields all fall back; anything that is not an object decodes as `{}`. */
+const obj = <E extends v.ObjectEntries>(entries: E) => {
+  const schema = v.object(entries);
+  return v.fallback(schema, () => v.parse(schema, {}));
+};
+
+/** An array that drops items failing `item`; anything that is not an array decodes as `[]`. */
+const listOf = <T extends v.GenericSchema>(item: T) =>
+  v.pipe(
+    v.fallback(v.array(v.unknown()), []),
+    v.transform((a) =>
+      a.flatMap((x) => {
+        const r = v.safeParse(item, x);
+        return r.success ? [r.output] : [];
+      }),
+    ),
+  );
 
 /** Shows the home folder as `~`, only at a path boundary. */
 const tilde = (p: string | null): string | null => {
@@ -89,140 +110,191 @@ const tilde = (p: string | null): string | null => {
   return p !== null && (p === home || p.startsWith(`${home}/`)) ? `~${p.slice(home.length)}` : p;
 };
 
-/** `owner/name` from `repositoryIdentity`, or null when a part is absent. */
-const repoOf = (p: Obj): string | null => {
-  const r = obj(p.repositoryIdentity);
-  const owner = str(r.owner);
-  const name = str(r.name);
-  return owner && name ? `${owner}/${name}` : null;
-};
+const PrSchema = v.pipe(
+  v.object({
+    number: v.number(),
+    url: S,
+    source: S,
+    stack: obj({ base: S }),
+    snapshot: obj({
+      state: S,
+      isDraft: B,
+      checksState: S,
+      reviewDecision: S,
+      mergeability: S,
+      title: S,
+      additions: N,
+      deletions: N,
+      changedFiles: N,
+    }),
+  }),
+  v.transform(({ number, url, source, stack, snapshot: s }): Pr => ({
+    n: number,
+    url: url ?? "",
+    source: source ?? "",
+    /** A link not synced yet has no snapshot; count it as open. */
+    state: s.state ?? "open",
+    draft: s.isDraft,
+    checks: s.checksState,
+    review: s.reviewDecision,
+    mergeability: s.mergeability,
+    stackBase: stack.base,
+    title: s.title,
+    additions: s.additions,
+    deletions: s.deletions,
+    changedFiles: s.changedFiles,
+  })),
+);
+
+const PendingSchema = obj({ kind: S, createdAt: S, blocking: B });
 
 /** Lenient decode: many shell fields are optional, and unknown fields are ignored. */
-export function decodeThread(raw: unknown): Thread | null {
-  const t = obj(raw);
-  const id = str(t.id);
-  if (!id) return null;
-  const lineage = obj(t.lineage);
-  const pending = t.pendingRuntimeRequest ? obj(t.pendingRuntimeRequest) : null;
-  const prs = Array.isArray(t.pullRequests) ? t.pullRequests : [];
-  const recovery = obj(t.limitRecovery);
-  const goal = obj(t.goal);
-  return {
-    id,
-    projectId: str(t.projectId) ?? "",
-    title: str(t.title) ?? "",
-    status: str(t.status) ?? "idle",
-    parentThreadId: str(lineage.parentThreadId),
-    sideChat: lineage.sideChat === true,
-    pending: pending && {
-      kind: str(pending.kind),
-      createdAt: str(pending.createdAt),
-      blocking: bool(pending.blocking),
-    },
-    guestMessages: num(t.pendingGuestMessageCount),
-    activityRunStatus: str(t.activityRunStatus),
+const ThreadSchema = v.pipe(
+  v.object({
+    id: Id,
+    projectId: S,
+    title: S,
+    status: S,
+    lineage: obj({ parentThreadId: S, sideChat: Any }),
+    pendingRuntimeRequest: Any,
+    pendingGuestMessageCount: N,
+    activityRunStatus: S,
+    blockedOnThreadWait: Any,
+    hasActionableProposedPlan: Any,
+    interactionMode: S,
+    latestRunCompletedAt: S,
+    lastVisitedAt: S,
+    activityRunStartedAt: S,
+    latestRunStartedAt: S,
+    settledAt: S,
+    snoozedUntil: S,
+    updatedAt: S,
+    archivedAt: Any,
+    deletedAt: Any,
+    pullRequests: listOf(PrSchema),
+    lastError: S,
+    lastErrorClass: S,
+    lastErrorCode: S,
+    usageLimitResetAt: S,
+    limitRecovery: obj({ resetAt: S, autoResume: Any }),
+    latestRunStopRequested: Any,
+    modelSelection: obj({ model: S }),
+    branch: S,
+    worktreePath: S,
+    forkedFrom: obj({ threadId: S }),
+    delegatedFrom: obj({ title: S }),
+    linkOrigin: obj({ label: S }),
+    createdBy: S,
+    creationSource: S,
+    createdAt: S,
+    goal: v.fallback(v.nullable(v.object({ objective: v.string(), status: v.string() })), null),
+    tags: listOf(v.string()),
+    pinnedAt: S,
+  }),
+  v.transform((t): Thread => ({
+    id: t.id,
+    projectId: t.projectId ?? "",
+    title: t.title ?? "",
+    status: t.status ?? "idle",
+    parentThreadId: t.lineage.parentThreadId,
+    sideChat: t.lineage.sideChat === true,
+    pending: t.pendingRuntimeRequest ? v.parse(PendingSchema, t.pendingRuntimeRequest) : null,
+    guestMessages: t.pendingGuestMessageCount,
+    activityRunStatus: t.activityRunStatus,
     blockedOnThreadWait: t.blockedOnThreadWait === true,
     hasPlan: t.hasActionableProposedPlan === true,
-    interactionMode: str(t.interactionMode),
-    latestRunCompletedAt: str(t.latestRunCompletedAt),
-    lastVisitedAt: str(t.lastVisitedAt),
-    activityRunStartedAt: str(t.activityRunStartedAt),
-    latestRunStartedAt: str(t.latestRunStartedAt),
-    settledAt: str(t.settledAt),
-    snoozedUntil: str(t.snoozedUntil),
-    updatedAt: str(t.updatedAt) ?? "",
+    interactionMode: t.interactionMode,
+    latestRunCompletedAt: t.latestRunCompletedAt,
+    lastVisitedAt: t.lastVisitedAt,
+    activityRunStartedAt: t.activityRunStartedAt,
+    latestRunStartedAt: t.latestRunStartedAt,
+    settledAt: t.settledAt,
+    snoozedUntil: t.snoozedUntil,
+    updatedAt: t.updatedAt ?? "",
     gone: !!t.archivedAt || !!t.deletedAt,
-    prs: prs.flatMap((p) => {
-      const o = obj(p);
-      const n = typeof o.number === "number" ? o.number : null;
-      if (n === null) return [];
-      /** A link not synced yet has no snapshot; count it as open. */
-      const snap = obj(o.snapshot);
-      const state = str(snap.state) ?? "open";
-      return [
-        {
-          n,
-          url: str(o.url) ?? "",
-          source: str(o.source) ?? "",
-          state,
-          draft: bool(snap.isDraft),
-          checks: str(snap.checksState),
-          review: str(snap.reviewDecision),
-          mergeability: str(snap.mergeability),
-          stackBase: str(obj(o.stack).base),
-          title: str(snap.title),
-          additions: num(snap.additions),
-          deletions: num(snap.deletions),
-          changedFiles: num(snap.changedFiles),
-        },
-      ];
-    }),
-    lastError: str(t.lastError),
-    lastErrorClass: str(t.lastErrorClass),
-    lastErrorCode: str(t.lastErrorCode),
-    limitResetAt: str(t.usageLimitResetAt) ?? str(recovery.resetAt),
-    autoResume: recovery.autoResume === true,
+    prs: t.pullRequests,
+    lastError: t.lastError,
+    lastErrorClass: t.lastErrorClass,
+    lastErrorCode: t.lastErrorCode,
+    limitResetAt: t.usageLimitResetAt ?? t.limitRecovery.resetAt,
+    autoResume: t.limitRecovery.autoResume === true,
     stopRequested: t.latestRunStopRequested === true,
-    model: str(obj(t.modelSelection).model),
-    branch: str(t.branch),
-    worktreePath: tilde(str(t.worktreePath)),
-    forkedFromThreadId: str(obj(t.forkedFrom).threadId),
-    delegatedFromTitle: str(obj(t.delegatedFrom).title),
-    linkLabel: str(obj(t.linkOrigin).label),
-    createdBy: str(t.createdBy),
-    creationSource: str(t.creationSource),
-    createdAt: str(t.createdAt),
-    goal:
-      typeof goal.objective === "string" && typeof goal.status === "string"
-        ? { objective: goal.objective, status: goal.status }
-        : null,
-    tags: Array.isArray(t.tags) ? t.tags.filter((x): x is string => typeof x === "string") : [],
-    pinned: typeof t.pinnedAt === "string",
-  };
+    model: t.modelSelection.model,
+    branch: t.branch,
+    worktreePath: tilde(t.worktreePath),
+    forkedFromThreadId: t.forkedFrom.threadId,
+    delegatedFromTitle: t.delegatedFrom.title,
+    linkLabel: t.linkOrigin.label,
+    createdBy: t.createdBy,
+    creationSource: t.creationSource,
+    createdAt: t.createdAt,
+    goal: t.goal,
+    tags: t.tags,
+    pinned: t.pinnedAt !== null,
+  })),
+);
+
+/** A project as `[id, project]`; `repo` is `owner/name` from `repositoryIdentity`, or null when a part is absent. */
+const ProjectSchema = v.pipe(
+  v.object({ id: Id, title: S, repositoryIdentity: obj({ owner: S, name: S }) }),
+  v.transform(({ id, title, repositoryIdentity: { owner, name } }): [string, Project] => [
+    id,
+    { title: title ?? id, repo: owner && name ? `${owner}/${name}` : null },
+  ]),
+);
+
+/** One shell stream item as an event. Archived items map to removals: the app never shows them. */
+const ItemSchema = v.variant("kind", [
+  v.pipe(
+    v.object({
+      kind: v.literal("snapshot"),
+      snapshot: obj({ threads: listOf(ThreadSchema), projects: listOf(ProjectSchema) }),
+    }),
+    v.transform(({ snapshot }): StreamEvent => ({ kind: "snapshot", fresh: false, ...snapshot })),
+  ),
+  v.pipe(
+    v.object({ kind: v.literal("thread.updated"), location: Any, thread: ThreadSchema }),
+    v.transform(({ location, thread }): StreamEvent =>
+      location === "archive" ? { kind: "thread.removed", id: thread.id } : { kind: "thread", thread },
+    ),
+  ),
+  v.pipe(
+    v.object({ kind: v.literal("thread.removed"), threadId: Id }),
+    v.transform(({ threadId }): StreamEvent => ({ kind: "thread.removed", id: threadId })),
+  ),
+  v.pipe(
+    v.object({ kind: v.literal("project.updated"), project: ProjectSchema }),
+    v.transform(({ project: [id, project] }): StreamEvent => ({ kind: "project", id, project })),
+  ),
+  v.pipe(
+    v.object({ kind: v.literal("project.removed"), projectId: Id }),
+    v.transform(({ projectId }): StreamEvent => ({ kind: "project.removed", id: projectId })),
+  ),
+]);
+
+/** Returns null when the thread has no usable id. */
+export function decodeThread(raw: unknown): Thread | null {
+  const r = v.safeParse(ThreadSchema, raw);
+  return r.success ? r.output : null;
 }
 
-/** Maps one shell stream item to an event. Archived items map to removals: the app never shows them. */
+/** Returns null for an unknown kind or an item without its required id. */
 export function decodeItem(raw: unknown): StreamEvent | null {
-  const it = obj(raw);
-  switch (it.kind) {
-    case "snapshot": {
-      const s = obj(it.snapshot);
-      const threads = (Array.isArray(s.threads) ? s.threads : []).flatMap((t) => decodeThread(t) ?? []);
-      const projects = (Array.isArray(s.projects) ? s.projects : []).flatMap((p): [string, Project][] => {
-        const o = obj(p);
-        const id = str(o.id);
-        return id ? [[id, { title: str(o.title) ?? id, repo: repoOf(o) }]] : [];
-      });
-      return { kind: "snapshot", fresh: false, threads, projects };
-    }
-    case "thread.updated": {
-      const thread = decodeThread(it.thread);
-      if (!thread) return null;
-      return it.location === "archive" ? { kind: "thread.removed", id: thread.id } : { kind: "thread", thread };
-    }
-    case "thread.removed": {
-      const id = str(it.threadId);
-      return id ? { kind: "thread.removed", id } : null;
-    }
-    case "project.updated": {
-      const p = obj(it.project);
-      const id = str(p.id);
-      return id ? { kind: "project", id, project: { title: str(p.title) ?? id, repo: repoOf(p) } } : null;
-    }
-    case "project.removed": {
-      const id = str(it.projectId);
-      return id ? { kind: "project.removed", id } : null;
-    }
-  }
-  return null;
+  const r = v.safeParse(ItemSchema, raw);
+  return r.success ? r.output : null;
 }
+
+const FrameSchema = v.variant("_tag", [
+  v.object({ _tag: v.literal("Chunk"), requestId: Any, values: listOf(ItemSchema) }),
+  v.object({ _tag: v.picklist(["Exit", "Defect", "ClientProtocolError"]) }),
+]);
 
 export const readEnvironmentId = async (): Promise<string> =>
   (await Bun.file(join(USERDATA, "environment-id")).text()).trim();
 
 const readOrigin = async (): Promise<string | null> => {
   try {
-    return str(obj(await Bun.file(join(USERDATA, "server-runtime.json")).json()).origin);
+    return v.parse(obj({ origin: S }), await Bun.file(join(USERDATA, "server-runtime.json")).json()).origin;
   } catch {
     return null;
   }
@@ -271,21 +343,23 @@ export function connectShell(opts: {
     };
     sock.onmessage = (ev) => {
       const parsed: unknown = JSON.parse(String(ev.data));
-      for (const m of (Array.isArray(parsed) ? parsed : [parsed]).map(obj)) {
+      for (const raw of [parsed].flat()) {
+        const r = v.safeParse(FrameSchema, raw);
+        if (!r.success) continue;
+        const m = r.output;
         if (m._tag === "Chunk") {
           opts.onConn("up");
-          for (const v of Array.isArray(m.values) ? m.values : []) {
-            const e = decodeItem(v);
-            if (e?.kind === "snapshot") {
+          for (const e of m.values) {
+            if (e.kind === "snapshot") {
               e.fresh = fresh;
               fresh = false;
             }
-            if (e) opts.onEvent(e);
+            opts.onEvent(e);
           }
           /** The server sends the next chunk only after an Ack. */
           send({ _tag: "Ack", requestId: m.requestId });
-        } else if (m._tag === "Exit" || m._tag === "Defect" || m._tag === "ClientProtocolError") {
-          console.error("[t3] stream ended:", JSON.stringify(m).slice(0, 500));
+        } else {
+          console.error("[t3] stream ended:", JSON.stringify(raw).slice(0, 500));
           sock.close();
         }
       }
