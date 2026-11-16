@@ -153,6 +153,10 @@ export function computeStacks(threads: Thread[]): Stack[] {
   return stacks;
 }
 
+/** The later of two ISO times, or null when both are null. */
+const newest = (a: string | null, b: string | null): string | null =>
+  a && b ? (Date.parse(a) >= Date.parse(b) ? a : b) : (a ?? b);
+
 export function buildTree(input: BuildInput): Branch[] {
   const { projects, spawnerOf, environmentId, settled, now } = input;
   const visible = new Map<string, Thread>();
@@ -181,6 +185,7 @@ export function buildTree(input: BuildInput): Branch[] {
       ...statusOf(t, now),
       raw: t.pending ? `${t.status} · pending ${t.pending.kind ?? "request"}` : t.status,
       updatedAt: t.updatedAt,
+      lastRun: newest(t.latestRunStartedAt, t.latestRunCompletedAt),
       settled: !!t.settledAt,
       input: t.pending?.blocking === false,
       snoozedUntil: t.snoozedUntil && Date.parse(t.snoozedUntil) > now ? t.snoozedUntil : null,

@@ -245,6 +245,8 @@ A component animates a value change only while it is mounted. A first load and a
 - The row flashes once in the new status color. The flash goes from 2 × `--wash` to 0 over 1 s with ease-out.
 - With reduced motion, none of this runs. The new value shows at once.
 
+A change of the row order animates with the View Transitions API. Each thread row and each PR stack has a `view-transition-name`. The rows slide in 250 ms to their new place when the sort changes, or when a push changes the row order. A push that keeps the order starts no transition. No transition runs during a drag, with the page hidden, or with reduced motion (`animation: none` on the transition pseudo-elements). A leaving row, and each named row inside it, has the name `none`, so no two elements share a name. The row gets its names back if it returns before it has gone.
+
 A project card, a group or a thread row that a push adds or removes also moves.
 
 - A new row grows from 0 to its full height in 200 ms with ease-out. Its opacity, margins and padding go from 0 to their values in the same time.
@@ -423,6 +425,14 @@ An absent value shows no mark. Each mark has a `title` with its meaning.
 
 **Narrow screens.** Below 720 px, the title goes on its own line below the status, and the right group wraps to a line below the title. The title wraps to as many lines as it needs. The page never scrolls sideways. On a touch screen, buttons have a 44 px target.
 
+### Sort
+
+A ghost `icon-sm` button with the `ArrowDownUp` icon, before fold all. Its label is "Sort" and its tooltip is "Sort: Manual" or "Sort: Last updated". It opens a dropdown menu with a radio group: "Manual" and "Last updated". The choice is in `localStorage` under `thread-tree:sort`.
+
+- "Last updated" sorts by `lastRun`, newest first. A thread with no `lastRun` is last. A thread counts its subthreads. A group or PR stack counts its newest thread.
+- Projects keep their order. Reviews stays first and No issue key stays last. A PR stack moves as one block and keeps its inner order. Subthreads keep their order. Ties keep the manual order.
+- Drag is off: no row has a handle, and the empty handle space stays so rows line up.
+
 ### Drag to reorder
 
 The user reorders projects, key groups (a stack run is one block), review groups and top-level threads. A list with fewer than two visible items has no handle. Subthreads, groups inside a stack rail, Reviews and No issue key have no handle. No drag crosses lists.
@@ -563,6 +573,8 @@ export type ThreadNode = {
   /** Raw T3 status, for the icon tooltip. */
   raw: string;
   updatedAt: string;
+  /** Newest of the run start and run end. Not `updatedAt`, which ticks while a thread works. */
+  lastRun: string | null;
   settled: boolean;
   /** A request with `blocking: false` is pending. */
   input: boolean;

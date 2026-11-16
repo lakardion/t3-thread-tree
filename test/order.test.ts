@@ -14,6 +14,7 @@ const thread = (id: string, status: Status = "working", children: ThreadNode[] =
   since: null,
   raw: status,
   updatedAt: "2026-11-12T12:00:00.000Z",
+  lastRun: null,
   settled: false,
   input: false,
   snoozedUntil: null,

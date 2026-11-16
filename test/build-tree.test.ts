@@ -245,6 +245,17 @@ describe("order", () => {
     expect(titles(child(tree, "frontend", "No issue key").threads)).toEqual(["old root", "new root"]);
   });
 
+  test("lastRun is the later of run start and run end, and null when both are null", () => {
+    const run = (over: Record<string, unknown>) =>
+      build([shell("a", "SHOP-1 a", over)])[0].branches[0].threads[0].lastRun;
+    const early = "2026-11-12T07:00:00.000Z";
+    const late = "2026-11-12T08:00:00.000Z";
+    expect(run({ latestRunStartedAt: early, latestRunCompletedAt: late })).toBe(late);
+    expect(run({ latestRunStartedAt: late, latestRunCompletedAt: early })).toBe(late);
+    expect(run({ latestRunStartedAt: early })).toBe(early);
+    expect(run({})).toBeNull();
+  });
+
   test("an updatedAt or run change does not move a row", () => {
     const a = shell("a", "SHOP-1 a");
     const b = shell("b", "SHOP-2 b");
