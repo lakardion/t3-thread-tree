@@ -2,7 +2,7 @@
 title: Keep the app alive with a hidden window, and add the app menu
 type: wayfinder:task
 status: open
-assignee:
+assignee: claude (desktop-08)
 blocked-by: [07-electron-shell]
 ---
 
