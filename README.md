@@ -32,7 +32,7 @@ _Screenshots use made-up data from `bun run demo`._
   - The "Needs you" filter and "show settled" work as in the tree.
   - The tree keeps its folds when you switch back.
   - The rows slide when the layout changes. The choice stays after a reload.
-- **Group by status.** In the flat view, the "Group by" button groups the list by status. Each group has a header with a count. The order is: Needs input, Plan ready, Your turn, Failed, Working, "Idle and snoozed", Done. A group with no thread is hidden. A PR stack goes to the group of its most urgent thread. A thread slides to a new group when its status changes. The choice stays after a reload.
+- **Group by status.** In the flat view, the "Group by" button groups the list by status. It is the same header button as "Fold all", and its icon morphs when you switch the view. Each group has a header with a count. The order is: Needs input, Plan ready, Your turn, Failed, Working, "Idle and snoozed", Done. A group with no thread is hidden. A PR stack goes to the group of its most urgent thread. A thread slides to a new group when its status changes. The choice stays after a reload.
 - **Stable order.** Rows keep their place while threads update. A new thread, group or project shows at the bottom of its list.
 - **Status changes move.** A new status icon or PR mark fades in. The row flashes once in the new status color. With reduced motion, changes show at once.
 - **Rows come and go.** A new project, group or thread grows in. A removed one collapses out. A change that arrives during a drag shows at once. With reduced motion, rows appear and disappear at once.

@@ -435,7 +435,7 @@ A ghost `icon-sm` button with the `ArrowDownUp` icon, before fold all. Its label
 
 ### Flat view
 
-The Tree / Flat switch is a `ToggleGroup` of two icons (`ListTree`, `List`) with tooltips, built like the theme choice. In flat, a `Rows3` menu "Group by" (None, Status) shows next to the sort menu, and the fold-all button hides. The page shows one card with one list. Drag is off.
+The Tree / Flat switch is a `ToggleGroup` of two icons (`ListTree`, `List`) with tooltips, built like the theme choice. Fold all and "Group by" share one header button. In the tree, it is fold all. In flat, it opens the "Group by" menu (None, Status), with the `Rows3` icon. On a view switch, the button stays and its icon morphs between the fold arrows and `Rows3`. The page shows one card with one list. Drag is off.
 
 - **Thread row.** The status icon comes first. The Project column follows: the project icon and name (`w-32`, truncated). Under 720 px, only the icon shows. Then the issue key chip (a Linear link when set), then the teal `Eye` for a review thread (`text-review`), then the title. The PR chips, the details chevron and the send icon stay as in the tree. There is no handle and no handle space.
 - **Subthreads.** They sit under the parent, indented, always open, in base order, with no Project column.

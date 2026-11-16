@@ -9,7 +9,7 @@ import {
 } from "@dnd-kit/dom";
 import { DragDropProvider } from "@dnd-kit/react";
 import { isSortable, useSortable } from "@dnd-kit/react/sortable";
-import { ChevronsDownUp, ChevronsUpDown } from "lucide";
+import { ChevronsDownUp, ChevronsUpDown, Rows3 } from "lucide";
 import {
   ArrowDownUp,
   Check,
@@ -26,7 +26,6 @@ import {
   ListTree,
   LoaderCircle,
   Moon,
-  Rows3,
   Send,
   SlidersHorizontal,
   Sun,
@@ -399,29 +398,53 @@ const GROUPS: [GroupBy, string][] = [
   ["none", "None"],
   ["status", "Status"],
 ];
-const GroupMenu = ({ groupBy, setGroupBy }: { groupBy: GroupBy; setGroupBy: (g: GroupBy) => void }) => (
-  <DropdownMenu modal={false}>
-    <Tooltip>
-      <TooltipTrigger asChild>
-        <DropdownMenuTrigger asChild>
-          <Button variant="ghost" size="icon-sm" aria-label="Group by">
-            <Rows3 />
-          </Button>
-        </DropdownMenuTrigger>
-      </TooltipTrigger>
-      <TooltipContent>Group by: {GROUPS.find(([g]) => g === groupBy)?.[1]}</TooltipContent>
-    </Tooltip>
-    <DropdownMenuContent align="end" className="min-w-40">
-      <DropdownMenuRadioGroup value={groupBy} onValueChange={(v) => setGroupBy(v as GroupBy)}>
-        {GROUPS.map(([g, name]) => (
-          <DropdownMenuRadioItem key={g} value={g}>
-            {name}
-          </DropdownMenuRadioItem>
-        ))}
-      </DropdownMenuRadioGroup>
-    </DropdownMenuContent>
-  </DropdownMenu>
-);
+/**
+ * One header button: fold all in the tree, the Group by menu in the flat view. It stays mounted across a view
+ * switch, so its icon morphs from one to the other. The menu never opens in the tree.
+ */
+function FoldOrGroup({
+  flat,
+  inner,
+  closed,
+  fold,
+  groupBy,
+  setGroupBy,
+}: { flat: boolean; inner: string[]; groupBy: GroupBy; setGroupBy: (g: GroupBy) => void } & Omit<Fold, "toggle">) {
+  const [menu, setMenu] = useState(false);
+  if (!flat && inner.length === 0) return null;
+  const shut = inner.every((id) => !closed.has(id));
+  const label = flat ? "Group by" : `${shut ? "Collapse" : "Expand"} all`;
+  return (
+    <DropdownMenu modal={false} open={flat && menu} onOpenChange={setMenu}>
+      <Tooltip>
+        <TooltipTrigger asChild>
+          <DropdownMenuTrigger asChild>
+            <Button
+              variant="ghost"
+              size="icon-sm"
+              aria-label={label}
+              aria-haspopup={flat ? "menu" : undefined}
+              aria-expanded={flat ? menu : undefined}
+              onClick={flat ? undefined : () => fold(inner, shut)}
+            >
+              <MorphIcon icon={flat ? Rows3 : shut ? ChevronsDownUp : ChevronsUpDown} size={16} reducedMotion="user" />
+            </Button>
+          </DropdownMenuTrigger>
+        </TooltipTrigger>
+        <TooltipContent>{flat ? `Group by: ${GROUPS.find(([g]) => g === groupBy)?.[1]}` : label}</TooltipContent>
+      </Tooltip>
+      <DropdownMenuContent align="end" className="min-w-40">
+        <DropdownMenuRadioGroup value={groupBy} onValueChange={(v) => setGroupBy(v as GroupBy)}>
+          {GROUPS.map(([g, name]) => (
+            <DropdownMenuRadioItem key={g} value={g}>
+              {name}
+            </DropdownMenuRadioItem>
+          ))}
+        </DropdownMenuRadioGroup>
+      </DropdownMenuContent>
+    </DropdownMenu>
+  );
+}
 
 /** Follows the update state of the main process. Undefined in the browser. */
 function useUpdate(): UpdateState | undefined {
@@ -1739,17 +1762,18 @@ function App() {
               transition(() => setLayout(l));
             }}
           />
-          {layout === "flat" && (
-            <GroupMenu
+          {projects && (
+            <FoldOrGroup
+              flat={layout === "flat"}
+              inner={projects.flatMap((p) => [p.id, ...foldIds(p)])}
+              closed={closed}
+              fold={fold}
               groupBy={groupBy}
               setGroupBy={(g) => {
                 save(GROUP_KEY, g);
                 transition(() => setGroupBy(g));
               }}
             />
-          )}
-          {projects && layout === "tree" && (
-            <FoldAll inner={projects.flatMap((p) => [p.id, ...foldIds(p)])} closed={closed} fold={fold} />
           )}
           <ViewButton
             update={update}
