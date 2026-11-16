@@ -17,7 +17,8 @@
     "lint": "oxlint --deny-warnings",
     "fmt": "oxfmt",
     "fmt:check": "oxfmt --check",
-    "check": "bun run fmt:check && bun run lint && bun run typecheck && bun test"
+    "check": "bun run fmt:check && bun run lint && bun run typecheck && bun test",
+    "release": "rm -rf release && bun run desktop:dmg --publish never && gh release create \"v$(jq -r .version package.json)\" release/*.dmg release/*.zip --generate-notes --target \"$(git rev-parse HEAD)\""
   },
   "dependencies": {
     "@dnd-kit/abstract": "0.5.3",

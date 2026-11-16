@@ -5,7 +5,24 @@ on:
 permissions:
   contents: write
 jobs:
+  check:
+    runs-on: ubuntu-latest
+    outputs:
+      published: ${{ steps.release.outputs.published }}
+    steps:
+      # A local `bun run release` creates the tag and the release together, so the macOS build is skipped.
+      - id: release
+        run: |
+          if gh release view "$GITHUB_REF_NAME" --repo "$GITHUB_REPOSITORY" >/dev/null 2>&1; then
+            echo "published=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "published=false" >> "$GITHUB_OUTPUT"
+          fi
+        env:
+          GH_TOKEN: ${{ github.token }}
   release:
+    needs: check
+    if: needs.check.outputs.published == 'false'
     runs-on: macos-15
     steps:
       - uses: actions/checkout@v4
