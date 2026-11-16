@@ -1,7 +1,6 @@
 import { readFileSync, writeFileSync } from "node:fs";
 
 export type Rect = { x: number; y: number; width: number; height: number };
-export type Settings = { alwaysOnTop: boolean };
 
 /** The parsed JSON in `file`, or `undefined` when the file is missing or bad. */
 export function readJson(file: string): unknown {
@@ -14,11 +13,6 @@ export function readJson(file: string): unknown {
 
 export function writeJson(file: string, value: unknown): void {
   writeFileSync(file, JSON.stringify(value, null, 2));
-}
-
-export function parseSettings(raw: unknown): Settings {
-  const r = (raw ?? {}) as Record<string, unknown>;
-  return { alwaysOnTop: typeof r.alwaysOnTop === "boolean" ? r.alwaysOnTop : false };
 }
 
 const positive = (n: unknown): n is number => typeof n === "number" && Number.isFinite(n) && n > 0;

@@ -5,7 +5,7 @@ import { join } from "node:path";
 import { app, BrowserWindow, Menu, screen, shell } from "electron";
 
 import { fallbackPath, pickPort, RESET_AFTER_MS, restartDelay, shellPath } from "./runtime.ts";
-import { parseBounds, parseSettings, readJson, type Settings, writeJson } from "./store.ts";
+import { parseBounds, readJson, writeJson } from "./store.ts";
 
 const log = (m: string) => console.log(`desktop: ${m}`);
 const sleep = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
@@ -13,7 +13,6 @@ const sleep = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
 let window: BrowserWindow | undefined;
 let child: ChildProcess | undefined;
 let quitting = false;
-let settings: Settings = parseSettings(undefined);
 
 const dataFile = (name: string) => join(app.getPath("userData"), name);
 const save = (name: string, value: unknown) => {
@@ -84,7 +83,6 @@ function openWindow(port: number) {
       readJson(dataFile("window.json")),
       screen.getAllDisplays().map((d) => d.workArea),
     ),
-    alwaysOnTop: settings.alwaysOnTop,
     show: false,
     webPreferences: {
       preload: join(__dirname, "preload.cjs"),
@@ -120,41 +118,11 @@ function openWindow(port: number) {
 
 function setMenu() {
   Menu.setApplicationMenu(
-    Menu.buildFromTemplate([
-      {
-        label: app.name,
-        submenu: [
-          { role: "about" },
-          { type: "separator" },
-          {
-            label: "Always on Top",
-            type: "checkbox",
-            checked: settings.alwaysOnTop,
-            click: (item) => {
-              settings = { ...settings, alwaysOnTop: item.checked };
-              window?.setAlwaysOnTop(item.checked);
-              save("settings.json", settings);
-            },
-          },
-          { type: "separator" },
-          { role: "services" },
-          { type: "separator" },
-          { role: "hide" },
-          { role: "hideOthers" },
-          { role: "unhide" },
-          { type: "separator" },
-          { role: "quit" },
-        ],
-      },
-      { role: "editMenu" },
-      { role: "viewMenu" },
-      { role: "windowMenu" },
-    ]),
+    Menu.buildFromTemplate([{ role: "appMenu" }, { role: "editMenu" }, { role: "viewMenu" }, { role: "windowMenu" }]),
   );
 }
 
 async function main() {
-  settings = parseSettings(readJson(dataFile("settings.json")));
   setMenu();
   const [PATH, port] = await Promise.all([loginPath(), pickPort()]);
   startServer(port, PATH, 0);

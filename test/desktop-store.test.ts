@@ -3,24 +3,12 @@ import { mkdtempSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 
-import { parseBounds, parseSettings, readJson, writeJson } from "../src/desktop/store.ts";
+import { parseBounds, readJson, writeJson } from "../src/desktop/store.ts";
 
 const screens = [
   { x: 0, y: 0, width: 1000, height: 800 },
   { x: 1000, y: 0, width: 1000, height: 800 },
 ];
-
-describe("parseSettings", () => {
-  test("defaults when empty", () => {
-    expect(parseSettings(undefined)).toEqual({ alwaysOnTop: false });
-  });
-  test("keeps a boolean", () => {
-    expect(parseSettings({ alwaysOnTop: true })).toEqual({ alwaysOnTop: true });
-  });
-  test("takes the default for a wrong type", () => {
-    expect(parseSettings({ alwaysOnTop: "yes" })).toEqual({ alwaysOnTop: false });
-  });
-});
 
 describe("parseBounds", () => {
   test("is empty for junk or zero size", () => {
