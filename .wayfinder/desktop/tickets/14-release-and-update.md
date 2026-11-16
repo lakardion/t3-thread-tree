@@ -1,7 +1,7 @@
 ---
 title: Release the .dmg from a tag and show "Update available"
 type: wayfinder:task
-status: open
+status: in-review
 assignee: claude (desktop-14)
 blocked-by: [13-package-install]
 ---
