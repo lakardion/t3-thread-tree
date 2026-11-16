@@ -120,3 +120,5 @@ CI runs `bun run check` on every pull request. A pull request merges only when i
 ## Status
 
 It shows the threads of the local T3 environment only. Its write actions are send a message and start a thread. It has no settle, snooze or interrupt.
+
+A macOS desktop app, with a Dock badge, notifications and a menu-bar entry, is in build. [SPEC.md](SPEC.md) › "Desktop app" defines it.
