@@ -37,10 +37,8 @@ export const onlyNeedsYou = (projects: Branch[]): Branch[] => projects.flatMap(k
 export const needsYouThreads = (projects: Branch[]): NeedsYouThread[] =>
   projects
     .flatMap(allThreads)
-    .filter((t) => !t.settled && (t.status === "needs-input" || t.status === "plan-ready"))
-    .map((t) => ({
-      id: t.id,
-      title: t.title,
-      environmentId: decodeURIComponent(t.href.split("/")[3] ?? ""),
-      since: t.since,
-    }));
+    .flatMap((t) =>
+      !t.settled && (t.status === "needs-input" || t.status === "plan-ready")
+        ? [{ id: t.id, title: t.title, environmentId: decodeURIComponent(t.href.split("/")[3] ?? ""), since: t.since }]
+        : [],
+    );
