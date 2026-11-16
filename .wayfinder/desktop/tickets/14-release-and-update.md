@@ -24,3 +24,7 @@ Publish the `.dmg` on GitHub Releases from a tag, and tell the user in the menus
 ## Handed over from desktop-08
 
 - `setMenu()` in `src/desktop/main.ts` builds the app menu. Add "Update available: vX.Y.Z…" to its app submenu, and call `setMenu()` again when an update is found.
+
+## Handed over from desktop-12
+
+- The menu-bar menu is built in `setTrayMenu()` in `src/desktop/main.ts`. Put "Update available: vX.Y.Z…" between "Mute Notifications" and "Quit" (SPEC.md › "Menu-bar entry"), and call `setTrayMenu()` when an update is found.

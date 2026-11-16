@@ -36,3 +36,7 @@ Package the app with electron-builder, sign it ad-hoc, and install it with one c
 ## Handed over from desktop-09
 
 - The README gives the token path `~/Library/Application Support/T3 Thread Tree/token`. Electron takes that folder name from `productName`. Today `package.json` has none, so dev uses `t3-thread-tree/`. Set `productName: "T3 Thread Tree"` so the packaged path matches the README.
+
+## Handed over from desktop-12
+
+- The tray icon is `assets/trayTemplate.png` and `assets/trayTemplate@2x.png`, loaded from `join(app.getAppPath(), "assets", "trayTemplate.png")`. The package must include `assets/`; a `files` filter that leaves it out gives an empty menu-bar icon.
