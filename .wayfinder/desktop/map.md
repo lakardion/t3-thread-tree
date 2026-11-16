@@ -48,7 +48,7 @@ The destination is reached when every route key is done and no map ticket is ope
 
 ## Stacks
 
-- `main ← desktop-05-spec (#30) ← desktop-06-sidecar-build (#31) ← desktop-07-electron-shell (#33) ← desktop-08-window-lifetime (#34) ← desktop-09-token-entry (#35) ← desktop-10-dock-badge (#36) ← desktop-11-notifications (#37) ← desktop-12-menu-bar (#38)` (spec, base of the build stack)
+- `main ← desktop-05-spec (#30) ← desktop-06-sidecar-build (#31) ← desktop-07-electron-shell (#33) ← desktop-08-window-lifetime (#34) ← desktop-09-token-entry (#35) ← desktop-10-dock-badge (#36) ← desktop-11-notifications (#37) ← desktop-12-menu-bar (#38) ← desktop-13-package-install (#39)` (spec, base of the build stack)
 
 ## Notes
 
