@@ -22,14 +22,13 @@ const screens = [
 
 describe("parseSettings", () => {
   test("defaults when empty", () => {
-    expect(parseSettings(undefined)).toEqual({ alwaysOnTop: false, muted: false });
+    expect(parseSettings(undefined)).toEqual({ muted: false });
   });
   test("keeps a boolean", () => {
-    expect(parseSettings({ alwaysOnTop: true })).toEqual({ alwaysOnTop: true, muted: false });
-    expect(parseSettings({ muted: true })).toEqual({ alwaysOnTop: false, muted: true });
+    expect(parseSettings({ muted: true })).toEqual({ muted: true });
   });
   test("takes the default for a wrong type", () => {
-    expect(parseSettings({ alwaysOnTop: "yes" })).toEqual({ alwaysOnTop: false, muted: false });
+    expect(parseSettings({ muted: "yes" })).toEqual({ muted: false });
   });
 });
 
