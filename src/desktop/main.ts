@@ -1,6 +1,9 @@
 import { type ChildProcess, execFile, spawn } from "node:child_process";
+import { constants } from "node:fs";
+import { access, mkdtemp, readdir, rm, writeFile } from "node:fs/promises";
 import { homedir } from "node:os";
-import { join } from "node:path";
+import { dirname, join } from "node:path";
+import { promisify } from "node:util";
 
 import {
   app,
@@ -29,7 +32,16 @@ import {
   threadUrl,
   trayItems,
 } from "./runtime.ts";
-import { parseBounds, parseNeedsYou, parseNotify, parseSettings, readJson, type Settings, writeJson } from "./store.ts";
+import {
+  parseBounds,
+  parseNeedsYou,
+  parseNotify,
+  parseSettings,
+  parseUpdated,
+  readJson,
+  type Settings,
+  writeJson,
+} from "./store.ts";
 
 const log = (m: string) => console.log(`desktop: ${m}`);
 const sleep = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
@@ -44,6 +56,8 @@ let needsYou: NeedsYouThread[] = [];
 let tray: Tray | undefined;
 /** The newer release found on GitHub, for the "Update available" menu item. */
 let update: ReturnType<typeof parseRelease> = null;
+/** True while the update downloads, so the menus show it and offer no second download. */
+let downloading = false;
 
 const LATEST_RELEASE = "https://api.github.com/repos/lakardion/t3-thread-tree/releases/latest";
 
@@ -213,19 +227,90 @@ async function checkUpdate() {
   }
 }
 
-/** The "Check for Updates…" click: checks now and shows the result in a dialog. */
-async function checkUpdateNow() {
-  const ok = await checkUpdate();
-  const u = update;
-  if (u) {
-    const { response } = await dialog.showMessageBox({
-      message: `Version ${u.version} is available`,
-      detail: `You have version ${app.getVersion()}.`,
-      buttons: ["Open Release Page", "Later"],
+/** Waits for process `$1` to exit, puts bundle `$3` in place of bundle `$2` (or keeps `$2` when that fails), and opens it. */
+const SWAP = `while kill -0 "$1" 2>/dev/null; do sleep 0.2; done
+rm -rf "$2.old" && mv "$2" "$2.old" && if mv "$3" "$2"; then rm -rf "$2.old"; else mv "$2.old" "$2"; fi
+open "$2"`;
+
+/** Downloads and unpacks the release zip, then quits so the swap script puts the new app in place and opens it. */
+async function installUpdate(u: NonNullable<typeof update>, zipUrl: string) {
+  /** The executable is `X.app/Contents/MacOS/X`. */
+  const bundle = dirname(dirname(dirname(app.getPath("exe"))));
+  if (bundle.includes("/AppTranslocation/")) throw new Error("Move the app to the Applications folder first.");
+  await access(dirname(bundle), constants.W_OK);
+  const dir = await mkdtemp(join(app.getPath("temp"), "t3-thread-tree-update-"));
+  const res = await fetch(zipUrl, { signal: AbortSignal.timeout(10 * 60_000) });
+  if (!res.ok) throw new Error(`Download failed with HTTP ${res.status}.`);
+  /** ponytail: holds the whole zip in memory; stream it to disk if releases get much larger. */
+  await writeFile(join(dir, "update.zip"), Buffer.from(await res.arrayBuffer()));
+  await promisify(execFile)("ditto", ["-x", "-k", join(dir, "update.zip"), dir]);
+  const name = (await readdir(dir)).find((n) => n.endsWith(".app"));
+  if (!name) throw new Error("The download has no app in it.");
+  save("updated.json", { version: u.version, notes: u.notes, url: u.url });
+  spawn("/bin/sh", ["-c", SWAP, "sh", String(process.pid), bundle, join(dir, name)], {
+    detached: true,
+    stdio: "ignore",
+  }).unref();
+  app.quit();
+}
+
+/** Offers the update. A release with an app zip installs in place; one without opens the release page. */
+async function promptUpdate(u: NonNullable<typeof update>) {
+  /** A run from source must not replace the Electron binary it runs on. */
+  const zip = app.isPackaged ? u.zip : null;
+  const { response } = await dialog.showMessageBox({
+    message: `Version ${u.version} is available`,
+    detail: `You have version ${app.getVersion()}.`,
+    buttons: [zip ? "Update and Restart" : "Open Release Page", "Later"],
+    defaultId: 0,
+    cancelId: 1,
+  });
+  if (response !== 0) return;
+  if (!zip) return openOutside(u.url);
+  downloading = true;
+  setMenus();
+  try {
+    await installUpdate(u, zip);
+  } catch (e) {
+    log(`update install failed: ${String(e)}`);
+    downloading = false;
+    setMenus();
+    const failed = await dialog.showMessageBox({
+      type: "warning",
+      message: "Cannot install the update",
+      detail: e instanceof Error ? e.message : String(e),
+      buttons: ["Open Release Page", "Close"],
       defaultId: 0,
       cancelId: 1,
     });
-    if (response === 0) openOutside(u.url);
+    if (failed.response === 0) openOutside(u.url);
+  }
+}
+
+/** After an update, shows once what the new version changed. */
+async function showUpdated() {
+  const file = dataFile("updated.json");
+  const updated = parseUpdated(readJson(file));
+  if (!updated) return;
+  await rm(file, { force: true });
+  if (updated.version !== app.getVersion()) return;
+  const { response } = await dialog.showMessageBox({
+    message: `Updated to version ${updated.version}`,
+    detail: updated.notes || undefined,
+    buttons: ["OK", "Open Release Page"],
+    defaultId: 0,
+    cancelId: 0,
+  });
+  if (response === 1) openOutside(updated.url);
+}
+
+/** The "Check for Updates…" click: checks now and shows the result in a dialog. */
+async function checkUpdateNow() {
+  if (downloading) return;
+  const ok = await checkUpdate();
+  const u = update;
+  if (u) {
+    await promptUpdate(u);
   } else if (ok) {
     await dialog.showMessageBox({
       message: "You are up to date",
@@ -242,7 +327,8 @@ async function checkUpdateNow() {
 
 const updateItems = (): MenuItemConstructorOptions[] => {
   const u = update;
-  if (u) return [{ label: `Update available: v${u.version}…`, click: () => openOutside(u.url) }];
+  if (downloading) return [{ label: "Downloading Update…", enabled: false }];
+  if (u) return [{ label: `Update available: v${u.version}…`, click: () => void promptUpdate(u) }];
   return [{ label: "Check for Updates…", click: () => void checkUpdateNow() }];
 };
 
@@ -339,6 +425,7 @@ async function main() {
     return;
   }
   openWindow(port);
+  void showUpdated();
 }
 
 /** A run from source keeps its own data and lock, so it runs beside the installed app. */
