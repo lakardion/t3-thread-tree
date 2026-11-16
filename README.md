@@ -4,6 +4,8 @@ A live map of your [T3 Code](https://github.com/pingdotgg/t3code) threads.
 
 T3 Code shows threads as a flat list. When agents launch threads, review PRs and work through PR stacks, a flat list does not tell you how the work fits together. This app shows the active threads as one tree, **Project › issue key › thread**, with a status and the PR marks on each row. Click a thread to open it in T3 Code.
 
+Use it as a Mac app or in a browser. The Mac app adds a Dock badge, notifications and a menu-bar entry for the threads that need you.
+
 ![The thread tree in light mode](docs/tree-light.png)
 
 ![The thread tree in dark mode, with one project closed and one details block open](docs/tree-dark.png)
@@ -44,7 +46,9 @@ _Screenshots use made-up data from `bun run demo`._
 - **Dock badge.** In the desktop app, the Dock icon shows how many threads need you (needs input or plan ready), the same count as the "need you" chip. Settled threads do not count, so with "show settled" on, the badge can be lower than the chip. It updates with the window hidden, and it does not clear when you open the window.
 - **Notifications.** In the desktop app, you get a notification when a thread starts to need input, has a plan ready or fails. When 3 or more threads change at once, you get one notification, "N threads need you". A click on a thread notification opens the thread in T3 Code. A click on the summary shows the window. A new notification for a thread replaces the earlier one. Nothing is sent for the threads that already need you when the app starts, or for settled threads. "Mute Notifications" in the app menu turns them off. The badge stays on.
 - **Menu-bar entry.** The menu-bar icon shows the Needs-you count, and shows no number at 0. Its menu lists up to 10 threads, longest wait first. A click on a thread opens it in T3 Code. "+N more…" and "Open tree" show the window. "Mute Notifications" is the same switch as in the app menu. When a newer release exists, "Update available: vX.Y.Z…" shows below it, and a click opens the release page. "Quit" quits the app.
-- **Desktop window.** The tree runs in its own macOS window. The app starts the server for you on the first free port from 4773. Links to T3 Code and to PRs open outside the window. A second start shows the first window. Closing the window hides it, and the tree keeps running. A click on the Dock icon shows it again. Cmd-Q quits the app. The window opens at its last size and place. When T3 rejects the token, the banner has a field to paste a new token. The app saves it and reconnects, with no restart. Install it as a Mac app with one command, and start it from Spotlight or the Dock. The installed app checks GitHub Releases at start and every 6 hours. When a newer release exists, it shows "Update available: vX.Y.Z…" in the app menu. It does not update itself.
+- **Desktop window.** The tree runs in its own macOS window, which you start from Spotlight or the Dock. The app starts the server for you. Closing the window hides it, and the tree keeps running. A click on the Dock icon shows it again, and Cmd-Q quits. The window opens at its last size and place. Links to T3 Code and to PRs open outside the window.
+- **Token in the window.** When T3 rejects the token, the banner has a field to paste a new one. The app saves it and reconnects, with no restart.
+- **Update notice.** The Mac app checks GitHub Releases at start and every 6 hours. When a newer release exists, the app menu and the menu-bar menu show "Update available: vX.Y.Z…". The app does not update itself.
 
 ## Requirements
 
