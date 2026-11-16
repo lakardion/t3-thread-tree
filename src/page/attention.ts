@@ -35,14 +35,18 @@ export const onlyNeedsYou = (projects: Branch[]): Branch[] => projects.flatMap(k
 
 const envOf = (t: ThreadNode) => decodeURIComponent(t.href.split("/")[3] ?? "");
 
+const waiting = (t: ThreadNode): t is ThreadNode & { status: "needs-input" | "plan-ready" } =>
+  !t.settled && (t.status === "needs-input" || t.status === "plan-ready");
+
+/** True when a thread under `b` waits for the user (needs input or plan ready), settled ones left out. */
+export const waits = (b: Branch): boolean => allThreads(b).some(waiting);
+
 /** The visible threads that wait for the user (needs input or plan ready), settled ones left out. */
 export const needsYouThreads = (projects: Branch[]): NeedsYouThread[] =>
   projects
     .flatMap(allThreads)
     .flatMap((t) =>
-      !t.settled && (t.status === "needs-input" || t.status === "plan-ready")
-        ? [{ id: t.id, title: t.title, environmentId: envOf(t), since: t.since, status: t.status }]
-        : [],
+      waiting(t) ? [{ id: t.id, title: t.title, environmentId: envOf(t), since: t.since, status: t.status }] : [],
     );
 
 export type Statuses = Map<string, Status>;

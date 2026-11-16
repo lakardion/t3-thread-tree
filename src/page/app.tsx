@@ -51,7 +51,15 @@ import {
   type ThreadNode,
   type Tree,
 } from "../shared/tree.ts";
-import { countAttention, needsYou, needsYouThreads, notifyEvents, onlyNeedsYou, type Statuses } from "./attention.ts";
+import {
+  countAttention,
+  needsYou,
+  needsYouThreads,
+  notifyEvents,
+  onlyNeedsYou,
+  type Statuses,
+  waits,
+} from "./attention.ts";
 import { BriefControls, BriefPanel, type Offered } from "./brief.tsx";
 import {
   ago,
@@ -752,7 +760,10 @@ function GroupRow({ b, closed, toggle, fold, sort }: { b: Branch; sort?: Sort } 
   const render = (ref: RefFn, handleRef?: RefFn) => (
     <Collapsible asChild open={open} onOpenChange={() => toggle(b.id)}>
       <li ref={ref} className="my-px">
-        <div className="group/row relative flex h-7 min-w-0 items-center gap-2 rounded-[8px] px-2 hover:bg-accent max-[720px]:h-auto max-[720px]:min-h-7 max-[720px]:flex-wrap">
+        <div
+          className="group/row relative flex h-7 min-w-0 items-center gap-2 rounded-[8px] px-2 hover:bg-accent max-[720px]:h-auto max-[720px]:min-h-7 max-[720px]:flex-wrap"
+          data-waiting={!open && waits(b) ? "" : undefined}
+        >
           <DragHandle handleRef={handleRef} name={b.label} className="relative z-10 -ml-1.5" />
           <CollapsibleTrigger className="flex min-w-0 cursor-pointer items-center gap-2 select-none after:absolute after:inset-0 max-[720px]:min-h-11">
             <Chevron open={open} />
@@ -858,7 +869,10 @@ function StackRail({ run, closed, toggle, sort }: { run: Branch[]; sort?: Sort }
   const render = (ref: RefFn, handleRef?: RefFn) => (
     <Collapsible asChild open={open} onOpenChange={() => toggle(`rail:${id}`)}>
       <li ref={ref} className="relative my-1 ml-7 rounded-[10px] border border-dashed border-border">
-        <div className="group/row relative flex min-h-7 flex-wrap items-center gap-2 px-2 text-xs">
+        <div
+          className="group/row relative flex min-h-7 flex-wrap items-center gap-2 rounded-[10px] px-2 text-xs"
+          data-waiting={!open && run.some(waits) ? "" : undefined}
+        >
           {handleRef && (
             <DragHandle
               handleRef={handleRef}
@@ -931,7 +945,10 @@ function ProjectBlock({ b, closed, toggle, fold }: { b: Branch } & Fold) {
     <li ref={ref} className="border-l-[3px] not-last:border-b" style={{ borderLeftColor: color }}>
       <Collapsible asChild open={open} onOpenChange={() => toggle(b.id)}>
         <div>
-          <div className="group/row sticky top-0 z-20 flex h-8 min-w-0 items-center gap-1.5 bg-card px-2 max-[720px]:h-auto max-[720px]:min-h-8">
+          <div
+            className="group/row sticky top-0 z-20 flex h-8 min-w-0 items-center gap-1.5 bg-card px-2 max-[720px]:h-auto max-[720px]:min-h-8"
+            data-waiting={!open && waits(b) ? "" : undefined}
+          >
             <DragHandle handleRef={handleRef} name={b.label} className="relative z-10 -ml-1" />
             <CollapsibleTrigger className="flex min-w-0 cursor-pointer items-center gap-1.5 select-none after:absolute after:inset-0">
               <Chevron open={open} />
