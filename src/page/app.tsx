@@ -285,7 +285,7 @@ function SettingsPanel(p: PanelProps) {
             variant="outline"
             size="sm"
             className="justify-self-start"
-            onClick={() => window.desktopBridge?.checkUpdates()}
+            onClick={() => window.desktopBridge?.checkUpdates(true)}
           >
             <MorphIcon icon={CircleArrowUp} size={16} reducedMotion="user" /> Check for updates
           </Button>

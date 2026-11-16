@@ -36,10 +36,31 @@ export const NotifyList = v.pipe(
 export type NotifyEvent = v.InferOutput<typeof NotifyList>[number];
 export type NotifyStatus = Extract<NotifyEvent, { kind: "thread" }>["status"];
 
+/** The update state the main process keeps and sends to the page. */
+export type UpdateState = {
+  version: string;
+  checking: boolean;
+  /** Last time GitHub gave a reply that parses. */
+  checkedAt: string | null;
+  checkFailed: boolean;
+  release: { version: string; canInstall: boolean } | null;
+  install:
+    | { stage: "downloading"; progress: number | null }
+    | { stage: "unpacking" | "restarting" }
+    | { stage: "failed"; error: string }
+    | null;
+};
+
 export type DesktopBridge = {
   setNeedsYou(threads: NeedsYouThread[]): void;
   notify(events: NotifyEvent[]): void;
-  checkUpdates(): void;
+  updateState(): Promise<UpdateState>;
+  /** Returns a function that removes this listener only. */
+  onUpdateState(cb: (state: UpdateState) => void): () => void;
+  /** A silent check. It skips a check made less than 60 s ago unless `force` is true. */
+  checkUpdates(force: boolean): void;
+  installUpdate(): void;
+  openRelease(): void;
 };
 
 declare global {

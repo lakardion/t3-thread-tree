@@ -2,6 +2,7 @@ import { describe, expect, test } from "bun:test";
 import { createServer, type Server } from "node:net";
 
 import {
+  afterCheck,
   fallbackPath,
   isNewer,
   parseRelease,
@@ -9,9 +10,11 @@ import {
   pickPort,
   restartDelay,
   shellPath,
+  shouldCheck,
   trayItems,
+  updateMenuLabel,
 } from "../src/desktop/runtime.ts";
-import type { NeedsYouThread } from "../src/shared/desktop.ts";
+import type { NeedsYouThread, UpdateState } from "../src/shared/desktop.ts";
 
 const listen = (port: number) =>
   new Promise<Server>((resolve, reject) => {
@@ -152,5 +155,78 @@ describe("parseRelease", () => {
     expect(parseRelease(null)).toBeNull();
     const assets = [{ name: "a.zip", browser_download_url: "https://example.com/a.zip" }];
     expect(parseRelease({ tag_name: "v0.2.0", html_url: url, assets })).toBeNull();
+  });
+});
+
+const NOW = Date.parse("2026-01-01T12:00:00Z");
+const idle: UpdateState = {
+  version: "0.1.5",
+  checking: false,
+  checkedAt: null,
+  checkFailed: false,
+  release: null,
+  install: null,
+};
+const found = {
+  version: "0.2.0",
+  url: "https://github.com/a/b/releases/tag/v0.2.0",
+  zip: "https://github.com/a/b/x.zip",
+  notes: "",
+};
+
+describe("shouldCheck", () => {
+  test("allows a first check", () => {
+    expect(shouldCheck(idle, NOW, false)).toBe(true);
+  });
+  test("blocks while a check runs, also when forced", () => {
+    expect(shouldCheck({ ...idle, checking: true }, NOW, true)).toBe(false);
+  });
+  test("blocks while an install runs, also when forced", () => {
+    expect(shouldCheck({ ...idle, install: { stage: "unpacking" } }, NOW, true)).toBe(false);
+  });
+  test("allows a check after a failed install", () => {
+    expect(shouldCheck({ ...idle, install: { stage: "failed", error: "x" } }, NOW, false)).toBe(true);
+  });
+  test("skips a check under 60 s old unless forced", () => {
+    const state = { ...idle, checkedAt: new Date(NOW - 59_000).toISOString() };
+    expect(shouldCheck(state, NOW, false)).toBe(false);
+    expect(shouldCheck(state, NOW, true)).toBe(true);
+    expect(shouldCheck({ ...state, checkedAt: new Date(NOW - 60_000).toISOString() }, NOW, false)).toBe(true);
+  });
+});
+
+describe("afterCheck", () => {
+  test("sets a newer release", () => {
+    const next = afterCheck(idle, found, "0.1.5", NOW, true);
+    expect(next).toMatchObject({ checking: false, checkFailed: false, checkedAt: new Date(NOW).toISOString() });
+    expect(next.release).toEqual({ version: "0.2.0", canInstall: true });
+  });
+  test("cannot install a release with no zip, or from source", () => {
+    expect(afterCheck(idle, { ...found, zip: null }, "0.1.5", NOW, true).release?.canInstall).toBe(false);
+    expect(afterCheck(idle, found, "0.1.5", NOW, false).release?.canInstall).toBe(false);
+  });
+  test("clears the release when it is not newer", () => {
+    const known = { ...idle, release: { version: "0.2.0", canInstall: true } };
+    expect(afterCheck(known, found, "0.2.0", NOW, true).release).toBeNull();
+  });
+  test("a failed check keeps the release and the last good time", () => {
+    const known = { ...idle, checking: true, checkedAt: "t", release: { version: "0.2.0", canInstall: true } };
+    expect(afterCheck(known, "failed", "0.1.5", NOW, true)).toEqual({ ...known, checking: false, checkFailed: true });
+  });
+  test("a later good reply clears checkFailed", () => {
+    expect(afterCheck({ ...idle, checkFailed: true }, found, "0.1.5", NOW, true).checkFailed).toBe(false);
+  });
+});
+
+describe("updateMenuLabel", () => {
+  const label = (patch: Partial<UpdateState>) => updateMenuLabel({ ...idle, ...patch });
+  test("names each state", () => {
+    expect(label({})).toBe("Check for Updates…");
+    expect(label({ release: { version: "0.2.0", canInstall: true } })).toBe("Update available: v0.2.0…");
+    expect(label({ install: { stage: "downloading", progress: null } })).toBe("Downloading Update…");
+    expect(label({ install: { stage: "downloading", progress: 0.424 } })).toBe("Downloading Update… 42%");
+    expect(label({ install: { stage: "unpacking" } })).toBe("Installing Update…");
+    expect(label({ install: { stage: "restarting" } })).toBe("Restarting…");
+    expect(label({ install: { stage: "failed", error: "x" } })).toBe("Update Failed: Open Release Page…");
   });
 });
