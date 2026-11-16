@@ -990,6 +990,7 @@ function ThreadRow({
   const sendTo = useContext(SendTo);
   const chipHref = chip ? linearHref(chip, linear) : null;
   const pulse = useChanges(t.status);
+  const noPrLabel = t.stack ? `PR stack · ${t.stack.total} PRs · no PR from this thread` : undefined;
   const render = (ref: RefFn, handleRef?: RefFn) => (
     <Collapsible asChild open={open.has(t.id)} onOpenChange={() => toggle(t.id)}>
       <li ref={ref} className="my-px" style={{ viewTransitionName: vtName("t", t.id) }}>
@@ -1044,12 +1045,18 @@ function ThreadRow({
                 Settled
               </Badge>
             )}
-            {t.stack && !inStack && (
-              <Badge variant="outline" className={cn(CHIP, "chip-stack")} title="PR stack">
-                <Layers />
-                {t.stack.pos ? `${t.stack.pos}/${t.stack.total}` : `base · ${t.stack.total}`}
-              </Badge>
-            )}
+            {t.stack &&
+              !inStack &&
+              (t.stack.pos ? (
+                <Badge variant="outline" className={cn(CHIP, "chip-stack")} title="PR stack">
+                  <Layers />
+                  {`${t.stack.pos}/${t.stack.total}`}
+                </Badge>
+              ) : (
+                <Badge variant="outline" className={cn(CHIP, "chip-stack")} title={noPrLabel}>
+                  <Layers role="img" aria-label={noPrLabel} />
+                </Badge>
+              ))}
             {t.prs.slice(0, 2).map((p) => (
               <PrChip key={p.n} p={p} />
             ))}
