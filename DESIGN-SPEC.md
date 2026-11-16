@@ -392,20 +392,20 @@ One line when the title fits, `min-height: 36px`, radius 8 px, 13 px text with a
  12px   120px column      chip  flex, wraps            right group, gap 6px
 ```
 
-| Part           | Rule                                                                                                                                                                          |
-| -------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| Icon           | 12 px, in `--status-<name>`. A tooltip shows the raw T3 status.                                                                                                               |
-| Phrase         | 12 px, weight 500, in the status text color. The column is 120 px wide and does not wrap.                                                                                     |
-| Key chip       | Only on a folded group. Mono 11 px, muted, outline.                                                                                                                           |
-| Title          | The link to T3. Weight 500; weight 650 when the status is `your-turn`. `--muted-foreground` when the status is `snoozed` or the thread is settled. It wraps and is never cut. |
-| "Input" chip   | Outline. Only when a request with `blocking: false` is pending.                                                                                                               |
-| "until" note   | "until Fri 10:42" in an outline chip, when `snoozedUntil` is in the future. It also shows on a `needs-input` row of a snoozed thread.                                         |
-| "Settled" chip | Outline, muted. Only with "show settled" on, on a settled thread.                                                                                                             |
-| Stack chip     | `.chip-stack`, the `Layers` icon and "2/4", or "base · 4" when the thread created no PR in the stack. Not shown on rows in a stack block.                                     |
-| PR chips       | The first two PRs, then a "+N" button that opens the details block.                                                                                                           |
-| Age            | Relative age of `updatedAt`, mono 11 px, muted, `tabular-nums`. The tooltip shows "Updated" and the exact time.                                                               |
-| Details button | Ghost icon button with `ChevronDown`, `aria-expanded`, label "Details".                                                                                                       |
-| Handle         | Ghost icon button with `GripVertical`, the first item of the row. See "Drag to reorder".                                                                                      |
+| Part           | Rule                                                                                                                                                                                                                            |
+| -------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Icon           | 12 px, in `--status-<name>`. A tooltip shows the raw T3 status.                                                                                                                                                                 |
+| Phrase         | 12 px, weight 500, in the status text color. The column is 120 px wide and does not wrap.                                                                                                                                       |
+| Key chip       | Only on a folded group. Mono 11 px, muted, outline.                                                                                                                                                                             |
+| Title          | The link to T3. Weight 500; weight 650 when the status is `your-turn`. `--muted-foreground` when the status is `snoozed` or the thread is settled. It wraps and is never cut.                                                   |
+| "Input" chip   | Outline. Only when a request with `blocking: false` is pending.                                                                                                                                                                 |
+| "until" note   | "until Fri 10:42" in an outline chip, when `snoozedUntil` is in the future. It also shows on a `needs-input` row of a snoozed thread.                                                                                           |
+| "Settled" chip | Outline, muted. Only with "show settled" on, on a settled thread.                                                                                                                                                               |
+| Stack chip     | `.chip-stack`, the `Layers` icon and "2/4", or the icon alone when the thread created no PR in the stack, with the tooltip and accessible name "PR stack · 4 PRs · no PR from this thread". Not shown on rows in a stack block. |
+| PR chips       | The first two PRs, then a "+N" button that opens the details block.                                                                                                                                                             |
+| Age            | Relative age of `updatedAt`, mono 11 px, muted, `tabular-nums`. The tooltip shows "Updated" and the exact time.                                                                                                                 |
+| Details button | Ghost icon button with `ChevronDown`, `aria-expanded`, label "Details".                                                                                                                                                         |
+| Handle         | Ghost icon button with `GripVertical`, the first item of the row. See "Drag to reorder".                                                                                                                                        |
 
 **PR chip.** "#2102" in mono 11 px, a link to the PR, with these marks:
 
