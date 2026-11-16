@@ -40,6 +40,7 @@ export type DesktopBridge = {
   setToken(token: string): Promise<void>;
   setNeedsYou(threads: NeedsYouThread[]): void;
   notify(events: NotifyEvent[]): void;
+  checkUpdates(): void;
 };
 
 declare global {
