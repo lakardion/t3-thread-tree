@@ -6,4 +6,5 @@ contextBridge.exposeInMainWorld("desktopBridge", {
   setToken: (token) => ipcRenderer.invoke("setToken", token),
   setNeedsYou: (threads) => ipcRenderer.send("setNeedsYou", threads),
   notify: (events) => ipcRenderer.send("notify", events),
+  checkUpdates: () => ipcRenderer.send("checkUpdates"),
 } satisfies DesktopBridge);

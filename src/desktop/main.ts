@@ -353,6 +353,9 @@ async function main() {
     if (settings.muted) return;
     events.forEach(showNotification);
   });
+  ipcMain.on("checkUpdates", (event) => {
+    if (event.sender === window?.webContents) void checkUpdateNow();
+  });
   const [PATH, port] = await Promise.all([loginPath(), pickPort()]);
   startServer(port, PATH, 0);
   if (!(await waitReady(port))) {

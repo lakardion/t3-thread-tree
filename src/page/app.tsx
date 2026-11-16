@@ -9,7 +9,7 @@ import {
 } from "@dnd-kit/dom";
 import { DragDropProvider } from "@dnd-kit/react";
 import { isSortable, useSortable } from "@dnd-kit/react/sortable";
-import { ChevronsDownUp, ChevronsUpDown, Contrast, Moon, Sun } from "lucide";
+import { ChevronsDownUp, ChevronsUpDown, CircleArrowUp, Contrast, Moon, Sun } from "lucide";
 import {
   Check,
   ChevronDown,
@@ -1087,6 +1087,17 @@ function App() {
         </div>
         {projects && <FoldAll inner={projects.flatMap((p) => [p.id, ...foldIds(p)])} closed={closed} fold={fold} />}
         <StatusLegend />
+        {window.desktopBridge && (
+          <Button
+            variant="ghost"
+            size="icon-sm"
+            aria-label="Check for updates"
+            title="Check for updates"
+            onClick={() => window.desktopBridge?.checkUpdates()}
+          >
+            <MorphIcon icon={CircleArrowUp} size={16} reducedMotion="user" />
+          </Button>
+        )}
         <Button
           variant="ghost"
           size="icon-sm"
