@@ -1822,11 +1822,11 @@ function App() {
                           <ul className={cn("m-0 list-none p-0", layout === "flat" && "p-1")}>
                             <SendTo value={{ t3cli, open: (id) => setSendTo({ id, open: true }) }}>
                               {layout === "flat" ? (
-                                <Presence items={view.flat ?? []} keyOf={(i) => i.id}>
+                                <Presence key="flat" items={view.flat ?? []} keyOf={(i) => i.id}>
                                   {(i) => <FlatRow i={i} closed={closed} toggle={toggle} fold={fold} />}
                                 </Presence>
                               ) : (
-                                <Presence items={projects} keyOf={(p) => p.id}>
+                                <Presence key="tree" items={projects} keyOf={(p) => p.id}>
                                   {(p) => <ProjectBlock b={p} closed={closed} toggle={toggle} fold={fold} />}
                                 </Presence>
                               )}
