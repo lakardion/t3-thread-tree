@@ -1,6 +1,6 @@
 ---
 label: wayfinder:map
-status: open
+status: closed
 created: 2026-11-15
 ---
 
@@ -48,7 +48,7 @@ The destination is reached when every route key is done and no map ticket is ope
 
 ## Stacks
 
-- `main ← desktop-05-spec (#30) ← desktop-06-sidecar-build (#31) ← desktop-07-electron-shell (#33) ← desktop-08-window-lifetime (#34) ← desktop-09-token-entry (#35) ← desktop-10-dock-badge (#36) ← desktop-11-notifications (#37) ← desktop-12-menu-bar (#38) ← desktop-13-package-install (#39) ← desktop-14-release-and-update (#40)` (spec, base of the build stack)
+Merged to `main` as one stack (#30, #31, #33–#40). The destination is reached.
 
 ## Notes
 

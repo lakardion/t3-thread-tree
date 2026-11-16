@@ -1,7 +1,7 @@
 ---
 title: Show the Needs-you count on the Dock icon
 type: wayfinder:task
-status: in-review
+status: closed
 assignee: claude (desktop-10)
 blocked-by: [09-token-entry]
 ---
