@@ -96,6 +96,7 @@ import {
   PROJECTS,
   arrange,
   isPinned,
+  applyOrder,
   parseOrders,
   prune,
   groupsKey,
@@ -113,6 +114,8 @@ import { CliGate, SendDialog } from "./send-dialog.tsx";
 import { LEGEND, LegendIcon, STATUS, StatusIcon } from "./status-icon.tsx";
 import { Swap, useChanges } from "./swap.tsx";
 import {
+  FLAT,
+  flatLists,
   flatten,
   itemIds,
   sequence,
@@ -963,14 +966,13 @@ function DetailBlock({ t }: { t: ThreadNode }) {
 
 /**
  * `inStack`: the row sits on a stack rail, which holds no drag handles and shows the stack itself.
- * `flat`: the row sits in the flat list, which has no handles. `project` adds the Project column, `review` the eye.
+ * `project` adds the Project column of the flat list, `review` the eye.
  */
 function ThreadRow({
   t,
   chip,
   sort,
   inStack,
-  flat,
   project,
   review,
 }: {
@@ -978,7 +980,6 @@ function ThreadRow({
   chip?: string;
   sort?: Sort;
   inStack?: boolean;
-  flat?: boolean;
   project?: Branch;
   review?: boolean;
 }) {
@@ -996,7 +997,7 @@ function ThreadRow({
           className="thread-row group/row flex min-h-9 min-w-0 items-center gap-x-2 rounded-[8px] px-2 py-1 text-[13px] leading-5 max-[720px]:flex-wrap"
           data-status={t.status}
         >
-          {!inStack && !flat && <DragHandle handleRef={handleRef} name={t.title || t.id} className="-ml-1.5" />}
+          {!inStack && <DragHandle handleRef={handleRef} name={t.title || t.id} className="-ml-1.5" />}
           <StatusIcon t={t} now={now} />
           {pulse > 0 && <span key={pulse} aria-hidden className={cn("row-pulse", STATUS[t.status].shape)} />}
           {project && <ProjectColumn b={project} />}
@@ -1100,7 +1101,7 @@ function ThreadRow({
         {t.children.length > 0 && (
           <ul className="m-0 list-none pl-2.5">
             <Presence items={t.children} keyOf={(c) => c.id}>
-              {(c) => <ThreadRow t={c} inStack={inStack} flat={flat} />}
+              {(c) => <ThreadRow t={c} inStack={inStack} />}
             </Presence>
           </ul>
         )}
@@ -1298,7 +1299,7 @@ function StackRail({
     <Collapsible asChild open={open} onOpenChange={() => toggle(`rail:${id}`)}>
       <li
         ref={ref}
-        className={cn("relative my-1 ml-7 rounded-[10px] border border-dashed border-border", flat && "ml-0")}
+        className="relative my-1 ml-7 rounded-[10px] border border-dashed border-border"
         style={{ viewTransitionName: vtName("s", run[0].id) }}
       >
         <div
@@ -1377,10 +1378,31 @@ function StackRail({
 
 /** A flat-list item: a status section header, a thread row or a PR stack. */
 function FlatRow({ i, closed, toggle, fold }: { i: FlatItem } & Fold) {
+  const lists = useContext(Lists);
+  /** The section list that holds the unit, or the whole flat list when ungrouped. */
+  const list = [...lists.keys()].find((k) => k !== FLAT && lists.get(k)?.includes(i.id)) ?? FLAT;
   if (i.kind === "thread")
-    return <ThreadRow t={i.t} chip={i.t.key ?? undefined} project={i.project} review={i.review} flat />;
+    return (
+      <ThreadRow
+        t={i.t}
+        chip={i.t.key ?? undefined}
+        project={i.project}
+        review={i.review}
+        sort={sortOf(lists, list, i.id, i.t.title || i.t.id)}
+      />
+    );
   if (i.kind === "stack")
-    return <StackRail run={i.run} project={i.project} flat closed={closed} toggle={toggle} fold={fold} />;
+    return (
+      <StackRail
+        run={i.run}
+        project={i.project}
+        flat
+        closed={closed}
+        toggle={toggle}
+        fold={fold}
+        sort={sortOf(lists, list, i.id, `PR stack of ${i.run[0].label}`)}
+      />
+    );
   return (
     <MotionHook>
       {(ref) => (
@@ -1491,11 +1513,16 @@ type Cfg = { orders: Orders; needsOnly: boolean; sortBy: SortBy; layout: Layout;
  * In the flat layout, `view.flat` is also set: the sorted units, with section headers when grouped.
  */
 const pipeline = (ps: Branch[], c: Cfg): { full: Arranged; view: Arranged & { flat?: FlatItem[] } } => {
-  const full = arrange(ps, c.orders);
+  const tree = arrange(ps, c.orders);
+  const flatIds = applyOrder(flatten(tree.projects), (u) => u.id, c.orders[FLAT]).map((u) => u.id);
+  const full = { ...tree, lists: new Map(tree.lists).set(FLAT, flatIds) };
   const view = arrange(c.needsOnly ? onlyNeedsYou(full.projects) : full.projects, {}, c.freeze);
   if (c.layout === "flat") {
-    const units = flatten(view.projects);
-    return { full, view: { ...view, flat: sequence(c.sortBy === "updated" ? sortFlat(units) : units, c.groupBy) } };
+    const own = c.freeze?.list === FLAT ? c.freeze.ids : c.orders[FLAT];
+    const units =
+      c.sortBy === "updated" ? sortFlat(flatten(view.projects)) : applyOrder(flatten(view.projects), (u) => u.id, own);
+    const flat = sequence(units, c.groupBy);
+    return { full, view: { ...view, lists: flatLists(flat), flat } };
   }
   return { full, view: { ...view, projects: c.sortBy === "updated" ? sortTree(view.projects) : view.projects } };
 };
@@ -1693,20 +1720,23 @@ function App() {
     const list = String(source.sortable.group);
     const ids = latest.current.view.lists.get(list);
     const units = latest.current.view.units.get(list);
-    if (ids && units) setFreeze({ list, ids, units });
+    if (list.startsWith(FLAT))
+      setFreeze({ list: FLAT, ids: latest.current.view.lists.get(FLAT) ?? [], units: new Map() });
+    else if (ids && units) setFreeze({ list, ids, units });
   };
   const dragEnd = ({ operation: { source }, canceled }: DragEndEvent) => {
     drag.on = false;
     setFreeze(undefined);
     if (canceled || !isSortable(source)) return;
     const list = String(source.sortable.group);
-    const all = latest.current.full.lists.get(list);
+    const store = list.startsWith(FLAT) ? FLAT : list;
+    const all = latest.current.full.lists.get(store);
     const visible = latest.current.view.lists.get(list);
     if (!all || !visible) return;
     const moved = reorder(all, visible, source.sortable.initialIndex, source.sortable.index);
     const lists = latest.current.full.lists;
     setOrders((prev) => {
-      const next = prune({ ...prev, [list]: moved }, lists);
+      const next = prune({ ...prev, [store]: moved }, lists);
       save(ORDER_KEY, JSON.stringify(next));
       return next;
     });
@@ -1833,7 +1863,7 @@ function App() {
         <Details value={details}>
           <NeedsOnly value={needsOnly}>
             <Linear value={linear}>
-              <Lists value={sortBy === "updated" || layout === "flat" ? NO_LISTS : view.lists}>
+              <Lists value={sortBy === "updated" ? NO_LISTS : view.lists}>
                 <Now value={now}>
                   <div
                     className={!connecting && tree.conn !== "up" ? "grayscale" : ""}

@@ -1,6 +1,16 @@
 import { describe, expect, test } from "bun:test";
 
-import { flatten, itemIds, recency, sections, sequence, sortFlat, sortTree, vtName } from "../src/page/view.ts";
+import {
+  flatLists,
+  flatten,
+  itemIds,
+  recency,
+  sections,
+  sequence,
+  sortFlat,
+  sortTree,
+  vtName,
+} from "../src/page/view.ts";
 import { NO_KEY, REVIEWS, type Branch, type Status, type ThreadNode } from "../src/shared/tree.ts";
 
 const T = (n: number) => `2026-11-12T12:00:${String(n).padStart(2, "0")}.000Z`;
@@ -230,5 +240,19 @@ describe("sections", () => {
   test("itemIds lists a stack with its threads", () => {
     const [stack] = flatten([project("p", [branch("s1", [thread("a")], [], "st")])]);
     expect(itemIds(stack)).toEqual(["stack:p:st", "a"]);
+  });
+});
+
+describe("flatLists", () => {
+  const units = flatten([project("p", [branch("g", [thread("a", 1, [], "done"), thread("b", 1, [], "working")])])]);
+  test("holds all unit ids under the flat key when ungrouped", () => {
+    expect([...flatLists(sequence(units, "none"))]).toEqual([["flat", ["t:a", "t:b"]]]);
+  });
+  test("adds the unit ids of each section when grouped", () => {
+    expect([...flatLists(sequence(units, "status"))]).toEqual([
+      ["flat", ["t:b", "t:a"]],
+      ["flat:working", ["t:b"]],
+      ["flat:done", ["t:a"]],
+    ]);
   });
 });

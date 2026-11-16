@@ -120,3 +120,24 @@ export const sequence = (units: FlatUnit[], groupBy: GroupBy): FlatItem[] =>
 /** The ids that a flat item puts in the row-order signature. */
 export const itemIds = (i: FlatItem): string[] =>
   i.kind === "stack" ? [i.id, ...i.run.flatMap(allThreads).map((t) => t.id)] : [i.id];
+
+/** The stored order key of the flat list. It is kept apart from the tree lists. */
+export const FLAT = "flat";
+/** The drag list of one status section. A row drags only inside its section. */
+export const sectionList = (key: string) => `${FLAT}:${key}`;
+
+/** The drag lists of a flat sequence: all unit ids under `FLAT`, and the unit ids of each section header. */
+export function flatLists(items: FlatItem[]): Map<string, string[]> {
+  const lists = new Map<string, string[]>([[FLAT, []]]);
+  let section: string[] | undefined;
+  for (const i of items) {
+    if (i.kind === "section") {
+      section = [];
+      lists.set(sectionList(i.key), section);
+    } else {
+      lists.get(FLAT)!.push(i.id);
+      section?.push(i.id);
+    }
+  }
+  return lists;
+}
