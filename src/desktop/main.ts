@@ -5,6 +5,7 @@ import { join } from "node:path";
 import {
   app,
   BrowserWindow,
+  dialog,
   ipcMain,
   Menu,
   type MenuItemConstructorOptions,
@@ -207,26 +208,57 @@ const toggles = (): MenuItemConstructorOptions[] => [
   },
 ];
 
+/** Returns true when GitHub answered. */
 async function checkUpdate() {
   try {
     const res = await fetch(LATEST_RELEASE, {
       headers: { Accept: "application/vnd.github+json" },
       signal: AbortSignal.timeout(10_000),
     });
-    if (!res.ok) return;
+    if (!res.ok) return false;
     const release = parseRelease(await res.json());
     if (release && isNewer(release.version, app.getVersion())) {
       update = release;
       setMenus();
     }
+    return true;
   } catch (e) {
     log(`update check failed: ${String(e)}`);
+    return false;
+  }
+}
+
+/** The "Check for Updates…" click: checks now and shows the result in a dialog. */
+async function checkUpdateNow() {
+  const ok = await checkUpdate();
+  const u = update;
+  if (u) {
+    const { response } = await dialog.showMessageBox({
+      message: `Version ${u.version} is available`,
+      detail: `You have version ${app.getVersion()}.`,
+      buttons: ["Open Release Page", "Later"],
+      defaultId: 0,
+      cancelId: 1,
+    });
+    if (response === 0) openOutside(u.url);
+  } else if (ok) {
+    await dialog.showMessageBox({
+      message: "You are up to date",
+      detail: `Version ${app.getVersion()} is the latest.`,
+    });
+  } else {
+    await dialog.showMessageBox({
+      type: "warning",
+      message: "Cannot check for updates",
+      detail: "GitHub did not answer. Try again later.",
+    });
   }
 }
 
 const updateItems = (): MenuItemConstructorOptions[] => {
   const u = update;
-  return u ? [{ label: `Update available: v${u.version}…`, click: () => openOutside(u.url) }] : [];
+  if (u) return [{ label: `Update available: v${u.version}…`, click: () => openOutside(u.url) }];
+  return [{ label: "Check for Updates…", click: () => void checkUpdateNow() }];
 };
 
 function setMenu() {

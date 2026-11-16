@@ -51,7 +51,7 @@ _Screenshots use made-up data from `bun run demo`._
 - **Menu-bar entry.** The menu-bar icon shows the Needs-you count, and shows no number at 0. Its menu lists up to 10 threads, longest wait first. A click on a thread opens it in T3 Code. "+N more…" and "Open tree" show the window. "Mute Notifications" is the same switch as in the app menu. When a newer release exists, "Update available: vX.Y.Z…" shows below it, and a click opens the release page. "Quit" quits the app.
 - **Desktop window.** The tree runs in its own macOS window, which you start from Spotlight or the Dock. The app starts the server for you. Closing the window hides it, and the tree keeps running. A click on the Dock icon shows it again, and Cmd-Q quits. The window opens at its last size and place. Links to T3 Code and to PRs open outside the window.
 - **Token in the window.** When T3 rejects the token, the banner has a field to paste a new one. The app saves it and reconnects, with no restart.
-- **Update notice.** The Mac app checks GitHub Releases at start and every 6 hours. When a newer release exists, the app menu and the menu-bar menu show "Update available: vX.Y.Z…". The app does not update itself.
+- **Update notice.** The Mac app checks GitHub Releases at start and every 6 hours. When a newer release exists, the app menu and the menu-bar menu show "Update available: vX.Y.Z…". Until then, both menus show "Check for Updates…". A click checks now and shows the result in a dialog, with a button that opens the release page when a newer release exists. The app does not update itself.
 
 ## Requirements
 
