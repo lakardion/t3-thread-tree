@@ -22,8 +22,11 @@ import {
   GripVertical,
   Info,
   Layers,
+  List,
+  ListTree,
   LoaderCircle,
   Moon,
+  Rows3,
   Send,
   SlidersHorizontal,
   Sun,
@@ -101,6 +104,7 @@ import {
   runUnitId,
   threadUnitId,
   threadsKey,
+  type Arranged,
   type Freeze,
   type Orders,
 } from "./order.ts";
@@ -109,7 +113,18 @@ import { ProjectIcon, projectHex } from "./project-icon.tsx";
 import { CliGate, SendDialog } from "./send-dialog.tsx";
 import { LEGEND, LegendIcon, STATUS, StatusIcon } from "./status-icon.tsx";
 import { Swap, useChanges } from "./swap.tsx";
-import { sortTree, vtName, type SortBy } from "./view.ts";
+import {
+  flatten,
+  itemIds,
+  sequence,
+  sortFlat,
+  sortTree,
+  vtName,
+  type FlatItem,
+  type GroupBy,
+  type Layout,
+  type SortBy,
+} from "./view.ts";
 
 const TOKEN_CMD =
   "~/.t3/bin/t3 auth session issue --scope orchestration:read --label thread-tree --ttl 52w --token-only";
@@ -121,6 +136,8 @@ const CLI_KEY = "thread-tree:cli";
 const ORDER_KEY = "thread-tree:order";
 const LINEAR_KEY = "thread-tree:linear";
 const SORT_KEY = "thread-tree:sort";
+const LAYOUT_KEY = "thread-tree:layout";
+const GROUP_KEY = "thread-tree:group";
 const THEMES = ["system", "light", "dark"] as const;
 type Theme = (typeof THEMES)[number];
 
@@ -341,6 +358,63 @@ const SortMenu = ({ sortBy, setSortBy }: { sortBy: SortBy; setSortBy: (s: SortBy
       <DropdownMenuRadioGroup value={sortBy} onValueChange={(v) => setSortBy(v as SortBy)}>
         {SORTS.map(([s, name]) => (
           <DropdownMenuRadioItem key={s} value={s}>
+            {name}
+          </DropdownMenuRadioItem>
+        ))}
+      </DropdownMenuRadioGroup>
+    </DropdownMenuContent>
+  </DropdownMenu>
+);
+
+const LAYOUTS: [Layout, string, typeof List][] = [
+  ["tree", "Tree", ListTree],
+  ["flat", "Flat", List],
+];
+const LayoutToggle = ({ layout, setLayout }: { layout: Layout; setLayout: (l: Layout) => void }) => (
+  <ToggleGroup
+    type="single"
+    size="sm"
+    variant="outline"
+    aria-label="Layout"
+    value={layout}
+    onValueChange={(v) => v && setLayout(v as Layout)}
+  >
+    {LAYOUTS.map(([l, name, Icon]) => (
+      <ToggleGroupItem key={l} value={l} aria-label={name} className={cn(FILTER_ITEM, "w-9 px-0")}>
+        {/** The tooltip sits inside: as the trigger it would replace the item's `data-state="on"`. */}
+        <Tooltip>
+          <TooltipTrigger asChild>
+            <span className="flex size-full items-center justify-center">
+              <Icon />
+            </span>
+          </TooltipTrigger>
+          <TooltipContent>{name}</TooltipContent>
+        </Tooltip>
+      </ToggleGroupItem>
+    ))}
+  </ToggleGroup>
+);
+
+const GROUPS: [GroupBy, string][] = [
+  ["none", "None"],
+  ["status", "Status"],
+];
+const GroupMenu = ({ groupBy, setGroupBy }: { groupBy: GroupBy; setGroupBy: (g: GroupBy) => void }) => (
+  <DropdownMenu modal={false}>
+    <Tooltip>
+      <TooltipTrigger asChild>
+        <DropdownMenuTrigger asChild>
+          <Button variant="ghost" size="icon-sm" aria-label="Group by">
+            <Rows3 />
+          </Button>
+        </DropdownMenuTrigger>
+      </TooltipTrigger>
+      <TooltipContent>Group by: {GROUPS.find(([g]) => g === groupBy)?.[1]}</TooltipContent>
+    </Tooltip>
+    <DropdownMenuContent align="end" className="min-w-40">
+      <DropdownMenuRadioGroup value={groupBy} onValueChange={(v) => setGroupBy(v as GroupBy)}>
+        {GROUPS.map(([g, name]) => (
+          <DropdownMenuRadioItem key={g} value={g}>
             {name}
           </DropdownMenuRadioItem>
         ))}
@@ -864,8 +938,27 @@ function DetailBlock({ t }: { t: ThreadNode }) {
   );
 }
 
-/** `inStack`: the row sits on a stack rail, which holds no drag handles and shows the stack itself. */
-function ThreadRow({ t, chip, sort, inStack }: { t: ThreadNode; chip?: string; sort?: Sort; inStack?: boolean }) {
+/**
+ * `inStack`: the row sits on a stack rail, which holds no drag handles and shows the stack itself.
+ * `flat`: the row sits in the flat list, which has no handles. `project` adds the Project column, `review` the eye.
+ */
+function ThreadRow({
+  t,
+  chip,
+  sort,
+  inStack,
+  flat,
+  project,
+  review,
+}: {
+  t: ThreadNode;
+  chip?: string;
+  sort?: Sort;
+  inStack?: boolean;
+  flat?: boolean;
+  project?: Branch;
+  review?: boolean;
+}) {
   const now = useContext(Now);
   const { open, toggle, show } = useContext(Details);
   const dim = useContext(NeedsOnly) && !needsYou(t.status);
@@ -880,9 +973,10 @@ function ThreadRow({ t, chip, sort, inStack }: { t: ThreadNode; chip?: string; s
           className="thread-row group/row flex min-h-9 min-w-0 items-center gap-x-2 rounded-[8px] px-2 py-1 text-[13px] leading-5 max-[720px]:flex-wrap"
           data-status={t.status}
         >
-          {!inStack && <DragHandle handleRef={handleRef} name={t.title || t.id} className="-ml-1.5" />}
+          {!inStack && !flat && <DragHandle handleRef={handleRef} name={t.title || t.id} className="-ml-1.5" />}
           <StatusIcon t={t} now={now} />
           {pulse > 0 && <span key={pulse} aria-hidden className={cn("row-pulse", STATUS[t.status].shape)} />}
+          {project && <ProjectColumn b={project} />}
           {chip && (
             <Badge
               variant="outline"
@@ -898,6 +992,7 @@ function ThreadRow({ t, chip, sort, inStack }: { t: ThreadNode; chip?: string; s
               )}
             </Badge>
           )}
+          {review && <Eye className="size-3.5 flex-none text-review" aria-label="Review" />}
           <a
             className={cn(
               "min-w-0 flex-1 break-words hover:underline",
@@ -982,7 +1077,7 @@ function ThreadRow({ t, chip, sort, inStack }: { t: ThreadNode; chip?: string; s
         {t.children.length > 0 && (
           <ul className="m-0 list-none pl-2.5">
             <Presence items={t.children} keyOf={(c) => c.id}>
-              {(c) => <ThreadRow t={c} inStack={inStack} />}
+              {(c) => <ThreadRow t={c} inStack={inStack} flat={flat} />}
             </Presence>
           </ul>
         )}
@@ -991,6 +1086,14 @@ function ThreadRow({ t, chip, sort, inStack }: { t: ThreadNode; chip?: string; s
   );
   return <Sortable sort={sort}>{render}</Sortable>;
 }
+
+/** The project icon and name of a flat row. Phone widths show the icon only. */
+const ProjectColumn = ({ b }: { b: Branch }) => (
+  <span className="flex w-32 flex-none items-center gap-1.5 max-[720px]:w-auto" title={b.repo ?? b.label}>
+    <ProjectIcon name={b.label} />
+    <span className="truncate text-xs text-muted-foreground max-[720px]:hidden">{b.label}</span>
+  </span>
+);
 
 const Chevron = ({ open }: { open: boolean }) => (
   <ChevronRight
@@ -1154,9 +1257,16 @@ function RailNode({
  * Key groups of one PR stack. The header is a line of stops from the base to the top PR; the body lists the
  * threads on a numbered line, one number per PR. Both are colored by PR state.
  */
-function StackRail({ run, closed, toggle, sort }: { run: Branch[]; sort?: Sort } & Fold) {
+function StackRail({
+  run,
+  closed,
+  toggle,
+  sort,
+  flat,
+  project,
+}: { run: Branch[]; sort?: Sort; flat?: boolean; project?: Branch } & Fold) {
   const { id, total, base } = run[0].stack!;
-  const open = !closed.has(`rail:${id}`);
+  const open = flat || !closed.has(`rail:${id}`);
   const stops = run.map((g) => ({ g, p: ownPr(g) }));
   const rows = stops.flatMap(({ g, p }, i) =>
     g.threads.map((t, j) => ({ t, g, color: prTone(p), n: j ? undefined : i + 1 })),
@@ -1165,7 +1275,7 @@ function StackRail({ run, closed, toggle, sort }: { run: Branch[]; sort?: Sort }
     <Collapsible asChild open={open} onOpenChange={() => toggle(`rail:${id}`)}>
       <li
         ref={ref}
-        className="relative my-1 ml-7 rounded-[10px] border border-dashed border-border"
+        className={cn("relative my-1 ml-7 rounded-[10px] border border-dashed border-border", flat && "ml-0")}
         style={{ viewTransitionName: vtName("s", run[0].id) }}
       >
         <div
@@ -1179,14 +1289,21 @@ function StackRail({ run, closed, toggle, sort }: { run: Branch[]; sort?: Sort }
               className="absolute top-1 -left-7 z-10"
             />
           )}
-          <CollapsibleTrigger
-            className="flex cursor-pointer items-center gap-1 text-muted-foreground select-none after:absolute after:inset-0 max-[720px]:min-h-11"
-            aria-label={`PR stack · ${total} PRs`}
-            title={`PR stack · ${total} PRs`}
-          >
-            <Chevron open={open} />
-            <Layers className="size-3.5" aria-hidden />
-          </CollapsibleTrigger>
+          {flat ? (
+            <span className="flex items-center text-muted-foreground" title={`PR stack · ${total} PRs`}>
+              <Layers className="size-3.5" aria-label={`PR stack · ${total} PRs`} />
+            </span>
+          ) : (
+            <CollapsibleTrigger
+              className="flex cursor-pointer items-center gap-1 text-muted-foreground select-none after:absolute after:inset-0 max-[720px]:min-h-11"
+              aria-label={`PR stack · ${total} PRs`}
+              title={`PR stack · ${total} PRs`}
+            >
+              <Chevron open={open} />
+              <Layers className="size-3.5" aria-hidden />
+            </CollapsibleTrigger>
+          )}
+          {project && <ProjectColumn b={project} />}
           <span className="inline-flex flex-wrap items-center gap-y-1">
             {base && (
               <code className="rounded-[5px] bg-muted px-1.5 py-0.5 font-mono text-[11px] text-muted-foreground">
@@ -1233,6 +1350,28 @@ function StackRail({ run, closed, toggle, sort }: { run: Branch[]; sort?: Sort }
     </Collapsible>
   );
   return <Sortable sort={sort}>{render}</Sortable>;
+}
+
+/** A flat-list item: a status section header, a thread row or a PR stack. */
+function FlatRow({ i, closed, toggle, fold }: { i: FlatItem } & Fold) {
+  if (i.kind === "thread")
+    return <ThreadRow t={i.t} chip={i.t.key ?? undefined} project={i.project} review={i.review} flat />;
+  if (i.kind === "stack")
+    return <StackRail run={i.run} project={i.project} flat closed={closed} toggle={toggle} fold={fold} />;
+  return (
+    <MotionHook>
+      {(ref) => (
+        <li
+          ref={ref}
+          className="flex h-7 items-center gap-2 px-2 text-xs font-semibold text-muted-foreground"
+          style={{ viewTransitionName: vtName("sec", i.key) }}
+        >
+          {i.label}
+          <span className="font-normal tabular-nums">{i.count}</span>
+        </li>
+      )}
+    </MotionHook>
+  );
 }
 
 /** A project as one block of the shared list: a one-line header, then its groups. */
@@ -1322,11 +1461,20 @@ const transition = (change: () => void) => {
   else document.startViewTransition(() => flushSync(change));
 };
 
-/** The user order on the whole tree, then the filter, then the drag freeze. `view.projects` is also sorted. */
-const pipeline = (ps: Branch[], orders: Orders, needsOnly: boolean, sortBy: SortBy, freeze?: Freeze) => {
-  const full = arrange(ps, orders);
-  const view = arrange(needsOnly ? onlyNeedsYou(full.projects) : full.projects, {}, freeze);
-  return { full, view: sortBy === "updated" ? { ...view, projects: sortTree(view.projects) } : view };
+type Cfg = { orders: Orders; needsOnly: boolean; sortBy: SortBy; layout: Layout; groupBy: GroupBy; freeze?: Freeze };
+
+/**
+ * The user order on the whole tree, then the filter, then the drag freeze. In the tree, `view.projects` is also sorted.
+ * In the flat layout, `view.flat` is also set: the sorted units, with section headers when grouped.
+ */
+const pipeline = (ps: Branch[], c: Cfg): { full: Arranged; view: Arranged & { flat?: FlatItem[] } } => {
+  const full = arrange(ps, c.orders);
+  const view = arrange(c.needsOnly ? onlyNeedsYou(full.projects) : full.projects, {}, c.freeze);
+  if (c.layout === "flat") {
+    const units = flatten(view.projects);
+    return { full, view: { ...view, flat: sequence(c.sortBy === "updated" ? sortFlat(units) : units, c.groupBy) } };
+  }
+  return { full, view: { ...view, projects: c.sortBy === "updated" ? sortTree(view.projects) : view.projects } };
 };
 
 function App() {
@@ -1335,6 +1483,8 @@ function App() {
   const [needsOnly, setNeedsOnly] = useState(load(FILTER_KEY) === "needs");
   const [theme, setTheme] = useState<Theme>(() => THEMES.find((t) => t === load(THEME_KEY)) ?? "system");
   const [sortBy, setSortBy] = useState<SortBy>(() => (load(SORT_KEY) === "updated" ? "updated" : "manual"));
+  const [layout, setLayout] = useState<Layout>(() => (load(LAYOUT_KEY) === "flat" ? "flat" : "tree"));
+  const [groupBy, setGroupBy] = useState<GroupBy>(() => (load(GROUP_KEY) === "status" ? "status" : "none"));
   const [now, setNow] = useState(Date.now);
   const [shown, setShown] = useState(() => new Set<string>());
   const [closed, setClosed] = useState(() => new Set<string>(JSON.parse(load(CLOSED_KEY) ?? "[]") as string[]));
@@ -1453,13 +1603,15 @@ function App() {
   const live = new Map((tree?.projects ?? []).flatMap(allThreads).map((t) => [t.id, t]));
   const counts = countAttention(tree?.projects ?? []);
   const connecting = !tree || tree.conn === "connecting";
-  const { full, view } = pipeline(tree?.projects ?? [], orders, needsOnly, sortBy, freeze);
-  /** The ids of the rendered rows, in order, for a tree. */
-  const rows = (ps: Branch[]) =>
-    pipeline(ps, orders, needsOnly, sortBy, freeze)
-      .view.projects.flatMap(allThreads)
-      .map((t) => t.id)
-      .join();
+  const cfg: Cfg = { orders, needsOnly, sortBy, layout, groupBy, freeze };
+  const { full, view } = pipeline(tree?.projects ?? [], cfg);
+  /** The ids of the rendered rows and section headers, in order, for a tree. */
+  const rows = (ps: Branch[]) => {
+    const v = pipeline(ps, cfg).view;
+    return (
+      layout === "flat" ? (v.flat ?? []).flatMap(itemIds) : v.projects.flatMap(allThreads).map((t) => t.id)
+    ).join();
+  };
   const latest = useRef({ full, view, rows, projects: tree?.projects ?? [], connecting });
   useEffect(() => {
     latest.current = { full, view, rows, projects: tree?.projects ?? [], connecting };
@@ -1580,7 +1732,25 @@ function App() {
               transition(() => setSortBy(s));
             }}
           />
-          {projects && <FoldAll inner={projects.flatMap((p) => [p.id, ...foldIds(p)])} closed={closed} fold={fold} />}
+          <LayoutToggle
+            layout={layout}
+            setLayout={(l) => {
+              save(LAYOUT_KEY, l);
+              transition(() => setLayout(l));
+            }}
+          />
+          {layout === "flat" && (
+            <GroupMenu
+              groupBy={groupBy}
+              setGroupBy={(g) => {
+                save(GROUP_KEY, g);
+                transition(() => setGroupBy(g));
+              }}
+            />
+          )}
+          {projects && layout === "tree" && (
+            <FoldAll inner={projects.flatMap((p) => [p.id, ...foldIds(p)])} closed={closed} fold={fold} />
+          )}
           <ViewButton
             update={update}
             open={settingsOpen}
@@ -1639,7 +1809,7 @@ function App() {
         <Details value={details}>
           <NeedsOnly value={needsOnly}>
             <Linear value={linear}>
-              <Lists value={sortBy === "updated" ? NO_LISTS : view.lists}>
+              <Lists value={sortBy === "updated" || layout === "flat" ? NO_LISTS : view.lists}>
                 <Now value={now}>
                   <div
                     className={!connecting && tree.conn !== "up" ? "grayscale" : ""}
@@ -1649,11 +1819,17 @@ function App() {
                     {projects ? (
                       <DragDropProvider plugins={plugins} onDragStart={dragStart} onDragEnd={dragEnd}>
                         <Card className="gap-0 overflow-clip rounded-[12px] py-0 shadow-none">
-                          <ul className="m-0 list-none p-0">
+                          <ul className={cn("m-0 list-none p-0", layout === "flat" && "p-1")}>
                             <SendTo value={{ t3cli, open: (id) => setSendTo({ id, open: true }) }}>
-                              <Presence items={projects} keyOf={(p) => p.id}>
-                                {(p) => <ProjectBlock b={p} closed={closed} toggle={toggle} fold={fold} />}
-                              </Presence>
+                              {layout === "flat" ? (
+                                <Presence items={view.flat ?? []} keyOf={(i) => i.id}>
+                                  {(i) => <FlatRow i={i} closed={closed} toggle={toggle} fold={fold} />}
+                                </Presence>
+                              ) : (
+                                <Presence items={projects} keyOf={(p) => p.id}>
+                                  {(p) => <ProjectBlock b={p} closed={closed} toggle={toggle} fold={fold} />}
+                                </Presence>
+                              )}
                             </SendTo>
                           </ul>
                         </Card>

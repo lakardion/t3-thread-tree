@@ -433,6 +433,16 @@ A ghost `icon-sm` button with the `ArrowDownUp` icon, before fold all. Its label
 - Projects keep their order. Reviews stays first and No issue key stays last. A PR stack moves as one block and keeps its inner order. Subthreads keep their order. Ties keep the manual order.
 - Drag is off: no row has a handle, and the empty handle space stays so rows line up.
 
+### Flat view
+
+The Tree / Flat switch is a `ToggleGroup` of two icons (`ListTree`, `List`) with tooltips, built like the theme choice. In flat, a `Rows3` menu "Group by" (None, Status) shows next to the sort menu, and the fold-all button hides. The page shows one card with one list. Drag is off.
+
+- **Thread row.** The status icon comes first. The Project column follows: the project icon and name (`w-32`, truncated). Under 720 px, only the icon shows. Then the issue key chip (a Linear link when set), then the teal `Eye` for a review thread (`text-review`), then the title. The PR chips, the details chevron and the send icon stay as in the tree. There is no handle and no handle space.
+- **Subthreads.** They sit under the parent, indented, always open, in base order, with no Project column.
+- **Stack block.** One block with the rail header and numbered rows. The header has the `Layers` icon with no chevron, then the Project column, then the stops. It is always open.
+- **Section headers.** With "Group by Status", a non-collapsible row of 28 px: the label (12 px, semibold, muted) and the count. Order: Needs input, Plan ready, Your turn, Failed, Working, Idle and snoozed, Done. Empty sections are hidden.
+- **Motion.** One `Presence` holds headers and rows, so a row that changes section slides. Each header has a `view-transition-name`. A switch between Tree and Flat cross-fades the headers, chevrons and fold buttons, and the Project column and key chips. The old and new snapshots keep their own size (`height: 100%; width: auto`), so a row does not stretch.
+
 ### Drag to reorder
 
 The user reorders projects, key groups (a stack run is one block), review groups and top-level threads. A list with fewer than two visible items has no handle. Subthreads, groups inside a stack rail, Reviews and No issue key have no handle. No drag crosses lists.
