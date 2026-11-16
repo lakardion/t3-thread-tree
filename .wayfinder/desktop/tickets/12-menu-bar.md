@@ -35,3 +35,8 @@ Add a menu-bar (tray) entry that shows the Needs-you count and lists the threads
 
 - Main keeps the last list in `let needsYou: NeedsYouThread[]` in `src/desktop/main.ts`, already checked, set in the `setNeedsYou` handler. Read it for the tray and remove its `oxlint-disable-next-line` line. Rebuild the tray menu in that handler, after `app.setBadgeCount`.
 - `NeedsYouThread.since` is `null` for some threads; the menu sorts those last.
+
+## Handed over from desktop-11
+
+- `showWindow()` is now at module level in `src/desktop/main.ts`; use it for "Open tree" and "+N more…".
+- The mute switch is `settings.muted` (`Settings` in `src/desktop/store.ts`, saved in `settings.json`). The app-menu "Mute Notifications" checkbox in `setMenu()` copies the "Always on Top" click. The menu-bar checkbox must set `settings.muted`, save, and call `setMenu()` again; a toggle in the app menu must rebuild the tray menu too.

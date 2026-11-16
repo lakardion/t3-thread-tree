@@ -6,6 +6,8 @@ import { join } from "node:path";
 import {
   parseBounds,
   parseNeedsYou,
+  parseNotify,
+  parseSettings,
   parseToken,
   readJson,
   readToken,
@@ -17,6 +19,43 @@ const screens = [
   { x: 0, y: 0, width: 1000, height: 800 },
   { x: 1000, y: 0, width: 1000, height: 800 },
 ];
+
+describe("parseSettings", () => {
+  test("defaults when empty", () => {
+    expect(parseSettings(undefined)).toEqual({ muted: false });
+  });
+  test("keeps a boolean", () => {
+    expect(parseSettings({ muted: true })).toEqual({ muted: true });
+  });
+  test("takes the default for a wrong type", () => {
+    expect(parseSettings({ muted: "yes" })).toEqual({ muted: false });
+  });
+});
+
+describe("parseNotify", () => {
+  const thread = { kind: "thread", threadId: "t", environmentId: "e", title: "T", status: "failed" } as const;
+  test("round-trips events and drops extra fields", () => {
+    expect(
+      parseNotify([
+        { ...thread, extra: 1 },
+        { kind: "summary", count: 3, extra: 1 },
+      ]),
+    ).toEqual([thread, { kind: "summary", count: 3 }]);
+    expect(parseNotify([])).toEqual([]);
+  });
+  test("rejects bad input", () => {
+    const bad: unknown[] = [
+      "x",
+      Array.from({ length: 11 }, () => thread),
+      [{ ...thread, kind: "other" }],
+      [{ ...thread, status: "working" }],
+      [{ ...thread, title: 1 }],
+      [{ kind: "summary", count: 0 }],
+      [{ kind: "summary", count: 1.5 }],
+    ];
+    for (const raw of bad) expect(parseNotify(raw)).toBeNull();
+  });
+});
 
 describe("parseBounds", () => {
   test("is empty for junk or zero size", () => {

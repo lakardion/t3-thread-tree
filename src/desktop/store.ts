@@ -2,7 +2,7 @@ import { chmodSync, readFileSync, writeFileSync } from "node:fs";
 
 import * as v from "valibot";
 
-import { NeedsYouList, type NeedsYouThread } from "../shared/desktop.ts";
+import { NeedsYouList, type NeedsYouThread, NotifyList, type NotifyEvent } from "../shared/desktop.ts";
 
 const Size = v.object({
   width: v.pipe(v.number(), v.finite(), v.gtValue(0)),
@@ -12,7 +12,11 @@ const Place = v.object({ x: v.pipe(v.number(), v.finite()), y: v.pipe(v.number()
 
 const Token = v.pipe(v.string(), v.trim(), v.regex(/^\S+$/), v.maxBytes(4096));
 
+/** Each field falls back to its default when it is missing or has the wrong type. */
+const SettingsSchema = v.fallback(v.object({ muted: v.fallback(v.boolean(), false) }), { muted: false });
+
 export type Rect = v.InferOutput<typeof Size> & v.InferOutput<typeof Place>;
+export type Settings = v.InferOutput<typeof SettingsSchema>;
 
 /** The parsed JSON in `file`, or `undefined` when the file is missing or bad. */
 export function readJson(file: string): unknown {
@@ -54,6 +58,16 @@ export function writeToken(file: string, token: string): void {
 export function parseNeedsYou(raw: unknown): NeedsYouThread[] | null {
   const result = v.safeParse(NeedsYouList, raw);
   return result.success ? result.output : null;
+}
+
+/** A clean copy of the notification events, or `null` when `raw` is not an array of at most 10 well-formed events. */
+export function parseNotify(raw: unknown): NotifyEvent[] | null {
+  const result = v.safeParse(NotifyList, raw);
+  return result.success ? result.output : null;
+}
+
+export function parseSettings(raw: unknown): Settings {
+  return v.parse(SettingsSchema, raw);
 }
 
 /** Saved window bounds. The position stays only when the window touches a screen. */
