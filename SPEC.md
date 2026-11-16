@@ -367,8 +367,7 @@ An app started from the Dock or Spotlight does not get the shell PATH, so the br
 - The app saves the window size and place in `window.json` in the app data folder, and restores them at start. A saved place that is off all screens is dropped.
 - **Close:** the close button hides the window. The page keeps running and drives the badge, the menu-bar entry and the notifications. A Dock click or "Open tree" shows the window again.
 - **Quit:** Cmd-Q, or "Quit" in the menu-bar menu. Launch at login is not offered.
-- **Always on top:** a menu item in the app menu and in the menu-bar menu. Off by default. Saved in `settings.json` in the app data folder.
-- **App menu:** the role menus (app, edit, view, window). The app menu also holds "Always on Top", "Mute Notifications" and, when one exists, "Update available: vX.Y.Z…".
+- **App menu:** the role menus (app, edit, view, window). The app menu also holds "Mute Notifications" and, when one exists, "Update available: vX.Y.Z…".
 - External links (`t3code://`, PRs, Linear) open with `shell.openExternal`, not in the app window.
 
 ### Preload bridge
@@ -431,7 +430,7 @@ The page owns the rules. Main shows them, so the mute switch stays in main.
 - A click opens a native menu:
   1. Up to 10 Needs-you threads, the longest wait first (oldest `since`; `null` last). Each item shows the status and the title. A click opens the thread in T3 Code.
   2. "+N more… (open tree)" when more than 10, which shows the window.
-  3. "Open tree", "Always on Top", "Mute Notifications", "Update available: vX.Y.Z…" when one exists, "Quit".
+  3. "Open tree", "Mute Notifications", "Update available: vX.Y.Z…" when one exists, "Quit".
 - Main builds the menu again on each `setNeedsYou`.
 
 ### Token
