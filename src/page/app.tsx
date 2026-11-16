@@ -805,10 +805,8 @@ function MotionHook({ children }: { children: (ref: RefFn) => ReactNode }) {
 const Sortable = ({ sort, children }: { sort?: Sort; children: (ref: RefFn, handleRef?: RefFn) => ReactNode }) =>
   sort ? <SortHook sort={sort}>{children}</SortHook> : <MotionHook>{children}</MotionHook>;
 
-const DragHandle = ({ handleRef, name, className }: { handleRef?: RefFn; name: string; className?: string }) =>
-  !handleRef ? (
-    <span aria-hidden className="size-5 flex-none pointer-coarse:min-h-11 pointer-coarse:min-w-11" />
-  ) : (
+const DragHandle = ({ handleRef, name }: { handleRef?: RefFn; name: string }) =>
+  handleRef && (
     <Button
       ref={handleRef}
       variant="ghost"
@@ -816,8 +814,8 @@ const DragHandle = ({ handleRef, name, className }: { handleRef?: RefFn; name: s
       aria-label={`Move ${name}`}
       className={cn(
         ROW_BUTTON,
+        "absolute top-1/2 left-0 z-10 w-3 -translate-x-1/2 -translate-y-1/2 pointer-coarse:relative pointer-coarse:inset-auto pointer-coarse:translate-none",
         "cursor-grab opacity-0 group-hover/row:opacity-100 focus-visible:opacity-100 pointer-coarse:opacity-100",
-        className,
       )}
     >
       <GripVertical className="size-3.5" />
@@ -901,7 +899,7 @@ function DetailBlock({ t }: { t: ThreadNode }) {
     .join(" · ");
   const tags = [d.tags.join(", "), d.pinned && "Pinned"].filter(Boolean).join(" · ");
   return (
-    <dl className="m-0 grid grid-cols-[auto_1fr] gap-x-3 gap-y-0.5 py-1 pl-[178px] text-xs max-[720px]:pl-7">
+    <dl className="m-0 grid grid-cols-[auto_1fr] gap-x-3 gap-y-0.5 py-1 pl-[156px] text-xs max-[720px]:pl-7">
       {d.request && <Line label="Request">{d.request}</Line>}
       {d.error && (
         <Line label="Error">
@@ -997,7 +995,7 @@ function ThreadRow({
           className="thread-row group/row flex min-h-9 min-w-0 items-center gap-x-2 rounded-[8px] px-2 py-1 text-[13px] leading-5 max-[720px]:flex-wrap"
           data-status={t.status}
         >
-          {!inStack && <DragHandle handleRef={handleRef} name={t.title || t.id} className="-ml-1.5" />}
+          {!inStack && <DragHandle handleRef={handleRef} name={t.title || t.id} />}
           <StatusIcon t={t} now={now} />
           {pulse > 0 && <span key={pulse} aria-hidden className={cn("row-pulse", STATUS[t.status].shape)} />}
           {project && <ProjectColumn b={project} />}
@@ -1186,7 +1184,7 @@ function GroupRow({ b, closed, toggle, fold, sort }: { b: Branch; sort?: Sort } 
           className="group/row relative flex h-7 min-w-0 items-center gap-2 rounded-[8px] px-2 hover:bg-accent max-[720px]:h-auto max-[720px]:min-h-7 max-[720px]:flex-wrap"
           data-waiting={!open && waits(b) ? "" : undefined}
         >
-          <DragHandle handleRef={handleRef} name={b.label} className="relative z-10 -ml-1.5" />
+          <DragHandle handleRef={handleRef} name={b.label} />
           <CollapsibleTrigger className="flex min-w-0 cursor-pointer items-center gap-2 select-none after:absolute after:inset-0 max-[720px]:min-h-11">
             <Chevron open={open} />
             {b.label === REVIEWS && <Eye className="size-3.5 flex-none text-review" aria-hidden />}
@@ -1306,13 +1304,7 @@ function StackRail({
           className="group/row relative flex min-h-7 flex-wrap items-center gap-2 rounded-[10px] px-2 text-xs"
           data-waiting={!open && run.some(waits) ? "" : undefined}
         >
-          {handleRef && (
-            <DragHandle
-              handleRef={handleRef}
-              name={`PR stack of ${run[0].label}`}
-              className="absolute top-1 -left-7 z-10"
-            />
-          )}
+          <DragHandle handleRef={handleRef} name={`PR stack of ${run[0].label}`} />
           {flat ? (
             <span className="flex items-center text-muted-foreground" title={`PR stack · ${total} PRs`}>
               <Layers className="size-3.5" aria-label={`PR stack · ${total} PRs`} />
@@ -1432,7 +1424,7 @@ function ProjectBlock({ b, closed, toggle, fold }: { b: Branch } & Fold) {
             className="group/row sticky top-0 z-20 flex h-8 min-w-0 items-center gap-1.5 bg-card px-2 max-[720px]:h-auto max-[720px]:min-h-8"
             data-waiting={!open && waits(b) ? "" : undefined}
           >
-            <DragHandle handleRef={handleRef} name={b.label} className="relative z-10 -ml-1" />
+            <DragHandle handleRef={handleRef} name={b.label} />
             <CollapsibleTrigger className="flex min-w-0 cursor-pointer items-center gap-1.5 select-none after:absolute after:inset-0">
               <Chevron open={open} />
               <ProjectIcon name={b.label} />
