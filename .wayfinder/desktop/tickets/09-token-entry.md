@@ -26,3 +26,7 @@ Let the user paste the T3 token in the desktop window, so the packaged app needs
 ## Handed over from desktop-07
 
 - To restart the child after `setToken`, send it SIGTERM. The `exit` handler in `startServer` (`src/desktop/main.ts`) starts it again after 500 ms on the same port. Pass the token through the env that `startServer` builds.
+
+## Handed over from desktop-10
+
+- On this branch the preload never loads: Bun bakes the source folder into `__dirname`, so `join(__dirname, "preload.cjs")` in `src/desktop/main.ts` points at `src/desktop/preload.cjs`. `window.desktopBridge` is absent and the token field never shows. desktop-10 (#36) fixes it with `join(app.getAppPath(), "dist", "desktop", "preload.cjs")`.
