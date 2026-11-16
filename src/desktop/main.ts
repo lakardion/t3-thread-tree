@@ -1,8 +1,11 @@
 import { type ChildProcess, execFile, spawn } from "node:child_process";
-import { constants } from "node:fs";
-import { access, mkdtemp, readdir, rm, writeFile } from "node:fs/promises";
+import { constants, createWriteStream } from "node:fs";
+import { access, mkdtemp, readdir, rm } from "node:fs/promises";
 import { homedir } from "node:os";
 import { dirname, join } from "node:path";
+import { Readable } from "node:stream";
+import { pipeline } from "node:stream/promises";
+import type { ReadableStream as WebReadableStream } from "node:stream/web";
 import { promisify } from "node:util";
 
 import {
@@ -19,18 +22,21 @@ import {
   Tray,
 } from "electron";
 
-import type { NeedsYouThread, NotifyEvent } from "../shared/desktop.ts";
+import type { NeedsYouThread, NotifyEvent, UpdateState } from "../shared/desktop.ts";
 import {
+  afterCheck,
   fallbackPath,
-  isNewer,
+  installing,
   parseRelease,
   pickPort,
   RESET_AFTER_MS,
   restartDelay,
   shellPath,
+  shouldCheck,
   STATUS_TITLE,
   threadUrl,
   trayItems,
+  updateMenuLabel,
 } from "./runtime.ts";
 import {
   parseBounds,
@@ -54,10 +60,17 @@ let settings: Settings = parseSettings(undefined);
 let needsYou: NeedsYouThread[] = [];
 /** Kept referenced so the menu-bar icon is not garbage-collected. */
 let tray: Tray | undefined;
-/** The newer release found on GitHub, for the "Update available" menu item. */
-let update: ReturnType<typeof parseRelease> = null;
-/** True while the update downloads, so the menus show it and offer no second download. */
-let downloading = false;
+/** What the menus and the page show about updates. */
+let updateState: UpdateState = {
+  version: app.getVersion(),
+  checking: false,
+  checkedAt: null,
+  checkFailed: false,
+  release: null,
+  install: null,
+};
+/** The newer release found on GitHub. `updateState.release` holds the part the page may see. */
+let release: ReturnType<typeof parseRelease> = null;
 
 const LATEST_RELEASE = "https://api.github.com/repos/lakardion/t3-thread-tree/releases/latest";
 
@@ -207,25 +220,36 @@ const toggles = (): MenuItemConstructorOptions[] => [
   },
 ];
 
-/** Returns true when GitHub answered. */
+/** Merges `patch` into the update state, then updates the menus, the page and the Dock progress bar. */
+function setUpdate(patch: Partial<UpdateState>) {
+  updateState = { ...updateState, ...patch };
+  setMenus();
+  window?.webContents.send("updateState", updateState);
+  const { install } = updateState;
+  window?.setProgressBar(install?.stage === "downloading" && install.progress !== null ? install.progress : -1);
+}
+
+/** Returns true when GitHub gave a reply that parses. */
 async function checkUpdate() {
+  setUpdate({ checking: true });
+  let reply: Parameters<typeof afterCheck>[1] = "failed";
   try {
     const res = await fetch(LATEST_RELEASE, {
       headers: { Accept: "application/vnd.github+json" },
       signal: AbortSignal.timeout(10_000),
     });
-    if (!res.ok) return false;
-    const release = parseRelease(await res.json());
-    if (release && isNewer(release.version, app.getVersion())) {
-      update = release;
-      setMenus();
-    }
-    return true;
+    if (res.ok) reply = parseRelease(await res.json()) ?? "failed";
   } catch (e) {
     log(`update check failed: ${String(e)}`);
-    return false;
   }
+  const next = afterCheck(updateState, reply, app.getVersion(), Date.now(), app.isPackaged);
+  if (reply !== "failed") release = next.release ? reply : null;
+  setUpdate(next);
+  return reply !== "failed";
 }
+
+/** Runs a check unless `shouldCheck` says no. */
+const runCheck = (force: boolean) => (shouldCheck(updateState, Date.now(), force) ? checkUpdate() : undefined);
 
 /** Waits for process `$1` to exit, puts bundle `$3` in place of bundle `$2` (or keeps `$2` when that fails), and opens it. */
 const SWAP = `while kill -0 "$1" 2>/dev/null; do sleep 0.2; done
@@ -233,16 +257,32 @@ rm -rf "$2.old" && mv "$2" "$2.old" && if mv "$3" "$2"; then rm -rf "$2.old"; el
 open "$2"`;
 
 /** Downloads and unpacks the release zip, then quits so the swap script puts the new app in place and opens it. */
-async function installUpdate(u: NonNullable<typeof update>, zipUrl: string) {
+async function installUpdate(u: NonNullable<typeof release>, zipUrl: string) {
   /** The executable is `X.app/Contents/MacOS/X`. */
   const bundle = dirname(dirname(dirname(app.getPath("exe"))));
   if (bundle.includes("/AppTranslocation/")) throw new Error("Move the app to the Applications folder first.");
   await access(dirname(bundle), constants.W_OK);
   const dir = await mkdtemp(join(app.getPath("temp"), "t3-thread-tree-update-"));
   const res = await fetch(zipUrl, { signal: AbortSignal.timeout(10 * 60_000) });
-  if (!res.ok) throw new Error(`Download failed with HTTP ${res.status}.`);
-  /** ponytail: holds the whole zip in memory; stream it to disk if releases get much larger. */
-  await writeFile(join(dir, "update.zip"), Buffer.from(await res.arrayBuffer()));
+  if (!res.ok || !res.body) throw new Error(`Download failed with HTTP ${res.status}.`);
+  const total = Number(res.headers.get("content-length")) || 0;
+  let received = 0;
+  let sentAt = 0;
+  await pipeline(
+    Readable.fromWeb(res.body as unknown as WebReadableStream<Uint8Array>),
+    async function* (chunks: AsyncIterable<Buffer>) {
+      for await (const chunk of chunks) {
+        received += chunk.length;
+        if (total && Date.now() - sentAt >= 250) {
+          sentAt = Date.now();
+          setUpdate({ install: { stage: "downloading", progress: received / total } });
+        }
+        yield chunk;
+      }
+    },
+    createWriteStream(join(dir, "update.zip")),
+  );
+  setUpdate({ install: { stage: "unpacking" } });
   await promisify(execFile)("ditto", ["-x", "-k", join(dir, "update.zip"), dir]);
   const name = (await readdir(dir)).find((n) => n.endsWith(".app"));
   if (!name) throw new Error("The download has no app in it.");
@@ -251,40 +291,48 @@ async function installUpdate(u: NonNullable<typeof update>, zipUrl: string) {
     detached: true,
     stdio: "ignore",
   }).unref();
+  setUpdate({ install: { stage: "restarting" } });
+  await sleep(400);
   app.quit();
 }
 
-/** Offers the update. A release with an app zip installs in place; one without opens the release page. */
-async function promptUpdate(u: NonNullable<typeof update>) {
-  /** A run from source must not replace the Electron binary it runs on. */
-  const zip = app.isPackaged ? u.zip : null;
-  const { response } = await dialog.showMessageBox({
-    message: `Version ${u.version} is available`,
-    detail: `You have version ${app.getVersion()}.`,
-    buttons: [zip ? "Update and Restart" : "Open Release Page", "Later"],
-    defaultId: 0,
-    cancelId: 1,
-  });
-  if (response !== 0) return;
-  if (!zip) return openOutside(u.url);
-  downloading = true;
-  setMenus();
+/** Installs the known release in place. `fromMenu` shows a dialog when it fails. */
+async function applyUpdate(fromMenu = false) {
+  const u = release;
+  if (!u?.zip || installing(updateState)) return;
+  setUpdate({ install: { stage: "downloading", progress: null } });
   try {
-    await installUpdate(u, zip);
+    await installUpdate(u, u.zip);
   } catch (e) {
     log(`update install failed: ${String(e)}`);
-    downloading = false;
-    setMenus();
+    const error = e instanceof Error ? e.message : String(e);
+    setUpdate({ install: { stage: "failed", error } });
+    if (!fromMenu) return;
     const failed = await dialog.showMessageBox({
       type: "warning",
       message: "Cannot install the update",
-      detail: e instanceof Error ? e.message : String(e),
+      detail: error,
       buttons: ["Open Release Page", "Close"],
       defaultId: 0,
       cancelId: 1,
     });
     if (failed.response === 0) openOutside(u.url);
   }
+}
+
+/** The menu path: offers the update. A release that can install in place does so; one that cannot opens the release page. */
+async function promptUpdate(u: NonNullable<typeof release>) {
+  const canInstall = updateState.release?.canInstall;
+  const { response } = await dialog.showMessageBox({
+    message: `Version ${u.version} is available`,
+    detail: `You have version ${app.getVersion()}.`,
+    buttons: [canInstall ? "Update and Restart" : "Open Release Page", "Later"],
+    defaultId: 0,
+    cancelId: 1,
+  });
+  if (response !== 0) return;
+  if (!canInstall) return openOutside(u.url);
+  await applyUpdate(true);
 }
 
 /** After an update, shows once what the new version changed. */
@@ -306,9 +354,9 @@ async function showUpdated() {
 
 /** The "Check for Updates…" click: checks now and shows the result in a dialog. */
 async function checkUpdateNow() {
-  if (downloading) return;
+  if (!shouldCheck(updateState, Date.now(), true)) return;
   const ok = await checkUpdate();
-  const u = update;
+  const u = release;
   if (u) {
     await promptUpdate(u);
   } else if (ok) {
@@ -326,10 +374,13 @@ async function checkUpdateNow() {
 }
 
 const updateItems = (): MenuItemConstructorOptions[] => {
-  const u = update;
-  if (downloading) return [{ label: "Downloading Update…", enabled: false }];
-  if (u) return [{ label: `Update available: v${u.version}…`, click: () => void promptUpdate(u) }];
-  return [{ label: "Check for Updates…", click: () => void checkUpdateNow() }];
+  const u = release;
+  const label = updateMenuLabel(updateState);
+  const { install } = updateState;
+  if (install?.stage === "failed") return [{ label, click: () => u && openOutside(u.url) }];
+  if (install) return [{ label, enabled: false }];
+  if (u) return [{ label, click: () => void promptUpdate(u) }];
+  return [{ label, click: () => void checkUpdateNow() }];
 };
 
 function setMenu() {
@@ -390,8 +441,8 @@ async function main() {
   tray.setToolTip(app.name);
   setMenus();
   if (app.isPackaged) {
-    void checkUpdate();
-    setInterval(() => void checkUpdate(), 6 * 60 * 60 * 1000);
+    void runCheck(true);
+    setInterval(() => void runCheck(true), 6 * 60 * 60 * 1000);
   }
   ipcMain.on("setNeedsYou", (event, raw: unknown) => {
     if (event.sender !== window?.webContents) return;
@@ -414,8 +465,21 @@ async function main() {
     if (settings.muted) return;
     events.forEach(showNotification);
   });
-  ipcMain.on("checkUpdates", (event) => {
-    if (event.sender === window?.webContents) void checkUpdateNow();
+  ipcMain.handle("updateState", (event) => {
+    if (event.sender !== window?.webContents) throw new Error("untrusted sender");
+    return updateState;
+  });
+  ipcMain.on("checkUpdates", (event, force: unknown) => {
+    if (event.sender !== window?.webContents) return;
+    if (!runCheck(force === true)) window.webContents.send("updateState", updateState);
+  });
+  ipcMain.on("installUpdate", (event) => {
+    if (event.sender !== window?.webContents) return;
+    if (updateState.release?.canInstall) void applyUpdate();
+    else if (release) openOutside(release.url);
+  });
+  ipcMain.on("openRelease", (event) => {
+    if (event.sender === window?.webContents && release) openOutside(release.url);
   });
   const [PATH, port] = await Promise.all([loginPath(), pickPort()]);
   startServer(port, PATH, 0);

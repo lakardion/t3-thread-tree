@@ -2,7 +2,7 @@ import { createServer } from "node:net";
 
 import * as v from "valibot";
 
-import type { NeedsYouThread, NotifyStatus } from "../shared/desktop.ts";
+import type { NeedsYouThread, NotifyStatus, UpdateState } from "../shared/desktop.ts";
 
 /** The first port from `start` up that a server can listen on at 127.0.0.1. */
 export async function pickPort(start = 4773): Promise<number> {
@@ -101,4 +101,51 @@ export function releaseNotes(body: string): string {
     .filter((l) => /^\s*[*-] /.test(l))
     .map((l) => `• ${l.replace(/^\s*[*-] /, "").replace(/ by @\S+ in https:\/\/\S+$/, "")}`)
     .join("\n");
+}
+
+type Release = NonNullable<ReturnType<typeof parseRelease>>;
+
+const CHECK_GAP_MS = 60_000;
+
+export const installing = (state: UpdateState) => state.install !== null && state.install.stage !== "failed";
+
+/** False while a check or an install runs, and, unless `force`, within 60 s of the last good reply. */
+export function shouldCheck(state: UpdateState, now: number, force: boolean): boolean {
+  if (state.checking || installing(state)) return false;
+  return force || state.checkedAt === null || now - Date.parse(state.checkedAt) >= CHECK_GAP_MS;
+}
+
+/**
+ * The state after a check. `reply` is the parsed release, or "failed" for a fetch error, a bad status or
+ * a reply that does not parse. A failed check keeps the known release.
+ */
+export function afterCheck(
+  state: UpdateState,
+  reply: Release | "failed",
+  currentVersion: string,
+  now: number,
+  canInstall: boolean,
+): UpdateState {
+  if (reply === "failed") return { ...state, checking: false, checkFailed: true };
+  const newer = isNewer(reply.version, currentVersion);
+  return {
+    ...state,
+    checking: false,
+    checkFailed: false,
+    checkedAt: new Date(now).toISOString(),
+    release: newer ? { version: reply.version, canInstall: canInstall && reply.zip !== null } : null,
+  };
+}
+
+/** The text of the update item in the app menu and the menu-bar menu. */
+export function updateMenuLabel(state: UpdateState): string {
+  const { install, release } = state;
+  if (install?.stage === "downloading")
+    return install.progress === null
+      ? "Downloading Update…"
+      : `Downloading Update… ${Math.round(install.progress * 100)}%`;
+  if (install?.stage === "unpacking") return "Installing Update…";
+  if (install?.stage === "restarting") return "Restarting…";
+  if (install?.stage === "failed") return "Update Failed: Open Release Page…";
+  return release ? `Update available: v${release.version}…` : "Check for Updates…";
 }
