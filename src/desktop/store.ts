@@ -2,7 +2,7 @@ import { chmodSync, readFileSync, writeFileSync } from "node:fs";
 
 import * as v from "valibot";
 
-import type { NeedsYouThread, NotifyEvent } from "../shared/desktop.ts";
+import { NeedsYouList, type NeedsYouThread, type NotifyEvent } from "../shared/desktop.ts";
 
 const Size = v.object({
   width: v.pipe(v.number(), v.finite(), v.gtValue(0)),
@@ -53,23 +53,8 @@ export function writeToken(file: string, token: string): void {
 
 /** A clean copy of the Needs-you list, or `null` when `raw` is not an array of at most 500 well-formed threads. */
 export function parseNeedsYou(raw: unknown): NeedsYouThread[] | null {
-  if (!Array.isArray(raw) || raw.length > 500) return null;
-  const out: NeedsYouThread[] = [];
-  for (const item of raw as unknown[]) {
-    const t = item as Record<string, unknown> | null;
-    if (
-      typeof t !== "object" ||
-      t === null ||
-      typeof t.id !== "string" ||
-      typeof t.title !== "string" ||
-      typeof t.environmentId !== "string" ||
-      !(typeof t.since === "string" || t.since === null)
-    ) {
-      return null;
-    }
-    out.push({ id: t.id, title: t.title, environmentId: t.environmentId, since: t.since });
-  }
-  return out;
+  const result = v.safeParse(NeedsYouList, raw);
+  return result.success ? result.output : null;
 }
 
 /** A clean copy of the notification events, or `null` when `raw` is not an array of at most 10 well-formed events. */
