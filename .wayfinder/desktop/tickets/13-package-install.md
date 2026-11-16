@@ -21,3 +21,8 @@ Package the app with electron-builder, sign it ad-hoc, and install it with one c
 ## Done when
 
 `bun run check` passes. `bun run desktop:install` installs the app. Started from Spotlight, it shows the tree, the badge, the menu-bar entry and a notification, and "What's next" finds `claude` or `codex` (shell PATH). `codesign -dv --entitlements -` on the sidecar shows the JIT entitlements.
+
+## Handed over from desktop-06
+
+- Confirmed: the compiled sidecar loads `.env` from its cwd, so a `.env` in the app data folder loads when main starts the sidecar there.
+- Not yet confirmed: whether the ubuntu cross-compile from CI runs on a Mac. The release build on `macos-14` compiles natively, so it does not depend on it.
