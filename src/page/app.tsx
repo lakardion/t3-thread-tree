@@ -815,10 +815,11 @@ const DragHandle = ({ handleRef, name }: { handleRef?: RefFn; name: string }) =>
       className={cn(
         ROW_BUTTON,
         "absolute top-1/2 left-0 z-10 w-3 -translate-x-1/2 -translate-y-1/2 pointer-coarse:relative pointer-coarse:inset-auto pointer-coarse:translate-none",
+        "pointer-fine:border pointer-fine:bg-card pointer-fine:shadow-sm",
         "cursor-grab opacity-0 group-hover/row:opacity-100 focus-visible:opacity-100 pointer-coarse:opacity-100",
       )}
     >
-      <GripVertical className="size-3.5" />
+      <GripVertical className="size-3" />
     </Button>
   );
 
@@ -1864,7 +1865,7 @@ function App() {
                     {projects?.length === 0 && <p className="text-muted-foreground">No active threads.</p>}
                     {projects ? (
                       <DragDropProvider plugins={plugins} onDragStart={dragStart} onDragEnd={dragEnd}>
-                        <Card className="gap-0 overflow-clip rounded-[12px] py-0 shadow-none">
+                        <Card className="gap-0 overflow-clip rounded-[12px] px-2 py-0 shadow-none">
                           <ul className={cn("m-0 list-none p-0", layout === "flat" && "p-1")}>
                             <SendTo value={{ t3cli, open: (id) => setSendTo({ id, open: true }) }}>
                               {layout === "flat" ? (
