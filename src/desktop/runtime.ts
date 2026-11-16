@@ -1,5 +1,7 @@
 import { createServer } from "node:net";
 
+import * as v from "valibot";
+
 import type { NeedsYouThread, NotifyStatus } from "../shared/desktop.ts";
 
 /** The first port from `start` up that a server can listen on at 127.0.0.1. */
@@ -52,4 +54,29 @@ export function trayItems(threads: NeedsYouThread[]): { label: string; url: stri
   }));
   if (sorted.length > TRAY_MAX) items.push({ label: `+${sorted.length - TRAY_MAX} more… (open tree)`, url: null });
   return items;
+}
+
+const parseVersion = (version: string) => {
+  const parts = version.replace(/^v/, "").split(".");
+  return parts.length === 3 && parts.every((p) => /^\d+$/.test(p)) ? parts.map(Number) : null;
+};
+
+/** True when `latest` is a higher `X.Y.Z` version than `current`. A leading `v` is allowed. Anything else is false. */
+export function isNewer(latest: string, current: string): boolean {
+  const a = parseVersion(latest);
+  const b = parseVersion(current);
+  if (!a || !b) return false;
+  const i = a.findIndex((n, k) => n !== b[k]);
+  return i !== -1 && a[i] > b[i];
+}
+
+const Release = v.object({
+  tag_name: v.string(),
+  html_url: v.pipe(v.string(), v.startsWith("https://github.com/")),
+});
+
+/** The version and page of a GitHub latest-release payload, or null when it has another shape. */
+export function parseRelease(raw: unknown): { version: string; url: string } | null {
+  const r = v.safeParse(Release, raw);
+  return r.success ? { version: r.output.tag_name.replace(/^v/, ""), url: r.output.html_url } : null;
 }
