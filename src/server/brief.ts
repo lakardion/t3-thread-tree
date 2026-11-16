@@ -6,6 +6,7 @@ import { join } from "node:path";
 import { ago, phraseWith, stripKey } from "../page/format.ts";
 import type { BriefAction, BriefState, Cli } from "../shared/brief.ts";
 import { allThreads, type Branch, type ThreadNode } from "../shared/tree.ts";
+import guideText from "./next-step-prompt.md" with { type: "text" };
 
 export const CLIS: Record<Cli, { label: string; status: string[] }> = {
   claude: { label: "Claude Haiku", status: ["claude", "auth", "status"] },
@@ -295,7 +296,6 @@ export function filterAnswer(
 
 const TIMEOUT_MS = 60_000;
 const TAIL = 2048;
-const GUIDE = new URL("./next-step-prompt.md", import.meta.url);
 
 let dirs: { cwd: string; schema: string } | undefined;
 /** One fixed empty working folder and the schema file, made once. */
@@ -325,12 +325,11 @@ export function runBrief(cli: Cli, threads: InputThread[], now = () => new Date(
   let cancelled = false;
   let proc: ReturnType<typeof Bun.spawn> | undefined;
   const done = (async (): Promise<Outcome | null> => {
-    const guide = await Bun.file(GUIDE).text();
     const { cwd, schema } = workDirs();
     try {
-      proc = Bun.spawn(cliArgs(cli, guide, schema, cwd), {
+      proc = Bun.spawn(cliArgs(cli, guideText, schema, cwd), {
         cwd,
-        stdin: Buffer.from(stdinFor(cli, guide, threads)),
+        stdin: Buffer.from(stdinFor(cli, guideText, threads)),
         stdout: "pipe",
         stderr: "pipe",
       });

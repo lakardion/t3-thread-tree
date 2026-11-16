@@ -5,6 +5,7 @@
   "scripts": {
     "start": "bun run src/server.ts",
     "typecheck": "tsc --noEmit",
+    "build:sidecar": "bun run scripts/build-sidecar.ts",
     "demo": "bun run scripts/demo.ts",
     "lint": "oxlint --deny-warnings",
     "fmt": "oxfmt",
