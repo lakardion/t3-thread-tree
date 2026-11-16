@@ -26,3 +26,9 @@ Package the app with electron-builder, sign it ad-hoc, and install it with one c
 
 - Confirmed: the compiled sidecar loads `.env` from its cwd, so a `.env` in the app data folder loads when main starts the sidecar there.
 - Not yet confirmed: whether the ubuntu cross-compile from CI runs on a Mac. The release build on `macos-14` compiles natively, so it does not depend on it.
+
+## Handed over from desktop-07
+
+- The packaged branch of `startServer` already runs `process.resourcesPath/server` with cwd `app.getPath("userData")`.
+- `package.json` `main` is `dist/desktop/main.cjs`. The bundles are `.cjs` because the package is `"type": "module"`. electron-builder must include `dist/desktop/`.
+- Electron 45 has no postinstall. The binary downloads on the first `electron .` run, or with `node node_modules/electron/install.js`. A packaging step may need that call first.

@@ -22,3 +22,7 @@ Let the user paste the T3 token in the desktop window, so the packaged app needs
 ## Done when
 
 `bun run check` passes. With a bad `T3_TOKEN` in dev, the banner shows the field; a good token saves to the file with mode `0600` and the tree loads with no restart of the app. The banner looks right in light and dark mode.
+
+## Handed over from desktop-07
+
+- To restart the child after `setToken`, send it SIGTERM. The `exit` handler in `startServer` (`src/desktop/main.ts`) starts it again after 500 ms on the same port. Pass the token through the env that `startServer` builds.
