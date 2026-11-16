@@ -1,5 +1,7 @@
 import { createServer } from "node:net";
 
+import * as v from "valibot";
+
 import type { NeedsYouThread, NotifyStatus } from "../shared/desktop.ts";
 
 /** The first port from `start` up that a server can listen on at 127.0.0.1. */
@@ -54,8 +56,8 @@ export function trayItems(threads: NeedsYouThread[]): { label: string; url: stri
   return items;
 }
 
-const parseVersion = (v: string) => {
-  const parts = v.replace(/^v/, "").split(".");
+const parseVersion = (version: string) => {
+  const parts = version.replace(/^v/, "").split(".");
   return parts.length === 3 && parts.every((p) => /^\d+$/.test(p)) ? parts.map(Number) : null;
 };
 
@@ -68,11 +70,13 @@ export function isNewer(latest: string, current: string): boolean {
   return i !== -1 && a[i] > b[i];
 }
 
+const Release = v.object({
+  tag_name: v.string(),
+  html_url: v.pipe(v.string(), v.startsWith("https://github.com/")),
+});
+
 /** The version and page of a GitHub latest-release payload, or null when it has another shape. */
 export function parseRelease(raw: unknown): { version: string; url: string } | null {
-  if (typeof raw !== "object" || raw === null) return null;
-  const { tag_name, html_url } = raw as Record<string, unknown>;
-  if (typeof tag_name !== "string" || typeof html_url !== "string") return null;
-  if (!html_url.startsWith("https://github.com/")) return null;
-  return { version: tag_name.replace(/^v/, ""), url: html_url };
+  const r = v.safeParse(Release, raw);
+  return r.success ? { version: r.output.tag_name.replace(/^v/, ""), url: r.output.html_url } : null;
 }
