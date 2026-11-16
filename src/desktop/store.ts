@@ -10,6 +10,8 @@ const Size = v.object({
 });
 const Place = v.object({ x: v.pipe(v.number(), v.finite()), y: v.pipe(v.number(), v.finite()) });
 
+const Token = v.pipe(v.string(), v.trim(), v.regex(/^\S+$/), v.maxBytes(4096));
+
 export type Rect = v.InferOutput<typeof Size> & v.InferOutput<typeof Place>;
 
 /** The parsed JSON in `file`, or `undefined` when the file is missing or bad. */
@@ -27,10 +29,8 @@ export function writeJson(file: string, value: unknown): void {
 
 /** The trimmed token, or `null` when `raw` is not a single-line string of at most 4096 bytes. */
 export function parseToken(raw: unknown): string | null {
-  if (typeof raw !== "string") return null;
-  const token = raw.trim();
-  if (!token || /\s/.test(token) || Buffer.byteLength(token) > 4096) return null;
-  return token;
+  const result = v.safeParse(Token, raw);
+  return result.success ? result.output : null;
 }
 
 /** The saved token, or `undefined` when the file is missing or holds no valid token. */
