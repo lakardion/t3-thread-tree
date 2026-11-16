@@ -2,7 +2,15 @@ import * as v from "valibot";
 
 /** The bridge payload of `setNeedsYou`. Unknown keys are dropped. */
 export const NeedsYouList = v.pipe(
-  v.array(v.object({ id: v.string(), title: v.string(), environmentId: v.string(), since: v.nullable(v.string()) })),
+  v.array(
+    v.object({
+      id: v.string(),
+      title: v.string(),
+      environmentId: v.string(),
+      since: v.nullable(v.string()),
+      status: v.picklist(["needs-input", "plan-ready"]),
+    }),
+  ),
   v.maxLength(500),
 );
 

@@ -41,7 +41,7 @@ export const needsYouThreads = (projects: Branch[]): NeedsYouThread[] =>
     .flatMap(allThreads)
     .flatMap((t) =>
       !t.settled && (t.status === "needs-input" || t.status === "plan-ready")
-        ? [{ id: t.id, title: t.title, environmentId: envOf(t), since: t.since }]
+        ? [{ id: t.id, title: t.title, environmentId: envOf(t), since: t.since, status: t.status }]
         : [],
     );
 

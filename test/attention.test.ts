@@ -131,7 +131,9 @@ describe("needsYouThreads", () => {
 
   test("decodes the environment id from the href", () => {
     const tree = [branch("p", [{ ...thread("a", "needs-input"), href: "t3code://threads/env%201/a", since: "s" }])];
-    expect(needsYouThreads(tree)).toEqual([{ id: "a", title: "a", environmentId: "env 1", since: "s" }]);
+    expect(needsYouThreads(tree)).toEqual([
+      { id: "a", title: "a", environmentId: "env 1", since: "s", status: "needs-input" },
+    ]);
   });
 
   test("has the length of the need-you count", () => {
