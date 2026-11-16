@@ -2,7 +2,7 @@
 title: Send a notification when a thread starts to need you
 type: wayfinder:task
 status: open
-assignee:
+assignee: claude (desktop-11)
 blocked-by: [10-dock-badge]
 ---
 
