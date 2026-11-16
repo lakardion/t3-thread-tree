@@ -41,7 +41,7 @@ _Screenshots use made-up data from `bun run demo`._
 - **Settled threads on demand.** The "show settled" switch adds them. Archived threads never show.
 - **What's next.** A click on "What's next" shows a ranked list of next steps over the active threads, each with links to its threads. Code makes the obvious steps at once: answer a waiting agent, fix a PR with failing checks, conflicts or requested changes, and merge an approved PR. A local `claude` or `codex` CLI on a cheap model ranks the rest, and it does not run when nothing is left. A step can have a prompt that you copy with one click. It also has a send icon that opens a dialog with a thread picker and the editable prompt. "Confirm send" sends the message to the thread, and the step then shows "Sent to" with the thread name. The send icon is off when no `t3` CLI is found. A step with a prompt also has a "Start thread" icon. It opens a dialog with a project picker, a title (the issue key and the step title), and the editable prompt. "Start thread" starts a new thread in that project with the prompt as its first message, and the thread then shows in the tree. This icon is also off when no `t3` CLI is found. The chevron next to the button opens a menu that selects the model. Each option shows its provider icon. The current model shows next to the button. A thread that is no longer active shows struck through.
 - **Send from a row.** Each thread row, top-level or subthread, has a send icon at its end. It shows on hover or focus, and always on touch screens. It opens the same dialog with that thread as the fixed target and an empty message. The icon is off when no `t3` CLI is found. The row status changes when the thread takes the message.
-- **Desktop window.** The tree runs in its own macOS window. The app starts the server for you on the first free port from 4773. Links to T3 Code and to PRs open outside the window. A second start shows the first window.
+- **Desktop window.** The tree runs in its own macOS window. The app starts the server for you on the first free port from 4773. Links to T3 Code and to PRs open outside the window. A second start shows the first window. Closing the window hides it, and the tree keeps running. A click on the Dock icon shows it again. Cmd-Q quits the app. The window opens at its last size and place.
 
 ## Requirements
 
@@ -87,7 +87,7 @@ Open <http://127.0.0.1:4773>.
 - The app starts even when T3 is not running. It retries every 3 s. Until T3 is back, the page shows the last tree, greyed, with the time of the last update.
 - If T3 rejects the token, the page shows the command to issue a new one.
 
-To use the desktop window, run `bun run desktop`. It takes the first free port from 4773. Run `bun run desktop:demo` to see the demo in the window. Closing the window quits the app.
+To use the desktop window, run `bun run desktop`. It takes the first free port from 4773. Run `bun run desktop:demo` to see the demo in the window. Closing the window hides it. Cmd-Q quits.
 
 To see the UI without T3, run `bun run demo` and open <http://127.0.0.1:4774>. The demo uses a stub brief runner: set `BRIEF=failed`, `BRIEF=empty` or `BRIEF=rules` to see the other outcomes, `CLIS=0` to offer no CLI, `PUSH=1` to fake a live change every 3 seconds, `SEND=failed` to make a send fail, and `T3CLI=0` to show the `t3` CLI as missing.
 

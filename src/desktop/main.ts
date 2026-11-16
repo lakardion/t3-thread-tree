@@ -2,9 +2,10 @@ import { type ChildProcess, execFile, spawn } from "node:child_process";
 import { homedir } from "node:os";
 import { join } from "node:path";
 
-import { app, BrowserWindow, shell } from "electron";
+import { app, BrowserWindow, Menu, screen, shell } from "electron";
 
 import { fallbackPath, pickPort, RESET_AFTER_MS, restartDelay, shellPath } from "./runtime.ts";
+import { parseBounds, readJson, writeJson } from "./store.ts";
 
 const log = (m: string) => console.log(`desktop: ${m}`);
 const sleep = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
@@ -12,6 +13,15 @@ const sleep = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
 let window: BrowserWindow | undefined;
 let child: ChildProcess | undefined;
 let quitting = false;
+
+const dataFile = (name: string) => join(app.getPath("userData"), name);
+const save = (name: string, value: unknown) => {
+  try {
+    writeJson(dataFile(name), value);
+  } catch (e) {
+    log(`save ${name} failed: ${String(e)}`);
+  }
+};
 
 const loginPath = () =>
   new Promise<string>((resolve) => {
@@ -66,9 +76,13 @@ const openOutside = (url: string) => {
 
 function openWindow(port: number) {
   const origin = `http://127.0.0.1:${port}`;
-  window = new BrowserWindow({
+  const win = (window = new BrowserWindow({
     width: 1200,
     height: 900,
+    ...parseBounds(
+      readJson(dataFile("window.json")),
+      screen.getAllDisplays().map((d) => d.workArea),
+    ),
     show: false,
     webPreferences: {
       preload: join(__dirname, "preload.cjs"),
@@ -77,21 +91,39 @@ function openWindow(port: number) {
       sandbox: true,
       backgroundThrottling: false,
     },
+  }));
+  win.once("ready-to-show", () => win.show());
+  /** Close hides the window so the tree keeps running. A fullscreen window leaves fullscreen first. */
+  win.on("close", (e) => {
+    save("window.json", win.getNormalBounds());
+    if (quitting) return;
+    e.preventDefault();
+    if (win.isFullScreen()) {
+      win.once("leave-full-screen", () => win.hide());
+      win.setFullScreen(false);
+    } else win.hide();
   });
-  window.once("ready-to-show", () => window?.show());
-  window.webContents.setWindowOpenHandler(({ url }) => {
+  win.on("closed", () => (window = undefined));
+  win.webContents.setWindowOpenHandler(({ url }) => {
     openOutside(url);
     return { action: "deny" };
   });
-  window.webContents.on("will-navigate", (event, url) => {
+  win.webContents.on("will-navigate", (event, url) => {
     if (url === origin || url.startsWith(`${origin}/`)) return;
     event.preventDefault();
     openOutside(url);
   });
-  window.loadURL(origin).catch((e: unknown) => log(`load failed: ${String(e)}`));
+  win.loadURL(origin).catch((e: unknown) => log(`load failed: ${String(e)}`));
+}
+
+function setMenu() {
+  Menu.setApplicationMenu(
+    Menu.buildFromTemplate([{ role: "appMenu" }, { role: "editMenu" }, { role: "viewMenu" }, { role: "windowMenu" }]),
+  );
 }
 
 async function main() {
+  setMenu();
   const [PATH, port] = await Promise.all([loginPath(), pickPort()]);
   startServer(port, PATH, 0);
   if (!(await waitReady(port))) {
@@ -105,13 +137,14 @@ async function main() {
 if (!app.requestSingleInstanceLock()) {
   app.quit();
 } else {
-  app.on("second-instance", () => {
+  const showWindow = () => {
     if (!window) return;
     if (window.isMinimized()) window.restore();
     window.show();
     window.focus();
-  });
-  app.on("window-all-closed", () => app.quit());
+  };
+  app.on("second-instance", showWindow);
+  app.on("activate", showWindow);
   app.on("before-quit", (event) => {
     quitting = true;
     if (!child) return;

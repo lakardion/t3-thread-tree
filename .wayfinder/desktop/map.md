@@ -39,7 +39,7 @@ One chain. Each key stacks on the one before it. "forced" marks a key that needs
 8. [Keep the app alive with a hidden window, and add the app menu](tickets/08-window-lifetime.md) — after 07 (forced)
 9. [Save the T3 token from the desktop window](tickets/09-token-entry.md) — after 07 (forced: bridge)
 10. [Show the Needs-you count on the Dock icon](tickets/10-dock-badge.md) — after 07 (forced: bridge)
-11. [Send a notification when a thread starts to need you](tickets/11-notifications.md) — after 08 (forced: `settings.json`)
+11. [Send a notification when a thread starts to need you](tickets/11-notifications.md) — after 08
 12. [Add the menu-bar entry with the Needs-you threads](tickets/12-menu-bar.md) — after 10 and 11 (forced: list and mute)
 13. [Package, sign and install the app from source](tickets/13-package-install.md) — after 06 and 12 (forced)
 14. [Release the .dmg from a tag and show "Update available"](tickets/14-release-and-update.md) — after 13 (forced)
@@ -48,7 +48,7 @@ The destination is reached when every route key is done and no map ticket is ope
 
 ## Stacks
 
-- `main ← desktop-05-spec (#30) ← desktop-06-sidecar-build (#31) ← desktop-07-electron-shell (#33)` (spec, base of the build stack)
+- `main ← desktop-05-spec (#30) ← desktop-06-sidecar-build (#31) ← desktop-07-electron-shell (#33) ← desktop-08-window-lifetime (#34)` (spec, base of the build stack)
 
 ## Notes
 
@@ -83,6 +83,7 @@ Closed map tickets:
 
 ## Not yet specified
 
+- A small always-on-top window with a summary of the threads. "Always on Top" for the full window was dropped in ticket 08: it covers too much of the screen.
 
 ## Out of scope
 
