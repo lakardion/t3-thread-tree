@@ -6,17 +6,7 @@ import { app, BrowserWindow, ipcMain, Menu, screen, shell } from "electron";
 
 import type { NeedsYouThread } from "../shared/desktop.ts";
 import { fallbackPath, pickPort, RESET_AFTER_MS, restartDelay, shellPath } from "./runtime.ts";
-import {
-  parseBounds,
-  parseNeedsYou,
-  parseSettings,
-  parseToken,
-  readJson,
-  readToken,
-  type Settings,
-  writeJson,
-  writeToken,
-} from "./store.ts";
+import { parseBounds, parseNeedsYou, parseToken, readJson, readToken, writeJson, writeToken } from "./store.ts";
 
 const log = (m: string) => console.log(`desktop: ${m}`);
 const sleep = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
@@ -26,7 +16,6 @@ let child: ChildProcess | undefined;
 let quitting = false;
 /** Set when main stops the server to load a new token, so the stop does not count as a crash. */
 let tokenRestart = false;
-let settings: Settings = parseSettings(undefined);
 /** The last Needs-you list, for the menu-bar entry. */
 /* oxlint-disable-next-line eslint/no-unused-vars -- read by the menu-bar entry */
 let needsYou: NeedsYouThread[] = [];
@@ -102,7 +91,6 @@ function openWindow(port: number) {
       readJson(dataFile("window.json")),
       screen.getAllDisplays().map((d) => d.workArea),
     ),
-    alwaysOnTop: settings.alwaysOnTop,
     show: false,
     webPreferences: {
       /** Bun bakes the source folder into `__dirname`, so the path starts at the app root. */
@@ -139,41 +127,11 @@ function openWindow(port: number) {
 
 function setMenu() {
   Menu.setApplicationMenu(
-    Menu.buildFromTemplate([
-      {
-        label: app.name,
-        submenu: [
-          { role: "about" },
-          { type: "separator" },
-          {
-            label: "Always on Top",
-            type: "checkbox",
-            checked: settings.alwaysOnTop,
-            click: (item) => {
-              settings = { ...settings, alwaysOnTop: item.checked };
-              window?.setAlwaysOnTop(item.checked);
-              save("settings.json", settings);
-            },
-          },
-          { type: "separator" },
-          { role: "services" },
-          { type: "separator" },
-          { role: "hide" },
-          { role: "hideOthers" },
-          { role: "unhide" },
-          { type: "separator" },
-          { role: "quit" },
-        ],
-      },
-      { role: "editMenu" },
-      { role: "viewMenu" },
-      { role: "windowMenu" },
-    ]),
+    Menu.buildFromTemplate([{ role: "appMenu" }, { role: "editMenu" }, { role: "viewMenu" }, { role: "windowMenu" }]),
   );
 }
 
 async function main() {
-  settings = parseSettings(readJson(dataFile("settings.json")));
   setMenu();
   ipcMain.handle("setToken", (event, raw: unknown) => {
     if (event.sender !== window?.webContents) throw new Error("not allowed");
