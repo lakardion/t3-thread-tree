@@ -331,6 +331,9 @@ async function main() {
   openWindow(port);
 }
 
+/** A run from source keeps its own data and lock, so it runs beside the installed app. */
+if (!app.isPackaged) app.setPath("userData", `${app.getPath("userData")} Dev`);
+
 if (!app.requestSingleInstanceLock()) {
   app.quit();
 } else {

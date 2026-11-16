@@ -781,7 +781,7 @@ function ProjectBlock({ b, closed, toggle, fold }: { b: Branch } & Fold) {
     <li ref={ref} className="border-l-[3px] not-last:border-b" style={{ borderLeftColor: color }}>
       <Collapsible asChild open={open} onOpenChange={() => toggle(b.id)}>
         <div>
-          <div className="group/row relative flex h-8 min-w-0 items-center gap-1.5 px-2 max-[720px]:h-auto max-[720px]:min-h-8">
+          <div className="group/row sticky top-0 z-20 flex h-8 min-w-0 items-center gap-1.5 bg-card px-2 max-[720px]:h-auto max-[720px]:min-h-8">
             <DragHandle handleRef={handleRef} name={b.label} className="relative z-10 -ml-1" />
             <CollapsibleTrigger className="flex min-w-0 cursor-pointer items-center gap-1.5 select-none after:absolute after:inset-0">
               <Chevron open={open} />
@@ -1032,7 +1032,7 @@ function App() {
 
   return (
     <TooltipProvider>
-      <header className="mb-3.5 flex flex-wrap items-center gap-x-5 gap-y-3 text-muted-foreground">
+      <header className="mb-3.5 flex flex-none flex-wrap items-center gap-x-5 gap-y-3 text-muted-foreground">
         <h1 className="m-0 text-[15px] font-semibold text-foreground">Thread tree</h1>
         {tree && (
           <div className="flex flex-wrap items-center gap-1.5">
@@ -1097,96 +1097,98 @@ function App() {
           <MorphIcon icon={THEME_ICONS[theme]} size={16} reducedMotion="user" />
         </Button>
       </header>
-      {tree?.conn === "down" && (
-        <Alert className="mb-3 border-l-[3px] border-l-status-needs-input">
-          <AlertDescription className="text-foreground">
-            T3 not running: last update {tree.lastUpdate ? hhmm(tree.lastUpdate) : "never"}
-          </AlertDescription>
-        </Alert>
-      )}
-      {tree?.conn === "unauthorized" && (
-        <Alert className="mb-3 border-l-[3px] border-l-status-needs-input">
-          <AlertDescription className="block text-foreground">
-            T3 rejected the token. Issue one{" "}
-            {window.desktopBridge ? (
-              "with this command, then paste it here:"
-            ) : (
-              <>
-                and put it in <code className="text-xs select-all">.env</code> as{" "}
-                <code className="text-xs select-all">T3_TOKEN</code>, then restart:
-              </>
-            )}
-            <br />
-            <code className="text-xs select-all">{TOKEN_CMD}</code>
-            {window.desktopBridge && <TokenForm bridge={window.desktopBridge} />}
-          </AlertDescription>
-        </Alert>
-      )}
-      {!hideBrief && brief.status !== "idle" && (
-        <BriefPanel
-          state={brief}
-          clis={clis}
-          live={live}
-          projects={tree?.projects ?? []}
-          t3cli={t3cli}
-          sent={sent}
-          onSent={(key, id) =>
-            setSent((m) => {
-              const ids = m.get(key) ?? [];
-              return ids.includes(id) ? m : new Map(m).set(key, [...ids, id]);
-            })
-          }
-          run={runBrief}
-          cancel={() => fetch("/brief/cancel", { method: "POST" })}
-          close={() => setHideBrief(true)}
-        />
-      )}
-      <Details value={details}>
-        <NeedsOnly value={needsOnly}>
-          <Linear value={tree?.linear ?? null}>
-            <Lists value={view.lists}>
-              <Now value={now}>
-                <div
-                  className={!connecting && tree.conn !== "up" ? "grayscale" : ""}
-                  data-conn={!connecting && tree.conn !== "up" ? "down" : undefined}
-                >
-                  {projects?.length === 0 && <p className="text-muted-foreground">No active threads.</p>}
-                  {projects ? (
-                    <DragDropProvider plugins={plugins} onDragStart={dragStart} onDragEnd={dragEnd}>
-                      <Card className="gap-0 overflow-hidden rounded-[12px] py-0 shadow-none">
-                        <ul className="m-0 list-none p-0">
-                          <SendTo value={{ t3cli, open: (id) => setSendTo({ id, open: true }) }}>
-                            <Presence items={projects} keyOf={(p) => p.id}>
-                              {(p) => <ProjectBlock b={p} closed={closed} toggle={toggle} fold={fold} />}
-                            </Presence>
-                          </SendTo>
-                        </ul>
-                      </Card>
-                    </DragDropProvider>
-                  ) : (
-                    <>
-                      <p className="mb-2 text-sm text-muted-foreground" role="status">
-                        Connecting to T3…
-                      </p>
-                      <Card
-                        className="gap-0 rounded-[12px] py-0 shadow-none"
-                        aria-busy="true"
-                        aria-label="Loading threads"
-                      >
-                        <CardContent className="flex flex-col gap-0.5 p-1.5">
-                          {[0, 1, 2].map((i) => (
-                            <Skeleton key={i} className="h-9 rounded-[8px] motion-reduce:animate-none" />
-                          ))}
-                        </CardContent>
-                      </Card>
-                    </>
-                  )}
-                </div>
-              </Now>
-            </Lists>
-          </Linear>
-        </NeedsOnly>
-      </Details>
+      <div className="min-h-0 flex-1 overflow-y-auto">
+        {tree?.conn === "down" && (
+          <Alert className="mb-3 border-l-[3px] border-l-status-needs-input">
+            <AlertDescription className="text-foreground">
+              T3 not running: last update {tree.lastUpdate ? hhmm(tree.lastUpdate) : "never"}
+            </AlertDescription>
+          </Alert>
+        )}
+        {tree?.conn === "unauthorized" && (
+          <Alert className="mb-3 border-l-[3px] border-l-status-needs-input">
+            <AlertDescription className="block text-foreground">
+              T3 rejected the token. Issue one{" "}
+              {window.desktopBridge ? (
+                "with this command, then paste it here:"
+              ) : (
+                <>
+                  and put it in <code className="text-xs select-all">.env</code> as{" "}
+                  <code className="text-xs select-all">T3_TOKEN</code>, then restart:
+                </>
+              )}
+              <br />
+              <code className="text-xs select-all">{TOKEN_CMD}</code>
+              {window.desktopBridge && <TokenForm bridge={window.desktopBridge} />}
+            </AlertDescription>
+          </Alert>
+        )}
+        {!hideBrief && brief.status !== "idle" && (
+          <BriefPanel
+            state={brief}
+            clis={clis}
+            live={live}
+            projects={tree?.projects ?? []}
+            t3cli={t3cli}
+            sent={sent}
+            onSent={(key, id) =>
+              setSent((m) => {
+                const ids = m.get(key) ?? [];
+                return ids.includes(id) ? m : new Map(m).set(key, [...ids, id]);
+              })
+            }
+            run={runBrief}
+            cancel={() => fetch("/brief/cancel", { method: "POST" })}
+            close={() => setHideBrief(true)}
+          />
+        )}
+        <Details value={details}>
+          <NeedsOnly value={needsOnly}>
+            <Linear value={tree?.linear ?? null}>
+              <Lists value={view.lists}>
+                <Now value={now}>
+                  <div
+                    className={!connecting && tree.conn !== "up" ? "grayscale" : ""}
+                    data-conn={!connecting && tree.conn !== "up" ? "down" : undefined}
+                  >
+                    {projects?.length === 0 && <p className="text-muted-foreground">No active threads.</p>}
+                    {projects ? (
+                      <DragDropProvider plugins={plugins} onDragStart={dragStart} onDragEnd={dragEnd}>
+                        <Card className="gap-0 overflow-clip rounded-[12px] py-0 shadow-none">
+                          <ul className="m-0 list-none p-0">
+                            <SendTo value={{ t3cli, open: (id) => setSendTo({ id, open: true }) }}>
+                              <Presence items={projects} keyOf={(p) => p.id}>
+                                {(p) => <ProjectBlock b={p} closed={closed} toggle={toggle} fold={fold} />}
+                              </Presence>
+                            </SendTo>
+                          </ul>
+                        </Card>
+                      </DragDropProvider>
+                    ) : (
+                      <>
+                        <p className="mb-2 text-sm text-muted-foreground" role="status">
+                          Connecting to T3…
+                        </p>
+                        <Card
+                          className="gap-0 rounded-[12px] py-0 shadow-none"
+                          aria-busy="true"
+                          aria-label="Loading threads"
+                        >
+                          <CardContent className="flex flex-col gap-0.5 p-1.5">
+                            {[0, 1, 2].map((i) => (
+                              <Skeleton key={i} className="h-9 rounded-[8px] motion-reduce:animate-none" />
+                            ))}
+                          </CardContent>
+                        </Card>
+                      </>
+                    )}
+                  </div>
+                </Now>
+              </Lists>
+            </Linear>
+          </NeedsOnly>
+        </Details>
+      </div>
       <SendDialog
         fixed
         open={sendTo.open}

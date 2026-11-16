@@ -17,6 +17,7 @@ _Screenshots use made-up data from `bun run demo`._
 ## What you get
 
 - **All projects in one list.** Each project is a block with its name on one header line above its threads, so you see all projects at once. Long thread titles wrap and are never cut, also on a phone. The project has the same icon and color as in T3 Code: two letters on a colored square, and the block has a left edge in that color. Hover the name to see the repository (`owner/name`). Threads group by the first issue key in the title (`SHOP-412`, `API-81`, …). A key group with one thread folds into its row, which shows the key as a chip. Review threads (`Review #…`) go in their own Reviews group. This group always sits at the top of the project, with an eye icon and a teal label, so you find it fast.
+- **Header stays in view.** The header stays at the top of the window, and only the list below it scrolls. The header line of the project you scroll through stays at the top of the list.
 - **Launch lineage.** A thread that an agent launched, with no issue key, nests under the thread that launched it. T3 does not store this link, so the app reads it from T3's local database.
 - **PR stacks.** Issue groups that share a stack sit together in one block. Its header is a line from the base branch to the top PR, with one stop for each PR, for example `main ─ 1 · #2101 ─ 2 · #2102`. Click a stop to open the PR. Below the header, the threads sit on a numbered line, one number for each stack position. A red stop means failing checks, a conflict or requested changes, green means approved, grey means draft and blue means open. Click the chevron to fold the block to its header.
 - **PR marks.** Each row shows its first two PRs. A PR chip shows checks (dot or ring), review (check or cross), conflicts (warning), draft (dashed border), merged (violet) and closed (struck through).
@@ -111,7 +112,7 @@ Open <http://127.0.0.1:4773>.
 - The app starts even when T3 is not running. It retries every 3 s. Until T3 is back, the page shows the last tree, greyed, with the time of the last update.
 - If T3 rejects the token, the page shows the command to issue a new one.
 
-To use the desktop window, run `bun run desktop`. It takes the first free port from 4773. Run `bun run desktop:demo` to see the demo in the window. Closing the window hides it. Cmd-Q quits.
+To use the desktop window, run `bun run desktop`. It takes the first free port from 4773. It keeps its own data, so it runs beside the installed app. Run `bun run desktop:demo` to see the demo in the window. Closing the window hides it. Cmd-Q quits.
 
 To see the UI without T3, run `bun run demo` and open <http://127.0.0.1:4774>. The demo uses a stub brief runner: set `BRIEF=failed`, `BRIEF=empty` or `BRIEF=rules` to see the other outcomes, `CLIS=0` to offer no CLI, `PUSH=1` to fake a live change every 3 seconds, `SEND=failed` to make a send fail, and `T3CLI=0` to show the `t3` CLI as missing.
 
