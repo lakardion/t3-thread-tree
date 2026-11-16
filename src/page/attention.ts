@@ -39,13 +39,11 @@ const envOf = (t: ThreadNode) => decodeURIComponent(t.href.split("/")[3] ?? "");
 export const needsYouThreads = (projects: Branch[]): NeedsYouThread[] =>
   projects
     .flatMap(allThreads)
-    .filter((t) => !t.settled && (t.status === "needs-input" || t.status === "plan-ready"))
-    .map((t) => ({
-      id: t.id,
-      title: t.title,
-      environmentId: envOf(t),
-      since: t.since,
-    }));
+    .flatMap((t) =>
+      !t.settled && (t.status === "needs-input" || t.status === "plan-ready")
+        ? [{ id: t.id, title: t.title, environmentId: envOf(t), since: t.since }]
+        : [],
+    );
 
 export type Statuses = Map<string, Status>;
 
