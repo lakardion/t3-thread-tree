@@ -2,6 +2,8 @@ import { chmodSync, readFileSync, writeFileSync } from "node:fs";
 
 import * as v from "valibot";
 
+import { NeedsYouList, type NeedsYouThread } from "../shared/desktop.ts";
+
 const Size = v.object({
   width: v.pipe(v.number(), v.finite(), v.gtValue(0)),
   height: v.pipe(v.number(), v.finite(), v.gtValue(0)),
@@ -46,6 +48,12 @@ export function writeToken(file: string, token: string): void {
     chmodSync(file, 0o600);
   } catch {}
   writeFileSync(file, token, { mode: 0o600 });
+}
+
+/** A clean copy of the Needs-you list, or `null` when `raw` is not an array of at most 500 well-formed threads. */
+export function parseNeedsYou(raw: unknown): NeedsYouThread[] | null {
+  const result = v.safeParse(NeedsYouList, raw);
+  return result.success ? result.output : null;
 }
 
 /** Saved window bounds. The position stays only when the window touches a screen. */

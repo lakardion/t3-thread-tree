@@ -49,7 +49,7 @@ import { cn } from "@/lib/utils";
 import type { BriefState, Cli } from "../shared/brief.ts";
 import type { CliStatus } from "../shared/send.ts";
 import { allThreads, REVIEWS, type Branch, type PrNode, type ThreadNode, type Tree } from "../shared/tree.ts";
-import { countAttention, needsYou, onlyNeedsYou } from "./attention.ts";
+import { countAttention, needsYou, needsYouThreads, onlyNeedsYou } from "./attention.ts";
 import { BriefControls, BriefPanel, type Offered } from "./brief.tsx";
 import {
   ago,
@@ -869,6 +869,16 @@ function App() {
   const briefStatus = useRef<BriefState["status"]>("idle");
   const [orders, setOrders] = useState(() => parseOrders(load(ORDER_KEY)));
   const [freeze, setFreeze] = useState<Freeze>();
+  const sentNeedsYou = useRef("");
+
+  useEffect(() => {
+    if (!window.desktopBridge || !tree) return;
+    const list = needsYouThreads(tree.projects);
+    const key = JSON.stringify(list);
+    if (key === sentNeedsYou.current) return;
+    sentNeedsYou.current = key;
+    window.desktopBridge.setNeedsYou(list);
+  }, [tree]);
 
   useEffect(() => {
     fetch("/brief/clis")

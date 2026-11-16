@@ -32,3 +32,9 @@ Notify the user when a thread enters needs input, plan ready or failed, with a m
 ## Handed over from desktop-09
 
 - Add `notify` to `DesktopBridge` in `src/shared/desktop.ts` and to the preload object (`satisfies DesktopBridge`). Main accepts IPC only from `window?.webContents`, as the `setToken` handler does.
+
+## Handed over from desktop-10
+
+- The preload now loads: main resolves it from `app.getAppPath()`, because Bun bakes the source folder into `__dirname`. Check `window.desktopBridge` in `bun run desktop:demo` (the badge already works there).
+- For a fire-and-forget method like `notify`, follow `setNeedsYou`: `ipcRenderer.send` in the preload, `ipcMain.on` in main, which ignores any sender that is not `window?.webContents`. The payload check lives in `src/desktop/store.ts` (`parseNeedsYou` is the model).
+- The page sends `setNeedsYou` from a `useEffect` on `tree` in `App` (`src/page/app.tsx`). Put the notify rules next to it; `needsYouThreads` in `src/page/attention.ts` is the pure-function model.

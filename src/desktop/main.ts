@@ -4,8 +4,9 @@ import { join } from "node:path";
 
 import { app, BrowserWindow, ipcMain, Menu, screen, shell } from "electron";
 
+import type { NeedsYouThread } from "../shared/desktop.ts";
 import { fallbackPath, pickPort, RESET_AFTER_MS, restartDelay, shellPath } from "./runtime.ts";
-import { parseBounds, parseToken, readJson, readToken, writeJson, writeToken } from "./store.ts";
+import { parseBounds, parseNeedsYou, parseToken, readJson, readToken, writeJson, writeToken } from "./store.ts";
 
 const log = (m: string) => console.log(`desktop: ${m}`);
 const sleep = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
@@ -15,6 +16,9 @@ let child: ChildProcess | undefined;
 let quitting = false;
 /** Set when main stops the server to load a new token, so the stop does not count as a crash. */
 let tokenRestart = false;
+/** The last Needs-you list, for the menu-bar entry. */
+/* oxlint-disable-next-line eslint/no-unused-vars -- read by the menu-bar entry */
+let needsYou: NeedsYouThread[] = [];
 
 const dataFile = (name: string) => join(app.getPath("userData"), name);
 const save = (name: string, value: unknown) => {
@@ -89,7 +93,8 @@ function openWindow(port: number) {
     ),
     show: false,
     webPreferences: {
-      preload: join(__dirname, "preload.cjs"),
+      /** Bun bakes the source folder into `__dirname`, so the path starts at the app root. */
+      preload: join(app.getAppPath(), "dist", "desktop", "preload.cjs"),
       contextIsolation: true,
       nodeIntegration: false,
       sandbox: true,
@@ -137,6 +142,16 @@ async function main() {
       tokenRestart = true;
       child.kill("SIGTERM");
     }
+  });
+  ipcMain.on("setNeedsYou", (event, raw: unknown) => {
+    if (event.sender !== window?.webContents) return;
+    const list = parseNeedsYou(raw);
+    if (!list) {
+      log("bad setNeedsYou payload");
+      return;
+    }
+    needsYou = list;
+    app.setBadgeCount(list.length);
   });
   const [PATH, port] = await Promise.all([loginPath(), pickPort()]);
   startServer(port, PATH, 0);
