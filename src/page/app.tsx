@@ -9,17 +9,23 @@ import {
 } from "@dnd-kit/dom";
 import { DragDropProvider } from "@dnd-kit/react";
 import { isSortable, useSortable } from "@dnd-kit/react/sortable";
-import { ChevronsDownUp, ChevronsUpDown, CircleArrowUp } from "lucide";
+import { ChevronsDownUp, ChevronsUpDown } from "lucide";
 import {
   Check,
   ChevronDown,
   ChevronRight,
+  CircleArrowUp,
+  Contrast,
   ExternalLink,
   Eye,
   GripVertical,
+  Info,
   Layers,
+  LoaderCircle,
+  Moon,
   Send,
   SlidersHorizontal,
+  Sun,
   TriangleAlert,
   X,
 } from "lucide-react";
@@ -34,6 +40,7 @@ import { Card, CardContent } from "@/components/ui/card";
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { Progress } from "@/components/ui/progress";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Switch } from "@/components/ui/switch";
 import { ToggleGroup, ToggleGroupItem } from "@/components/ui/toggle-group";
@@ -41,6 +48,7 @@ import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/comp
 import { cn } from "@/lib/utils";
 
 import type { BriefState, Cli } from "../shared/brief.ts";
+import type { UpdateState } from "../shared/desktop.ts";
 import type { CliStatus } from "../shared/send.ts";
 import {
   allThreads,
@@ -198,12 +206,270 @@ function LinearForm({ linear, setLinear }: LinearProps) {
   );
 }
 
-const Section = ({ title, children }: { title: string; children: ReactNode }) => (
-  <section className="grid gap-2.5 border-t pt-4 first:border-t-0 first:pt-0">
-    <h3 className="m-0 text-sm font-semibold text-foreground">{title}</h3>
-    {children}
+/** One labelled group: a title outside a card of rows. */
+const Group = ({ title, children, accent }: { title: string; children: ReactNode; accent?: boolean }) => (
+  <section className="grid gap-1.5">
+    <h3 className="m-0 px-1 text-xs font-semibold text-muted-foreground">{title}</h3>
+    <div className={cn("divide-y rounded-lg border bg-background", accent && "border-l-[3px] border-l-primary")}>
+      {children}
+    </div>
   </section>
 );
+
+/** Label and hint at the left, control at the right. */
+const Row = ({
+  label,
+  hint,
+  children,
+  htmlFor,
+}: {
+  label: ReactNode;
+  hint?: ReactNode;
+  children?: ReactNode;
+  htmlFor?: string;
+}) => (
+  <div className="flex items-center justify-between gap-2 px-3 py-2.5">
+    <div className="grid min-w-0 gap-0.5">
+      <Label htmlFor={htmlFor} className="text-[13px] font-normal">
+        {label}
+      </Label>
+      {hint && <div className={HINT}>{hint}</div>}
+    </div>
+    {children}
+  </div>
+);
+
+type Tone = "ok" | "warn" | "info";
+const TONE: Record<Tone, { cls: string; Icon: typeof Info | null }> = {
+  ok: { cls: "text-status-done-fg", Icon: null },
+  warn: { cls: "text-status-needs-input-fg", Icon: TriangleAlert },
+  info: { cls: "text-status-working-fg", Icon: Info },
+};
+
+/** A row that folds open, with its current value at the right. */
+const Fold = ({
+  label,
+  value,
+  tone,
+  defaultOpen,
+  children,
+}: {
+  label: string;
+  value: ReactNode;
+  tone: Tone;
+  defaultOpen?: boolean;
+  children: ReactNode;
+}) => {
+  const { cls, Icon } = TONE[tone];
+  return (
+    <Collapsible defaultOpen={defaultOpen}>
+      <CollapsibleTrigger className="group flex w-full items-center justify-between gap-2 px-3 py-2.5 text-left">
+        <span className="text-[13px]">{label}</span>
+        <span className="flex items-center gap-1.5">
+          <span className={cn("inline-flex items-center gap-1 text-xs", cls)}>
+            {Icon && <Icon className="size-3.5" aria-hidden />}
+            {value}
+          </span>
+          <ChevronDown className="size-4 transition-transform group-data-[state=open]:rotate-180" />
+        </span>
+      </CollapsibleTrigger>
+      <CollapsibleContent className="px-3 pb-3">{children}</CollapsibleContent>
+    </Collapsible>
+  );
+};
+
+/** Light, system, dark: icons only, so the three parts are the same width. */
+const THEME_ICONS: [Theme, string, typeof Sun][] = [
+  ["light", "Light", Sun],
+  ["system", "System", Contrast],
+  ["dark", "Dark", Moon],
+];
+const ThemeToggle = ({ theme, setTheme }: { theme: Theme; setTheme: (t: Theme) => void }) => (
+  <ToggleGroup
+    type="single"
+    size="sm"
+    variant="outline"
+    aria-label="Theme"
+    value={theme}
+    onValueChange={(v) => v && setTheme(v as Theme)}
+  >
+    {THEME_ICONS.map(([t, name, Icon]) => (
+      <ToggleGroupItem key={t} value={t} aria-label={name} className={cn(FILTER_ITEM, "w-9 px-0")}>
+        {/** The tooltip sits inside: as the trigger it would replace the item's `data-state="on"`. */}
+        <Tooltip>
+          <TooltipTrigger asChild>
+            <span className="flex size-full items-center justify-center">
+              <Icon />
+            </span>
+          </TooltipTrigger>
+          <TooltipContent>{name}</TooltipContent>
+        </Tooltip>
+      </ToggleGroupItem>
+    ))}
+  </ToggleGroup>
+);
+
+/** Follows the update state of the main process. Undefined in the browser. */
+function useUpdate(): UpdateState | undefined {
+  const [state, setState] = useState<UpdateState>();
+  useEffect(() => {
+    const bridge = window.desktopBridge;
+    if (!bridge) return;
+    const off = bridge.onUpdateState(setState);
+    void bridge.updateState().then((s) => setState((current) => current ?? s));
+    return off;
+  }, []);
+  return state;
+}
+
+/** Circumference of the r=6 ring. */
+const RING = 2 * Math.PI * 6;
+
+/** The View button. An update shows as a dot, and a running install as a progress ring in place of the icon. */
+function ViewButton({ update, open, toggle }: { update: UpdateState | undefined; open: boolean; toggle: () => void }) {
+  const install = update?.install ?? null;
+  const running = install !== null && install.stage !== "failed";
+  const spinning = install?.stage === "unpacking" || (install?.stage === "downloading" && install.progress === null);
+  const filled = install?.stage === "downloading" && install.progress !== null ? install.progress : spinning ? 0.25 : 1;
+  const note =
+    install?.stage === "downloading"
+      ? `downloading update${install.progress === null ? "" : ` ${Math.round(install.progress * 100)}%`}`
+      : install?.stage === "unpacking"
+        ? "unpacking update"
+        : install?.stage === "restarting"
+          ? "restarting"
+          : install?.stage === "failed"
+            ? "update failed"
+            : update?.release
+              ? "update available"
+              : null;
+  const dot = install?.stage === "failed" ? "bg-destructive" : !install && update?.release ? "bg-primary" : null;
+  return (
+    <Button
+      variant={open ? "secondary" : "ghost"}
+      size="sm"
+      aria-expanded={open}
+      aria-label={note ? `View and settings, ${note}` : "View and settings"}
+      onClick={toggle}
+    >
+      {running ? (
+        <svg
+          viewBox="0 0 16 16"
+          className={cn("size-4 -rotate-90", spinning && "animate-spin motion-reduce:animate-none")}
+          aria-hidden
+        >
+          <circle cx="8" cy="8" r="6" fill="none" strokeWidth="2" className="stroke-muted-foreground/25" />
+          <circle
+            cx="8"
+            cy="8"
+            r="6"
+            fill="none"
+            strokeWidth="2"
+            strokeLinecap="round"
+            strokeDasharray={RING}
+            strokeDashoffset={RING * (1 - filled)}
+            className="stroke-primary transition-[stroke-dashoffset] duration-150"
+          />
+        </svg>
+      ) : (
+        <span className="relative inline-flex">
+          <SlidersHorizontal />
+          {dot && (
+            <span className={cn("absolute -top-0.5 -right-0.5 size-1.5 rounded-full ring-2 ring-background", dot)} />
+          )}
+        </span>
+      )}
+      View
+    </Button>
+  );
+}
+
+/** The version row, with the update state as its hint, and a bar while an install runs. */
+function UpdateRows({ update }: { update: UpdateState }) {
+  const { release, install, checking, checkedAt, checkFailed } = update;
+  const bridge = window.desktopBridge;
+  const recheck = (label: string, variant: "ghost" | "outline") => (
+    <Button variant={variant} size="sm" disabled={checking} onClick={() => bridge?.checkUpdates(true)}>
+      {label}
+    </Button>
+  );
+  const releasePage = (
+    <Button variant="outline" size="sm" onClick={() => bridge?.openRelease()}>
+      <ExternalLink /> Open release page
+    </Button>
+  );
+  const next = release?.version;
+  let line: ReactNode;
+  let action: ReactNode = null;
+  let bar: number | null | undefined;
+  if (install?.stage === "downloading") {
+    const percent = install.progress === null ? null : Math.round(install.progress * 100);
+    line = percent === null ? `Downloading ${next}…` : `Downloading ${next}… ${percent}%`;
+    bar = percent;
+  } else if (install?.stage === "unpacking") {
+    line = `Unpacking ${next}… Keep the app open.`;
+    bar = null;
+  } else if (install?.stage === "restarting") {
+    line = `Restarting into ${next}…`;
+    bar = 100;
+  } else if (install?.stage === "failed") {
+    line = <span className="text-destructive">Cannot install the update: {install.error}</span>;
+    action = (
+      <div className="flex gap-1.5">
+        <Button variant="outline" size="sm" onClick={() => bridge?.installUpdate()}>
+          Try again
+        </Button>
+        {releasePage}
+      </div>
+    );
+  } else if (release) {
+    line = `Version ${next} is available`;
+    action = release.canInstall ? (
+      <Button size="sm" onClick={() => bridge?.installUpdate()}>
+        <CircleArrowUp /> Update and restart
+      </Button>
+    ) : (
+      releasePage
+    );
+  } else if (checking || (checkedAt === null && !checkFailed)) {
+    line = (
+      <span className="inline-flex items-center gap-1.5">
+        <LoaderCircle className="size-3 animate-spin motion-reduce:animate-none" /> Checking for updates…
+      </span>
+    );
+    action = recheck("Check again", "ghost");
+  } else if (checkFailed) {
+    line = <span className="text-destructive">Cannot check for updates.</span>;
+    action = recheck("Try again", "outline");
+  } else {
+    line = `Up to date · checked ${hhmm(checkedAt!)}`;
+    action = recheck("Check again", "ghost");
+  }
+  return (
+    <>
+      <Row
+        label={
+          <>
+            Version <span className="font-mono text-xs">{update.version}</span>
+          </>
+        }
+        hint={<span aria-live="polite">{line}</span>}
+      >
+        {action}
+      </Row>
+      {bar !== undefined && (
+        <div className="px-3 pb-3">
+          <Progress value={bar} aria-label="Update progress" />
+        </div>
+      )}
+    </>
+  );
+}
+
+const tokenSummary = (conn: Tree["conn"] | undefined) =>
+  conn === "no-token" ? "Not set" : conn === "unauthorized" ? "Rejected" : "Connected";
+const linearSummary = (l: Tree["linear"]) =>
+  l ? [l.workspace, l.teams.join(", ")].filter(Boolean).join(" · ") : "Not set";
 
 type PanelProps = LinearProps & {
   close: () => void;
@@ -213,6 +479,10 @@ type PanelProps = LinearProps & {
   resetOrder: () => void;
   theme: Theme;
   setTheme: (t: Theme) => void;
+  update: UpdateState | undefined;
+  conn: Tree["conn"] | undefined;
+  /** Opens the T3 token fold. */
+  tokenOpen: boolean;
 };
 
 /** View options and settings, beside the list so a change shows at once. */
@@ -223,74 +493,57 @@ function SettingsPanel(p: PanelProps) {
     addEventListener("keydown", onKey);
     return () => removeEventListener("keydown", onKey);
   }, [close]);
+  useEffect(() => window.desktopBridge?.checkUpdates(false), []);
+  const token = tokenSummary(p.conn);
   return (
     <aside
       aria-label="View and settings"
-      className="fixed top-0 right-0 z-40 grid h-full w-[380px] max-w-full content-start gap-4 overflow-y-auto border-l bg-card p-4 shadow-xl"
+      className="fixed top-0 right-0 z-40 flex h-full w-[380px] max-w-full flex-col overflow-y-auto border-l bg-card shadow-xl"
     >
-      <div className="flex items-center justify-between">
+      <div className="sticky top-0 z-10 flex items-center justify-between border-b bg-card px-4 py-3">
         <h2 className="m-0 text-[15px] font-semibold">View and settings</h2>
         <Button variant="ghost" size="icon-sm" aria-label="Close" onClick={close}>
           <X />
         </Button>
       </div>
-      <Section title="View">
-        <div className="flex items-center gap-2">
-          <Switch id="settled" checked={p.settled} onCheckedChange={p.setSettled} />
-          <Label htmlFor="settled" className="font-normal">
-            Show settled threads
-          </Label>
-        </div>
-        <div className="flex items-center gap-2">
-          <Button variant="outline" size="sm" disabled={!p.canReset} onClick={p.resetOrder}>
-            Reset order
-          </Button>
-          <span className={HINT}>Undo the drag-and-drop order.</span>
-        </div>
-      </Section>
-      <Section title="Appearance">
-        <ToggleGroup
-          type="single"
-          size="sm"
-          variant="outline"
-          aria-label="Theme"
-          className="justify-self-start"
-          value={p.theme}
-          onValueChange={(v) => v && p.setTheme(v as Theme)}
-        >
-          {THEMES.map((t) => (
-            <ToggleGroupItem key={t} value={t} className={cn(FILTER_ITEM, "capitalize")}>
-              {t}
-            </ToggleGroupItem>
-          ))}
-        </ToggleGroup>
-      </Section>
-      <Section title="T3 token">
-        <p className={HINT}>
-          The app reads your threads from T3 with this token. Run this command in a terminal to issue one, then paste it
-          below. Paste a new one at any time to replace it.
-        </p>
-        <code className="rounded-[6px] bg-muted p-2 text-xs break-all select-all">{TOKEN_CMD}</code>
-        <TokenForm />
-      </Section>
-      <Section title="Linear links">
-        <LinearForm linear={p.linear} setLinear={p.setLinear} />
-      </Section>
-      <Section title="Status icons">
-        <Legend />
-      </Section>
-      {window.desktopBridge && (
-        <Section title="App">
-          <Button
-            variant="outline"
-            size="sm"
-            className="justify-self-start"
-            onClick={() => window.desktopBridge?.checkUpdates(true)}
-          >
-            <MorphIcon icon={CircleArrowUp} size={16} reducedMotion="user" /> Check for updates
-          </Button>
-        </Section>
-      )}
+      <div className="grid content-start gap-4 p-4">
+        {p.update && (
+          <Group title="Updates" accent={p.update.release !== null && p.update.install === null}>
+            <UpdateRows update={p.update} />
+          </Group>
+        )}
+        <Group title="View">
+          <Row label="Show settled threads" htmlFor="settled">
+            <Switch id="settled" checked={p.settled} onCheckedChange={p.setSettled} />
+          </Row>
+          <Row label="Drag-and-drop order">
+            <Button variant="outline" size="sm" disabled={!p.canReset} onClick={p.resetOrder}>
+              Reset
+            </Button>
+          </Row>
+          <Row label="Theme">
+            <ThemeToggle theme={p.theme} setTheme={p.setTheme} />
+          </Row>
+        </Group>
+        <Group title="Setup">
+          <Fold label="T3 token" value={token} tone={token === "Connected" ? "ok" : "warn"} defaultOpen={p.tokenOpen}>
+            <div className="grid gap-2">
+              <p className={cn(HINT, "m-0")}>
+                The app reads your threads from T3 with this token. Run this command in a terminal to issue one, then
+                paste it below. Paste a new one at any time to replace it.
+              </p>
+              <code className="rounded-[6px] bg-muted p-2 text-xs break-all select-all">{TOKEN_CMD}</code>
+              <TokenForm />
+            </div>
+          </Fold>
+          <Fold label="Linear links" value={linearSummary(p.linear)} tone={p.linear ? "ok" : "warn"}>
+            <LinearForm linear={p.linear} setLinear={p.setLinear} />
+          </Fold>
+          <Fold label="Status icons" value={<span className="sr-only">Legend</span>} tone="info">
+            <Legend />
+          </Fold>
+        </Group>
+      </div>
     </aside>
   );
 }
@@ -1036,6 +1289,8 @@ function App() {
   });
   const linear = linearSet ?? tree?.linear ?? null;
   const [settingsOpen, setSettingsOpen] = useState(false);
+  const [tokenOpen, setTokenOpen] = useState(false);
+  const update = useUpdate();
   const closeSettings = useCallback(() => setSettingsOpen(false), []);
   const setLinear = (workspace: string, teams: string) => {
     const next = parseLinear(workspace, teams);
@@ -1238,14 +1493,14 @@ function App() {
         />
         <div className="ml-auto flex items-center gap-1">
           {projects && <FoldAll inner={projects.flatMap((p) => [p.id, ...foldIds(p)])} closed={closed} fold={fold} />}
-          <Button
-            variant={settingsOpen ? "secondary" : "ghost"}
-            size="sm"
-            aria-expanded={settingsOpen}
-            onClick={() => setSettingsOpen((o) => !o)}
-          >
-            <SlidersHorizontal /> View
-          </Button>
+          <ViewButton
+            update={update}
+            open={settingsOpen}
+            toggle={() => {
+              setTokenOpen(false);
+              setSettingsOpen((o) => !o);
+            }}
+          />
         </div>
       </header>
       <div className="min-h-0 flex-1 overflow-y-auto">
@@ -1260,7 +1515,15 @@ function App() {
           <Alert className="mb-3 border-l-[3px] border-l-status-needs-input">
             <AlertDescription className="flex flex-wrap items-center gap-x-2 text-foreground">
               {tree.conn === "no-token" ? "No T3 token is set." : "T3 rejected the token."}
-              <Button variant="link" size="sm" className="h-auto p-0" onClick={() => setSettingsOpen(true)}>
+              <Button
+                variant="link"
+                size="sm"
+                className="h-auto p-0"
+                onClick={() => {
+                  setTokenOpen(true);
+                  setSettingsOpen(true);
+                }}
+              >
                 Set the token
               </Button>
             </AlertDescription>
@@ -1343,6 +1606,9 @@ function App() {
           resetOrder={resetOrder}
           theme={theme}
           setTheme={setTheme}
+          update={update}
+          conn={tree?.conn}
+          tokenOpen={tokenOpen}
         />
       )}
       <SendDialog

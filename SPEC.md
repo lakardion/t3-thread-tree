@@ -8,7 +8,7 @@ Terms are defined in [CONTEXT.md](CONTEXT.md). Each section links the ticket tha
 
 - In scope: the threads of the local T3 environment (`~/.t3/userdata`), live updates, "open in T3", and a send of a message to one thread and a start of a thread in a project, through the `t3` CLI.
 - In scope, desktop: a macOS (Apple Silicon) app with its own window, a Dock badge, notifications and a menu-bar entry (see "Desktop app").
-- Out of scope: settle, snooze, interrupt, approve or deny a request, archive; a send to several threads at once; threads from linked T3 environments on other machines; any change to T3 Code itself; launch at login; Windows, Linux and Intel Mac builds; Developer ID signing, notarization and auto-update.
+- Out of scope: settle, snooze, interrupt, approve or deny a request, archive; a send to several threads at once; threads from linked T3 environments on other machines; any change to T3 Code itself; launch at login; Windows, Linux and Intel Mac builds; Developer ID signing and notarization.
 
 ## Runtime and stack
 
@@ -94,7 +94,7 @@ A **top-level thread** has no native `parentThreadId`. A **subagent** has `relat
 
 The page shows an outline tree: Project, group, thread. Each thread row has a status dot, a title link to `t3code://threads/<environmentId>/<threadId>`, a stack badge and PR links. Closed rows are saved in `localStorage`. A toggle shows settled threads. When a Linear workspace is set, an issue key links to its Linear issue. With team keys set, only a key of a listed team links. The "View" panel keeps the workspace and teams in `localStorage`; `LINEAR_WORKSPACE` and `LINEAR_TEAMS` give the default. A banner shows when T3 is down, when no token is set, or when T3 rejects the token. The token banners open the "View" panel.
 
-The header holds the title, the filter with the Needs-you count ("All", "Needs you N"), "What's next", fold all, and a "View" button. "View" opens a panel on the right, beside the tree: show settled, reset order, theme, T3 token, Linear links, the status icon legend, and "Check for updates" in the desktop app. Escape closes it.
+The header holds the title, the filter with the Needs-you count ("All", "Needs you N"), "What's next", fold all, and a "View" button. "View" opens a panel on the right, beside the tree. Its header stays in view while the panel scrolls, and Escape closes it. The panel has three groups. "Updates" (desktop app only) has the version, the update state and its action. "View" has show settled, reset order and the theme as three icons (Light, System, Dark). "Setup" has three folds, closed at first: T3 token, Linear links and the status icon legend. A fold shows its state at the right: green text when set, yellow text with a warning sign when not set, a blue info icon for the legend. The token banners open the panel with the T3 token fold open. When the panel opens in the desktop app, it checks for updates, but not when the last good check is less than 60 s old.
 
 A pending request wins over snooze. A snoozed thread with a pending request shows as needs input.
 
@@ -461,7 +461,10 @@ The page owns the rules. Main shows them, so the mute switch stays in main.
 ### Release and updates
 
 - A push of a `v*` tag runs `.github/workflows/release.yml` on `macos-14`. It builds the ad-hoc signed `.dmg` and attaches it to the GitHub Release of that tag. `package.json` holds the version.
-- No auto-update. The packaged app reads the GitHub latest-release API at start and every 6 h. When the latest tag is newer than `app.getVersion()`, it adds "Update available: vX.Y.Z…" to the app menu and the menu-bar menu. A click opens the release page. No notification. A failed check changes nothing.
+- The main process keeps one update state (`UpdateState` in `src/shared/desktop.ts`). The app menu, the menu-bar menu and the "View" panel read it. The page gets it through `updateState` and `onUpdateState` on the bridge, and sends no URL or path.
+- The packaged app reads the GitHub latest-release API at start and every 6 h. The panel also checks when it opens. A check never runs during another check or an install, and a check that is not forced is skipped within 60 s of the last good reply. A reply that does not parse counts as a failed check. A failed check keeps a known release.
+- When the latest tag is newer than `app.getVersion()`, the menus show "Update available: vX.Y.Z…" and the "View" button shows a dot. No notification.
+- "Update and Restart" (menu) and "Update and restart" (panel) download the release zip to disk, unpack it with `ditto`, start the swap script and quit. The state has the stages `downloading` (with a percent when `content-length` is known), `unpacking` and `restarting`. The menus, the panel, the "View" button ring and the Dock progress bar (download only) show them. A failed install sets the stage `failed` with the message. A run from source, or a release with no zip, can only open the release page.
 
 ### CI
 
