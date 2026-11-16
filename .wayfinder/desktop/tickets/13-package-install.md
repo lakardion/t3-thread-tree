@@ -32,3 +32,7 @@ Package the app with electron-builder, sign it ad-hoc, and install it with one c
 - The packaged branch of `startServer` already runs `process.resourcesPath/server` with cwd `app.getPath("userData")`.
 - `package.json` `main` is `dist/desktop/main.cjs`. The bundles are `.cjs` because the package is `"type": "module"`. electron-builder must include `dist/desktop/`.
 - Electron 45 has no postinstall. The binary downloads on the first `electron .` run, or with `node node_modules/electron/install.js`. A packaging step may need that call first.
+
+## Handed over from desktop-09
+
+- The README gives the token path `~/Library/Application Support/T3 Thread Tree/token`. Electron takes that folder name from `productName`. Today `package.json` has none, so dev uses `t3-thread-tree/`. Set `productName: "T3 Thread Tree"` so the packaged path matches the README.
