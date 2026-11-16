@@ -376,7 +376,14 @@ An app started from the Dock or Spotlight does not get the shell PATH, so the br
 The preload exposes `window.desktopBridge`. The page checks for it. In a browser it is absent, and the page works as today.
 
 ```ts
-type NeedsYouThread = { id: string; title: string; environmentId: string; since: string | null };
+type NeedsYouStatus = "needs-input" | "plan-ready";
+type NeedsYouThread = {
+  id: string;
+  title: string;
+  environmentId: string;
+  since: string | null;
+  status: NeedsYouStatus;
+};
 type NotifyEvent =
   | {
       kind: "thread";

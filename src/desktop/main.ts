@@ -2,10 +2,30 @@ import { type ChildProcess, execFile, spawn } from "node:child_process";
 import { homedir } from "node:os";
 import { join } from "node:path";
 
-import { app, BrowserWindow, ipcMain, Menu, Notification, screen, shell } from "electron";
+import {
+  app,
+  BrowserWindow,
+  ipcMain,
+  Menu,
+  type MenuItemConstructorOptions,
+  nativeImage,
+  Notification,
+  screen,
+  shell,
+  Tray,
+} from "electron";
 
-import type { NeedsYouThread, NotifyEvent, NotifyStatus } from "../shared/desktop.ts";
-import { fallbackPath, pickPort, RESET_AFTER_MS, restartDelay, shellPath } from "./runtime.ts";
+import type { NeedsYouThread, NotifyEvent } from "../shared/desktop.ts";
+import {
+  fallbackPath,
+  pickPort,
+  RESET_AFTER_MS,
+  restartDelay,
+  shellPath,
+  STATUS_TITLE,
+  threadUrl,
+  trayItems,
+} from "./runtime.ts";
 import {
   parseBounds,
   parseNeedsYou,
@@ -29,8 +49,9 @@ let quitting = false;
 let tokenRestart = false;
 let settings: Settings = parseSettings(undefined);
 /** The last Needs-you list, for the menu-bar entry. */
-/* oxlint-disable-next-line eslint/no-unused-vars -- read by the menu-bar entry */
 let needsYou: NeedsYouThread[] = [];
+/** Kept referenced so the menu-bar icon is not garbage-collected. */
+let tray: Tray | undefined;
 
 const dataFile = (name: string) => join(app.getPath("userData"), name);
 const save = (name: string, value: unknown) => {
@@ -101,11 +122,6 @@ const showWindow = () => {
   window.focus();
 };
 
-const STATUS_TITLE: Record<NotifyStatus, string> = {
-  "needs-input": "Needs input",
-  "plan-ready": "Plan ready",
-  failed: "Failed",
-};
 /**
  * The shown notifications by thread id, "" for the summary. The reference keeps the click handler alive.
  * ponytail: never pruned; holds at most one entry per thread that notified.
@@ -118,9 +134,7 @@ function showNotification(e: NotifyEvent) {
   if (e.kind === "thread") {
     key = e.threadId;
     n = new Notification({ title: STATUS_TITLE[e.status], body: e.title, silent: false });
-    n.on("click", () =>
-      openOutside(`t3code://threads/${encodeURIComponent(e.environmentId)}/${encodeURIComponent(e.threadId)}`),
-    );
+    n.on("click", () => openOutside(threadUrl(e.environmentId, e.threadId)));
   } else {
     key = "";
     n = new Notification({ title: `${e.count} threads need you`, silent: false });
@@ -175,6 +189,30 @@ function openWindow(port: number) {
   win.loadURL(origin).catch((e: unknown) => log(`load failed: ${String(e)}`));
 }
 
+const toggles = (): MenuItemConstructorOptions[] => [
+  {
+    label: "Always on Top",
+    type: "checkbox",
+    checked: settings.alwaysOnTop,
+    click: (item) => {
+      settings = { ...settings, alwaysOnTop: item.checked };
+      window?.setAlwaysOnTop(item.checked);
+      save("settings.json", settings);
+      setMenus();
+    },
+  },
+  {
+    label: "Mute Notifications",
+    type: "checkbox",
+    checked: settings.muted,
+    click: (item) => {
+      settings = { ...settings, muted: item.checked };
+      save("settings.json", settings);
+      setMenus();
+    },
+  },
+];
+
 function setMenu() {
   Menu.setApplicationMenu(
     Menu.buildFromTemplate([
@@ -183,25 +221,7 @@ function setMenu() {
         submenu: [
           { role: "about" },
           { type: "separator" },
-          {
-            label: "Always on Top",
-            type: "checkbox",
-            checked: settings.alwaysOnTop,
-            click: (item) => {
-              settings = { ...settings, alwaysOnTop: item.checked };
-              window?.setAlwaysOnTop(item.checked);
-              save("settings.json", settings);
-            },
-          },
-          {
-            label: "Mute Notifications",
-            type: "checkbox",
-            checked: settings.muted,
-            click: (item) => {
-              settings = { ...settings, muted: item.checked };
-              save("settings.json", settings);
-            },
-          },
+          ...toggles(),
           { type: "separator" },
           { role: "services" },
           { type: "separator" },
@@ -219,9 +239,35 @@ function setMenu() {
   );
 }
 
+function setTrayMenu() {
+  if (!tray) return;
+  tray.setTitle(needsYou.length ? String(needsYou.length) : "", { fontType: "monospacedDigit" });
+  tray.setContextMenu(
+    Menu.buildFromTemplate([
+      ...trayItems(needsYou).map((i) => ({
+        label: i.label,
+        click: () => (i.url ? openOutside(i.url) : showWindow()),
+      })),
+      ...(needsYou.length ? [{ type: "separator" } as const] : []),
+      { label: "Open tree", click: showWindow },
+      { type: "separator" },
+      ...toggles(),
+      { type: "separator" },
+      { label: "Quit", role: "quit" },
+    ]),
+  );
+}
+
+function setMenus() {
+  setMenu();
+  setTrayMenu();
+}
+
 async function main() {
   settings = parseSettings(readJson(dataFile("settings.json")));
-  setMenu();
+  tray = new Tray(nativeImage.createFromPath(join(app.getAppPath(), "assets", "trayTemplate.png")));
+  tray.setToolTip(app.name);
+  setMenus();
   ipcMain.handle("setToken", (event, raw: unknown) => {
     if (event.sender !== window?.webContents) throw new Error("not allowed");
     const token = parseToken(raw);
@@ -241,6 +287,7 @@ async function main() {
     }
     needsYou = list;
     app.setBadgeCount(list.length);
+    setTrayMenu();
   });
   ipcMain.on("notify", (event, raw: unknown) => {
     if (event.sender !== window?.webContents) return;

@@ -55,11 +55,12 @@ export function parseNeedsYou(raw: unknown): NeedsYouThread[] | null {
       typeof t.id !== "string" ||
       typeof t.title !== "string" ||
       typeof t.environmentId !== "string" ||
-      !(typeof t.since === "string" || t.since === null)
+      !(typeof t.since === "string" || t.since === null) ||
+      (t.status !== "needs-input" && t.status !== "plan-ready")
     ) {
       return null;
     }
-    out.push({ id: t.id, title: t.title, environmentId: t.environmentId, since: t.since });
+    out.push({ id: t.id, title: t.title, environmentId: t.environmentId, since: t.since, status: t.status });
   }
   return out;
 }

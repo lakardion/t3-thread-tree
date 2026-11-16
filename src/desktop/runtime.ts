@@ -1,5 +1,7 @@
 import { createServer } from "node:net";
 
+import type { NeedsYouThread, NotifyStatus } from "../shared/desktop.ts";
+
 /** The first port from `start` up that a server can listen on at 127.0.0.1. */
 export async function pickPort(start = 4773): Promise<number> {
   for (let port = start; ; port++) {
@@ -26,3 +28,28 @@ export const restartDelay = (attempt: number) => Math.min(500 * 2 ** attempt, 10
 
 /** A child that ran this long resets the restart attempt count. */
 export const RESET_AFTER_MS = 60_000;
+
+export const STATUS_TITLE: Record<NotifyStatus, string> = {
+  "needs-input": "Needs input",
+  "plan-ready": "Plan ready",
+  failed: "Failed",
+};
+
+export const threadUrl = (environmentId: string, id: string) =>
+  `t3code://threads/${encodeURIComponent(environmentId)}/${encodeURIComponent(id)}`;
+
+const TRAY_MAX = 10;
+
+/** The menu-bar thread items, longest wait first. `url: null` means "show the window". */
+export function trayItems(threads: NeedsYouThread[]): { label: string; url: string | null }[] {
+  /** ISO timestamps sort the same as text. */
+  const sorted = threads.toSorted((a, b) =>
+    a.since === b.since ? 0 : a.since === null ? 1 : b.since === null ? -1 : a.since < b.since ? -1 : 1,
+  );
+  const items: { label: string; url: string | null }[] = sorted.slice(0, TRAY_MAX).map((t) => ({
+    label: `${STATUS_TITLE[t.status]} · ${t.title}`,
+    url: threadUrl(t.environmentId, t.id),
+  }));
+  if (sorted.length > TRAY_MAX) items.push({ label: `+${sorted.length - TRAY_MAX} more… (open tree)`, url: null });
+  return items;
+}

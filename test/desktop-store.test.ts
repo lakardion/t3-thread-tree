@@ -134,7 +134,13 @@ describe("readToken and writeToken", () => {
 });
 
 describe("parseNeedsYou", () => {
-  const item = { id: "a", title: "t", environmentId: "e", since: "2026-11-12T12:00:00.000Z" };
+  const item = {
+    id: "a",
+    title: "t",
+    environmentId: "e",
+    since: "2026-11-12T12:00:00.000Z",
+    status: "needs-input" as const,
+  };
   test("round-trips a valid list and drops extra fields", () => {
     expect(
       parseNeedsYou([
@@ -152,5 +158,9 @@ describe("parseNeedsYou", () => {
     expect(parseNeedsYou([{ ...item, id: 1 }])).toBeNull();
     expect(parseNeedsYou([{ ...item, since: 5 }])).toBeNull();
     expect(parseNeedsYou([null])).toBeNull();
+  });
+  test("rejects a missing or other status", () => {
+    expect(parseNeedsYou([{ ...item, status: undefined }])).toBeNull();
+    expect(parseNeedsYou([{ ...item, status: "failed" }])).toBeNull();
   });
 });

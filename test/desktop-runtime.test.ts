@@ -1,7 +1,8 @@
 import { describe, expect, test } from "bun:test";
 import { createServer, type Server } from "node:net";
 
-import { fallbackPath, pickPort, restartDelay, shellPath } from "../src/desktop/runtime.ts";
+import { fallbackPath, pickPort, restartDelay, shellPath, trayItems } from "../src/desktop/runtime.ts";
+import type { NeedsYouThread } from "../src/shared/desktop.ts";
 
 const listen = (port: number) =>
   new Promise<Server>((resolve, reject) => {
@@ -49,5 +50,36 @@ describe("restartDelay", () => {
     expect([0, 1, 2, 3].map(restartDelay)).toEqual([500, 1000, 2000, 4000]);
     expect(restartDelay(5)).toBe(10_000);
     expect(restartDelay(50)).toBe(10_000);
+  });
+});
+
+describe("trayItems", () => {
+  const th = (id: string, since: string | null, status: NeedsYouThread["status"] = "needs-input"): NeedsYouThread => ({
+    id,
+    title: id,
+    environmentId: "e",
+    since,
+    status,
+  });
+  test("oldest wait first, null last, ties keep input order", () => {
+    const ids = trayItems([th("n1", null), th("b", "2026-01-02"), th("t1", "2026-01-01"), th("t2", "2026-01-01")]).map(
+      (i) => i.label,
+    );
+    expect(ids).toEqual(["Needs input · t1", "Needs input · t2", "Needs input · b", "Needs input · n1"]);
+  });
+  test("label has the status and the URL encodes env and id", () => {
+    expect(trayItems([{ ...th("a b", null, "plan-ready"), environmentId: "e/1" }])).toEqual([
+      { label: "Plan ready · a b", url: "t3code://threads/e%2F1/a%20b" },
+    ]);
+  });
+  test("10 threads have no more item, 13 add one that shows the window", () => {
+    const many = (n: number) => Array.from({ length: n }, (_, i) => th(String(i), null));
+    expect(trayItems(many(10))).toHaveLength(10);
+    const items = trayItems(many(13));
+    expect(items).toHaveLength(11);
+    expect(items[10]).toEqual({ label: "+3 more… (open tree)", url: null });
+  });
+  test("empty list gives no items", () => {
+    expect(trayItems([])).toEqual([]);
   });
 });

@@ -1,4 +1,11 @@
-export type NeedsYouThread = { id: string; title: string; environmentId: string; since: string | null };
+export type NeedsYouStatus = "needs-input" | "plan-ready";
+export type NeedsYouThread = {
+  id: string;
+  title: string;
+  environmentId: string;
+  since: string | null;
+  status: NeedsYouStatus;
+};
 
 export type NotifyStatus = "needs-input" | "plan-ready" | "failed";
 export type NotifyEvent =
