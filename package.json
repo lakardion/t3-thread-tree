@@ -1,12 +1,16 @@
 {
   "name": "t3-thread-tree",
+  "version": "0.1.0",
   "private": true,
   "type": "module",
   "main": "dist/desktop/main.cjs",
   "scripts": {
     "start": "bun run src/server.ts",
     "typecheck": "tsc --noEmit",
-    "desktop": "bun build src/desktop/main.ts src/desktop/preload.ts --target node --format cjs --external electron --outdir dist/desktop --entry-naming '[name].cjs' && electron .",
+    "desktop:bundle": "bun build src/desktop/main.ts src/desktop/preload.ts --target node --format cjs --external electron --outdir dist/desktop --entry-naming '[name].cjs'",
+    "desktop": "bun run desktop:bundle && electron .",
+    "desktop:install": "bun run build:sidecar && bun run desktop:bundle && electron-builder --dir && rm -rf '/Applications/T3 Thread Tree.app' && ditto 'release/mac-arm64/T3 Thread Tree.app' '/Applications/T3 Thread Tree.app'",
+    "desktop:dmg": "bun run build:sidecar && bun run desktop:bundle && electron-builder",
     "desktop:demo": "DESKTOP_DEMO=1 bun run desktop",
     "build:sidecar": "bun run scripts/build-sidecar.ts",
     "demo": "bun run scripts/demo.ts",
@@ -38,9 +42,41 @@
     "@types/react": "^19.3.0",
     "@types/react-dom": "^19.3.0",
     "electron": "^45.3.3",
+    "electron-builder": "^26.18.0",
     "oxfmt": "^0.78.0",
     "oxlint": "^1.93.0",
     "oxlint-tsgolint": "^7.0.2007",
     "typescript": "^7.0.2"
-  }
+  },
+  "build": {
+    "directories": {
+      "output": "release"
+    },
+    "files": [
+      "dist/desktop/*.cjs",
+      "assets/trayTemplate*.png",
+      "!node_modules"
+    ],
+    "extraResources": [
+      {
+        "from": "dist/sidecar/server",
+        "to": "server"
+      }
+    ],
+    "mac": {
+      "target": [
+        {
+          "target": "dmg",
+          "arch": [
+            "arm64"
+          ]
+        }
+      ],
+      "icon": "assets/icon.icns",
+      "identity": "-",
+      "entitlements": "assets/entitlements.mac.plist",
+      "entitlementsInherit": "assets/entitlements.mac.plist"
+    }
+  },
+  "productName": "T3 Thread Tree"
 }
