@@ -26,3 +26,7 @@ Add a menu-bar (tray) entry that shows the Needs-you count and lists the threads
 
 - "Open tree" calls `showWindow()` in `src/desktop/main.ts`. It is defined inside the single-instance `else` block; move it to module level if the tray code needs it there.
 - "Always on Top" was dropped from the app; do not add it to the menu-bar menu.
+
+## Handed over from desktop-09
+
+- `openExternal` is not on the bridge yet. Add it to `DesktopBridge` in `src/shared/desktop.ts` and to the preload object if the page needs it; main already has `openOutside(url)` with the URL check.

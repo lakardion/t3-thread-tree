@@ -2,10 +2,10 @@ import { type ChildProcess, execFile, spawn } from "node:child_process";
 import { homedir } from "node:os";
 import { join } from "node:path";
 
-import { app, BrowserWindow, Menu, screen, shell } from "electron";
+import { app, BrowserWindow, ipcMain, Menu, screen, shell } from "electron";
 
 import { fallbackPath, pickPort, RESET_AFTER_MS, restartDelay, shellPath } from "./runtime.ts";
-import { parseBounds, readJson, writeJson } from "./store.ts";
+import { parseBounds, parseToken, readJson, readToken, writeJson, writeToken } from "./store.ts";
 
 const log = (m: string) => console.log(`desktop: ${m}`);
 const sleep = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
@@ -13,6 +13,8 @@ const sleep = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
 let window: BrowserWindow | undefined;
 let child: ChildProcess | undefined;
 let quitting = false;
+/** Set when main stops the server to load a new token, so the stop does not count as a crash. */
+let tokenRestart = false;
 
 const dataFile = (name: string) => join(app.getPath("userData"), name);
 const save = (name: string, value: unknown) => {
@@ -32,7 +34,8 @@ const loginPath = () =>
 
 function startServer(port: number, PATH: string, attempt: number) {
   const started = Date.now();
-  const env = { ...process.env, PATH, PORT: String(port) };
+  const token = readToken(dataFile("token"));
+  const env = { ...process.env, PATH, PORT: String(port), ...(token && { T3_TOKEN: token }) };
   child = app.isPackaged
     ? spawn(join(process.resourcesPath, "server"), { cwd: app.getPath("userData"), env, stdio: "inherit" })
     : spawn("bun", [process.env.DESKTOP_DEMO ? "scripts/demo.ts" : "src/server.ts"], {
@@ -43,7 +46,8 @@ function startServer(port: number, PATH: string, attempt: number) {
   child.once("exit", (code, signal) => {
     child = undefined;
     if (quitting) return;
-    if (Date.now() - started >= RESET_AFTER_MS) attempt = 0;
+    if (tokenRestart || Date.now() - started >= RESET_AFTER_MS) attempt = 0;
+    tokenRestart = false;
     const delay = restartDelay(attempt);
     log(`server exited (${String(signal ?? code)}), restart in ${delay} ms`);
     /** ponytail: restarts on the startup port. A port taken in the meantime keeps failing, so pick a port again if that happens. */
@@ -124,6 +128,16 @@ function setMenu() {
 
 async function main() {
   setMenu();
+  ipcMain.handle("setToken", (event, raw: unknown) => {
+    if (event.sender !== window?.webContents) throw new Error("not allowed");
+    const token = parseToken(raw);
+    if (!token) throw new Error("Not a valid token");
+    writeToken(dataFile("token"), token);
+    if (child) {
+      tokenRestart = true;
+      child.kill("SIGTERM");
+    }
+  });
   const [PATH, port] = await Promise.all([loginPath(), pickPort()]);
   startServer(port, PATH, 0);
   if (!(await waitReady(port))) {

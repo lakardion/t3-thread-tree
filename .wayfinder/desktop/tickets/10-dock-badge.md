@@ -20,3 +20,8 @@ Show the Needs-you count as the Dock badge.
 ## Done when
 
 `bun run check` passes. In `bun run desktop:demo` the badge equals the header chip count, with the window shown and hidden. With `PUSH=1`, the badge follows the changes.
+
+## Handed over from desktop-09
+
+- The bridge type lives in `src/shared/desktop.ts` (`DesktopBridge`, with the `window.desktopBridge` global). It has only `setToken` today. Add `setNeedsYou` there, and add it to the object in `src/desktop/preload.ts`, which uses `satisfies DesktopBridge`.
+- IPC pattern in `src/desktop/main.ts`: `ipcMain.handle` in `main()`, and the handler rejects any sender that is not `window?.webContents`. Check the payload in a module with no Electron import (`store.ts` has `parseToken` as the model), so `bun test` covers it.

@@ -38,6 +38,7 @@ import {
   DropdownMenuLabel,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
+import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Switch } from "@/components/ui/switch";
@@ -92,6 +93,47 @@ const ORDER_KEY = "thread-tree:order";
 const THEMES = ["system", "light", "dark"] as const;
 type Theme = (typeof THEMES)[number];
 const THEME_ICONS = { system: Contrast, light: Sun, dark: Moon };
+
+function TokenForm({ bridge }: { bridge: NonNullable<Window["desktopBridge"]> }) {
+  const [value, setValue] = useState("");
+  const [saving, setSaving] = useState(false);
+  const [message, setMessage] = useState<{ text: string; error: boolean }>();
+  const save = async () => {
+    setSaving(true);
+    try {
+      await bridge.setToken(value);
+      setValue("");
+      setMessage({ text: "Saved.", error: false });
+    } catch (e) {
+      const text = e instanceof Error ? e.message : String(e);
+      setMessage({ text: text.replace(/^Error invoking remote method '[^']*': (Error: )?/, ""), error: true });
+    }
+    setSaving(false);
+  };
+  return (
+    <form
+      className="mt-2"
+      onSubmit={(e) => {
+        e.preventDefault();
+        void save();
+      }}
+    >
+      <div className="flex gap-2">
+        <Input
+          type="password"
+          aria-label="T3 token"
+          autoComplete="off"
+          value={value}
+          onChange={(e) => setValue(e.target.value)}
+        />
+        <Button type="submit" size="sm" disabled={!value || saving}>
+          Save
+        </Button>
+      </div>
+      {message && <p className={cn("mt-1 text-xs", message.error && "text-destructive")}>{message.text}</p>}
+    </form>
+  );
+}
 
 const load = (k: string): string | null => {
   try {
@@ -1047,10 +1089,18 @@ function App() {
       {tree?.conn === "unauthorized" && (
         <Alert className="mb-3 border-l-[3px] border-l-status-needs-input">
           <AlertDescription className="block text-foreground">
-            T3 rejected the token. Issue one and put it in <code className="text-xs select-all">.env</code> as{" "}
-            <code className="text-xs select-all">T3_TOKEN</code>, then restart:
+            T3 rejected the token. Issue one{" "}
+            {window.desktopBridge ? (
+              "with this command, then paste it here:"
+            ) : (
+              <>
+                and put it in <code className="text-xs select-all">.env</code> as{" "}
+                <code className="text-xs select-all">T3_TOKEN</code>, then restart:
+              </>
+            )}
             <br />
             <code className="text-xs select-all">{TOKEN_CMD}</code>
+            {window.desktopBridge && <TokenForm bridge={window.desktopBridge} />}
           </AlertDescription>
         </Alert>
       )}

@@ -28,3 +28,7 @@ Notify the user when a thread enters needs input, plan ready or failed, with a m
 - `settings.json` does not exist yet: "Always on Top" was dropped. Add `parseSettings` (default `{ muted: false }`) to `src/desktop/store.ts`, next to `readJson`, `writeJson` and `parseBounds`, with a test in `test/desktop-store.test.ts`. Write it with `save("settings.json", …)` in `src/desktop/main.ts`.
 - `setMenu()` in `main.ts` builds the app menu from role menus only (`{ role: "appMenu" }` …). To add "Mute Notifications", replace `{ role: "appMenu" }` with an explicit app submenu (about, separator, the checkbox, separator, services, hide, hideOthers, unhide, separator, quit).
 - `showWindow()` in `main.ts` restores, shows and focuses the window. Use it for a summary notification click.
+
+## Handed over from desktop-09
+
+- Add `notify` to `DesktopBridge` in `src/shared/desktop.ts` and to the preload object (`satisfies DesktopBridge`). Main accepts IPC only from `window?.webContents`, as the `setToken` handler does.
