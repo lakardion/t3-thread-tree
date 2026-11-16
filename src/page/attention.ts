@@ -1,3 +1,4 @@
+import type { NeedsYouThread } from "../shared/desktop.ts";
 import { allThreads, type Branch, type Status, type ThreadNode } from "../shared/tree.ts";
 
 export type Counts = { needYou: number; working: number; yourTurn: number; stopped: number };
@@ -31,3 +32,15 @@ const keepBranch = (b: Branch): Branch[] => {
 
 /** The tree with only the threads that need the user, and the spawners, groups and projects that hold them. */
 export const onlyNeedsYou = (projects: Branch[]): Branch[] => projects.flatMap(keepBranch);
+
+/** The visible threads that wait for the user (needs input or plan ready), settled ones left out. */
+export const needsYouThreads = (projects: Branch[]): NeedsYouThread[] =>
+  projects
+    .flatMap(allThreads)
+    .filter((t) => !t.settled && (t.status === "needs-input" || t.status === "plan-ready"))
+    .map((t) => ({
+      id: t.id,
+      title: t.title,
+      environmentId: decodeURIComponent(t.href.split("/")[3] ?? ""),
+      since: t.since,
+    }));

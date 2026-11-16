@@ -1,6 +1,6 @@
 import { describe, expect, test } from "bun:test";
 
-import { countAttention, needsYou, onlyNeedsYou } from "../src/page/attention.ts";
+import { countAttention, needsYou, needsYouThreads, onlyNeedsYou } from "../src/page/attention.ts";
 import type { Branch, Status, ThreadNode } from "../src/shared/tree.ts";
 
 const thread = (id: string, status: Status, children: ThreadNode[] = []): ThreadNode => ({
@@ -102,5 +102,33 @@ describe("onlyNeedsYou", () => {
     const copy = structuredClone(tree);
     onlyNeedsYou(tree);
     expect(tree).toEqual(copy);
+  });
+});
+
+describe("needsYouThreads", () => {
+  test("keeps needs-input and plan-ready, nested included, and drops the rest", () => {
+    const tree = [
+      branch("p", [
+        thread("a", "needs-input", [thread("n", "plan-ready")]),
+        thread("b", "your-turn"),
+        thread("c", "working"),
+      ]),
+    ];
+    expect(needsYouThreads(tree).map((t) => t.id)).toEqual(["a", "n"]);
+  });
+
+  test("drops settled threads", () => {
+    const tree = [branch("p", [{ ...thread("a", "needs-input"), settled: true }, thread("b", "needs-input")])];
+    expect(needsYouThreads(tree).map((t) => t.id)).toEqual(["b"]);
+  });
+
+  test("decodes the environment id from the href", () => {
+    const tree = [branch("p", [{ ...thread("a", "needs-input"), href: "t3code://threads/env%201/a", since: "s" }])];
+    expect(needsYouThreads(tree)).toEqual([{ id: "a", title: "a", environmentId: "env 1", since: "s" }]);
+  });
+
+  test("has the length of the need-you count", () => {
+    const tree = [branch("p", [thread("a", "needs-input"), thread("b", "plan-ready", [thread("c", "needs-input")])])];
+    expect(needsYouThreads(tree)).toHaveLength(countAttention(tree).needYou);
   });
 });

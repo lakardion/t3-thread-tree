@@ -1,5 +1,7 @@
 import { chmodSync, readFileSync, writeFileSync } from "node:fs";
 
+import type { NeedsYouThread } from "../shared/desktop.ts";
+
 export type Rect = { x: number; y: number; width: number; height: number };
 export type Settings = { alwaysOnTop: boolean };
 
@@ -39,6 +41,27 @@ export function writeToken(file: string, token: string): void {
     chmodSync(file, 0o600);
   } catch {}
   writeFileSync(file, token, { mode: 0o600 });
+}
+
+/** A clean copy of the Needs-you list, or `null` when `raw` is not an array of at most 500 well-formed threads. */
+export function parseNeedsYou(raw: unknown): NeedsYouThread[] | null {
+  if (!Array.isArray(raw) || raw.length > 500) return null;
+  const out: NeedsYouThread[] = [];
+  for (const item of raw as unknown[]) {
+    const t = item as Record<string, unknown> | null;
+    if (
+      typeof t !== "object" ||
+      t === null ||
+      typeof t.id !== "string" ||
+      typeof t.title !== "string" ||
+      typeof t.environmentId !== "string" ||
+      !(typeof t.since === "string" || t.since === null)
+    ) {
+      return null;
+    }
+    out.push({ id: t.id, title: t.title, environmentId: t.environmentId, since: t.since });
+  }
+  return out;
 }
 
 export function parseSettings(raw: unknown): Settings {

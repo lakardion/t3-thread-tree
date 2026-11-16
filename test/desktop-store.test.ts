@@ -5,6 +5,7 @@ import { join } from "node:path";
 
 import {
   parseBounds,
+  parseNeedsYou,
   parseSettings,
   parseToken,
   readJson,
@@ -102,5 +103,27 @@ describe("readToken and writeToken", () => {
   });
   test("is undefined for a missing file", () => {
     expect(readToken(join(dir, "missing"))).toBeUndefined();
+  });
+});
+
+describe("parseNeedsYou", () => {
+  const item = { id: "a", title: "t", environmentId: "e", since: "2026-11-12T12:00:00.000Z" };
+  test("round-trips a valid list and drops extra fields", () => {
+    expect(
+      parseNeedsYou([
+        { ...item, extra: 1 },
+        { ...item, since: null },
+      ]),
+    ).toEqual([item, { ...item, since: null }]);
+  });
+  test("accepts 500 items and rejects 501", () => {
+    expect(parseNeedsYou(Array.from({ length: 500 }, () => item))).toHaveLength(500);
+    expect(parseNeedsYou(Array.from({ length: 501 }, () => item))).toBeNull();
+  });
+  test("rejects a non-array, a non-string field and a numeric since", () => {
+    expect(parseNeedsYou("x")).toBeNull();
+    expect(parseNeedsYou([{ ...item, id: 1 }])).toBeNull();
+    expect(parseNeedsYou([{ ...item, since: 5 }])).toBeNull();
+    expect(parseNeedsYou([null])).toBeNull();
   });
 });
