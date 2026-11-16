@@ -52,9 +52,9 @@ export const isKeyGroup = (b: Branch): boolean => b.threads.length > 0 && b.thre
 /** The one thread of a key group that folds into its row, else null. */
 export const folded = (b: Branch): ThreadNode | null => (isKeyGroup(b) && b.threads.length === 1 ? b.threads[0] : null);
 
-/** The Linear issue URL when the key prefix is a configured team, else null. */
+/** The Linear issue URL, else null. With teams set, only a key of a listed team links. */
 export function linearHref(key: string, linear: Tree["linear"]): string | null {
-  if (!linear || !linear.teams.includes(key.slice(0, key.lastIndexOf("-")))) return null;
+  if (!linear || (linear.teams.length && !linear.teams.includes(key.slice(0, key.lastIndexOf("-"))))) return null;
   return `https://linear.app/${linear.workspace}/issue/${key}`;
 }
 

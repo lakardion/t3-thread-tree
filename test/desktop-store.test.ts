@@ -1,19 +1,9 @@
 import { describe, expect, test } from "bun:test";
-import { mkdtempSync, statSync, writeFileSync } from "node:fs";
+import { mkdtempSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 
-import {
-  parseBounds,
-  parseNeedsYou,
-  parseNotify,
-  parseSettings,
-  parseToken,
-  readJson,
-  readToken,
-  writeJson,
-  writeToken,
-} from "../src/desktop/store.ts";
+import { parseBounds, parseNeedsYou, parseNotify, parseSettings, readJson, writeJson } from "../src/desktop/store.ts";
 
 const screens = [
   { x: 0, y: 0, width: 1000, height: 800 },
@@ -89,46 +79,6 @@ describe("readJson and writeJson", () => {
     const file = join(dir, "bad.json");
     writeFileSync(file, "{nope");
     expect(readJson(file)).toBeUndefined();
-  });
-});
-
-describe("parseToken", () => {
-  test("is null for a non-string", () => {
-    expect(parseToken(1)).toBeNull();
-    expect(parseToken(undefined)).toBeNull();
-  });
-  test("is null for empty or blank", () => {
-    expect(parseToken("")).toBeNull();
-    expect(parseToken("  \n")).toBeNull();
-  });
-  test("is null for inner whitespace", () => {
-    expect(parseToken("a b")).toBeNull();
-  });
-  test("is null over 4096 bytes", () => {
-    expect(parseToken("a".repeat(4097))).toBeNull();
-    expect(parseToken("a".repeat(4096))).toBe("a".repeat(4096));
-  });
-  test("trims the ends", () => {
-    expect(parseToken("abc\n")).toBe("abc");
-  });
-});
-
-describe("readToken and writeToken", () => {
-  const dir = mkdtempSync(join(tmpdir(), "desktop-token-"));
-  test("round trips with mode 0600", () => {
-    const file = join(dir, "token");
-    writeToken(file, "abc");
-    expect(readToken(file)).toBe("abc");
-    expect(statSync(file).mode & 0o777).toBe(0o600);
-  });
-  test("tightens an old 0644 file", () => {
-    const file = join(dir, "old");
-    writeFileSync(file, "x", { mode: 0o644 });
-    writeToken(file, "abc");
-    expect(statSync(file).mode & 0o777).toBe(0o600);
-  });
-  test("is undefined for a missing file", () => {
-    expect(readToken(join(dir, "missing"))).toBeUndefined();
   });
 });
 

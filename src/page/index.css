@@ -120,11 +120,12 @@
     outline: 2px solid var(--ring);
     outline-offset: 2px;
   }
+  /** The padding sits here, not on body: the dialog scroll lock resets the body padding. */
   #root {
-    @apply mx-auto flex h-[calc(100dvh-2rem)] max-w-[1200px] flex-col;
+    @apply mx-auto flex h-dvh max-w-[1232px] flex-col p-4;
   }
   body {
-    @apply bg-background p-4 text-[13px] leading-[1.45] text-foreground;
+    @apply bg-background text-[13px] leading-[1.45] text-foreground;
   }
 }
 
