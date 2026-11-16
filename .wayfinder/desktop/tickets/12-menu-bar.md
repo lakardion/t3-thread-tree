@@ -2,7 +2,7 @@
 title: Add the menu-bar entry with the Needs-you threads
 type: wayfinder:task
 status: open
-assignee:
+assignee: claude (desktop-12)
 blocked-by: [11-notifications]
 ---
 
