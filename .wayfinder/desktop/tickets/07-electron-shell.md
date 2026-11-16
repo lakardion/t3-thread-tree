@@ -2,7 +2,7 @@
 title: Start the server and the window from an Electron shell
 type: wayfinder:task
 status: open
-assignee:
+assignee: claude (desktop-07)
 blocked-by: [06-sidecar-build]
 ---
 
