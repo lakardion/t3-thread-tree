@@ -15,7 +15,6 @@ export const NeedsYouList = v.pipe(
 );
 
 export type NeedsYouThread = v.InferOutput<typeof NeedsYouList>[number];
-export type NeedsYouStatus = NeedsYouThread["status"];
 
 /** The bridge payload of `notify`. Unknown keys are dropped. */
 export const NotifyList = v.pipe(

@@ -1,4 +1,4 @@
-import type { NeedsYouStatus, NeedsYouThread, NotifyEvent, NotifyStatus } from "../shared/desktop.ts";
+import type { NeedsYouThread, NotifyEvent, NotifyStatus } from "../shared/desktop.ts";
 import { allThreads, type Branch, type Status, type ThreadNode, type Tree } from "../shared/tree.ts";
 
 export type Counts = { needYou: number; working: number; yourTurn: number; stopped: number };
@@ -39,17 +39,11 @@ const envOf = (t: ThreadNode) => decodeURIComponent(t.href.split("/")[3] ?? "");
 export const needsYouThreads = (projects: Branch[]): NeedsYouThread[] =>
   projects
     .flatMap(allThreads)
-    .filter(
-      (t): t is ThreadNode & { status: NeedsYouStatus } =>
-        !t.settled && (t.status === "needs-input" || t.status === "plan-ready"),
-    )
-    .map((t) => ({
-      id: t.id,
-      title: t.title,
-      environmentId: envOf(t),
-      since: t.since,
-      status: t.status,
-    }));
+    .flatMap((t) =>
+      !t.settled && (t.status === "needs-input" || t.status === "plan-ready")
+        ? [{ id: t.id, title: t.title, environmentId: envOf(t), since: t.since, status: t.status }]
+        : [],
+    );
 
 export type Statuses = Map<string, Status>;
 
