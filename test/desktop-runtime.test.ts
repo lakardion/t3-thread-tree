@@ -1,7 +1,15 @@
 import { describe, expect, test } from "bun:test";
 import { createServer, type Server } from "node:net";
 
-import { fallbackPath, pickPort, restartDelay, shellPath, trayItems } from "../src/desktop/runtime.ts";
+import {
+  fallbackPath,
+  isNewer,
+  parseRelease,
+  pickPort,
+  restartDelay,
+  shellPath,
+  trayItems,
+} from "../src/desktop/runtime.ts";
 import type { NeedsYouThread } from "../src/shared/desktop.ts";
 
 const listen = (port: number) =>
@@ -81,5 +89,39 @@ describe("trayItems", () => {
   });
   test("empty list gives no items", () => {
     expect(trayItems([])).toEqual([]);
+  });
+});
+
+describe("isNewer", () => {
+  test("compares major, minor and patch as numbers", () => {
+    expect(isNewer("0.1.1", "0.1.0")).toBe(true);
+    expect(isNewer("0.2.0", "0.1.9")).toBe(true);
+    expect(isNewer("1.0.0", "0.9.9")).toBe(true);
+    expect(isNewer("0.1.10", "0.1.9")).toBe(true);
+    expect(isNewer("0.1.0", "0.1.0")).toBe(false);
+    expect(isNewer("0.1.0", "0.1.1")).toBe(false);
+    expect(isNewer("0.9.0", "0.10.0")).toBe(false);
+  });
+  test("allows a leading v on either side", () => {
+    expect(isNewer("v0.2.0", "0.1.0")).toBe(true);
+    expect(isNewer("0.2.0", "v0.1.0")).toBe(true);
+  });
+  test("is false for input that is not X.Y.Z", () => {
+    for (const bad of ["latest", "1.2", "1.2.3-beta.1", ""]) {
+      expect(isNewer(bad, "0.1.0")).toBe(false);
+      expect(isNewer("9.9.9", bad)).toBe(false);
+    }
+  });
+});
+
+describe("parseRelease", () => {
+  const url = "https://github.com/lakardion/t3-thread-tree/releases/tag/v0.2.0";
+  test("reads the version and page", () => {
+    expect(parseRelease({ tag_name: "v0.2.0", html_url: url })).toEqual({ version: "0.2.0", url });
+  });
+  test("rejects a bad payload", () => {
+    expect(parseRelease({ html_url: url })).toBeNull();
+    expect(parseRelease({ tag_name: "v0.2.0", html_url: "https://example.com/x" })).toBeNull();
+    expect(parseRelease(null)).toBeNull();
   });
 });

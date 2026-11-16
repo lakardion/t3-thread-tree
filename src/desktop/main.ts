@@ -18,6 +18,8 @@ import {
 import type { NeedsYouThread, NotifyEvent } from "../shared/desktop.ts";
 import {
   fallbackPath,
+  isNewer,
+  parseRelease,
   pickPort,
   RESET_AFTER_MS,
   restartDelay,
@@ -52,6 +54,10 @@ let settings: Settings = parseSettings(undefined);
 let needsYou: NeedsYouThread[] = [];
 /** Kept referenced so the menu-bar icon is not garbage-collected. */
 let tray: Tray | undefined;
+/** The newer release found on GitHub, for the "Update available" menu item. */
+let update: ReturnType<typeof parseRelease> = null;
+
+const LATEST_RELEASE = "https://api.github.com/repos/lakardion/t3-thread-tree/releases/latest";
 
 const dataFile = (name: string) => join(app.getPath("userData"), name);
 const save = (name: string, value: unknown) => {
@@ -213,6 +219,28 @@ const toggles = (): MenuItemConstructorOptions[] => [
   },
 ];
 
+async function checkUpdate() {
+  try {
+    const res = await fetch(LATEST_RELEASE, {
+      headers: { Accept: "application/vnd.github+json" },
+      signal: AbortSignal.timeout(10_000),
+    });
+    if (!res.ok) return;
+    const release = parseRelease(await res.json());
+    if (release && isNewer(release.version, app.getVersion())) {
+      update = release;
+      setMenus();
+    }
+  } catch (e) {
+    log(`update check failed: ${String(e)}`);
+  }
+}
+
+const updateItems = (): MenuItemConstructorOptions[] => {
+  const u = update;
+  return u ? [{ label: `Update available: v${u.version}…`, click: () => openOutside(u.url) }] : [];
+};
+
 function setMenu() {
   Menu.setApplicationMenu(
     Menu.buildFromTemplate([
@@ -222,6 +250,7 @@ function setMenu() {
           { role: "about" },
           { type: "separator" },
           ...toggles(),
+          ...updateItems(),
           { type: "separator" },
           { role: "services" },
           { type: "separator" },
@@ -252,6 +281,7 @@ function setTrayMenu() {
       { label: "Open tree", click: showWindow },
       { type: "separator" },
       ...toggles(),
+      ...updateItems(),
       { type: "separator" },
       { label: "Quit", role: "quit" },
     ]),
@@ -268,6 +298,10 @@ async function main() {
   tray = new Tray(nativeImage.createFromPath(join(app.getAppPath(), "assets", "trayTemplate.png")));
   tray.setToolTip(app.name);
   setMenus();
+  if (app.isPackaged) {
+    void checkUpdate();
+    setInterval(() => void checkUpdate(), 6 * 60 * 60 * 1000);
+  }
   ipcMain.handle("setToken", (event, raw: unknown) => {
     if (event.sender !== window?.webContents) throw new Error("not allowed");
     const token = parseToken(raw);

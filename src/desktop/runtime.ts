@@ -53,3 +53,26 @@ export function trayItems(threads: NeedsYouThread[]): { label: string; url: stri
   if (sorted.length > TRAY_MAX) items.push({ label: `+${sorted.length - TRAY_MAX} more… (open tree)`, url: null });
   return items;
 }
+
+const parseVersion = (v: string) => {
+  const parts = v.replace(/^v/, "").split(".");
+  return parts.length === 3 && parts.every((p) => /^\d+$/.test(p)) ? parts.map(Number) : null;
+};
+
+/** True when `latest` is a higher `X.Y.Z` version than `current`. A leading `v` is allowed. Anything else is false. */
+export function isNewer(latest: string, current: string): boolean {
+  const a = parseVersion(latest);
+  const b = parseVersion(current);
+  if (!a || !b) return false;
+  const i = a.findIndex((n, k) => n !== b[k]);
+  return i !== -1 && a[i] > b[i];
+}
+
+/** The version and page of a GitHub latest-release payload, or null when it has another shape. */
+export function parseRelease(raw: unknown): { version: string; url: string } | null {
+  if (typeof raw !== "object" || raw === null) return null;
+  const { tag_name, html_url } = raw as Record<string, unknown>;
+  if (typeof tag_name !== "string" || typeof html_url !== "string") return null;
+  if (!html_url.startsWith("https://github.com/")) return null;
+  return { version: tag_name.replace(/^v/, ""), url: html_url };
+}
