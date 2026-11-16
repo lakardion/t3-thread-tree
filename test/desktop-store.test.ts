@@ -6,6 +6,7 @@ import { join } from "node:path";
 import {
   parseBounds,
   parseNeedsYou,
+  parseNotify,
   parseSettings,
   parseToken,
   readJson,
@@ -21,13 +22,39 @@ const screens = [
 
 describe("parseSettings", () => {
   test("defaults when empty", () => {
-    expect(parseSettings(undefined)).toEqual({ alwaysOnTop: false });
+    expect(parseSettings(undefined)).toEqual({ alwaysOnTop: false, muted: false });
   });
   test("keeps a boolean", () => {
-    expect(parseSettings({ alwaysOnTop: true })).toEqual({ alwaysOnTop: true });
+    expect(parseSettings({ alwaysOnTop: true })).toEqual({ alwaysOnTop: true, muted: false });
+    expect(parseSettings({ muted: true })).toEqual({ alwaysOnTop: false, muted: true });
   });
   test("takes the default for a wrong type", () => {
-    expect(parseSettings({ alwaysOnTop: "yes" })).toEqual({ alwaysOnTop: false });
+    expect(parseSettings({ alwaysOnTop: "yes" })).toEqual({ alwaysOnTop: false, muted: false });
+  });
+});
+
+describe("parseNotify", () => {
+  const thread = { kind: "thread", threadId: "t", environmentId: "e", title: "T", status: "failed" } as const;
+  test("round-trips events and drops extra fields", () => {
+    expect(
+      parseNotify([
+        { ...thread, extra: 1 },
+        { kind: "summary", count: 3, extra: 1 },
+      ]),
+    ).toEqual([thread, { kind: "summary", count: 3 }]);
+    expect(parseNotify([])).toEqual([]);
+  });
+  test("rejects bad input", () => {
+    const bad: unknown[] = [
+      "x",
+      Array.from({ length: 11 }, () => thread),
+      [{ ...thread, kind: "other" }],
+      [{ ...thread, status: "working" }],
+      [{ ...thread, title: 1 }],
+      [{ kind: "summary", count: 0 }],
+      [{ kind: "summary", count: 1.5 }],
+    ];
+    for (const raw of bad) expect(parseNotify(raw)).toBeNull();
   });
 });
 

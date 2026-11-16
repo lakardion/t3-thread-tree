@@ -1,9 +1,9 @@
 import { chmodSync, readFileSync, writeFileSync } from "node:fs";
 
-import type { NeedsYouThread } from "../shared/desktop.ts";
+import type { NeedsYouThread, NotifyEvent } from "../shared/desktop.ts";
 
 export type Rect = { x: number; y: number; width: number; height: number };
-export type Settings = { alwaysOnTop: boolean };
+export type Settings = { alwaysOnTop: boolean; muted: boolean };
 
 /** The parsed JSON in `file`, or `undefined` when the file is missing or bad. */
 export function readJson(file: string): unknown {
@@ -64,9 +64,40 @@ export function parseNeedsYou(raw: unknown): NeedsYouThread[] | null {
   return out;
 }
 
+/** A clean copy of the notification events, or `null` when `raw` is not an array of at most 10 well-formed events. */
+export function parseNotify(raw: unknown): NotifyEvent[] | null {
+  if (!Array.isArray(raw) || raw.length > 10) return null;
+  const out: NotifyEvent[] = [];
+  for (const item of raw as unknown[]) {
+    const e = item as Record<string, unknown> | null;
+    if (typeof e !== "object" || e === null) return null;
+    if (e.kind === "summary" && typeof e.count === "number" && Number.isInteger(e.count) && e.count > 0) {
+      out.push({ kind: "summary", count: e.count });
+    } else if (
+      e.kind === "thread" &&
+      typeof e.threadId === "string" &&
+      typeof e.environmentId === "string" &&
+      typeof e.title === "string" &&
+      (e.status === "needs-input" || e.status === "plan-ready" || e.status === "failed")
+    ) {
+      out.push({
+        kind: "thread",
+        threadId: e.threadId,
+        environmentId: e.environmentId,
+        title: e.title,
+        status: e.status,
+      });
+    } else return null;
+  }
+  return out;
+}
+
 export function parseSettings(raw: unknown): Settings {
   const r = (raw ?? {}) as Record<string, unknown>;
-  return { alwaysOnTop: typeof r.alwaysOnTop === "boolean" ? r.alwaysOnTop : false };
+  return {
+    alwaysOnTop: typeof r.alwaysOnTop === "boolean" ? r.alwaysOnTop : false,
+    muted: typeof r.muted === "boolean" ? r.muted : false,
+  };
 }
 
 const positive = (n: unknown): n is number => typeof n === "number" && Number.isFinite(n) && n > 0;

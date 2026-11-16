@@ -2,13 +2,14 @@ import { type ChildProcess, execFile, spawn } from "node:child_process";
 import { homedir } from "node:os";
 import { join } from "node:path";
 
-import { app, BrowserWindow, ipcMain, Menu, screen, shell } from "electron";
+import { app, BrowserWindow, ipcMain, Menu, Notification, screen, shell } from "electron";
 
-import type { NeedsYouThread } from "../shared/desktop.ts";
+import type { NeedsYouThread, NotifyEvent, NotifyStatus } from "../shared/desktop.ts";
 import { fallbackPath, pickPort, RESET_AFTER_MS, restartDelay, shellPath } from "./runtime.ts";
 import {
   parseBounds,
   parseNeedsYou,
+  parseNotify,
   parseSettings,
   parseToken,
   readJson,
@@ -93,6 +94,43 @@ const openOutside = (url: string) => {
   if (allowed(url)) shell.openExternal(url).catch((e: unknown) => log(`openExternal failed: ${String(e)}`));
 };
 
+const showWindow = () => {
+  if (!window) return;
+  if (window.isMinimized()) window.restore();
+  window.show();
+  window.focus();
+};
+
+const STATUS_TITLE: Record<NotifyStatus, string> = {
+  "needs-input": "Needs input",
+  "plan-ready": "Plan ready",
+  failed: "Failed",
+};
+/**
+ * The shown notifications by thread id, "" for the summary. The reference keeps the click handler alive.
+ * ponytail: never pruned; holds at most one entry per thread that notified.
+ */
+const shown = new Map<string, Notification>();
+
+function showNotification(e: NotifyEvent) {
+  let key: string;
+  let n: Notification;
+  if (e.kind === "thread") {
+    key = e.threadId;
+    n = new Notification({ title: STATUS_TITLE[e.status], body: e.title, silent: false });
+    n.on("click", () =>
+      openOutside(`t3code://threads/${encodeURIComponent(e.environmentId)}/${encodeURIComponent(e.threadId)}`),
+    );
+  } else {
+    key = "";
+    n = new Notification({ title: `${e.count} threads need you`, silent: false });
+    n.on("click", showWindow);
+  }
+  shown.get(key)?.close();
+  shown.set(key, n);
+  n.show();
+}
+
 function openWindow(port: number) {
   const origin = `http://127.0.0.1:${port}`;
   const win = (window = new BrowserWindow({
@@ -155,6 +193,15 @@ function setMenu() {
               save("settings.json", settings);
             },
           },
+          {
+            label: "Mute Notifications",
+            type: "checkbox",
+            checked: settings.muted,
+            click: (item) => {
+              settings = { ...settings, muted: item.checked };
+              save("settings.json", settings);
+            },
+          },
           { type: "separator" },
           { role: "services" },
           { type: "separator" },
@@ -195,6 +242,16 @@ async function main() {
     needsYou = list;
     app.setBadgeCount(list.length);
   });
+  ipcMain.on("notify", (event, raw: unknown) => {
+    if (event.sender !== window?.webContents) return;
+    const events = parseNotify(raw);
+    if (!events) {
+      log("bad notify payload");
+      return;
+    }
+    if (settings.muted) return;
+    events.forEach(showNotification);
+  });
   const [PATH, port] = await Promise.all([loginPath(), pickPort()]);
   startServer(port, PATH, 0);
   if (!(await waitReady(port))) {
@@ -208,12 +265,6 @@ async function main() {
 if (!app.requestSingleInstanceLock()) {
   app.quit();
 } else {
-  const showWindow = () => {
-    if (!window) return;
-    if (window.isMinimized()) window.restore();
-    window.show();
-    window.focus();
-  };
   app.on("second-instance", showWindow);
   app.on("activate", showWindow);
   app.on("before-quit", (event) => {

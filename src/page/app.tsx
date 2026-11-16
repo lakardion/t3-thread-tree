@@ -49,7 +49,7 @@ import { cn } from "@/lib/utils";
 import type { BriefState, Cli } from "../shared/brief.ts";
 import type { CliStatus } from "../shared/send.ts";
 import { allThreads, REVIEWS, type Branch, type PrNode, type ThreadNode, type Tree } from "../shared/tree.ts";
-import { countAttention, needsYou, needsYouThreads, onlyNeedsYou } from "./attention.ts";
+import { countAttention, needsYou, needsYouThreads, notifyEvents, onlyNeedsYou, type Statuses } from "./attention.ts";
 import { BriefControls, BriefPanel, type Offered } from "./brief.tsx";
 import {
   ago,
@@ -878,6 +878,14 @@ function App() {
     if (key === sentNeedsYou.current) return;
     sentNeedsYou.current = key;
     window.desktopBridge.setNeedsYou(list);
+  }, [tree]);
+
+  const lastStatuses = useRef<Statuses | null>(null);
+  useEffect(() => {
+    if (!window.desktopBridge || !tree) return;
+    const { events, nextStatuses } = notifyEvents(lastStatuses.current, tree);
+    lastStatuses.current = nextStatuses;
+    if (events.length > 0) window.desktopBridge.notify(events);
   }, [tree]);
 
   useEffect(() => {
