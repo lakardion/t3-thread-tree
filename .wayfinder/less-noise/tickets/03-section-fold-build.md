@@ -2,7 +2,7 @@
 title: Fold the flat sections and add "Show snoozed threads"
 type: wayfinder:task
 status: open
-assignee:
+assignee: damian.lucero
 blocked-by: [01-section-fold-rules]
 ---
 
