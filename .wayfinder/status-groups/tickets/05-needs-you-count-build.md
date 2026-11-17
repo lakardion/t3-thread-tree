@@ -29,3 +29,9 @@ Fixed now: stacks on the 04-context-rows-build branch. Update `SPEC.md`, `DESIGN
 - The chip stays on the first header line at 390px width, in light and dark mode (`bun run demo`).
 - The Dock badge still counts needs-input and plan-ready threads only.
 - `bun run check` passes; the docs above are updated.
+
+## Handed over from status-groups-04
+
+- 04 is in review as draft PR #79, branch `status-groups-04-context-rows-count`. Stack this key on that branch.
+- A status section header now counts matching threads, subthreads included, settled left out (`sequence` in `src/page/view.ts`). `isContext(t, statuses)` there is the one rule for a **Context row**; `CONTEXT.md` defines the term.
+- The "Needs you" spawners keep their muted look (`dim` in `ThreadRow`, `src/page/app.tsx`).
