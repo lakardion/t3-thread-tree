@@ -971,7 +971,7 @@ function DetailBlock({ t }: { t: ThreadNode }) {
 
 /**
  * `inStack`: the row sits on a stack rail, which holds no drag handles and shows the stack itself.
- * `project` adds the Project column of the flat list, `review` the eye.
+ * `project` adds the Project column and project edge of the flat list, `corners` rounds that edge, `review` the eye.
  */
 function ThreadRow({
   t,
@@ -979,6 +979,7 @@ function ThreadRow({
   sort,
   inStack,
   project,
+  corners,
   review,
 }: {
   t: ThreadNode;
@@ -986,6 +987,7 @@ function ThreadRow({
   sort?: Sort;
   inStack?: boolean;
   project?: Branch;
+  corners?: string;
   review?: boolean;
 }) {
   const now = useContext(Now);
@@ -998,7 +1000,11 @@ function ThreadRow({
   const noPrLabel = t.stack ? `PR stack · ${t.stack.total} PRs · no PR from this thread` : undefined;
   const render = (ref: RefFn, handleRef?: RefFn) => (
     <Collapsible asChild open={open.has(t.id)} onOpenChange={() => toggle(t.id)}>
-      <li ref={ref} className="my-px" style={{ viewTransitionName: vtName("t", t.id) }}>
+      <li
+        ref={ref}
+        className={cn("my-px", project && "border-l-[3px] pl-1", corners)}
+        style={{ viewTransitionName: vtName("t", t.id), borderLeftColor: project && projectHex(project.label) }}
+      >
         <div
           className="thread-row group/row flex min-h-9 min-w-0 items-center gap-x-2 rounded-[8px] px-2 py-1 text-[13px] leading-5 max-[720px]:flex-wrap"
           data-status={t.status}
@@ -1308,8 +1314,12 @@ function StackRail({
     <Collapsible asChild open={open} onOpenChange={() => toggle(`rail:${id}`)}>
       <li
         ref={ref}
-        className="relative my-1 rounded-[10px] border border-dashed border-border"
-        style={{ viewTransitionName: vtName("s", run[0].id) }}
+        className={cn("relative my-1 rounded-[10px] border border-dashed border-border", project && "border-l-[3px]")}
+        style={{
+          viewTransitionName: vtName("s", run[0].id),
+          borderLeftColor: project && projectHex(project.label),
+          borderLeftStyle: project && "solid",
+        }}
       >
         <div
           className="group/row relative flex min-h-7 flex-wrap items-center gap-2 rounded-[10px] px-2 text-xs"
@@ -1385,8 +1395,16 @@ function StackRail({
   return <Sortable sort={sort}>{render}</Sortable>;
 }
 
+/** Rounds the ends of a flat thread row's project edge, except where the row next to it continues that edge. */
+const edgeCorners = (items: FlatItem[], i: FlatItem) => {
+  const at = items.findIndex((x) => x.id === i.id);
+  const joins = (o?: FlatItem) =>
+    at >= 0 && i.kind === "thread" && o?.kind === "thread" && o.project.id === i.project.id;
+  return cn(!joins(items[at - 1]) && "rounded-tl-[8px]", !joins(items[at + 1]) && "rounded-bl-[8px]");
+};
+
 /** A flat-list item: a status section header, a thread row or a PR stack. */
-function FlatRow({ i, closed, toggle, fold }: { i: FlatItem } & Fold) {
+function FlatRow({ i, corners, closed, toggle, fold }: { i: FlatItem; corners: string } & Fold) {
   const lists = useContext(Lists);
   /** The section list that holds the unit, or the whole flat list when ungrouped. */
   const list = [...lists.keys()].find((k) => k !== FLAT && lists.get(k)?.includes(i.id)) ?? FLAT;
@@ -1396,6 +1414,7 @@ function FlatRow({ i, closed, toggle, fold }: { i: FlatItem } & Fold) {
         t={i.t}
         chip={i.t.key ?? undefined}
         project={i.project}
+        corners={corners}
         review={i.review}
         sort={sortOf(lists, list, i.id, i.t.title || i.t.id)}
       />
@@ -1888,7 +1907,15 @@ function App() {
                             <SendTo value={{ t3cli, open: (id) => setSendTo({ id, open: true }) }}>
                               {layout === "flat" ? (
                                 <Presence key="flat" items={view.flat ?? []} keyOf={(i) => i.id}>
-                                  {(i) => <FlatRow i={i} closed={closed} toggle={toggle} fold={fold} />}
+                                  {(i) => (
+                                    <FlatRow
+                                      i={i}
+                                      corners={edgeCorners(view.flat ?? [], i)}
+                                      closed={closed}
+                                      toggle={toggle}
+                                      fold={fold}
+                                    />
+                                  )}
                                 </Presence>
                               ) : (
                                 <Presence key="tree" items={projects} keyOf={(p) => p.id}>
