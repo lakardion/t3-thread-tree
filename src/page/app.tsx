@@ -132,6 +132,7 @@ const TOKEN_CMD =
   "~/.t3/bin/t3 auth session issue --scope orchestration:read --label thread-tree --ttl 52w --token-only";
 const CLOSED_KEY = "thread-tree:closed";
 const SETTLED_KEY = "thread-tree:settled";
+const NEST_KEY = "thread-tree:nest";
 const FILTER_KEY = "thread-tree:filter";
 const THEME_KEY = "thread-tree:theme";
 const CLI_KEY = "thread-tree:cli";
@@ -615,6 +616,8 @@ type PanelProps = LinearProps & {
   close: () => void;
   settled: boolean;
   setSettled: (v: boolean) => void;
+  nest: boolean;
+  setNest: (v: boolean) => void;
   canReset: boolean;
   resetOrder: () => void;
   theme: Theme;
@@ -655,6 +658,9 @@ function SettingsPanel(p: PanelProps) {
         <Group title="View">
           <Row label="Show settled threads" htmlFor="settled">
             <Switch id="settled" checked={p.settled} onCheckedChange={p.setSettled} />
+          </Row>
+          <Row label="Nest launched threads" htmlFor="nest">
+            <Switch id="nest" checked={p.nest} onCheckedChange={p.setNest} />
           </Row>
           <Row label="Drag-and-drop order">
             <Button variant="outline" size="sm" disabled={!p.canReset} onClick={p.resetOrder}>
@@ -1533,6 +1539,7 @@ const pipeline = (ps: Branch[], c: Cfg): { full: Arranged; view: Arranged & { fl
 function App() {
   const [tree, setTree] = useState<Tree | null>(null);
   const [settled, setSettled] = useState(load(SETTLED_KEY) === "1");
+  const [nest, setNest] = useState(load(NEST_KEY) === "1");
   const [needsOnly, setNeedsOnly] = useState(load(FILTER_KEY) === "needs");
   const [theme, setTheme] = useState<Theme>(() => THEMES.find((t) => t === load(THEME_KEY)) ?? "system");
   const [sortBy, setSortBy] = useState<SortBy>(() => (load(SORT_KEY) === "updated" ? "updated" : "manual"));
@@ -1671,7 +1678,8 @@ function App() {
   });
   useEffect(() => {
     save(SETTLED_KEY, settled ? "1" : "0");
-    const es = new EventSource(settled ? "/events?settled=1" : "/events");
+    save(NEST_KEY, nest ? "1" : "0");
+    const es = new EventSource(`/events?settled=${settled ? 1 : 0}&nest=${nest ? 1 : 0}`);
     es.onmessage = (e) => {
       const next = JSON.parse(e.data) as Tree;
       const cur = latest.current;
@@ -1686,7 +1694,7 @@ function App() {
       setBrief(b);
     });
     return () => es.close();
-  }, [settled]);
+  }, [settled, nest]);
 
   const projects = connecting ? undefined : view.projects;
 
@@ -1923,6 +1931,8 @@ function App() {
           setLinear={setLinear}
           settled={settled}
           setSettled={setSettled}
+          nest={nest}
+          setNest={setNest}
           canReset={Object.keys(orders).length > 0}
           resetOrder={resetOrder}
           theme={theme}

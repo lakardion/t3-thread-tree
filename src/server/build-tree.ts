@@ -55,6 +55,8 @@ export type BuildInput = {
   spawnerOf: (id: string) => string | null | undefined;
   environmentId: string;
   settled: boolean;
+  /** Launch nesting: a keyless thread nests under its visible spawner. */
+  nest: boolean;
   now: number;
 };
 
@@ -158,7 +160,7 @@ const newest = (a: string | null, b: string | null): string | null =>
   a && b ? (Date.parse(a) >= Date.parse(b) ? a : b) : (a ?? b);
 
 export function buildTree(input: BuildInput): Branch[] {
-  const { projects, spawnerOf, environmentId, settled, now } = input;
+  const { projects, spawnerOf, environmentId, settled, nest, now } = input;
   const visible = new Map<string, Thread>();
   const all = new Map<string, Thread>();
   for (const t of input.threads) {
@@ -227,7 +229,7 @@ export function buildTree(input: BuildInput): Branch[] {
     else if (n.key) addTo(t.projectId, n.key, n);
     else if (stackKey) addTo(t.projectId, stackKey, n);
     else {
-      const vs = visibleSpawner(t.id);
+      const vs = nest ? visibleSpawner(t.id) : null;
       if (vs && visible.get(vs)!.projectId === t.projectId) nodes.get(vs)!.children.push(n);
       else addTo(t.projectId, NO_KEY, n);
     }
