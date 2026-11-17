@@ -4,6 +4,7 @@ import {
   countAttention,
   favicon,
   needsYou,
+  needsYouTip,
   needsYouThreads,
   nextTarget,
   notifyEvents,
@@ -322,5 +323,15 @@ describe("favicon", () => {
     const dotted = decode(favicon(svg, 3));
     expect(dotted.split("<circle").length - 1).toBe(1);
     expect(dotted.startsWith("<svg><path")).toBe(true);
+  });
+});
+
+describe("needsYouTip", () => {
+  const tip = (needYou: number, yourTurn: number) => needsYouTip({ needYou, working: 0, yourTurn, stopped: 0 });
+  test("joins the non-zero parts", () => {
+    expect(tip(6, 5)).toBe("6 need you, 5 your turn");
+    expect(tip(0, 3)).toBe("3 your turn");
+    expect(tip(5, 0)).toBe("5 need you");
+    expect(tip(0, 0)).toBe("");
   });
 });
