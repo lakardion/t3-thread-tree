@@ -27,6 +27,7 @@ The destination is reached when every route key is done and no map ticket is ope
 ## Stacks
 
 - 04-row-wait-build ← 05-sort-by-wait-build ← 06-open-next-build. Each key branches from the branch of the key before it.
+- main ← wait-time-04-show-row-wait (#61)
 
 ## Notes
 
