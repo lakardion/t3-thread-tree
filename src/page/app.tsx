@@ -90,6 +90,7 @@ import {
   prTone,
   railRows,
   stackRuns,
+  stopLabel,
   stripKey,
 } from "./format.ts";
 import {
@@ -1310,6 +1311,7 @@ function StackRail({
   const { id, total, base } = run[0].stack!;
   const open = flat || !closed.has(`rail:${id}`);
   const { stops, rows } = railRows(run);
+  const partial = stops.filter((s) => s.n).length < total;
   const render = (ref: RefFn, handleRef?: RefFn) => (
     <Collapsible asChild open={open} onOpenChange={() => toggle(`rail:${id}`)}>
       <li
@@ -1347,7 +1349,7 @@ function StackRail({
                 {base}
               </code>
             )}
-            {stops.map(({ id: stopId, label, p }, i) => (
+            {stops.map(({ id: stopId, label, p, n }, i) => (
               <span key={stopId} className="inline-flex items-center">
                 {(i > 0 || base) && <span className="h-0.5 w-4" style={{ background: prTone(p) }} />}
                 <a
@@ -1362,7 +1364,7 @@ function StackRail({
                   style={{ borderColor: prTone(p) }}
                 >
                   <span className="size-1.5 rounded-full" style={{ background: prTone(p) }} />
-                  {i + 1}
+                  {stopLabel(n, total, partial)}
                   {p && ` · #${p.n}`}
                 </a>
               </span>

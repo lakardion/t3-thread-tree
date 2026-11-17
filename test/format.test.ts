@@ -6,10 +6,12 @@ import {
   foldIds,
   groupIds,
   linearHref,
+  ownPos,
   phraseWith,
   prTone,
   railRows,
   stackRuns,
+  stopLabel,
   stripKey,
 } from "../src/page/format.ts";
 import { parseLinear, type Branch, type PrNode, type ThreadNode } from "../src/shared/tree.ts";
@@ -123,7 +125,7 @@ describe("railRows", () => {
     });
   });
 
-  test("key groups keep their chip; a thread with no position gets no number; a group with none still gets a stop", () => {
+  test("key groups keep their chip; a thread with no position gets no number; a group with none gets an unnumbered stop", () => {
     expect(
       show([g("WEB-1", [t("x", 1, "WEB-1"), t("y", null, "WEB-1")]), g("WEB-2", [t("z", null, "WEB-2")])]),
     ).toEqual({
@@ -131,9 +133,13 @@ describe("railRows", () => {
       rows: [
         ["x", 1, "WEB-1"],
         ["y", null, "WEB-1"],
-        ["z", 2, "WEB-2"],
+        ["z", null, "WEB-2"],
       ],
     });
+  });
+
+  test("numbers keep the stack position when a filter hides other stops", () => {
+    expect(show([g("WEB-2", [t("b", 2, "WEB-2")])])).toEqual({ stops: [102], rows: [["b", 2, "WEB-2"]] });
   });
 });
 
@@ -225,5 +231,31 @@ describe("prTone", () => {
     ["open", pr({ checks: "pending" }), "var(--status-working-fg)"],
   ])("%s", (_, p, out) => {
     expect(prTone(p)).toBe(out);
+  });
+});
+
+describe("ownPos", () => {
+  const t = (pos: number | null, children: ThreadNode[] = []) =>
+    ({ id: `t${pos}`, stack: { pos, total: 4 }, prs: [], children }) as unknown as ThreadNode;
+  const g = (threads: ThreadNode[]): Branch => ({ id: "g", label: "g", branches: [], threads });
+
+  test("is the position of the thread that made the stack PR", () => {
+    expect(ownPos(g([t(null), t(2)]))).toBe(2);
+  });
+  test("finds the position on a subthread", () => {
+    expect(ownPos(g([t(null, [t(3)])]))).toBe(3);
+  });
+  test("is undefined when no thread has a position", () => {
+    expect(ownPos(g([t(null)]))).toBeUndefined();
+  });
+});
+
+describe("stopLabel", () => {
+  test.each([
+    [undefined, 4, true, ""],
+    [2, 4, false, "2"],
+    [2, 4, true, "2 of 4"],
+  ])("%p of %i, partial %p is %p", (n, total, partial, out) => {
+    expect(stopLabel(n, total, partial)).toBe(out);
   });
 });
