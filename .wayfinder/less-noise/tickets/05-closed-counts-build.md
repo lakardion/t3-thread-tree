@@ -2,7 +2,7 @@
 title: Show counts on a closed project
 type: wayfinder:task
 status: open
-assignee:
+assignee: claude (less-noise-05)
 blocked-by: [02-closed-counts-look, 04-quiet-working-build]
 ---
 
