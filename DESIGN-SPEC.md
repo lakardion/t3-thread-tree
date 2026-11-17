@@ -276,7 +276,7 @@ A project card, a group or a thread row that a push adds or removes also moves.
 
 ## Gradients
 
-Five gradients, all static. No gradient on text, on the page background, or on a row with another status.
+Four gradients, all static. No gradient on text, on the page background, or on a row with another status.
 
 ```css
 /* Project card header: neutral. */
@@ -292,20 +292,18 @@ Five gradients, all static. No gradient on text, on the page background, or on a
     transparent 45%
   );
 }
-.thread-row[data-status="needs-input"]::before {
+.thread-row[data-status="needs-input"]::before,
+[data-waiting]::before {
   background: var(--status-needs-input);
 }
 
-/* Working: weaker wash and a 2 px left edge. */
-.thread-row[data-status="working"] {
-  background: linear-gradient(
+/* A closed row that hides a waiting thread. `background-image` keeps the row's own background color. */
+[data-waiting] {
+  background-image: linear-gradient(
     90deg,
-    color-mix(in oklch, var(--status-working) calc(var(--wash) * 0.6), transparent),
-    transparent 35%
+    color-mix(in oklch, var(--status-needs-input) var(--wash), transparent),
+    transparent 45%
   );
-}
-.thread-row[data-status="working"]::before {
-  background: var(--status-working);
 }
 
 /* The edge. */
@@ -313,7 +311,7 @@ Five gradients, all static. No gradient on text, on the page background, or on a
   position: relative;
 }
 .thread-row[data-status="needs-input"]::before,
-.thread-row[data-status="working"]::before {
+[data-waiting]::before {
   content: "";
   position: absolute;
   left: 0;
