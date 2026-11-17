@@ -2,7 +2,7 @@
 title: How do the flat sections fold, and how does "Show snoozed threads" work?
 type: grilling
 status: open
-assignee:
+assignee: damian.lucero
 blocked-by: []
 ---
 
