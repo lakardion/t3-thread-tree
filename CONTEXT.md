@@ -51,6 +51,10 @@ _Avoid_: status group, bucket
 The time since a thread started to wait on the user. It counts from the request for needs input, and from the run completion for plan ready and your turn. A row that waits on the user shows it beside the phrase.
 _Avoid_: age (age is the time since the last update)
 
+**Context row**:
+A row that shows only because it sits with a thread that matches the view: a spawner that the "Needs you" filter keeps, or a row of a status section whose own status is not in that section. It does not count in the section.
+_Avoid_: dimmed row, extra row
+
 **Desktop app**:
 The tree in its own macOS window, with a Dock icon, a Dock badge, notifications and a menu-bar entry. It shows the same page as the **Browser version** and stays alive when its window closes.
 _Avoid_: native app, Electron app
