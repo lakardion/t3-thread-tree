@@ -55,6 +55,8 @@ Decided at charting (by the user):
 - **Settled threads do not pull** (M01). With "Show settled threads" on, a unit goes by its unsettled threads. A unit with only settled threads goes by all its threads.
 - **Glossary:** new term **Context row** in `CONTEXT.md`. It covers the spawners that the "Needs you" filter keeps, and the rows of a status section that do not match it. One look for both places.
 
+- [How do context rows look, and what does a section count?](tickets/01-context-row-look.md): variant B. Stack context rows fold behind "+N other threads" on the rail header; other context rows are muted. The header counts matching threads only. A settled thread is a context row.
+
 ## Not yet specified
 
 <!-- none at charting -->
