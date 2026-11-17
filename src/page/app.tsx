@@ -27,8 +27,8 @@ import {
   LoaderCircle,
   Moon,
   Send,
+  Settings,
   SkipForward,
-  SlidersHorizontal,
   Sun,
   TriangleAlert,
   X,
@@ -541,8 +541,16 @@ function useUpdate(): UpdateState | undefined {
 /** Circumference of the r=6 ring. */
 const RING = 2 * Math.PI * 6;
 
-/** The View button. An update shows as a dot, and a running install as a progress ring in place of the icon. */
-function ViewButton({ update, open, toggle }: { update: UpdateState | undefined; open: boolean; toggle: () => void }) {
+/** An update shows as a dot, and a running install as a progress ring in place of the cog. */
+function SettingsButton({
+  update,
+  open,
+  toggle,
+}: {
+  update: UpdateState | undefined;
+  open: boolean;
+  toggle: () => void;
+}) {
   const install = update?.install ?? null;
   const running = install !== null && install.stage !== "failed";
   const spinning = install?.stage === "unpacking" || (install?.stage === "downloading" && install.progress === null);
@@ -563,9 +571,10 @@ function ViewButton({ update, open, toggle }: { update: UpdateState | undefined;
   return (
     <Button
       variant={open ? "secondary" : "ghost"}
-      size="sm"
+      size="icon-sm"
       aria-expanded={open}
-      aria-label={note ? `View and settings, ${note}` : "View and settings"}
+      aria-label={note ? `Settings, ${note}` : "Settings"}
+      title="Settings"
       onClick={toggle}
     >
       {running ? (
@@ -589,13 +598,12 @@ function ViewButton({ update, open, toggle }: { update: UpdateState | undefined;
         </svg>
       ) : (
         <span className="relative inline-flex">
-          <SlidersHorizontal />
+          <Settings aria-hidden />
           {dot && (
             <span className={cn("absolute -top-0.5 -right-0.5 size-1.5 rounded-full ring-2 ring-background", dot)} />
           )}
         </span>
       )}
-      View
     </Button>
   );
 }
@@ -717,11 +725,11 @@ function SettingsPanel(p: PanelProps) {
   const token = tokenSummary(p.conn);
   return (
     <aside
-      aria-label="View and settings"
+      aria-label="Settings"
       className="fixed top-0 right-0 z-40 flex h-full w-[380px] max-w-full flex-col overflow-y-auto border-l bg-card shadow-xl"
     >
       <div className="sticky top-0 z-10 flex items-center justify-between border-b bg-card px-4 py-3">
-        <h2 className="m-0 text-[15px] font-semibold">View and settings</h2>
+        <h2 className="m-0 text-[15px] font-semibold">Settings</h2>
         <Button variant="ghost" size="icon-sm" aria-label="Close" onClick={close}>
           <X />
         </Button>
@@ -2089,7 +2097,7 @@ function App() {
               }}
             />
           )}
-          <ViewButton
+          <SettingsButton
             update={update}
             open={settingsOpen}
             toggle={() => {
