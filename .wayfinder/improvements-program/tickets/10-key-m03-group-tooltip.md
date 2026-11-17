@@ -2,7 +2,7 @@
 title: Close the "Group by: Status" tooltip
 type: wayfinder:task
 status: open
-assignee:
+assignee: damian.lucero
 blocked-by: [03-key-m02-stack-numbers]
 ---
 
