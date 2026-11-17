@@ -1,6 +1,6 @@
 ---
 label: wayfinder:map
-status: open
+status: closed
 created: 2026-11-17
 ---
 
@@ -26,7 +26,7 @@ The destination is reached when every route key is done and no map ticket is ope
 
 ## Stacks
 
-- main ← status-groups-04-context-rows-count (#79) ← status-groups-05-show-your-turn-count (#80). GitHub stack #81. 03 merged as `741d0dc` (#78). The stack starts from `main`. Each key branches from the branch of the key before it.
+- None open. 03 merged as `741d0dc` (#78), 04 as `a56f06e` (#79), 05 as `83fd3b5` (#80). The stack starts from `main`. Each key branches from the branch of the key before it.
 
 ## Notes
 
