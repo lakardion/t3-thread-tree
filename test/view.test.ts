@@ -4,8 +4,10 @@ import { applyOrder } from "../src/page/order.ts";
 import {
   flatLists,
   flatten,
+  folds,
   itemIds,
   recency,
+  sectionOf,
   sections,
   sequence,
   sortFlat,
@@ -263,6 +265,33 @@ describe("sections", () => {
     ]);
     const header = sequence(units, "status")[0];
     expect(header.kind === "section" && header.count).toBe(2);
+  });
+  test("sequence counts the matching threads, subthreads included, without settled and context rows", () => {
+    const needs = (id: string, kids: ThreadNode[] = []) => thread(id, 1, kids, "needs-input");
+    const [a, stack] = flatten([
+      project("p", [
+        branch("g", [thread("a", 1, [needs("c", [needs("d")])], "idle")]),
+        branch("s1", [needs("s1")], [], "st"),
+        branch("s2", [thread("s2", 1, [], "done")], [], "st"),
+        branch("s3", [{ ...needs("s3"), settled: true }], [], "st"),
+      ]),
+    ]);
+    const header = sequence([a, stack], "status")[0];
+    expect(header.kind === "section" && header.count).toBe(3);
+  });
+  test("folds a stack row only when it and its subthreads are context rows", () => {
+    const needs = (kids: ThreadNode[] = []) => thread("n", 1, kids, "needs-input");
+    expect(folds(thread("a", 1, [], "done"), ["needs-input"])).toBe(true);
+    expect(folds(thread("a", 1, [needs()], "done"), ["needs-input"])).toBe(false);
+    expect(folds({ ...needs(), settled: true }, ["needs-input"])).toBe(true);
+    expect(folds(needs(), ["needs-input"])).toBe(false);
+  });
+  test("sectionOf gives the statuses of the header above a unit", () => {
+    const units = [unit("a", "done"), unit("b", "idle")];
+    const items = sequence(units, "status");
+    expect(sectionOf(items, items[1])).toEqual(["idle", "snoozed"]);
+    expect(sectionOf(items, items[0])).toBeNull();
+    expect(sectionOf(units, units[0])).toBeNull();
   });
   describe("waiting sections", () => {
     const waiting = (

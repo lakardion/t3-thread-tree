@@ -69,6 +69,7 @@ import {
   REVIEWS,
   type Branch,
   type PrNode,
+  type Status,
   type ThreadNode,
   type Tree,
 } from "../shared/tree.ts";
@@ -125,7 +126,10 @@ import {
   FLAT,
   flatLists,
   flatten,
+  folds,
+  isContext,
   itemIds,
+  sectionOf,
   sequence,
   sortFlat,
   sortTree,
@@ -791,6 +795,8 @@ const Details = createContext<{ open: Set<string>; toggle: (id: string) => void;
 /** Opens the send dialog for a thread. Null where rows cannot send. */
 const SendTo = createContext<{ t3cli: CliStatus | null; open: (id: string) => void } | null>(null);
 const NeedsOnly = createContext(false);
+/** The statuses of the status section that holds the row. Null outside one. */
+const Section = createContext<Status[] | null>(null);
 const Linear = createContext<Tree["linear"]>(null);
 /** The rendered ids of each list, by list key. */
 const Lists = createContext(new Map<string, string[]>());
@@ -1076,7 +1082,8 @@ function ThreadRow({
 }) {
   const now = useContext(Now);
   const { open, toggle, show } = useContext(Details);
-  const dim = useContext(NeedsOnly) && !needsYou(t.status);
+  const section = useContext(Section);
+  const dim = (useContext(NeedsOnly) && !needsYou(t.status)) || (section !== null && isContext(t, section));
   const linear = useContext(Linear);
   const sendTo = useContext(SendTo);
   const chipHref = chip ? linearHref(chip, linear) : null;
@@ -1394,7 +1401,11 @@ function StackRail({
 }: { run: Branch[]; sort?: Sort; flat?: boolean; project?: Branch } & Fold) {
   const { id, total, base } = run[0].stack!;
   const open = flat || !closed.has(`rail:${id}`);
-  const { stops, rows } = railRows(run);
+  const { stops, rows: allRows } = railRows(run);
+  const section = useContext(Section);
+  const [showOther, setShowOther] = useState(false);
+  const hidden = section ? allRows.filter((r) => folds(r.t, section)) : [];
+  const rows = showOther ? allRows : allRows.filter((r) => !hidden.includes(r));
   const partial = stops.filter((s) => s.n).length < total;
   const render = (ref: RefFn, handleRef?: RefFn) => (
     <Collapsible asChild open={open} onOpenChange={() => toggle(`rail:${id}`)}>
@@ -1454,6 +1465,17 @@ function StackRail({
               </span>
             ))}
           </span>
+          {hidden.length > 0 && (
+            <button
+              type="button"
+              className="relative z-10 ml-auto rounded-full border border-dashed px-2 py-px text-[11px] text-muted-foreground hover:text-foreground max-[720px]:min-h-11"
+              aria-expanded={showOther}
+              onClick={() => setShowOther(!showOther)}
+            >
+              {showOther ? "Hide " : "+"}
+              {hidden.length} other {hidden.length === 1 ? "thread" : "threads"}
+            </button>
+          )}
         </div>
         <CollapsibleContent asChild>
           <ul className="m-0 list-none p-0 pb-1 pl-1">
@@ -1490,32 +1512,43 @@ const edgeCorners = (items: FlatItem[], i: FlatItem) => {
 };
 
 /** A flat-list item: a status section header, a thread row or a PR stack. */
-function FlatRow({ i, corners, closed, toggle, fold }: { i: FlatItem; corners: string } & Fold) {
+function FlatRow({
+  i,
+  corners,
+  section,
+  closed,
+  toggle,
+  fold,
+}: { i: FlatItem; corners: string; section: Status[] | null } & Fold) {
   const lists = useContext(Lists);
   /** The section list that holds the unit, or the whole flat list when ungrouped. */
   const list = [...lists.keys()].find((k) => k !== FLAT && lists.get(k)?.includes(i.id)) ?? FLAT;
   if (i.kind === "thread")
     return (
-      <ThreadRow
-        t={i.t}
-        chip={i.t.key ?? undefined}
-        project={i.project}
-        corners={corners}
-        review={i.review}
-        sort={sortOf(lists, list, i.id, i.t.title || i.t.id)}
-      />
+      <Section value={section}>
+        <ThreadRow
+          t={i.t}
+          chip={i.t.key ?? undefined}
+          project={i.project}
+          corners={corners}
+          review={i.review}
+          sort={sortOf(lists, list, i.id, i.t.title || i.t.id)}
+        />
+      </Section>
     );
   if (i.kind === "stack")
     return (
-      <StackRail
-        run={i.run}
-        project={i.project}
-        flat
-        closed={closed}
-        toggle={toggle}
-        fold={fold}
-        sort={sortOf(lists, list, i.id, `PR stack of ${i.run[0].label}`)}
-      />
+      <Section value={section}>
+        <StackRail
+          run={i.run}
+          project={i.project}
+          flat
+          closed={closed}
+          toggle={toggle}
+          fold={fold}
+          sort={sortOf(lists, list, i.id, `PR stack of ${i.run[0].label}`)}
+        />
+      </Section>
     );
   return (
     <MotionHook>
@@ -2037,6 +2070,7 @@ function App() {
                                     <FlatRow
                                       i={i}
                                       corners={edgeCorners(view.flat ?? [], i)}
+                                      section={sectionOf(view.flat ?? [], i)}
                                       closed={closed}
                                       toggle={toggle}
                                       fold={fold}
