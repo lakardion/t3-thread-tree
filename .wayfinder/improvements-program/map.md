@@ -46,6 +46,7 @@ The destination is reached when every route key is done and no map ticket is ope
 
 ## Stacks
 
+- Lane 1 (stack #71): `main ← improvements-program-03-fix-filtered-stack-numbers (#62) ← improvements-program-10-close-group-tooltip (#69)`
 - Lane 3 (stack #70): `main ← improvements-program-08-tab-title-count (#63) ← improvements-program-11-phone-view-menu (#68)`
 
 ## Notes
