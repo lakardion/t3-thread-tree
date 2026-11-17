@@ -71,6 +71,8 @@ Decided at charting (by the user):
 - **One map for the whole program**, separate from the [improvements map](../improvements/map.md), which stays closed as the record of the reviews.
 - **Effort A** was charted before this map; its ticket is claimed and links the [wait-time map](../wait-time/map.md).
 
+- [Effort B: status groups that agree](tickets/02-effort-b-status-groups.md): a unit goes to its most urgent section, sections count matching threads and fold context rows, and the header shows the your-turn count. #78, #79, #80 merged.
+
 ## Not yet specified
 
 None.
