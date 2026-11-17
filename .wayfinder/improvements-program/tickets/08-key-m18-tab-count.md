@@ -1,7 +1,7 @@
 ---
 title: Show the Needs-you count in the tab title and favicon
 type: wayfinder:task
-status: open
+status: in-review
 assignee: damian.lucero
 blocked-by: []
 ---
