@@ -1,7 +1,7 @@
 ---
 title: Effort D: less noise
 type: task
-status: open
+status: closed
 assignee: damian.lucero
 blocked-by: []
 ---
@@ -17,3 +17,7 @@ Chart the map at `.wayfinder/less-noise/map.md` with `/wayfinder`, as the `wait-
 Charted: [less-noise map](../../less-noise/map.md). Its build keys run on autopilot, after the wait-time and status-groups stacks merge.
 
 When the map is charted, put its link here and set `assignee`. Close this ticket when that map is closed, with a one-line `## Resolution`.
+
+## Resolution
+
+The [less-noise map](../../less-noise/map.md) is closed. M09, M13 and M16 are merged to `main`; see its [completed stack](../../less-noise/map.md#stacks).

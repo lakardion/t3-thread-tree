@@ -1,7 +1,7 @@
 ---
 title: Fold the flat sections and add "Show snoozed threads"
 type: wayfinder:task
-status: in-review
+status: closed
 assignee: damian.lucero
 blocked-by: [01-section-fold-rules]
 ---
@@ -56,3 +56,7 @@ From [the fold rules](01-section-fold-rules.md). Read the code at `origin/main` 
 - `bun run check` passes. `bun run demo` checked in light and dark, desktop and phone width.
 - `SPEC.md:72` (tree rule 3), the `SPEC.md` flat-view paragraph, `DESIGN-SPEC.md` › Flat view, `CONTEXT.md` and `README.md` updated.
 - One draft PR from `main`, the bottom of the stack 03 ← 04 ← 05.
+
+## Result
+
+Merged to `main` in [PR #82](https://github.com/lakardion/t3-thread-tree/pull/82) as `37b1cde`.

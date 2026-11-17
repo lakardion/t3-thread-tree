@@ -73,6 +73,8 @@ Decided at charting (by the user):
 
 - [Effort B: status groups that agree](tickets/02-effort-b-status-groups.md): a unit goes to its most urgent section, sections count matching threads and fold context rows, and the header shows the your-turn count. #78, #79, #80 merged.
 
+- [Effort D: less noise](tickets/04-effort-d-less-noise.md): the [less-noise map](../less-noise/map.md) is closed; all three build keys are merged to `main`.
+
 ## Not yet specified
 
 None.

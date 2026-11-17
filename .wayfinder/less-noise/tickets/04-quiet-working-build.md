@@ -1,7 +1,7 @@
 ---
 title: Remove the edge and the wash from working rows
 type: wayfinder:task
-status: in-review
+status: closed
 assignee: claude (less-noise-04)
 blocked-by: [03-section-fold-build]
 ---
@@ -26,3 +26,7 @@ Decided at charting (see the map). A working thread needs nothing from the user.
 - `bun run check` passes.
 - `DESIGN-SPEC.md` (and `SPEC.md`, `README.md` where they name it) updated.
 - One draft PR, stacked on the branch of 03-section-fold-build.
+
+## Result
+
+Merged to `main` in [PR #83](https://github.com/lakardion/t3-thread-tree/pull/83) as `eabdd3f`.

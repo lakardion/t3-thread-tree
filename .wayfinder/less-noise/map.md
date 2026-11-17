@@ -1,6 +1,6 @@
 ---
 label: wayfinder:map
-status: open
+status: closed
 created: 2026-11-17
 ---
 
@@ -26,7 +26,7 @@ The destination is reached when every route key is done and no map ticket is ope
 
 ## Stacks
 
-- main ← less-noise-03-fold-flat-sections (#82) ← less-noise-04-quiet-working-rows (#83) ← 05-closed-counts-build. GitHub stack #84. The stack starts from `main` after the wait-time and status-groups stacks merge. Each key branches from the branch of the key before it.
+- Merged to `main`: [03-section-fold-build](tickets/03-section-fold-build.md) ([#82](https://github.com/lakardion/t3-thread-tree/pull/82)) ← [04-quiet-working-build](tickets/04-quiet-working-build.md) ([#83](https://github.com/lakardion/t3-thread-tree/pull/83)) ← [05-closed-counts-build](tickets/05-closed-counts-build.md) ([#85](https://github.com/lakardion/t3-thread-tree/pull/85)). All map tickets are closed.
 
 ## Notes
 
