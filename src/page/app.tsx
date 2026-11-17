@@ -45,8 +45,11 @@ import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/component
 import {
   DropdownMenu,
   DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuLabel,
   DropdownMenuRadioGroup,
   DropdownMenuRadioItem,
+  DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import { Input } from "@/components/ui/input";
@@ -457,6 +460,83 @@ function FoldOrGroup({
   );
 }
 
+/** Phone-width header menu: Sort, Layout, then Group by in the flat view or fold all in the tree. */
+function ViewMenu({
+  sortBy,
+  setSortBy,
+  layout,
+  setLayout,
+  groupBy,
+  setGroupBy,
+  inner,
+  closed,
+  fold,
+}: {
+  sortBy: SortBy;
+  setSortBy: (s: SortBy) => void;
+  layout: Layout;
+  setLayout: (l: Layout) => void;
+  groupBy: GroupBy;
+  setGroupBy: (g: GroupBy) => void;
+  inner: string[];
+} & Omit<Fold, "toggle">) {
+  const flat = layout === "flat";
+  const shut = inner.every((id) => !closed.has(id));
+  return (
+    <DropdownMenu modal={false}>
+      <Tooltip>
+        <TooltipTrigger asChild>
+          <DropdownMenuTrigger asChild>
+            <Button variant="ghost" size="icon-sm" aria-label="Sort and layout">
+              <ArrowDownUp />
+            </Button>
+          </DropdownMenuTrigger>
+        </TooltipTrigger>
+        <TooltipContent>Sort and layout</TooltipContent>
+      </Tooltip>
+      <DropdownMenuContent align="end" className="min-w-40">
+        <DropdownMenuLabel>Sort</DropdownMenuLabel>
+        <DropdownMenuRadioGroup value={sortBy} onValueChange={(v) => setSortBy(v as SortBy)}>
+          {SORTS.map(([s, name]) => (
+            <DropdownMenuRadioItem key={s} value={s}>
+              {name}
+            </DropdownMenuRadioItem>
+          ))}
+        </DropdownMenuRadioGroup>
+        <DropdownMenuSeparator />
+        <DropdownMenuLabel>Layout</DropdownMenuLabel>
+        <DropdownMenuRadioGroup value={layout} onValueChange={(v) => setLayout(v as Layout)}>
+          {LAYOUTS.map(([l, name, Icon]) => (
+            <DropdownMenuRadioItem key={l} value={l}>
+              <Icon />
+              {name}
+            </DropdownMenuRadioItem>
+          ))}
+        </DropdownMenuRadioGroup>
+        {flat && (
+          <>
+            <DropdownMenuSeparator />
+            <DropdownMenuLabel>Group by</DropdownMenuLabel>
+            <DropdownMenuRadioGroup value={groupBy} onValueChange={(v) => setGroupBy(v as GroupBy)}>
+              {GROUPS.map(([g, name]) => (
+                <DropdownMenuRadioItem key={g} value={g}>
+                  {name}
+                </DropdownMenuRadioItem>
+              ))}
+            </DropdownMenuRadioGroup>
+          </>
+        )}
+        {!flat && inner.length > 0 && (
+          <>
+            <DropdownMenuSeparator />
+            <DropdownMenuItem onSelect={() => fold(inner, shut)}>{shut ? "Collapse" : "Expand"} all</DropdownMenuItem>
+          </>
+        )}
+      </DropdownMenuContent>
+    </DropdownMenu>
+  );
+}
+
 /** Follows the update state of the main process. Undefined in the browser. */
 function useUpdate(): UpdateState | undefined {
   const [state, setState] = useState<UpdateState>();
@@ -527,7 +607,7 @@ function ViewButton({ update, open, toggle }: { update: UpdateState | undefined;
           )}
         </span>
       )}
-      View
+      <span className="max-[720px]:hidden">View</span>
     </Button>
   );
 }
@@ -1760,6 +1840,20 @@ function App() {
     forget(ORDER_KEY);
   };
 
+  const pickSort = (s: SortBy) => {
+    save(SORT_KEY, s);
+    transition(() => setSortBy(s));
+  };
+  const pickLayout = (l: Layout) => {
+    save(LAYOUT_KEY, l);
+    transition(() => setLayout(l));
+  };
+  const pickGroup = (g: GroupBy) => {
+    save(GROUP_KEY, g);
+    transition(() => setGroupBy(g));
+  };
+  const inner = projects?.flatMap((p) => [p.id, ...foldIds(p)]) ?? [];
+
   return (
     <TooltipProvider>
       <header className="mb-3.5 flex flex-none flex-wrap items-center gap-x-4 gap-y-3 text-muted-foreground">
@@ -1792,33 +1886,33 @@ function App() {
           run={runBrief}
         />
         <div className="ml-auto flex items-center gap-1">
-          <SortMenu
-            sortBy={sortBy}
-            setSortBy={(s) => {
-              save(SORT_KEY, s);
-              transition(() => setSortBy(s));
-            }}
-          />
-          <LayoutToggle
-            layout={layout}
-            setLayout={(l) => {
-              save(LAYOUT_KEY, l);
-              transition(() => setLayout(l));
-            }}
-          />
-          {projects && (
-            <FoldOrGroup
-              flat={layout === "flat"}
-              inner={projects.flatMap((p) => [p.id, ...foldIds(p)])}
+          <div className="min-[720px]:hidden">
+            <ViewMenu
+              sortBy={sortBy}
+              setSortBy={pickSort}
+              layout={layout}
+              setLayout={pickLayout}
+              groupBy={groupBy}
+              setGroupBy={pickGroup}
+              inner={inner}
               closed={closed}
               fold={fold}
-              groupBy={groupBy}
-              setGroupBy={(g) => {
-                save(GROUP_KEY, g);
-                transition(() => setGroupBy(g));
-              }}
             />
-          )}
+          </div>
+          <div className="flex items-center gap-1 max-[720px]:hidden">
+            <SortMenu sortBy={sortBy} setSortBy={pickSort} />
+            <LayoutToggle layout={layout} setLayout={pickLayout} />
+            {projects && (
+              <FoldOrGroup
+                flat={layout === "flat"}
+                inner={inner}
+                closed={closed}
+                fold={fold}
+                groupBy={groupBy}
+                setGroupBy={pickGroup}
+              />
+            )}
+          </div>
           <ViewButton
             update={update}
             open={settingsOpen}
