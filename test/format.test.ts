@@ -6,9 +6,12 @@ import {
   foldIds,
   groupIds,
   linearHref,
+  ownPos,
   phraseWith,
   prTone,
+  railRows,
   stackRuns,
+  stopLabel,
   stripKey,
 } from "../src/page/format.ts";
 import { parseLinear, type Branch, type PrNode, type ThreadNode } from "../src/shared/tree.ts";
@@ -101,6 +104,45 @@ describe("stackRuns", () => {
   });
 });
 
+describe("railRows", () => {
+  const pr = (n: number) => ({ n }) as PrNode;
+  const t = (id: string, pos: number | null, key: string | null = null) =>
+    ({ id, key, stack: { pos, total: 3 }, prs: pos ? [pr(100 + pos)] : [], children: [] }) as unknown as ThreadNode;
+  const g = (label: string, threads: ThreadNode[]): Branch => ({ id: label, label, branches: [], threads });
+  const show = (run: Branch[]) => {
+    const { stops, rows } = railRows(run);
+    return { stops: stops.map((s) => s.p?.n ?? null), rows: rows.map((r) => [r.t.id, r.n ?? null, r.chip ?? null]) };
+  };
+
+  test("a keyless group gets one stop per positioned thread, rows in stack order, no chip", () => {
+    expect(show([g("PR stack #101", [t("c", 3), t("a", 1), t("b", 2)])])).toEqual({
+      stops: [101, 102, 103],
+      rows: [
+        ["a", 1, null],
+        ["b", 2, null],
+        ["c", 3, null],
+      ],
+    });
+  });
+
+  test("key groups keep their chip; a thread with no position gets no number; a group with none gets an unnumbered stop", () => {
+    expect(
+      show([g("WEB-1", [t("x", 1, "WEB-1"), t("y", null, "WEB-1")]), g("WEB-2", [t("z", null, "WEB-2")])]),
+    ).toEqual({
+      stops: [101, null],
+      rows: [
+        ["x", 1, "WEB-1"],
+        ["y", null, "WEB-1"],
+        ["z", null, "WEB-2"],
+      ],
+    });
+  });
+
+  test("numbers keep the stack position when a filter hides other stops", () => {
+    expect(show([g("WEB-2", [t("b", 2, "WEB-2")])])).toEqual({ stops: [102], rows: [["b", 2, "WEB-2"]] });
+  });
+});
+
 describe("foldIds", () => {
   const thread = (key: string | null) => ({ id: `t-${key}`, key }) as ThreadNode;
   const b = (id: string, threads: ThreadNode[], branches: Branch[] = [], stack?: string): Branch => ({
@@ -189,5 +231,31 @@ describe("prTone", () => {
     ["open", pr({ checks: "pending" }), "var(--status-working-fg)"],
   ])("%s", (_, p, out) => {
     expect(prTone(p)).toBe(out);
+  });
+});
+
+describe("ownPos", () => {
+  const t = (pos: number | null, children: ThreadNode[] = []) =>
+    ({ id: `t${pos}`, stack: { pos, total: 4 }, prs: [], children }) as unknown as ThreadNode;
+  const g = (threads: ThreadNode[]): Branch => ({ id: "g", label: "g", branches: [], threads });
+
+  test("is the position of the thread that made the stack PR", () => {
+    expect(ownPos(g([t(null), t(2)]))).toBe(2);
+  });
+  test("finds the position on a subthread", () => {
+    expect(ownPos(g([t(null, [t(3)])]))).toBe(3);
+  });
+  test("is undefined when no thread has a position", () => {
+    expect(ownPos(g([t(null)]))).toBeUndefined();
+  });
+});
+
+describe("stopLabel", () => {
+  test.each([
+    [undefined, 4, true, ""],
+    [2, 4, false, "2"],
+    [2, 4, true, "2 of 4"],
+  ])("%p of %i, partial %p is %p", (n, total, partial, out) => {
+    expect(stopLabel(n, total, partial)).toBe(out);
   });
 });
