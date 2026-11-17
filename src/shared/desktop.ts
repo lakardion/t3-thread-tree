@@ -16,6 +16,9 @@ export const NeedsYouList = v.pipe(
 
 export type NeedsYouThread = v.InferOutput<typeof NeedsYouList>[number];
 
+/** The bridge payload of `setOpenNext`: the title of the next thread, or `null` with none. */
+export const OpenNextTitle = v.nullable(v.pipe(v.string(), v.maxLength(500)));
+
 /** The bridge payload of `notify`. Unknown keys are dropped. */
 export const NotifyList = v.pipe(
   v.array(
@@ -54,6 +57,10 @@ export type UpdateState = {
 export type DesktopBridge = {
   setNeedsYou(threads: NeedsYouThread[]): void;
   notify(events: NotifyEvent[]): void;
+  /** Sends the title that the menu-bar "Open next" item shows; `null` hides the item. */
+  setOpenNext(title: string | null): void;
+  /** Returns a function that removes this listener only. */
+  onOpenNext(cb: () => void): () => void;
   updateState(): Promise<UpdateState>;
   /** Returns a function that removes this listener only. */
   onUpdateState(cb: (state: UpdateState) => void): () => void;

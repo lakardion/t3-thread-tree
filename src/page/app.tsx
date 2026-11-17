@@ -27,6 +27,7 @@ import {
   LoaderCircle,
   Moon,
   Send,
+  SkipForward,
   SlidersHorizontal,
   Sun,
   TriangleAlert,
@@ -74,8 +75,11 @@ import {
   countAttention,
   needsYou,
   needsYouThreads,
+  nextTarget,
   notifyEvents,
   onlyNeedsYou,
+  openNextQueue,
+  remember,
   type Statuses,
   waits,
 } from "./attention.ts";
@@ -446,6 +450,43 @@ function FoldOrGroup({
         </DropdownMenuRadioGroup>
       </DropdownMenuContent>
     </DropdownMenu>
+  );
+}
+
+/** Opens the next thread that waits on the user. Disabled with no target. */
+function OpenNextButton({
+  target,
+  title,
+  now,
+  open,
+}: {
+  target: ThreadNode | null;
+  title: string | null;
+  now: number;
+  open: () => void;
+}) {
+  const button = (
+    <Button variant="outline" size="sm" aria-label="Open next" aria-keyshortcuts="n" disabled={!target} onClick={open}>
+      <SkipForward />
+      <span className="max-[720px]:hidden">Open next</span>
+    </Button>
+  );
+  return (
+    <Tooltip>
+      <TooltipTrigger asChild>
+        {target ? (
+          button
+        ) : (
+          /* oxlint-disable-next-line jsx-a11y/no-noninteractive-tabindex -- a disabled button gets no focus, so the wrapper takes it to show the tooltip */
+          <span tabIndex={0}>{button}</span>
+        )}
+      </TooltipTrigger>
+      <TooltipContent>
+        {target
+          ? [target.phrase, title, target.since && ago(target.since, now)].filter(Boolean).join(" · ")
+          : "Nothing waits"}
+      </TooltipContent>
+    </Tooltip>
   );
 }
 
@@ -1571,6 +1612,7 @@ function App() {
   });
   const linear = linearSet ?? tree?.linear ?? null;
   const [settingsOpen, setSettingsOpen] = useState(false);
+  const [seen, setSeen] = useState<ReadonlySet<string>>(new Set());
   const [tokenOpen, setTokenOpen] = useState(false);
   const update = useUpdate();
   const closeSettings = useCallback(() => setSettingsOpen(false), []);
@@ -1582,6 +1624,40 @@ function App() {
   };
   const [freeze, setFreeze] = useState<Freeze>();
   const sentNeedsYou = useRef("");
+  const queue = openNextQueue(tree?.projects ?? []);
+  const target = nextTarget(queue, seen);
+  const openNext = () => {
+    if (!target) return;
+    setSeen(remember(queue, seen, target));
+    location.assign(target.href);
+  };
+  const openNextRef = useRef(openNext);
+  const settingsOpenRef = useRef(settingsOpen);
+  useEffect(() => {
+    openNextRef.current = openNext;
+    settingsOpenRef.current = settingsOpen;
+  });
+
+  const sentOpenNext = useRef<string | null | undefined>(undefined);
+  const openNextTitle = target ? target.title || target.id : null;
+  useEffect(() => {
+    if (!window.desktopBridge || openNextTitle === sentOpenNext.current) return;
+    sentOpenNext.current = openNextTitle;
+    window.desktopBridge.setOpenNext(openNextTitle);
+  }, [openNextTitle]);
+  useEffect(() => window.desktopBridge?.onOpenNext(() => openNextRef.current()), []);
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key !== "n" || e.metaKey || e.ctrlKey || e.altKey || e.shiftKey || e.repeat || e.defaultPrevented) return;
+      const el = e.target instanceof HTMLElement ? e.target : null;
+      if (el?.closest("input, textarea, [contenteditable]:not([contenteditable=false])")) return;
+      if (settingsOpenRef.current) return;
+      if (document.querySelector("[role=dialog], [role=alertdialog], [role=menu], [role=listbox]")) return;
+      openNextRef.current();
+    };
+    addEventListener("keydown", onKey);
+    return () => removeEventListener("keydown", onKey);
+  }, []);
 
   useEffect(() => {
     if (!window.desktopBridge || !tree) return;
@@ -1783,6 +1859,7 @@ function App() {
             )}
           </ToggleGroupItem>
         </ToggleGroup>
+        <OpenNextButton target={target} title={openNextTitle} now={now} open={openNext} />
         <BriefControls
           clis={clis}
           cli={pick}

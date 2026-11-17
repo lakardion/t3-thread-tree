@@ -1,5 +1,5 @@
 import type { NeedsYouThread, NotifyEvent, NotifyStatus } from "../shared/desktop.ts";
-import { allThreads, type Branch, type Status, type ThreadNode, type Tree } from "../shared/tree.ts";
+import { allThreads, bySince, type Branch, type Status, type ThreadNode, type Tree } from "../shared/tree.ts";
 
 export type Counts = { needYou: number; working: number; yourTurn: number; stopped: number };
 
@@ -48,6 +48,24 @@ export const needsYouThreads = (projects: Branch[]): NeedsYouThread[] =>
     .flatMap((t) =>
       waiting(t) ? [{ id: t.id, title: t.title, environmentId: envOf(t), since: t.since, status: t.status }] : [],
     );
+
+/** The threads "Open next" can open: needs input, plan ready or your turn, not settled, subthreads included. Oldest `since` first, no `since` last, ties in tree order. */
+export const openNextQueue = (projects: Branch[]): ThreadNode[] =>
+  projects
+    .flatMap(allThreads)
+    .filter((t) => !t.settled && needsYou(t.status))
+    .toSorted((a, b) => bySince(a.since, b.since));
+
+/** A thread stays skipped until its Wait starts again. */
+const seenKey = (t: ThreadNode) => `${t.id} ${t.since}`;
+
+/** The first thread not opened yet; when all were opened, the top thread. Null with an empty queue. */
+export const nextTarget = (queue: ThreadNode[], seen: ReadonlySet<string>): ThreadNode | null =>
+  queue.find((t) => !seen.has(seenKey(t))) ?? queue[0] ?? null;
+
+/** The memory after opening `t`. When every thread was skipped, the memory starts again with `t` only. */
+export const remember = (queue: ThreadNode[], seen: ReadonlySet<string>, t: ThreadNode): Set<string> =>
+  queue.every((q) => seen.has(seenKey(q))) ? new Set([seenKey(t)]) : new Set(seen).add(seenKey(t));
 
 export type Statuses = Map<string, Status>;
 
