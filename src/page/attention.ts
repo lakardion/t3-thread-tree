@@ -1,5 +1,5 @@
 import type { NeedsYouThread, NotifyEvent, NotifyStatus } from "../shared/desktop.ts";
-import { allThreads, type Branch, type Status, type ThreadNode, type Tree } from "../shared/tree.ts";
+import { allThreads, bySince, type Branch, type Status, type ThreadNode, type Tree } from "../shared/tree.ts";
 
 export type Counts = { needYou: number; working: number; yourTurn: number; stopped: number };
 
@@ -48,6 +48,34 @@ export const needsYouThreads = (projects: Branch[]): NeedsYouThread[] =>
     .flatMap((t) =>
       waiting(t) ? [{ id: t.id, title: t.title, environmentId: envOf(t), since: t.since, status: t.status }] : [],
     );
+
+/** The threads "Open next" can open: needs input, plan ready or your turn, not settled, subthreads included. Oldest `since` first, no `since` last, ties in tree order. */
+export const openNextQueue = (projects: Branch[]): ThreadNode[] =>
+  projects
+    .flatMap(allThreads)
+    .filter((t) => !t.settled && needsYou(t.status))
+    .toSorted((a, b) => bySince(a.since, b.since));
+
+/** A thread stays skipped until its Wait starts again. */
+const seenKey = (t: ThreadNode) => `${t.id} ${t.since}`;
+
+/** The first thread not opened yet; when all were opened, the top thread. Null with an empty queue. */
+export const nextTarget = (queue: ThreadNode[], seen: ReadonlySet<string>): ThreadNode | null =>
+  queue.find((t) => !seen.has(seenKey(t))) ?? queue[0] ?? null;
+
+/** The memory after opening `t`. When every thread was skipped, the memory starts again with `t` only. */
+export const remember = (queue: ThreadNode[], seen: ReadonlySet<string>, t: ThreadNode): Set<string> =>
+  queue.every((q) => seen.has(seenKey(q))) ? new Set([seenKey(t)]) : new Set(seen).add(seenKey(t));
+
+/** The tab title, with the count of threads that need the user when it is not 0. */
+export const tabTitle = (n: number): string => (n > 0 ? `(${n}) Thread tree` : "Thread tree");
+
+/** The app icon as a data URL, with an amber dot in the top-right corner when `n` is not 0. */
+export const favicon = (svg: string, n: number): string => {
+  const dot = '<circle cx="800" cy="224" r="200" fill="#f59e0b" stroke="#141c1a" stroke-width="48"/>';
+  const out = n > 0 ? svg.replace("</svg>", `${dot}</svg>`) : svg;
+  return `data:image/svg+xml,${encodeURIComponent(out)}`;
+};
 
 export type Statuses = Map<string, Status>;
 

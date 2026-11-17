@@ -38,10 +38,10 @@ export function statusOf(t: Thread, now: number): { status: Status; phrase: stri
   if (run === "queued" || run === "preparing" || run === "starting")
     return verdict("starting", run === "queued" ? "Queued" : "Starting");
   if (run === "completed") {
-    if (t.interactionMode === "plan" && t.hasPlan) return verdict("plan-ready", "Plan ready");
+    if (t.interactionMode === "plan" && t.hasPlan) return verdict("plan-ready", "Plan ready", t.latestRunCompletedAt);
     const unseen =
       t.latestRunCompletedAt && (!t.lastVisitedAt || Date.parse(t.lastVisitedAt) < Date.parse(t.latestRunCompletedAt));
-    return unseen ? verdict("your-turn", "Your turn") : verdict("done", "Done");
+    return unseen ? verdict("your-turn", "Your turn", t.latestRunCompletedAt) : verdict("done", "Done");
   }
   if (run === "failed") return verdict("failed", "Failed");
   if (run === "interrupted" || run === "cancelled" || run === "rolled_back")

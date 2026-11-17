@@ -2,7 +2,7 @@ import { readFileSync, writeFileSync } from "node:fs";
 
 import * as v from "valibot";
 
-import { NeedsYouList, type NeedsYouThread, NotifyList, type NotifyEvent } from "../shared/desktop.ts";
+import { NeedsYouList, type NeedsYouThread, NotifyList, type NotifyEvent, OpenNextTitle } from "../shared/desktop.ts";
 
 const Size = v.object({
   width: v.pipe(v.number(), v.finite(), v.gtValue(0)),
@@ -39,6 +39,12 @@ export function parseNeedsYou(raw: unknown): NeedsYouThread[] | null {
 export function parseNotify(raw: unknown): NotifyEvent[] | null {
   const result = v.safeParse(NotifyList, raw);
   return result.success ? result.output : null;
+}
+
+/** The "Open next" title: a string, `null` for none, or `undefined` when `raw` is bad. */
+export function parseOpenNext(raw: unknown): string | null | undefined {
+  const result = v.safeParse(OpenNextTitle, raw);
+  return result.success ? result.output : undefined;
 }
 
 const UpdatedSchema = v.object({ version: v.string(), notes: v.string(), url: v.string() });

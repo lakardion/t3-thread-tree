@@ -40,6 +40,10 @@ An unsettled top-level thread (any status, snoozed included), or a subagent whos
 The threads that wait on the user: status needs input or plan ready. The Dock badge, the header count and the menu-bar list show this set. A notification fires when a thread enters this set, or fails. The "Needs you" filter also keeps your-turn threads.
 _Avoid_: attention, unread
 
+**Wait**:
+The time since a thread started to wait on the user. It counts from the request for needs input, and from the run completion for plan ready and your turn. A row that waits on the user shows it beside the phrase.
+_Avoid_: age (age is the time since the last update)
+
 **Desktop app**:
 The tree in its own macOS window, with a Dock icon, a Dock badge, notifications and a menu-bar entry. It shows the same page as the **Browser version** and stays alive when its window closes.
 _Avoid_: native app, Electron app

@@ -27,6 +27,7 @@ import {
   LoaderCircle,
   Moon,
   Send,
+  SkipForward,
   SlidersHorizontal,
   Sun,
   TriangleAlert,
@@ -58,6 +59,7 @@ import { ToggleGroup, ToggleGroupItem } from "@/components/ui/toggle-group";
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
 import { cn } from "@/lib/utils";
 
+import appIcon from "../../assets/icon.svg" with { type: "text" };
 import type { BriefState, Cli } from "../shared/brief.ts";
 import type { UpdateState } from "../shared/desktop.ts";
 import type { CliStatus } from "../shared/send.ts";
@@ -72,10 +74,15 @@ import {
 } from "../shared/tree.ts";
 import {
   countAttention,
+  favicon,
   needsYou,
   needsYouThreads,
+  nextTarget,
   notifyEvents,
   onlyNeedsYou,
+  openNextQueue,
+  remember,
+  tabTitle,
   type Statuses,
   waits,
 } from "./attention.ts";
@@ -111,7 +118,7 @@ import {
 } from "./order.ts";
 import { Presence, useMotion } from "./presence.tsx";
 import { ProjectIcon, projectHex } from "./project-icon.tsx";
-import { CliGate, SendDialog } from "./send-dialog.tsx";
+import { CliGate, LastMessage, SendDialog, useLastMessage } from "./send-dialog.tsx";
 import { LEGEND, LegendIcon, STATUS, StatusIcon } from "./status-icon.tsx";
 import { Swap, useChanges } from "./swap.tsx";
 import {
@@ -469,6 +476,43 @@ function FoldOrGroup({
         </DropdownMenuRadioGroup>
       </DropdownMenuContent>
     </DropdownMenu>
+  );
+}
+
+/** Opens the next thread that waits on the user. Disabled with no target. */
+function OpenNextButton({
+  target,
+  title,
+  now,
+  open,
+}: {
+  target: ThreadNode | null;
+  title: string | null;
+  now: number;
+  open: () => void;
+}) {
+  const button = (
+    <Button variant="outline" size="sm" aria-label="Open next" aria-keyshortcuts="n" disabled={!target} onClick={open}>
+      <SkipForward />
+      <span className="max-[720px]:hidden">Open next</span>
+    </Button>
+  );
+  return (
+    <Tooltip>
+      <TooltipTrigger asChild>
+        {target ? (
+          button
+        ) : (
+          /* oxlint-disable-next-line jsx-a11y/no-noninteractive-tabindex -- a disabled button gets no focus, so the wrapper takes it to show the tooltip */
+          <span tabIndex={0}>{button}</span>
+        )}
+      </TooltipTrigger>
+      <TooltipContent>
+        {target
+          ? [target.phrase, title, target.since && ago(target.since, now)].filter(Boolean).join(" · ")
+          : "Nothing waits"}
+      </TooltipContent>
+    </Tooltip>
   );
 }
 
@@ -927,12 +971,18 @@ function DetailBlock({ t }: { t: ThreadNode }) {
     .filter(Boolean)
     .join(" · ");
   const tags = [d.tags.join(", "), d.pinned && "Pinned"].filter(Boolean).join(" · ");
+  const last = useLastMessage(t.id, t.updatedAt);
   return (
     <dl className="m-0 grid grid-cols-[auto_1fr] gap-x-3 gap-y-0.5 py-1 pl-[156px] text-xs max-[720px]:pl-7">
       {d.request && <Line label="Request">{d.request}</Line>}
       {d.error && (
         <Line label="Error">
           {[[d.error.class, d.error.code].filter(Boolean).join(" · "), d.error.text].filter(Boolean).join(" ")}
+        </Line>
+      )}
+      {last && (
+        <Line label="Last message">
+          <LastMessage text={last} />
         </Line>
       )}
       {limit && <Line label="Limit">{limit}</Line>}
@@ -963,6 +1013,7 @@ function DetailBlock({ t }: { t: ThreadNode }) {
       )}
       {d.origin && <Line label="Origin">{d.origin}</Line>}
       {d.startedBy && <Line label="Started by">{d.startedBy}</Line>}
+      <Line label="Updated">{ago(t.updatedAt, now)}</Line>
       {d.createdAt && <Line label="Created">{ago(d.createdAt, now)}</Line>}
       {d.goal && (
         <Line label="Goal">
@@ -988,6 +1039,17 @@ function DetailBlock({ t }: { t: ThreadNode }) {
         </Line>
       ))}
     </dl>
+  );
+}
+
+/** The phrase beside the icon on rows that wait on the user, with the Wait; failed rows show the phrase only. */
+function WaitText({ t, now }: { t: ThreadNode; now: number }) {
+  if (!needsYou(t.status) && t.status !== "failed") return null;
+  return (
+    <span className={cn(STATUS[t.status].shape, "flex-none text-[12px] font-medium whitespace-nowrap")}>
+      {t.phrase}
+      {needsYou(t.status) && t.since && <span className="font-mono tabular-nums"> {ago(t.since, now)}</span>}
+    </span>
   );
 }
 
@@ -1033,6 +1095,7 @@ function ThreadRow({
         >
           {!inStack && <DragHandle handleRef={handleRef} name={t.title || t.id} />}
           <StatusIcon t={t} now={now} />
+          <WaitText t={t} now={now} />
           {pulse > 0 && <span key={pulse} aria-hidden className={cn("row-pulse", STATUS[t.status].shape)} />}
           {project && <ProjectColumn b={project} />}
           {chip && (
@@ -1610,6 +1673,7 @@ function App() {
   });
   const linear = linearSet ?? tree?.linear ?? null;
   const [settingsOpen, setSettingsOpen] = useState(false);
+  const [seen, setSeen] = useState<ReadonlySet<string>>(new Set());
   const [tokenOpen, setTokenOpen] = useState(false);
   const update = useUpdate();
   const closeSettings = useCallback(() => setSettingsOpen(false), []);
@@ -1621,6 +1685,40 @@ function App() {
   };
   const [freeze, setFreeze] = useState<Freeze>();
   const sentNeedsYou = useRef("");
+  const queue = openNextQueue(tree?.projects ?? []);
+  const target = nextTarget(queue, seen);
+  const openNext = () => {
+    if (!target) return;
+    setSeen(remember(queue, seen, target));
+    location.assign(target.href);
+  };
+  const openNextRef = useRef(openNext);
+  const settingsOpenRef = useRef(settingsOpen);
+  useEffect(() => {
+    openNextRef.current = openNext;
+    settingsOpenRef.current = settingsOpen;
+  });
+
+  const sentOpenNext = useRef<string | null | undefined>(undefined);
+  const openNextTitle = target ? target.title || target.id : null;
+  useEffect(() => {
+    if (!window.desktopBridge || openNextTitle === sentOpenNext.current) return;
+    sentOpenNext.current = openNextTitle;
+    window.desktopBridge.setOpenNext(openNextTitle);
+  }, [openNextTitle]);
+  useEffect(() => window.desktopBridge?.onOpenNext(() => openNextRef.current()), []);
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key !== "n" || e.metaKey || e.ctrlKey || e.altKey || e.shiftKey || e.repeat || e.defaultPrevented) return;
+      const el = e.target instanceof HTMLElement ? e.target : null;
+      if (el?.closest("input, textarea, [contenteditable]:not([contenteditable=false])")) return;
+      if (settingsOpenRef.current) return;
+      if (document.querySelector("[role=dialog], [role=alertdialog], [role=menu], [role=listbox]")) return;
+      openNextRef.current();
+    };
+    addEventListener("keydown", onKey);
+    return () => removeEventListener("keydown", onKey);
+  }, []);
 
   useEffect(() => {
     if (!window.desktopBridge || !tree) return;
@@ -1799,8 +1897,12 @@ function App() {
     forget(ORDER_KEY);
   };
 
+  const tabCount = tree ? needsYouThreads(tree.projects).length : 0;
+
   return (
     <TooltipProvider>
+      <title>{tabTitle(tabCount)}</title>
+      <link rel="icon" type="image/svg+xml" href={favicon(appIcon, tabCount)} />
       <header className="mb-3.5 flex flex-none flex-wrap items-center gap-x-4 gap-y-3 text-muted-foreground">
         <h1 className="m-0 text-[15px] font-semibold text-foreground">Thread tree</h1>
         <ToggleGroup
@@ -1823,6 +1925,7 @@ function App() {
             )}
           </ToggleGroupItem>
         </ToggleGroup>
+        <OpenNextButton target={target} title={openNextTitle} now={now} open={openNext} />
         <BriefControls
           clis={clis}
           cli={pick}

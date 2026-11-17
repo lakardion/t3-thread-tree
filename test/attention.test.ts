@@ -2,10 +2,15 @@ import { describe, expect, test } from "bun:test";
 
 import {
   countAttention,
+  favicon,
   needsYou,
   needsYouThreads,
+  nextTarget,
   notifyEvents,
   onlyNeedsYou,
+  openNextQueue,
+  remember,
+  tabTitle,
   type Statuses,
   waits,
 } from "../src/page/attention.ts";
@@ -239,5 +244,83 @@ describe("waits", () => {
   test("false for other statuses and for settled threads", () => {
     expect(waits(branch("g", [thread("a", "working"), thread("b", "your-turn")]))).toBe(false);
     expect(waits(branch("g", [{ ...thread("a", "needs-input"), settled: true }]))).toBe(false);
+  });
+});
+
+describe("openNextQueue", () => {
+  const w = (id: string, status: Status, since: string | null, extra: Partial<ThreadNode> = {}): ThreadNode => ({
+    ...thread(id, status),
+    since,
+    ...extra,
+  });
+  test("orders by oldest since, no since last, ties in tree order", () => {
+    const projects = [
+      branch("p", [
+        w("a", "your-turn", "2026-11-12T10:00:00.000Z"),
+        w("b", "needs-input", null),
+        w("c", "plan-ready", "2026-11-12T09:00:00.000Z"),
+        w("d", "needs-input", "2026-11-12T10:00:00.000Z"),
+      ]),
+    ];
+    expect(ids(openNextQueue(projects))).toEqual(["c", "a", "d", "b"]);
+  });
+  test("includes subthreads and leaves out settled and other statuses", () => {
+    const projects = [
+      branch("p", [
+        w("a", "working", null, { children: [w("n", "needs-input", "2026-11-12T10:00:00.000Z")] }),
+        w("s", "needs-input", "2026-11-12T09:00:00.000Z", { settled: true }),
+        w("f", "failed", "2026-11-12T08:00:00.000Z"),
+      ]),
+    ];
+    expect(ids(openNextQueue(projects))).toEqual(["n"]);
+  });
+  test("is empty for an empty tree", () => {
+    expect(openNextQueue([])).toEqual([]);
+  });
+});
+
+describe("nextTarget and remember", () => {
+  const q = ["a", "b", "c"].map((id, i) => ({ ...thread(id, "needs-input"), since: `2026-11-12T0${i}:00:00.000Z` }));
+  test("walks the queue, then starts again at the top", () => {
+    let seen = new Set<string>();
+    const order: string[] = [];
+    for (let i = 0; i < 4; i++) {
+      const t = nextTarget(q, seen)!;
+      order.push(t.id);
+      seen = remember(q, seen, t);
+    }
+    expect(order).toEqual(["a", "b", "c", "a"]);
+    expect(seen.size).toBe(1);
+  });
+  test("a new since makes an opened thread a target again", () => {
+    const seen = remember(q, new Set(), q[0]);
+    expect(nextTarget(q, seen)?.id).toBe("b");
+    expect(nextTarget([{ ...q[0], since: "2026-11-13T00:00:00.000Z" }, ...q.slice(1)], seen)?.id).toBe("a");
+  });
+  test("is null for an empty queue", () => {
+    expect(nextTarget([], new Set())).toBeNull();
+  });
+});
+
+describe("tabTitle", () => {
+  test("plain for 0, counted otherwise", () => {
+    expect(tabTitle(0)).toBe("Thread tree");
+    expect(tabTitle(5)).toBe("(5) Thread tree");
+  });
+});
+
+describe("favicon", () => {
+  const svg = '<svg><path fill="#fff"/></svg>';
+  const decode = (u: string) => decodeURIComponent(u.slice("data:image/svg+xml,".length));
+  test("is an encoded SVG data URL with no raw #", () => {
+    const u = favicon(svg, 0);
+    expect(u.startsWith("data:image/svg+xml,")).toBe(true);
+    expect(u.includes("#")).toBe(false);
+  });
+  test("is the plain icon for 0 and adds one dot otherwise", () => {
+    expect(decode(favicon(svg, 0))).toBe(svg);
+    const dotted = decode(favicon(svg, 3));
+    expect(dotted.split("<circle").length - 1).toBe(1);
+    expect(dotted.startsWith("<svg><path")).toBe(true);
   });
 });

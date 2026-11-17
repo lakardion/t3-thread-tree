@@ -7,8 +7,10 @@ import {
   codeActions,
   digestOf,
   filterAnswer,
+  lastMessageRoutes,
   parseAnswer,
   stdinFor,
+  tailOf,
   type InputThread,
   type Outcome,
 } from "../src/server/brief.ts";
@@ -196,12 +198,44 @@ describe("digestOf", () => {
   test("minimal line: no key, PRs, stack, request or message", () => {
     expect(digestOf(node("A"), "t1", null, NOW)).toBe("t1 · Your turn 3h · Thread A");
   });
+  test("plan ready and your turn with a since show the Wait, not the update age", () => {
+    const since = "2026-11-13T11:30:00.000Z";
+    expect(digestOf(node("A", { since }), "t1", null, NOW)).toBe("t1 · Your turn 30m · Thread A");
+    expect(digestOf(node("A", { since, status: "plan-ready", phrase: "Plan ready" }), "t1", null, NOW)).toBe(
+      "t1 · Plan ready 30m · Thread A",
+    );
+  });
   test("stack of N when pos is null; state shows when not open", () => {
     const n = node("A", { stack: { pos: null, total: 4 }, prs: [pr({ state: "merged" })] });
     expect(digestOf(n, "t1", null, NOW)).toBe("t1 · Your turn 3h · Thread A · PRs (#12 merged) · stack of 4");
   });
   test("a multi-line message tail is indented on every line", () => {
     expect(digestOf(node("A"), "t1", "a\nb", NOW)).toContain("\n  a\n  b");
+  });
+});
+
+describe("tailOf", () => {
+  test("a short message stays; a long one keeps its last 600 characters after a …", () => {
+    expect(tailOf("short")).toBe("short");
+    expect(tailOf("x".repeat(300) + "y".repeat(700))).toBe("…" + "y".repeat(600));
+  });
+});
+
+describe("lastMessageRoutes", () => {
+  const messages: Record<string, string | null> = { "env:thread%3A1": "z".repeat(700), quiet: null };
+  const get = lastMessageRoutes({ read: (id) => messages[id] ?? null, has: (id) => id in messages })["/t3/last-message"]
+    .GET;
+  const call = (query: string) => get(new Request(`http://x/t3/last-message${query}`));
+  test("400 without an id; 404 for an unknown thread", async () => {
+    expect(call("").status).toBe(400);
+    expect(call("?id=nope").status).toBe(404);
+  });
+  test("null text when the thread has no message", async () => {
+    expect(await call("?id=quiet").json()).toEqual({ text: null });
+  });
+  test("a long message comes back as its tail, for an id with : and %3A", async () => {
+    const res = call(`?id=${encodeURIComponent("env:thread%3A1")}`);
+    expect(await res.json()).toEqual({ text: "…" + "z".repeat(600) });
   });
 });
 
