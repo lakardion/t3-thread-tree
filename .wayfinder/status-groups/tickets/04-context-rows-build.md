@@ -2,7 +2,7 @@
 title: Count the matching threads of a section and show its context rows
 type: wayfinder:task
 status: open
-assignee: 
+assignee: claude (status-groups-04)
 blocked-by: [01-context-row-look, 03-unit-placement-build]
 ---
 
