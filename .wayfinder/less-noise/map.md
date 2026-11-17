@@ -54,6 +54,7 @@ Decided at charting (by the user):
 - **M09 reversal accepted:** flat sections fold ("Idle and snoozed" and "Done" closed at first), which reverses `SPEC.md:103`. A "Show snoozed threads" switch, on by default, makes tree rule 3 (`SPEC.md:72`) a choice. The details go to [the fold rules](tickets/01-section-fold-rules.md).
 - **M13 reversal accepted:** a working row loses its edge and its wash, and keeps the turning icon. This reverses the working gradient in `DESIGN-SPEC.md` › Gradients. A working thread needs nothing from the user, and `plan-ready` and `your-turn` rows have no wash, so the working wash is louder than two of the three waiting states. No decision ticket.
 - **M16 look:** a prototype ticket decides between words and icon + number.
+- [How does a closed project show its thread counts?](tickets/02-closed-counts-look.md): icon + number for each flat section, on closed projects with 5 or more threads; key groups and the waiting edge do not change.
 
 ## Not yet specified
 
