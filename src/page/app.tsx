@@ -87,9 +87,11 @@ import {
   groupIds,
   isKeyGroup,
   linearHref,
+  ownPos,
   ownPr,
   prTone,
   stackRuns,
+  stopLabel,
   stripKey,
 } from "./format.ts";
 import {
@@ -1297,9 +1299,10 @@ function StackRail({
 }: { run: Branch[]; sort?: Sort; flat?: boolean; project?: Branch } & Fold) {
   const { id, total, base } = run[0].stack!;
   const open = flat || !closed.has(`rail:${id}`);
-  const stops = run.map((g) => ({ g, p: ownPr(g) }));
-  const rows = stops.flatMap(({ g, p }, i) =>
-    g.threads.map((t, j) => ({ t, g, color: prTone(p), n: j ? undefined : i + 1 })),
+  const stops = run.map((g) => ({ g, p: ownPr(g), n: ownPos(g) }));
+  const partial = stops.filter((s) => s.n).length < total;
+  const rows = stops.flatMap(({ g, p, n }) =>
+    g.threads.map((t, j) => ({ t, g, color: prTone(p), n: j ? undefined : n })),
   );
   const render = (ref: RefFn, handleRef?: RefFn) => (
     <Collapsible asChild open={open} onOpenChange={() => toggle(`rail:${id}`)}>
@@ -1334,7 +1337,7 @@ function StackRail({
                 {base}
               </code>
             )}
-            {stops.map(({ g, p }, i) => (
+            {stops.map(({ g, p, n }, i) => (
               <span key={g.id} className="inline-flex items-center">
                 {(i > 0 || base) && <span className="h-0.5 w-4" style={{ background: prTone(p) }} />}
                 <a
@@ -1349,7 +1352,7 @@ function StackRail({
                   style={{ borderColor: prTone(p) }}
                 >
                   <span className="size-1.5 rounded-full" style={{ background: prTone(p) }} />
-                  {i + 1}
+                  {stopLabel(n, total, partial)}
                   {p && ` · #${p.n}`}
                 </a>
               </span>

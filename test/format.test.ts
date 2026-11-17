@@ -6,9 +6,11 @@ import {
   foldIds,
   groupIds,
   linearHref,
+  ownPos,
   phraseWith,
   prTone,
   stackRuns,
+  stopLabel,
   stripKey,
 } from "../src/page/format.ts";
 import { parseLinear, type Branch, type PrNode, type ThreadNode } from "../src/shared/tree.ts";
@@ -189,5 +191,31 @@ describe("prTone", () => {
     ["open", pr({ checks: "pending" }), "var(--status-working-fg)"],
   ])("%s", (_, p, out) => {
     expect(prTone(p)).toBe(out);
+  });
+});
+
+describe("ownPos", () => {
+  const t = (pos: number | null, children: ThreadNode[] = []) =>
+    ({ id: `t${pos}`, stack: { pos, total: 4 }, prs: [], children }) as unknown as ThreadNode;
+  const g = (threads: ThreadNode[]): Branch => ({ id: "g", label: "g", branches: [], threads });
+
+  test("is the position of the thread that made the stack PR", () => {
+    expect(ownPos(g([t(null), t(2)]))).toBe(2);
+  });
+  test("finds the position on a subthread", () => {
+    expect(ownPos(g([t(null, [t(3)])]))).toBe(3);
+  });
+  test("is undefined when no thread has a position", () => {
+    expect(ownPos(g([t(null)]))).toBeUndefined();
+  });
+});
+
+describe("stopLabel", () => {
+  test.each([
+    [undefined, 4, true, ""],
+    [2, 4, false, "2"],
+    [2, 4, true, "2 of 4"],
+  ])("%p of %i, partial %p is %p", (n, total, partial, out) => {
+    expect(stopLabel(n, total, partial)).toBe(out);
   });
 });

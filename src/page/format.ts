@@ -14,6 +14,14 @@ export function stackRuns(bs: Branch[]): Branch[][] {
 /** The PR a stack group opened: the first PR of its thread with a stack position. */
 export const ownPr = (g: Branch): PrNode | undefined => allThreads(g).find((t) => t.stack?.pos)?.prs[0];
 
+/** The stack position of the PR a stack group opened, or undefined when no thread of it has one. */
+export const ownPos = (g: Branch): number | undefined =>
+  allThreads(g).find((t) => t.stack?.pos)?.stack?.pos ?? undefined;
+
+/** The label of a stack stop: its position, with " of total" when the run hides some PRs of the stack. */
+export const stopLabel = (n: number | undefined, total: number, partial: boolean): string =>
+  n === undefined ? "" : partial ? `${n} of ${total}` : `${n}`;
+
 /**
  * The rail color of a stack PR: grey when draft or unknown, red when blocked, green when approved, blue otherwise.
  * The `-fg` tokens keep 4.5:1 contrast against `--background` text in both themes.
