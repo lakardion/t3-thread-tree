@@ -1,7 +1,7 @@
 ---
 title: Which thread does "Open next" open, and where is the control?
 type: grilling
-status: open
+status: closed
 assignee: damian.lucero
 blocked-by: [01-row-wait-look]
 ---
@@ -26,3 +26,15 @@ Decide:
 ## On resolution
 
 Write the `## Spec` and `## Done when` of [the build ticket](06-open-next-build.md) from the answer.
+
+## Resolution
+
+The user agreed to these rules:
+
+- **Set.** The filter set: `needs-input`, `plan-ready` and `your-turn`. Subthreads are included. Settled threads are always left out, also with "Show settled" on. The All/Needs-you filter, closed folds, the layout and the sort do not change the set. The control works on the whole tree.
+- **Order.** Oldest `since` first, so the longest **Wait** wins. Status has no rank. Rows with no Wait go last. A tie keeps the tree order.
+- **Repeat.** "Open next" remembers each thread that it opened, by thread id plus `since`, and skips it until its Wait starts again (a new `since`). The memory is in memory only, so a reload clears it. When every thread in the set was skipped, the memory clears and the control opens the top thread again.
+- **Empty set.** The header button stays visible and is disabled, with the tooltip "Nothing waits". The key `n` does nothing. The menu-bar item is hidden.
+- **Places.** A header button next to the "Needs you" filter: icon plus "Open next", icon only with an `aria-label` at phone width. The key `n` with no modifiers, off when focus is in an input, a textarea or a contenteditable element, and when a dialog, a menu or the View panel is open. The first item of the menu-bar menu in the desktop app.
+- **Label.** The button label stays "Open next". Its tooltip names the target: "<phrase> · <title> · <Wait>". The menu-bar item is "Open next · <title>".
+- It writes nothing to T3.
