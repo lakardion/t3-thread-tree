@@ -435,7 +435,7 @@ A ghost `icon-sm` button with the `ArrowDownUp` icon, before fold all. Its label
 
 ### Flat view
 
-The Tree / Flat switch is a `ToggleGroup` of two icons (`ListTree`, `List`) with tooltips, built like the theme choice. Fold all and "Group by" share one header button. In the tree, it is fold all. In flat, it opens the "Group by" menu (None, Status), with the `Rows3` icon. On a view switch, the button stays and its icon morphs between the fold arrows and `Rows3`. The page shows one card with one list. Drag works with "Manual" sort and follows "Drag to reorder". The flat list has its own stored order (list key `flat`).
+The Tree / Flat switch is a `ToggleGroup` of two icons (`ListTree`, `List`) with tooltips, built like the theme choice. Fold all and "Group by" share one header button. In the tree, it is fold all. In flat, it opens the "Group by" menu (None, Status), with the `Rows3` icon. On a view switch, the button stays and its icon morphs between the fold arrows and `Rows3`. The page shows one card with one list. Drag works with "Manual" sort and follows "Drag to reorder". With "Group by Status", drag is off in Needs input, Plan ready and Your turn. The flat list has its own stored order (list key `flat`).
 
 - **Thread row.** The status icon comes first. The Project column follows: the project icon and name (`w-32`, truncated). Under 720 px, only the icon shows. Then the issue key chip (a Linear link when set), then the teal `Eye` for a review thread (`text-review`), then the title. The PR chips, the details chevron and the send icon stay as in the tree. The handle sits first, as in the tree.
 - **Subthreads.** They sit under the parent, indented, always open, in base order, with no Project column.
@@ -445,7 +445,7 @@ The Tree / Flat switch is a `ToggleGroup` of two icons (`ListTree`, `List`) with
 
 ### Drag to reorder
 
-The user reorders projects, key groups (a stack run is one block), review groups and top-level threads. A list with fewer than two visible items has no handle. Subthreads, groups inside a stack rail, Reviews and No issue key have no handle. No drag crosses lists. The flat list is one list, or one list for each status section when grouped; a row drags only inside its section, and all sections share one stored order.
+The user reorders projects, key groups (a stack run is one block), review groups and top-level threads. A list with fewer than two visible items has no handle. Subthreads, groups inside a stack rail, Reviews and No issue key have no handle. No drag crosses lists. The flat list is one list, or one list for each status section when grouped; a row drags only inside its section, and all sections share one stored order. Needs input, Plan ready and Your turn have no drag.
 
 - **Handle.** A ghost icon `Button` with the `GripVertical` icon, `cursor-grab`, label "Move <name>". It sits at the start of the row: before the status icon on a thread row, and before the chevron or icon on a group header, a stack rail label row and a project. It keeps its space, so nothing shifts on hover. A row with no handle keeps an empty space of the same size, so the status icons and titles line up.
 - **Visibility.** The handle is hidden until the pointer is over its own row, or the handle has focus. It always shows on a touch screen. A hover on a parent does not show the handles of child rows.

@@ -114,3 +114,7 @@ export function parseLinear(workspace = "", teams = ""): Linear | null {
 
 const flat = (t: ThreadNode): ThreadNode[] => [t, ...t.children.flatMap(flat)];
 export const allThreads = (b: Branch): ThreadNode[] => [...b.branches.flatMap(allThreads), ...b.threads.flatMap(flat)];
+
+/** Oldest `since` first, `null` last. ISO timestamps sort the same as text. */
+export const bySince = (a: string | null, b: string | null): number =>
+  a === b ? 0 : a === null ? 1 : b === null ? -1 : a < b ? -1 : 1;

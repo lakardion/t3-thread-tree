@@ -25,7 +25,7 @@ _Screenshots use made-up data from `bun run demo`._
 - **Sort by last updated.** The sort button in the header opens a menu: "Manual" or "Last updated". "Last updated" puts the thread with the newest run start or run end first. Subthreads count for their parent. Projects keep their order. Reviews stays first and "No issue key" stays last. A PR stack moves as one block. Subthreads keep their order. Drag is off. When a run starts or ends, the rows slide to their new place. With reduced motion, they move at once. The choice stays after a reload.
 - **Flat view.** The Tree and Flat buttons in the header switch the layout. Flat shows all threads of all projects in one list.
   - The list has no folds.
-  - Drag works with "Manual" sort. The flat list has its own order, apart from the tree. With "Group by", a row moves only inside its group.
+  - Drag works with "Manual" sort. The flat list has its own order, apart from the tree. With "Group by", a row moves only inside its group. In the Needs input, Plan ready and Your turn groups, rows do not drag.
   - Each row shows the project icon and name, and the issue key as a chip. On a phone, the project shows as an icon only.
   - A review thread has a teal eye before its title.
   - A subthread sits under its parent. A PR stack stays one block.
@@ -33,7 +33,7 @@ _Screenshots use made-up data from `bun run demo`._
   - The "Needs you" filter and "show settled" work as in the tree.
   - The tree keeps its folds when you switch back.
   - The rows slide when the layout changes. The choice stays after a reload.
-- **Group by status.** In the flat view, the "Group by" button groups the list by status. It is the same header button as "Fold all", and its icon morphs when you switch the view. Each group has a header with a count. The order is: Needs input, Plan ready, Your turn, Failed, Working, "Idle and snoozed", Done. A group with no thread is hidden. A PR stack goes to the group of its most urgent thread. A thread slides to a new group when its status changes. The choice stays after a reload.
+- **Group by status.** In the flat view, the "Group by" button groups the list by status. It is the same header button as "Fold all", and its icon morphs when you switch the view. Each group has a header with a count. The order is: Needs input, Plan ready, Your turn, Failed, Working, "Idle and snoozed", Done. A group with no thread is hidden. A PR stack goes to the group of its most urgent thread. Needs input, Plan ready and Your turn show the longest wait first. A thread slides to a new group when its status changes. The choice stays after a reload.
 - **Stable order.** Rows keep their place while threads update. A new thread, group or project shows at the bottom of its list.
 - **Status changes move.** A new status icon or PR mark fades in. The row flashes once in the new status color. With reduced motion, changes show at once.
 - **Rows come and go.** A new project, group or thread grows in. A removed one collapses out. A change that arrives during a drag shows at once. With reduced motion, rows appear and disappear at once.
