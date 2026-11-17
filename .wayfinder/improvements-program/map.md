@@ -31,7 +31,7 @@ Efforts in the chosen order. A, B, D, E, G and I are map tickets (each runs its 
 ### Lane 1
 
 1. [Fix the stop numbers of a filtered PR stack](tickets/03-key-m02-stack-numbers.md) (M02)
-2. [Close the "Group by: Status" tooltip](tickets/03-key-m03-group-tooltip.md) (M03) — after 03-key-m02-stack-numbers (forced)
+2. [Close the "Group by: Status" tooltip](tickets/10-key-m03-group-tooltip.md) (M03) — after 03-key-m02-stack-numbers (forced)
 
 ### Lane 2
 
@@ -40,7 +40,7 @@ Efforts in the chosen order. A, B, D, E, G and I are map tickets (each runs its 
 ### Lane 3
 
 1. [Show the Needs-you count in the tab title and favicon](tickets/08-key-m18-tab-count.md) (M18)
-2. [One menu for Sort, Layout and Group by on a phone](tickets/08-key-m17-phone-view-menu.md) (M17) — after 08-key-m18-tab-count (forced)
+2. [One menu for Sort, Layout and Group by on a phone](tickets/11-key-m17-phone-view-menu.md) (M17) — after 08-key-m18-tab-count (forced)
 
 The destination is reached when every route key is done and no map ticket is open.
 
