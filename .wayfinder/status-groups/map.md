@@ -56,6 +56,7 @@ Decided at charting (by the user):
 - **Glossary:** new term **Context row** in `CONTEXT.md`. It covers the spawners that the "Needs you" filter keeps, and the rows of a status section that do not match it. One look for both places.
 
 - [How do context rows look, and what does a section count?](tickets/01-context-row-look.md): variant B. Stack context rows fold behind "+N other threads" on the rail header; other context rows are muted. The header counts matching threads only. A settled thread is a context row.
+- [How does the header show the your-turn count?](tickets/02-count-format.md): variant Opus. The chip reads "Needs you 6 · 5", the second number muted; a 0 part hides; tooltip "6 need you, 5 your turn".
 
 ## Not yet specified
 

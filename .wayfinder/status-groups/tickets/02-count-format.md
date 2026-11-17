@@ -1,7 +1,7 @@
 ---
 title: How does the header show the your-turn count?
 type: prototype
-status: open
+status: closed
 assignee: damian.lucero
 blocked-by: []
 ---
@@ -27,3 +27,13 @@ Decide:
 ## On resolution
 
 Write the `## Spec` and `## Done when` of [the build ticket](05-needs-you-count-build.md) from the answer. Delete the prototype code; link a screenshot or the throwaway branch from the resolution.
+
+## Resolution
+
+The user picked these answers from the demo prototype (Opus and Sol variants, light and dark, desktop and phone, forced counts):
+
+- **Format: Opus.** The "Needs you" chip shows the **Needs you** count as today's badge, then a muted second number for the your-turn threads: "6 · 5". It fits on the first header line at phone width. Sol put its words on a separate line on a phone.
+- **Zero.** Each number shows only when it is above 0. With only your-turn threads, the chip shows the muted number alone, with no badge and no dot. With both at 0, the chip shows no number.
+- **Words.** A tooltip on the numbers uses the status names: "6 need you, 5 your turn". A part that is 0 is left out.
+
+Prototype: branch `prototype/count-format` (commit `7136b4a`), run `bun run demo` and open `?variant=opus` or `?variant=sol`; `&counts=N,M` forces the two counts. Screenshots: `.wayfinder/status-groups/assets/02-count-format/` on that branch.
