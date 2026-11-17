@@ -3,7 +3,15 @@ import { mkdtempSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 
-import { parseBounds, parseNeedsYou, parseNotify, parseSettings, readJson, writeJson } from "../src/desktop/store.ts";
+import {
+  parseBounds,
+  parseNeedsYou,
+  parseNotify,
+  parseOpenNext,
+  parseSettings,
+  readJson,
+  writeJson,
+} from "../src/desktop/store.ts";
 
 const screens = [
   { x: 0, y: 0, width: 1000, height: 800 },
@@ -44,6 +52,17 @@ describe("parseNotify", () => {
       [{ kind: "summary", count: 1.5 }],
     ];
     for (const raw of bad) expect(parseNotify(raw)).toBeNull();
+  });
+});
+
+describe("parseOpenNext", () => {
+  test("accepts a string and null", () => {
+    expect(parseOpenNext("Title")).toBe("Title");
+    expect(parseOpenNext(null)).toBeNull();
+  });
+  test("rejects a number and a too-long string", () => {
+    expect(parseOpenNext(1)).toBeUndefined();
+    expect(parseOpenNext("x".repeat(501))).toBeUndefined();
   });
 });
 

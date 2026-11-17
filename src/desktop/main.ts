@@ -42,6 +42,7 @@ import {
   parseBounds,
   parseNeedsYou,
   parseNotify,
+  parseOpenNext,
   parseSettings,
   parseUpdated,
   readJson,
@@ -58,6 +59,8 @@ let quitting = false;
 let settings: Settings = parseSettings(undefined);
 /** The last Needs-you list, for the menu-bar entry. */
 let needsYou: NeedsYouThread[] = [];
+/** The title of the thread "Open next" opens, or `null` with none. */
+let openNext: string | null = null;
 /** Kept referenced so the menu-bar icon is not garbage-collected. */
 let tray: Tray | undefined;
 /** What the menus and the page show about updates. */
@@ -415,6 +418,12 @@ function setTrayMenu() {
   tray.setTitle(needsYou.length ? String(needsYou.length) : "", { fontType: "monospacedDigit" });
   tray.setContextMenu(
     Menu.buildFromTemplate([
+      ...(openNext
+        ? [
+            { label: `Open next · ${openNext}`, click: () => window?.webContents.send("openNext") },
+            { type: "separator" } as const,
+          ]
+        : []),
       ...trayItems(needsYou).map((i) => ({
         label: i.label,
         click: () => (i.url ? openOutside(i.url) : showWindow()),
@@ -453,6 +462,16 @@ async function main() {
     }
     needsYou = list;
     app.setBadgeCount(list.length);
+    setTrayMenu();
+  });
+  ipcMain.on("setOpenNext", (event, raw: unknown) => {
+    if (event.sender !== window?.webContents) return;
+    const title = parseOpenNext(raw);
+    if (title === undefined) {
+      log("bad setOpenNext payload");
+      return;
+    }
+    openNext = title;
     setTrayMenu();
   });
   ipcMain.on("notify", (event, raw: unknown) => {

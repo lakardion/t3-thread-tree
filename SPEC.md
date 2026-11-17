@@ -95,13 +95,21 @@ A **top-level thread** has no native `parentThreadId`. A **subagent** has `relat
 
 The page shows an outline tree: Project, group, thread. Each thread row has a status icon, a title link to `t3code://threads/<environmentId>/<threadId>`, a stack badge and PR links. A row that waits on the user (needs input, plan ready or your turn) shows its phrase and the Wait beside the icon, for example "Approval 12m". The Wait is the time since `since`. A guest message has no `since`, so it shows the phrase only. A failed row shows "Failed" with no time. Other rows show no text. This reverses `d602e6e` (#18) for these rows only. The row end keeps the age of `updatedAt`. Closed rows are saved in `localStorage`. A toggle shows settled threads. A second toggle turns on launch nesting. When a Linear workspace is set, an issue key links to its Linear issue. With team keys set, only a key of a listed team links. The "View" panel keeps the workspace and teams in `localStorage`; `LINEAR_WORKSPACE` and `LINEAR_TEAMS` give the default. A banner shows when T3 is down, when no token is set, or when T3 rejects the token. The token banners open the "View" panel.
 
-The header holds the title, the filter with the Needs-you count ("All", "Needs you N"), "What's next", a sort menu ("Manual", "Last updated"), a Tree / Flat switch, one button that is fold all in the tree and a "Group by" menu ("None", "Status") in the flat view, and a "View" button. "View" opens a panel on the right, beside the tree. Its header stays in view while the panel scrolls, and Escape closes it. The panel has three groups. "Updates" (desktop app only) has the version, the update state and its action. "View" has show settled, reset order and the theme as three icons (Light, System, Dark). "Setup" has three folds, closed at first: T3 token, Linear links and the status icon legend. A fold shows its state at the right: green text when set, yellow text with a warning sign when not set, a blue info icon for the legend. The token banners open the panel with the T3 token fold open. When the panel opens in the desktop app, it checks for updates, but not when the last good check is less than 60 s old.
+The header holds the title, the filter with the Needs-you count ("All", "Needs you N"), "Open next", "What's next", a sort menu ("Manual", "Last updated"), a Tree / Flat switch, one button that is fold all in the tree and a "Group by" menu ("None", "Status") in the flat view, and a "View" button. "View" opens a panel on the right, beside the tree. Its header stays in view while the panel scrolls, and Escape closes it. The panel has three groups. "Updates" (desktop app only) has the version, the update state and its action. "View" has show settled, reset order and the theme as three icons (Light, System, Dark). "Setup" has three folds, closed at first: T3 token, Linear links and the status icon legend. A fold shows its state at the right: green text when set, yellow text with a warning sign when not set, a blue info icon for the legend. The token banners open the panel with the T3 token fold open. When the panel opens in the desktop app, it checks for updates, but not when the last good check is less than 60 s old.
 
 A pending request wins over snooze. A snoozed thread with a pending request shows as needs input.
 
 The sort menu keeps its choice in `localStorage` under `thread-tree:sort`. "Last updated" sorts by `lastRun` of the thread node: the later of `latestRunStartedAt` and `latestRunCompletedAt`. It is never `updatedAt`, which changes about once a second while a thread works. The page sorts the arranged tree. Projects keep their order; Reviews stays first and No issue key last; groups and threads sort newest first, and a group or PR stack sorts by its newest thread, subthreads included. A thread with no run sorts last. Ties keep the manual order. Drag is off in "Last updated".
 
 The flat view lists all threads of all projects in one list. The switch keeps its choice in `localStorage` under `thread-tree:layout`, and "Group by" under `thread-tree:group`. The flat list has no folds and no fold-all button. Drag works with "Manual" sort and is off in "Last updated". The flat list keeps its own order in the stored orders (`thread-tree:order`, list key `flat`), so "Reset order" clears it. It starts as the tree order, flattened, and a new thread goes last. A flat drag never changes the tree order, and the reverse. With "Group by Status", a row drags only inside its section; all sections share the one flat order. A stack run is one block, and subthreads stay under their parent. "Manual" keeps the tree order, flattened. "Last updated" sorts the whole list. "Group by Status" makes sections in this order: Needs input, Plan ready, Your turn, Failed (`failed`, `interrupted`), Working (`working`, `starting`, `waiting`), Idle and snoozed, Done. A section with no thread is hidden. A stack goes to the section of its most urgent thread. With "Group by Status", Needs input, Plan ready and Your turn sort by Wait, oldest first, with both sort choices. A row with no Wait goes last, and a stack sorts by its oldest Wait in the section. Drag is off there. The stored flat order does not change, so a row that stops waiting goes back to its place. Saved tree folds stay unchanged.
+
+**Open next** opens in T3 the thread that has waited longest. The page owns the target and the skip memory; the button, the key `n` and the menu-bar item share them.
+
+- **Target.** The queue holds all threads of the server's tree, subthreads included, with status `needs-input`, `plan-ready` or `your-turn`, not settled. The filter, "Show settled", folds, layout and sort do not change it. The queue sorts by `since`, oldest first, no `since` last. Ties keep the server's tree order, not a saved manual order.
+- **Skip memory.** The page keeps, in memory, the threads it opened, keyed by thread id plus `since`. The target is the first thread of the queue that is not in the memory. A new Wait of a thread (a new `since`) makes it a target again. When all threads were opened, the target is the top thread, and the memory starts again with that thread only.
+- **Button.** It sits after the filter, with an icon and "Open next". At phone width it shows the icon only, with an `aria-label`. The tooltip is "<phrase> · <title> · <Wait>"; the Wait part is left out when `since` is null. With no target, the button is disabled and the tooltip is "Nothing waits".
+- **Key `n`.** It works with no modifier. It does nothing while focus is in an input, a textarea or a contenteditable element, while the "View" panel is open, and while a dialog, an alert dialog, a menu or a listbox is open. It does nothing with no target.
+- **Opens.** It goes to `t3code://threads/<environmentId>/<threadId>`, the same URL as the row link. It writes nothing to T3.
 
 The header has a System / Light / Dark choice. The full design is in [DESIGN-SPEC.md](DESIGN-SPEC.md).
 
@@ -225,7 +233,7 @@ type BriefState =
 
 The full look is in ticket 04. In short:
 
-- **Controls:** in the header, after the filter, a split control: a primary "What's next" button (Sparkles icon) joined to a model `Select`. The choice is saved in `localStorage`. With no CLI offered, the button is disabled with a tooltip. The button is disabled while a run is active.
+- **Controls:** in the header, after the filter, a split control: a primary "What's next" button (Sparkles icon) joined to a model `Select`. The choice is saved in `localStorage`. With no CLI offered, the button is disabled with a tooltip. The button is disabled while a run is active. At phone width the button shows its icon only, with an `aria-label`, and the model `Select` and the model name are hidden.
 - **Panel:** an inline card between the header and the tree. It shows only after the first click, or when the brief state is not `idle` at load. The head has "Next steps", a mono stamp "generated HH:MM · <label>" ("generated HH:MM · rules only" when the model did not run), and a close button that hides the panel.
 - **States:** loading ("Reading N threads…" with the letter wave, and "Cancel"); error (alert, "The brief failed.", "Retry", the stderr tail); empty ("Nothing needs you right now."); the ranked actions. In `running`, the code actions show at once as rows above the loading line. In `failed`, they show above the error. In `done`, all rows run in one rank order.
 - **Action row:** rank, kind chip, title with the reason, thread links, and a copy icon for `prompt` (none when `prompt` is `null`).
@@ -406,6 +414,8 @@ type NotifyEvent =
 type DesktopBridge = {
   setNeedsYou(threads: NeedsYouThread[]): void /** badge and menu-bar entry */;
   notify(events: NotifyEvent[]): void;
+  setOpenNext(title: string | null): void /** menu-bar "Open next" item */;
+  onOpenNext(cb: () => void): () => void /** a click on that item */;
   openExternal(url: string): void;
 };
 ```
@@ -438,10 +448,11 @@ The page owns the rules. Main shows them, so the mute switch stays in main.
 
 - A `Tray` with a template icon and the Needs-you count as its title. No title when the count is 0.
 - A click opens a native menu:
-  1. Up to 10 Needs-you threads, the longest wait first (oldest `since`; `null` last). Each item shows the status and the title. A click opens the thread in T3 Code.
-  2. "+N more… (open tree)" when more than 10, which shows the window.
-  3. "Open tree", "Mute Notifications", "Update available: vX.Y.Z…" when one exists, "Quit".
-- Main builds the menu again on each `setNeedsYou`.
+  1. "Open next · <title>" and a separator, only when the page has an Open next target. A click asks the page to open that target, so the item and the page button open the same thread. The page sends the title with `setOpenNext`; `null` hides the item.
+  2. Up to 10 Needs-you threads, the longest wait first (oldest `since`; `null` last). Each item shows the status and the title. A click opens the thread in T3 Code.
+  3. "+N more… (open tree)" when more than 10, which shows the window.
+  4. "Open tree", "Mute Notifications", "Update available: vX.Y.Z…" when one exists, "Quit".
+- Main builds the menu again on each `setNeedsYou` and each `setOpenNext`.
 
 ### Token
 
