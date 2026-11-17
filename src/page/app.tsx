@@ -78,6 +78,7 @@ import {
   favicon,
   needsYou,
   needsYouThreads,
+  needsYouTip,
   nextTarget,
   notifyEvents,
   onlyNeedsYou,
@@ -1835,6 +1836,7 @@ function App() {
   };
   const live = new Map((tree?.projects ?? []).flatMap(allThreads).map((t) => [t.id, t]));
   const counts = countAttention(tree?.projects ?? []);
+  const needsTip = needsYouTip(counts);
   const connecting = !tree || tree.conn === "connecting";
   const cfg: Cfg = { orders, needsOnly, sortBy, layout, groupBy, freeze };
   const { full, view } = pipeline(tree?.projects ?? [], cfg);
@@ -1949,12 +1951,34 @@ function App() {
           <ToggleGroupItem value="all" className={FILTER_ITEM}>
             All
           </ToggleGroupItem>
-          <ToggleGroupItem value="needs" className={cn(FILTER_ITEM, "gap-1.5 px-2.5")}>
+          <ToggleGroupItem
+            value="needs"
+            aria-label={needsTip ? `Needs you, ${needsTip}` : "Needs you"}
+            className={cn(FILTER_ITEM, "gap-1.5 px-2.5")}
+          >
             Needs you
-            {counts.needYou > 0 && (
-              <span className="rounded-[4px] bg-status-needs-input px-1 text-[11px] text-white tabular-nums">
-                {counts.needYou}
-              </span>
+            {needsTip && (
+              /** The tooltip sits inside the item so that the item keeps `data-state`. */
+              <Tooltip>
+                <TooltipTrigger asChild>
+                  <span className="flex items-center gap-1">
+                    {counts.needYou > 0 && (
+                      <span className="rounded-[4px] bg-status-needs-input px-1 text-[11px] text-white tabular-nums">
+                        {counts.needYou}
+                      </span>
+                    )}
+                    {counts.needYou > 0 && counts.yourTurn > 0 && (
+                      <span aria-hidden className="text-muted-foreground">
+                        ·
+                      </span>
+                    )}
+                    {counts.yourTurn > 0 && (
+                      <span className="text-[11px] text-muted-foreground tabular-nums">{counts.yourTurn}</span>
+                    )}
+                  </span>
+                </TooltipTrigger>
+                <TooltipContent>{needsTip}</TooltipContent>
+              </Tooltip>
             )}
           </ToggleGroupItem>
         </ToggleGroup>

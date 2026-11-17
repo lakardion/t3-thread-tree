@@ -37,7 +37,7 @@ A T3 Code project, usually one repo.
 An unsettled top-level thread (any status, snoozed included), or a subagent whose top-level ancestor is active. The default view shows only active threads.
 
 **Needs you**:
-The threads that wait on the user: status needs input or plan ready. The Dock badge, the header count and the menu-bar list show this set. A notification fires when a thread enters this set, or fails. The "Needs you" filter also keeps your-turn threads.
+The threads that wait on the user: status needs input or plan ready. The Dock badge, the Needs-you badge in the header and the menu-bar list show this set. A notification fires when a thread enters this set, or fails. The "Needs you" filter also keeps your-turn threads, and the header shows their count next to the Needs-you count.
 _Avoid_: attention, unread
 
 **Context row**:

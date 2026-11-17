@@ -6,6 +6,10 @@ export type Counts = { needYou: number; working: number; yourTurn: number; stopp
 /** The statuses that the "Needs you" filter keeps. */
 export const needsYou = (s: Status): boolean => s === "needs-input" || s === "plan-ready" || s === "your-turn";
 
+/** The tooltip of the "Needs you" chip numbers: the Needs-you count, then the your-turn count; "" when both are 0. */
+export const needsYouTip = (c: Counts): string =>
+  [c.needYou > 0 && `${c.needYou} need you`, c.yourTurn > 0 && `${c.yourTurn} your turn`].filter(Boolean).join(", ");
+
 /** The summary counts over all threads of the tree, nested threads included. */
 export function countAttention(projects: Branch[]): Counts {
   const c: Counts = { needYou: 0, working: 0, yourTurn: 0, stopped: 0 };
