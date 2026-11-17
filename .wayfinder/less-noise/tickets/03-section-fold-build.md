@@ -52,7 +52,7 @@ From [the fold rules](01-section-fold-rules.md). Read the code at `origin/main` 
 - A closed section shows no rows and its rows have no drag; its count equals the open count.
 - With "Show snoozed threads" off, no `snoozed` row shows in the tree or the flat view, and the counts drop them. A snoozed thread with a pending request still shows. A snoozed parent with a visible subthread shows as a muted context row.
 - The switch is on with no stored key.
-- Unit tests cover the snoozed filter (`src/page/*.test.ts`) and the closed-section drop in the flat sequence.
+- Unit tests cover the snoozed filter (`test/`, next to `attention.test.ts`) and the closed-section drop in the flat sequence.
 - `bun run check` passes. `bun run demo` checked in light and dark, desktop and phone width.
 - `SPEC.md:72` (tree rule 3), the `SPEC.md` flat-view paragraph, `DESIGN-SPEC.md` › Flat view, `CONTEXT.md` and `README.md` updated.
 - One draft PR from `main`, the bottom of the stack 03 ← 04 ← 05.
