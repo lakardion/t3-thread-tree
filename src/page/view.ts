@@ -117,10 +117,10 @@ export const SECTIONS: [key: string, label: string, statuses: Status[]][] = [
   ["done", "Done", ["done"]],
 ];
 
-/** A closed project with this many threads or more shows counts, not one icon per thread. */
+/** A closed branch with this many threads or more shows counts, not one icon per thread. */
 const COUNTS_FROM = 5;
 
-/** The threads of a closed project per status section, in section order, with the first status of the section for its icon. Empty with fewer than 5 threads. */
+/** The threads of a closed branch per status section, in section order, with the first status of the section for its icon. Empty with fewer than 5 threads. */
 export const closedCounts = (ts: ThreadNode[]): { status: Status; label: string; n: number }[] =>
   ts.length < COUNTS_FROM
     ? []

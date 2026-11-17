@@ -1257,7 +1257,7 @@ const Icons = ({ b }: { b: Branch }) => (
   </span>
 );
 
-/** A status icon and a number for each status group of a closed project. */
+/** A status icon and a number for each status group of a closed branch. */
 function Counts({ groups }: { groups: ReturnType<typeof closedCounts> }) {
   const tip = groups.map((g) => `${g.n} ${g.label}`).join(", ");
   return (
@@ -1279,6 +1279,12 @@ function Counts({ groups }: { groups: ReturnType<typeof closedCounts> }) {
       <TooltipContent className="max-w-64">{tip}</TooltipContent>
     </Tooltip>
   );
+}
+
+/** Counts for large closed branches, or one icon per thread for smaller branches. */
+function ClosedSummary({ b }: { b: Branch }) {
+  const counts = closedCounts(allThreads(b));
+  return counts.length > 0 ? <Counts groups={counts} /> : <Icons b={b} />;
 }
 
 type Fold = { closed: Set<string>; toggle: (id: string) => void; fold: (ids: string[], shut: boolean) => void };
@@ -1355,7 +1361,7 @@ function GroupRow({ b, closed, toggle, fold, sort }: { b: Branch; sort?: Sort } 
               <ExternalLink className="size-3" aria-hidden />
             </a>
           )}
-          {!open && <Icons b={b} />}
+          {!open && <ClosedSummary b={b} />}
           <FoldAll
             inner={b.branches.flatMap(groupIds)}
             self={b.id}
@@ -1610,7 +1616,6 @@ function ProjectBlock({ b, closed, toggle, fold }: { b: Branch } & Fold) {
   const open = !closed.has(b.id);
   const lists = useContext(Lists);
   const color = projectHex(b.label);
-  const counts = closedCounts(allThreads(b));
   const render = (ref: RefFn, handleRef?: RefFn) => (
     <li ref={ref} className="border-l-[3px] not-last:border-b" style={{ borderLeftColor: color }}>
       <Collapsible asChild open={open} onOpenChange={() => toggle(b.id)}>
@@ -1627,7 +1632,7 @@ function ProjectBlock({ b, closed, toggle, fold }: { b: Branch } & Fold) {
                 {b.label}
               </span>
             </CollapsibleTrigger>
-            {!open && (counts.length > 0 ? <Counts groups={counts} /> : <Icons b={b} />)}
+            {!open && <ClosedSummary b={b} />}
             <FoldAll inner={foldIds(b)} self={b.id} name={b.label} closed={closed} fold={fold} className={ROW_FOLD} />
           </div>
           <div className="min-w-0 px-1 pb-1">
