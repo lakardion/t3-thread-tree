@@ -1,7 +1,7 @@
 ---
 title: Sort the waiting sections of the flat view by Wait
 type: wayfinder:task
-status: in-review
+status: closed
 assignee: damian.lucero
 blocked-by: [02-sort-by-wait-rules, 04-row-wait-build]
 ---
