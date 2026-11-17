@@ -1,7 +1,7 @@
 ---
 title: Show counts on a closed project
 type: wayfinder:task
-status: open
+status: closed
 assignee: claude (less-noise-05)
 blocked-by: [02-closed-counts-look, 04-quiet-working-build]
 ---
@@ -26,3 +26,7 @@ Build M16: a closed project shows counts instead of one status icon for each thr
 - A closed key group still shows the icon line.
 - A unit test covers the group counts and the threshold.
 - Also: `bun run check` passes; `bun run demo` checked in light and dark, desktop and phone width; `DESIGN-SPEC.md` updated where it describes closed rows ("one status shape per thread on closed rows"); `README.md` updated; one draft PR, stacked on the branch of 04-quiet-working-build.
+
+## Result
+
+Merged in [PR #85](https://github.com/lakardion/t3-thread-tree/pull/85) as `af19764`. Required CI passed. The user approved extending the counts to closed tree groups with five or more threads. PR stacks keep their existing display.
