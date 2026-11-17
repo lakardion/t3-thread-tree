@@ -6,7 +6,7 @@ created: 2026-11-16
 
 # Map: find the next improvements to the thread tree
 
-Resume with `/wayfinder .wayfinder/improvements/map.md`.
+Resume with `/wayfinder .wayfinder/improvements/map.md`. The build of all items is tracked in the [improvements program map](../improvements-program/map.md).
 
 ## Destination
 
