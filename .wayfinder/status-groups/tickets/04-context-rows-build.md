@@ -30,3 +30,10 @@ Fixed now: stacks on the 03-unit-placement-build branch. A PR stack stays one bl
 - In `bun run demo` with "Group by: Status", the storefront PR stack in "Needs input" shows one row (SHOP-413) and a "+3 other threads" button. The button shows and hides the other three rows, muted.
 - "Needs input" shows the matching-thread count. Light and dark, desktop and phone width.
 - `bun run check` passes. `SPEC.md`, `DESIGN-SPEC.md` and `README.md` ("What you get") describe the context rows and the count.
+
+## Handed over from status-groups-03
+
+- 03 is merged to `main` as `741d0dc` (#78). Start this key from `main`.
+- `unitThreads` in `src/page/view.ts` now returns every thread of a unit, subthreads at any depth, without settled ones (all of them when every thread is settled). Placement and the Wait sort use it. Use it for "the threads that match a section".
+- In `bun run demo`, the Migrate and Search threads are subthreads only with "Nest launched threads" on (View panel). Turn it on to see units with subthreads in the flat view.
+- `README.md` "Group by status" still says "A PR stack goes to the group of its most urgent thread". Ticket 03 is a bug fix with no README change. Update that line with the context-rows feature: any unit goes by its most urgent thread, subthreads included, settled threads left out.

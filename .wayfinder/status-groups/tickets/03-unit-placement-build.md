@@ -1,8 +1,8 @@
 ---
 title: Put a unit in the section of its most urgent thread, subthreads included
 type: wayfinder:task
-status: open
-assignee: 
+status: closed
+assignee: claude (status-groups-03)
 blocked-by: []
 ---
 
