@@ -2,7 +2,7 @@
 title: Show the last message on demand, in details and the send dialog
 type: wayfinder:task
 status: open
-assignee:
+assignee: damian.lucero
 blocked-by: []
 ---
 
