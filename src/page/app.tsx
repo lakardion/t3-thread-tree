@@ -682,6 +682,7 @@ function UpdateRow({ update }: { update: UpdateState }) {
     line = `Up to date · checked ${hhmm(checkedAt!)}`;
     action = recheck("Check again", "ghost");
   }
+  const showProgress = bar !== undefined;
   return (
     <div>
       <Row
@@ -694,11 +695,19 @@ function UpdateRow({ update }: { update: UpdateState }) {
       >
         {action}
       </Row>
-      {bar !== undefined && (
-        <div className="px-3 pb-3">
-          <Progress value={bar} aria-label="Update progress" />
+      <div
+        aria-hidden={!showProgress}
+        className={cn(
+          "grid transition-[grid-template-rows,opacity] duration-250 ease-in-out motion-reduce:transition-none",
+          showProgress ? "grid-rows-[1fr] opacity-100" : "grid-rows-[0fr] opacity-0",
+        )}
+      >
+        <div className="min-h-0 overflow-hidden">
+          <div className="px-3 pb-3">
+            <Progress value={bar === undefined ? 100 : bar} aria-label="Update progress" />
+          </div>
         </div>
-      )}
+      </div>
     </div>
   );
 }
