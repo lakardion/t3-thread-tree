@@ -21,7 +21,7 @@ Efforts in the chosen order. A, B, D, E, G and I are map tickets (each runs its 
 | 1 | A. Wait time on the row | M04, M05, M19 | [ticket](tickets/01-effort-a-wait-time.md) → [wait-time map](../wait-time/map.md) |
 | 2 | B. Status groups that agree | M01, M07, M06 | [ticket](tickets/02-effort-b-status-groups.md) → [status-groups map](../status-groups/map.md) |
 | 3 | C. Small bugs | M02, M03 | Lane 1 |
-| 4 | D. Less noise | M09, M13, M16 | [ticket](tickets/04-effort-d-less-noise.md) |
+| 4 | D. Less noise | M09, M13, M16 | [ticket](tickets/04-effort-d-less-noise.md) → [less-noise map](../less-noise/map.md) |
 | 5 | F. Last message on demand | M08 | Lane 2 |
 | 6 | E. A brief that helps you choose | M11, M10, M12, M14, M15 | [ticket](tickets/06-effort-e-brief.md), after F |
 | 7 | G. Get to a thread fast | M20, M22, M21 | [ticket](tickets/07-effort-g-reach-a-thread.md) |
