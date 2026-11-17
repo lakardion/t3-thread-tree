@@ -117,6 +117,19 @@ export const SECTIONS: [key: string, label: string, statuses: Status[]][] = [
   ["done", "Done", ["done"]],
 ];
 
+/** A closed branch with this many threads or more shows counts, not one icon per thread. */
+const COUNTS_FROM = 5;
+
+/** The threads of a closed branch per status section, in section order, with the first status of the section for its icon. Empty with fewer than 5 threads. */
+export const closedCounts = (ts: ThreadNode[]): { status: Status; label: string; n: number }[] =>
+  ts.length < COUNTS_FROM
+    ? []
+    : SECTIONS.map(([, label, statuses]) => ({
+        status: statuses[0],
+        label: label.toLowerCase(),
+        n: ts.filter((t) => statuses.includes(t.status)).length,
+      })).filter((g) => g.n > 0);
+
 /** The sections that sort by Wait, oldest first, and have no drag. */
 export const WAIT_SECTIONS = new Set(["needs-input", "plan-ready", "your-turn"]);
 
