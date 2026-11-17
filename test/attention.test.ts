@@ -14,6 +14,7 @@ import {
   tabTitle,
   type Statuses,
   waits,
+  withoutSnoozed,
 } from "../src/page/attention.ts";
 import type { Branch, Conn, Status, ThreadNode, Tree } from "../src/shared/tree.ts";
 
@@ -117,6 +118,30 @@ describe("onlyNeedsYou", () => {
     const copy = structuredClone(tree);
     onlyNeedsYou(tree);
     expect(tree).toEqual(copy);
+  });
+});
+
+describe("withoutSnoozed", () => {
+  test("drops a snoozed thread and keeps the others", () => {
+    const out = withoutSnoozed([branch("p", [thread("a", "snoozed"), thread("b", "idle")])]);
+    expect(ids(out[0].threads)).toEqual(["b"]);
+  });
+
+  test("keeps a snoozed parent with a kept child, and trims the other children", () => {
+    const parent = thread("s", "snoozed", [thread("m", "working"), thread("z", "snoozed")]);
+    const out = withoutSnoozed([branch("p", [parent])]);
+    expect(ids(out[0].threads)).toEqual(["s"]);
+    expect(ids(out[0].threads[0].children)).toEqual(["m"]);
+  });
+
+  test("drops a group and a project that hold only snoozed threads", () => {
+    const tree = [branch("p1", [], [branch("g1", [thread("a", "snoozed")])]), branch("p2", [thread("b", "snoozed")])];
+    expect(withoutSnoozed(tree)).toEqual([]);
+  });
+
+  test("keeps a thread with a pending request, which has status needs-input", () => {
+    const out = withoutSnoozed([branch("p", [thread("a", "needs-input")])]);
+    expect(ids(out[0].threads)).toEqual(["a"]);
   });
 });
 

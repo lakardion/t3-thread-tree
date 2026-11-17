@@ -87,6 +87,7 @@ import {
   tabTitle,
   type Statuses,
   waits,
+  withoutSnoozed,
 } from "./attention.ts";
 import { BriefControls, BriefPanel, type Offered } from "./brief.tsx";
 import {
@@ -145,6 +146,8 @@ const TOKEN_CMD =
   "~/.t3/bin/t3 auth session issue --scope orchestration:read --label thread-tree --ttl 52w --token-only";
 const CLOSED_KEY = "thread-tree:closed";
 const SETTLED_KEY = "thread-tree:settled";
+const SNOOZED_KEY = "thread-tree:snoozed";
+const SECTIONS_KEY = "thread-tree:sections";
 const NEST_KEY = "thread-tree:nest";
 const FILTER_KEY = "thread-tree:filter";
 const THEME_KEY = "thread-tree:theme";
@@ -687,6 +690,8 @@ type PanelProps = LinearProps & {
   close: () => void;
   settled: boolean;
   setSettled: (v: boolean) => void;
+  snoozed: boolean;
+  setSnoozed: (v: boolean) => void;
   nest: boolean;
   setNest: (v: boolean) => void;
   canReset: boolean;
@@ -729,6 +734,9 @@ function SettingsPanel(p: PanelProps) {
         <Group title="View">
           <Row label="Show settled threads" htmlFor="settled">
             <Switch id="settled" checked={p.settled} onCheckedChange={p.setSettled} />
+          </Row>
+          <Row label="Show snoozed threads" htmlFor="snoozed">
+            <Switch id="snoozed" checked={p.snoozed} onCheckedChange={p.setSnoozed} />
           </Row>
           <Row label="Nest launched threads" htmlFor="nest">
             <Switch id="nest" checked={p.nest} onCheckedChange={p.setNest} />
@@ -1520,7 +1528,8 @@ function FlatRow({
   closed,
   toggle,
   fold,
-}: { i: FlatItem; corners: string; section: Status[] | null } & Fold) {
+  toggleSection,
+}: { i: FlatItem; corners: string; section: Status[] | null; toggleSection: (key: string) => void } & Fold) {
   const lists = useContext(Lists);
   /** The section list that holds the unit, or the whole flat list when ungrouped. */
   const list = [...lists.keys()].find((k) => k !== FLAT && lists.get(k)?.includes(i.id)) ?? FLAT;
@@ -1554,13 +1563,17 @@ function FlatRow({
   return (
     <MotionHook>
       {(ref) => (
-        <li
-          ref={ref}
-          className="flex h-7 items-center gap-2 px-2 text-xs font-semibold text-muted-foreground"
-          style={{ viewTransitionName: vtName("sec", i.key) }}
-        >
-          {i.label}
-          <span className="font-normal tabular-nums">{i.count}</span>
+        <li ref={ref} style={{ viewTransitionName: vtName("sec", i.key) }}>
+          <button
+            type="button"
+            aria-expanded={i.open}
+            onClick={() => toggleSection(i.key)}
+            className="flex h-7 w-full cursor-pointer items-center gap-2 rounded-[8px] px-2 text-xs font-semibold text-muted-foreground select-none hover:bg-accent focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring focus-visible:outline-solid max-[720px]:min-h-11"
+          >
+            <Chevron open={i.open} />
+            {i.label}
+            <span className="font-normal tabular-nums">{i.count}</span>
+          </button>
         </li>
       )}
     </MotionHook>
@@ -1654,7 +1667,16 @@ const transition = (change: () => void) => {
   else document.startViewTransition(() => flushSync(change));
 };
 
-type Cfg = { orders: Orders; needsOnly: boolean; sortBy: SortBy; layout: Layout; groupBy: GroupBy; freeze?: Freeze };
+type Cfg = {
+  orders: Orders;
+  needsOnly: boolean;
+  snoozed: boolean;
+  shutSections: ReadonlySet<string>;
+  sortBy: SortBy;
+  layout: Layout;
+  groupBy: GroupBy;
+  freeze?: Freeze;
+};
 
 /**
  * The user order on the whole tree, then the filter, then the drag freeze. In the tree, `view.projects` is also sorted.
@@ -1664,12 +1686,13 @@ const pipeline = (ps: Branch[], c: Cfg): { full: Arranged; view: Arranged & { fl
   const tree = arrange(ps, c.orders);
   const flatIds = applyOrder(flatten(tree.projects), (u) => u.id, c.orders[FLAT]).map((u) => u.id);
   const full = { ...tree, lists: new Map(tree.lists).set(FLAT, flatIds) };
-  const view = arrange(c.needsOnly ? onlyNeedsYou(full.projects) : full.projects, {}, c.freeze);
+  const shown = c.snoozed ? full.projects : withoutSnoozed(full.projects);
+  const view = arrange(c.needsOnly ? onlyNeedsYou(shown) : shown, {}, c.freeze);
   if (c.layout === "flat") {
     const own = c.freeze?.list === FLAT ? c.freeze.ids : c.orders[FLAT];
     const units =
       c.sortBy === "updated" ? sortFlat(flatten(view.projects)) : applyOrder(flatten(view.projects), (u) => u.id, own);
-    const flat = sequence(units, c.groupBy);
+    const flat = sequence(units, c.groupBy, c.shutSections, c.snoozed);
     return { full, view: { ...view, lists: flatLists(flat), flat } };
   }
   return { full, view: { ...view, projects: c.sortBy === "updated" ? sortTree(view.projects) : view.projects } };
@@ -1678,6 +1701,7 @@ const pipeline = (ps: Branch[], c: Cfg): { full: Arranged; view: Arranged & { fl
 function App() {
   const [tree, setTree] = useState<Tree | null>(null);
   const [settled, setSettled] = useState(load(SETTLED_KEY) === "1");
+  const [snoozed, setSnoozed] = useState(load(SNOOZED_KEY) !== "0");
   const [nest, setNest] = useState(load(NEST_KEY) === "1");
   const [needsOnly, setNeedsOnly] = useState(load(FILTER_KEY) === "needs");
   const [theme, setTheme] = useState<Theme>(() => THEMES.find((t) => t === load(THEME_KEY)) ?? "system");
@@ -1687,6 +1711,9 @@ function App() {
   const [now, setNow] = useState(Date.now);
   const [shown, setShown] = useState(() => new Set<string>());
   const [closed, setClosed] = useState(() => new Set<string>(JSON.parse(load(CLOSED_KEY) ?? "[]") as string[]));
+  const [shutSections, setShutSections] = useState(
+    () => new Set<string>(JSON.parse(load(SECTIONS_KEY) ?? '["idle","done"]') as string[]),
+  );
   const [brief, setBrief] = useState<BriefState>({ status: "idle" });
   const [clis, setClis] = useState<Offered | null>(null);
   const [cli, setCli] = useState(load(CLI_KEY) as Cli | null);
@@ -1788,6 +1815,9 @@ function App() {
   useEffect(() => {
     save(FILTER_KEY, needsOnly ? "needs" : "all");
   }, [needsOnly]);
+  useEffect(() => {
+    save(SNOOZED_KEY, snoozed ? "1" : "0");
+  }, [snoozed]);
 
   useEffect(() => {
     save(THEME_KEY, theme);
@@ -1806,6 +1836,13 @@ function App() {
     else n.add(id);
     setClosed(n);
     save(CLOSED_KEY, JSON.stringify([...n]));
+  };
+  const toggleSection = (key: string) => {
+    const n = new Set(shutSections);
+    if (n.has(key)) n.delete(key);
+    else n.add(key);
+    setShutSections(n);
+    save(SECTIONS_KEY, JSON.stringify([...n]));
   };
   const fold = (ids: string[], shut: boolean) => {
     const n = new Set(closed);
@@ -1838,7 +1875,7 @@ function App() {
   const counts = countAttention(tree?.projects ?? []);
   const needsTip = needsYouTip(counts);
   const connecting = !tree || tree.conn === "connecting";
-  const cfg: Cfg = { orders, needsOnly, sortBy, layout, groupBy, freeze };
+  const cfg: Cfg = { orders, needsOnly, snoozed, shutSections, sortBy, layout, groupBy, freeze };
   const { full, view } = pipeline(tree?.projects ?? [], cfg);
   /** The ids of the rendered rows and section headers, in order, for a tree. */
   const rows = (ps: Branch[]) => {
@@ -2101,6 +2138,7 @@ function App() {
                                       closed={closed}
                                       toggle={toggle}
                                       fold={fold}
+                                      toggleSection={toggleSection}
                                     />
                                   )}
                                 </Presence>
@@ -2145,6 +2183,8 @@ function App() {
           setLinear={setLinear}
           settled={settled}
           setSettled={setSettled}
+          snoozed={snoozed}
+          setSnoozed={setSnoozed}
           nest={nest}
           setNest={setNest}
           canReset={Object.keys(orders).length > 0}

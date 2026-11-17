@@ -43,6 +43,10 @@ _Avoid_: attention, unread
 **Context row**:
 A row that shows only to give context. In a status section, it is a thread whose status is not one of the section's statuses, or a settled thread. In the "Needs you" filter, it is a kept spawner that does not match. A context row shows muted; in a PR stack in a status section, it folds behind "+N other threads". A section count leaves context rows out.
 
+**Status section**:
+A group of the flat view, with "Group by Status", that holds the threads of one or more statuses, most urgent first. Its header counts the threads that match it. It folds.
+_Avoid_: status group, bucket
+
 **Wait**:
 The time since a thread started to wait on the user. It counts from the request for needs input, and from the run completion for plan ready and your turn. A row that waits on the user shows it beside the phrase.
 _Avoid_: age (age is the time since the last update)
