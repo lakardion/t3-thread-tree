@@ -349,33 +349,53 @@ const ThemeToggle = ({ theme, setTheme }: { theme: Theme; setTheme: (t: Theme) =
   </ToggleGroup>
 );
 
+/**
+ * Controlled props for a tooltip around a menu trigger, and the menu's `onCloseAutoFocus`. The focus that returns to
+ * the trigger when the menu closes does not open the tooltip. It relies on Radix focusing the trigger synchronously
+ * after `onCloseAutoFocus`.
+ */
+function useQuietTip() {
+  const [open, setOpen] = useState(false);
+  const quiet = useRef(false);
+  return {
+    tip: { open, onOpenChange: (o: boolean) => setOpen(o && !quiet.current) },
+    onCloseAutoFocus: () => {
+      quiet.current = true;
+      queueMicrotask(() => (quiet.current = false));
+    },
+  };
+}
+
 const SORTS: [SortBy, string][] = [
   ["manual", "Manual"],
   ["updated", "Last updated"],
 ];
-const SortMenu = ({ sortBy, setSortBy }: { sortBy: SortBy; setSortBy: (s: SortBy) => void }) => (
-  <DropdownMenu modal={false}>
-    <Tooltip>
-      <TooltipTrigger asChild>
-        <DropdownMenuTrigger asChild>
-          <Button variant="ghost" size="icon-sm" aria-label="Sort">
-            <ArrowDownUp />
-          </Button>
-        </DropdownMenuTrigger>
-      </TooltipTrigger>
-      <TooltipContent>Sort: {SORTS.find(([s]) => s === sortBy)?.[1]}</TooltipContent>
-    </Tooltip>
-    <DropdownMenuContent align="end" className="min-w-40">
-      <DropdownMenuRadioGroup value={sortBy} onValueChange={(v) => setSortBy(v as SortBy)}>
-        {SORTS.map(([s, name]) => (
-          <DropdownMenuRadioItem key={s} value={s}>
-            {name}
-          </DropdownMenuRadioItem>
-        ))}
-      </DropdownMenuRadioGroup>
-    </DropdownMenuContent>
-  </DropdownMenu>
-);
+const SortMenu = ({ sortBy, setSortBy }: { sortBy: SortBy; setSortBy: (s: SortBy) => void }) => {
+  const { tip, onCloseAutoFocus } = useQuietTip();
+  return (
+    <DropdownMenu modal={false}>
+      <Tooltip {...tip}>
+        <TooltipTrigger asChild>
+          <DropdownMenuTrigger asChild>
+            <Button variant="ghost" size="icon-sm" aria-label="Sort">
+              <ArrowDownUp />
+            </Button>
+          </DropdownMenuTrigger>
+        </TooltipTrigger>
+        <TooltipContent>Sort: {SORTS.find(([s]) => s === sortBy)?.[1]}</TooltipContent>
+      </Tooltip>
+      <DropdownMenuContent align="end" className="min-w-40" onCloseAutoFocus={onCloseAutoFocus}>
+        <DropdownMenuRadioGroup value={sortBy} onValueChange={(v) => setSortBy(v as SortBy)}>
+          {SORTS.map(([s, name]) => (
+            <DropdownMenuRadioItem key={s} value={s}>
+              {name}
+            </DropdownMenuRadioItem>
+          ))}
+        </DropdownMenuRadioGroup>
+      </DropdownMenuContent>
+    </DropdownMenu>
+  );
+};
 
 const LAYOUTS: [Layout, string, typeof List][] = [
   ["tree", "Tree", ListTree],
@@ -423,12 +443,13 @@ function FoldOrGroup({
   setGroupBy,
 }: { flat: boolean; inner: string[]; groupBy: GroupBy; setGroupBy: (g: GroupBy) => void } & Omit<Fold, "toggle">) {
   const [menu, setMenu] = useState(false);
+  const { tip, onCloseAutoFocus } = useQuietTip();
   if (!flat && inner.length === 0) return null;
   const shut = inner.every((id) => !closed.has(id));
   const label = flat ? "Group by" : `${shut ? "Collapse" : "Expand"} all`;
   return (
     <DropdownMenu modal={false} open={flat && menu} onOpenChange={setMenu}>
-      <Tooltip>
+      <Tooltip {...tip}>
         <TooltipTrigger asChild>
           <DropdownMenuTrigger asChild>
             <Button
@@ -445,7 +466,7 @@ function FoldOrGroup({
         </TooltipTrigger>
         <TooltipContent>{flat ? `Group by: ${GROUPS.find(([g]) => g === groupBy)?.[1]}` : label}</TooltipContent>
       </Tooltip>
-      <DropdownMenuContent align="end" className="min-w-40">
+      <DropdownMenuContent align="end" className="min-w-40" onCloseAutoFocus={onCloseAutoFocus}>
         <DropdownMenuRadioGroup value={groupBy} onValueChange={(v) => setGroupBy(v as GroupBy)}>
           {GROUPS.map(([g, name]) => (
             <DropdownMenuRadioItem key={g} value={g}>
