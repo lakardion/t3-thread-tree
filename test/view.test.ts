@@ -401,3 +401,39 @@ describe("flatLists", () => {
     ]);
   });
 });
+
+describe("closed sections", () => {
+  const units = flatten([
+    project("p", [
+      branch("g", [thread("a", 1, [], "working"), thread("b", 1, [], "idle"), thread("c", 1, [], "done")]),
+    ]),
+  ]);
+  const shut = new Set(["idle"]);
+  test("keeps the header with the open count and drops the units", () => {
+    const items = sequence(units, "status", shut);
+    expect(items.map((i) => i.id)).toEqual(["sec:working", "t:a", "sec:idle", "sec:done", "t:c"]);
+    expect(items.find((i) => i.id === "sec:idle")).toMatchObject({ open: false, count: 1 });
+    expect(items.find((i) => i.id === "sec:done")).toMatchObject({ open: true, count: 1 });
+  });
+  test("gives its units no drag", () => {
+    const lists = flatLists(sequence(units, "status", shut));
+    expect([...lists.values()].flat()).not.toContain("t:b");
+    expect(lists.get("flat:idle")).toEqual([]);
+  });
+  test("does nothing with Group by None", () => {
+    expect(sequence(units, "none", shut)).toEqual(units);
+  });
+});
+
+describe("hidden snoozed threads", () => {
+  const units = flatten([project("p", [branch("g", [thread("s", 1, [thread("d", 1, [], "done")], "snoozed")])])]);
+  test("a snoozed parent with a done child lands in Done, as a context row", () => {
+    const items = sequence(units, "status", new Set(), false);
+    expect(items.map((i) => i.id)).toEqual(["sec:done", "t:s"]);
+    expect(items[0]).toMatchObject({ count: 1 });
+    expect(sectionOf(items, items[1])).toEqual(["done"]);
+  });
+  test("a snoozed thread still places in Idle and snoozed by default", () => {
+    expect(sequence(units, "status").map((i) => i.id)).toEqual(["sec:idle", "t:s"]);
+  });
+});

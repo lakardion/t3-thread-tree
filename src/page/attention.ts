@@ -22,20 +22,25 @@ export function countAttention(projects: Branch[]): Counts {
   return c;
 }
 
-const keepThreads = (ts: ThreadNode[]): ThreadNode[] =>
+const keepThreads = (ts: ThreadNode[], keep: (t: ThreadNode) => boolean): ThreadNode[] =>
   ts.flatMap((t) => {
-    const children = keepThreads(t.children);
-    return needsYou(t.status) || children.length > 0 ? [{ ...t, children }] : [];
+    const children = keepThreads(t.children, keep);
+    return keep(t) || children.length > 0 ? [{ ...t, children }] : [];
   });
 
-const keepBranch = (b: Branch): Branch[] => {
-  const branches = b.branches.flatMap(keepBranch);
-  const threads = keepThreads(b.threads);
+const keepBranch = (b: Branch, keep: (t: ThreadNode) => boolean): Branch[] => {
+  const branches = b.branches.flatMap((x) => keepBranch(x, keep));
+  const threads = keepThreads(b.threads, keep);
   return branches.length > 0 || threads.length > 0 ? [{ ...b, branches, threads }] : [];
 };
 
 /** The tree with only the threads that need the user, and the spawners, groups and projects that hold them. */
-export const onlyNeedsYou = (projects: Branch[]): Branch[] => projects.flatMap(keepBranch);
+export const onlyNeedsYou = (projects: Branch[]): Branch[] =>
+  projects.flatMap((b) => keepBranch(b, (t) => needsYou(t.status)));
+
+/** The tree without snoozed threads. A snoozed thread with a kept subthread stays; empty groups and projects drop out. */
+export const withoutSnoozed = (projects: Branch[]): Branch[] =>
+  projects.flatMap((b) => keepBranch(b, (t) => t.status !== "snoozed"));
 
 const envOf = (t: ThreadNode) => decodeURIComponent(t.href.split("/")[3] ?? "");
 

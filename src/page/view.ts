@@ -59,7 +59,9 @@ export type FlatUnit =
   | { kind: "thread"; id: string; t: ThreadNode; project: Branch; review: boolean }
   | { kind: "stack"; id: string; run: Branch[]; project: Branch };
 
-export type FlatItem = FlatUnit | { kind: "section"; id: string; key: string; label: string; count: number };
+export type FlatItem =
+  | FlatUnit
+  | { kind: "section"; id: string; key: string; label: string; count: number; open: boolean; statuses: Status[] };
 
 const threadUnit = (t: ThreadNode, project: Branch, review: boolean): FlatUnit => ({
   kind: "thread",
@@ -115,8 +117,6 @@ export const SECTIONS: [key: string, label: string, statuses: Status[]][] = [
   ["done", "Done", ["done"]],
 ];
 
-const sectionIndex = (st: Status) => SECTIONS.findIndex(([, , statuses]) => statuses.includes(st));
-
 /** The sections that sort by Wait, oldest first, and have no drag. */
 export const WAIT_SECTIONS = new Set(["needs-input", "plan-ready", "your-turn"]);
 
@@ -130,21 +130,37 @@ const waitOf = (u: FlatUnit, statuses: Status[]): string | null =>
 /**
  * Groups units by status, in section order, and drops empty sections. A unit goes by its most urgent thread,
  * subthreads included. Units keep their input order, except in a waiting section: there the oldest Wait comes
- * first, units with no Wait last, and ties keep the input order.
+ * first, units with no Wait last, and ties keep the input order. With `snoozed` false, the snoozed status is in no
+ * section: a snoozed thread does not place its unit.
  */
-export function sections(units: FlatUnit[]): { key: string; label: string; statuses: Status[]; units: FlatUnit[] }[] {
-  const at = (u: FlatUnit) => Math.min(...unitThreads(u).map((t) => sectionIndex(t.status)));
-  return SECTIONS.map(([key, label, statuses], i) => {
-    const inSection = units.filter((u) => at(u) === i);
-    return {
-      key,
-      label,
-      statuses,
-      units: WAIT_SECTIONS.has(key)
-        ? inSection.toSorted((a, b) => bySince(waitOf(a, statuses), waitOf(b, statuses)))
-        : inSection,
-    };
-  }).filter((s) => s.units.length > 0);
+export function sections(
+  units: FlatUnit[],
+  snoozed = true,
+): { key: string; label: string; statuses: Status[]; units: FlatUnit[] }[] {
+  const list = SECTIONS.map(([key, label, statuses]): [string, string, Status[]] => [
+    key,
+    label,
+    snoozed ? statuses : statuses.filter((s) => s !== "snoozed"),
+  ]);
+  const indexOf = (st: Status) => list.findIndex(([, , statuses]) => statuses.includes(st));
+  const placed = (ts: ThreadNode[]) => ts.map((t) => indexOf(t.status)).filter((n) => n >= 0);
+  const at = (u: FlatUnit) => {
+    const own = placed(unitThreads(u));
+    return Math.min(...(own.length > 0 ? own : placed(everyThread(u))));
+  };
+  return list
+    .map(([key, label, statuses], i) => {
+      const inSection = units.filter((u) => at(u) === i);
+      return {
+        key,
+        label,
+        statuses,
+        units: WAIT_SECTIONS.has(key)
+          ? inSection.toSorted((a, b) => bySince(waitOf(a, statuses), waitOf(b, statuses)))
+          : inSection,
+      };
+    })
+    .filter((s) => s.units.length > 0);
 }
 
 /** True when the thread is a context row in a section of `statuses`: it is settled or has another status. */
@@ -155,20 +171,31 @@ export const folds = (t: ThreadNode, statuses: Status[]): boolean => flat(t).eve
 
 /**
  * The flat sequence: the units, or section headers each followed by its units. A header counts the threads that
- * match its section, subthreads included. Context rows are not counted.
+ * match its section, subthreads included. Context rows are not counted. A section in `shut` keeps its header and
+ * count and gives no units. `shut` does nothing without grouping.
  */
-export const sequence = (units: FlatUnit[], groupBy: GroupBy): FlatItem[] =>
+export const sequence = (
+  units: FlatUnit[],
+  groupBy: GroupBy,
+  shut: ReadonlySet<string> = new Set(),
+  snoozed = true,
+): FlatItem[] =>
   groupBy === "status"
-    ? sections(units).flatMap((s): FlatItem[] => [
-        {
-          kind: "section",
-          id: `sec:${s.key}`,
-          key: s.key,
-          label: s.label,
-          count: s.units.flatMap(everyThread).filter((t) => !isContext(t, s.statuses)).length,
-        },
-        ...s.units,
-      ])
+    ? sections(units, snoozed).flatMap((s): FlatItem[] => {
+        const open = !shut.has(s.key);
+        return [
+          {
+            kind: "section",
+            id: `sec:${s.key}`,
+            key: s.key,
+            label: s.label,
+            count: s.units.flatMap(everyThread).filter((t) => !isContext(t, s.statuses)).length,
+            open,
+            statuses: s.statuses,
+          },
+          ...(open ? s.units : []),
+        ];
+      })
     : units;
 
 /**
@@ -179,7 +206,7 @@ export const sectionOf = (items: FlatItem[], i: FlatItem): Status[] | null => {
   const at = items.findIndex((x) => x.id === i.id);
   if (i.kind === "section" || at < 0) return null;
   const head = items.slice(0, at).findLast((x) => x.kind === "section");
-  return SECTIONS.find(([key]) => key === head?.key)?.[2] ?? null;
+  return head?.kind === "section" ? head.statuses : null;
 };
 
 /** The ids that a flat item puts in the row-order signature. */
