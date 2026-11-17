@@ -1,7 +1,7 @@
 ---
 title: Close the "Group by: Status" tooltip
 type: wayfinder:task
-status: open
+status: in-review
 assignee: damian.lucero
 blocked-by: [03-key-m02-stack-numbers]
 ---
