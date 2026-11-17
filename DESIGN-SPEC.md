@@ -21,16 +21,16 @@ Each row gives the choice and its one reason.
 | Header          | Attention summary (A), "Needs you" filter (A), theme choice (B), first-load skeleton (A)                                                           | They answer "what needs me?" before the user reads the tree.               |
 | Inventory       | Row: status phrase, elapsed time, age, PR marks. All other useful fields: details.                                                                 | The row holds only what the user scans.                                    |
 
-Rejected from both proposals: the last message of a thread, in any place; subagent and background task counts, in any place; a model chip, tags, pin, limit and stop flags on the row (they are in details); exhaustive details with ids (B); a hover card (A); a popover for extra PR links (B).
+Rejected from both proposals: subagent and background task counts, in any place; a model chip, tags, pin, limit and stop flags on the row (they are in details); exhaustive details with ids (B); a hover card (A); a popover for extra PR links (B).
 
 ### Changes to the "not shown" rules
 
-| Rule from the rough tree UI                       | Result                                                                                  |
-| ------------------------------------------------- | --------------------------------------------------------------------------------------- |
-| No update age                                     | Overturned. The row shows the age.                                                      |
-| No launched-by hint                               | Overturned. Details show "Launched by" when the thread does not nest under its spawner. |
-| No last message                                   | Kept.                                                                                   |
-| No subagent rows, counts or signals (tree rule 2) | Kept. The page does not read `pendingBackgroundTasks`.                                  |
+| Rule from the rough tree UI                       | Result                                                                                                        |
+| ------------------------------------------------- | ------------------------------------------------------------------------------------------------------------- |
+| No update age                                     | Overturned. The row shows the age.                                                                            |
+| No launched-by hint                               | Overturned. Details show "Launched by" when the thread does not nest under its spawner.                       |
+| No last message                                   | Overturned for the details block and the send dialog. They load it on demand. The row still shows no message. |
+| No subagent rows, counts or signals (tree rule 2) | Kept. The page does not read `pendingBackgroundTasks`.                                                        |
 
 ### Correction to SPEC.md › UI
 
@@ -462,22 +462,23 @@ The details button opens a block below the row, inside the same list item, inden
 
 The block is a two-column list of label and value, 12 px. It shows a line only when the value is present. Paths, branches and ids of models are in mono.
 
-| Line        | Value                                                                                                                                                         |
-| ----------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| Request     | The raw request kind and its age: "command · 3m".                                                                                                             |
-| Error       | `lastErrorClass`, `lastErrorCode`, then `lastError` as plain text.                                                                                            |
-| Limit       | "resets 14:00" from `usageLimitResetAt` or `limitRecovery.resetAt`, and "auto-resume" when `limitRecovery.autoResume` is true.                                |
-| Run         | "Stop requested" when `latestRunStopRequested` is true.                                                                                                       |
-| Model       | `modelSelection.model`, and "plan mode" when `interactionMode` is `plan`.                                                                                     |
-| Branch      | `branch`.                                                                                                                                                     |
-| Worktree    | `worktreePath`, with the home folder as `~`.                                                                                                                  |
-| Launched by | The title of the spawner, as a link to that thread in T3. Only when the thread has a spawner and does not nest under it.                                      |
-| Origin      | "Fork of `<title>`" from `forkedFrom` when the source thread is known, "Delegated from `<title>`" from `delegatedFrom`, or "via `<label>`" from `linkOrigin`. |
-| Started by  | `createdBy` and `creationSource`: "agent via mcp".                                                                                                            |
-| Created     | Relative age of `createdAt`.                                                                                                                                  |
-| Goal        | `goal.objective` and `goal.status`.                                                                                                                           |
-| Tags        | `tags` as plain text. "Pinned" when `pinnedAt` is set.                                                                                                        |
-| PRs         | One line for each PR, all PRs of the row: number, title, state, checks, review, "+212 -40 · 9 files".                                                         |
+| Line         | Value                                                                                                                                                         |
+| ------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Request      | The raw request kind and its age: "command · 3m".                                                                                                             |
+| Error        | `lastErrorClass`, `lastErrorCode`, then `lastError` as plain text.                                                                                            |
+| Last message | The end of the newest complete assistant message, in a scroll box. It loads when the block opens.                                                             |
+| Limit        | "resets 14:00" from `usageLimitResetAt` or `limitRecovery.resetAt`, and "auto-resume" when `limitRecovery.autoResume` is true.                                |
+| Run          | "Stop requested" when `latestRunStopRequested` is true.                                                                                                       |
+| Model        | `modelSelection.model`, and "plan mode" when `interactionMode` is `plan`.                                                                                     |
+| Branch       | `branch`.                                                                                                                                                     |
+| Worktree     | `worktreePath`, with the home folder as `~`.                                                                                                                  |
+| Launched by  | The title of the spawner, as a link to that thread in T3. Only when the thread has a spawner and does not nest under it.                                      |
+| Origin       | "Fork of `<title>`" from `forkedFrom` when the source thread is known, "Delegated from `<title>`" from `delegatedFrom`, or "via `<label>`" from `linkOrigin`. |
+| Started by   | `createdBy` and `creationSource`: "agent via mcp".                                                                                                            |
+| Created      | Relative age of `createdAt`.                                                                                                                                  |
+| Goal         | `goal.objective` and `goal.status`.                                                                                                                           |
+| Tags         | `tags` as plain text. "Pinned" when `pinnedAt` is set.                                                                                                        |
+| PRs          | One line for each PR, all PRs of the row: number, title, state, checks, review, "+212 -40 · 9 files".                                                         |
 
 ### Typography and focus
 
@@ -510,14 +511,14 @@ All new stream fields are optional or nullable in the T3 shell schema (`Orchestr
 
 ### New fields to decode from the stream
 
-| For          | Thread fields                                                                                                                                                                                                                                                                                                                                                                                                                                    |
-| ------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
-| Status       | `activityRunStatus`, `blockedOnThreadWait`, `pendingRuntimeRequest.createdAt`, `pendingRuntimeRequest.blocking`, `pendingGuestMessageCount`, `hasActionableProposedPlan`, `interactionMode`, `latestRunCompletedAt`, `lastVisitedAt`                                                                                                                                                                                                             |
-| Elapsed time | `activityRunStartedAt`, `latestRunStartedAt`                                                                                                                                                                                                                                                                                                                                                                                                     |
-| PR marks     | `pullRequests[].snapshot`: `isDraft`, `checksState`, `reviewDecision`, `mergeability`                                                                                                                                                                                                                                                                                                                                                            |
-| Stack rail   | `pullRequests[].stack.base`                                                                                                                                                                                                                                                                                                                                                                                                                      |
-| Details      | `lastError`, `lastErrorClass`, `lastErrorCode`, `usageLimitResetAt`, `limitRecovery.resetAt`, `limitRecovery.autoResume`, `latestRunStopRequested`, `modelSelection.model`, `branch`, `worktreePath`, `forkedFrom`, `delegatedFrom.title`, `linkOrigin.label`, `createdBy`, `creationSource`, `createdAt`, `goal.objective`, `goal.status`, `tags`, `pinnedAt`, and `pullRequests[].snapshot`: `title`, `additions`, `deletions`, `changedFiles` |
-| Project card | `repositoryIdentity.owner` and `repositoryIdentity.name` of the project                                                                                                                                                                                                                                                                                                                                                                          |
+| For          | Thread fields                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                         |
+| ------------ | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Status       | `activityRunStatus`, `blockedOnThreadWait`, `pendingRuntimeRequest.createdAt`, `pendingRuntimeRequest.blocking`, `pendingGuestMessageCount`, `hasActionableProposedPlan`, `interactionMode`, `latestRunCompletedAt`, `lastVisitedAt`                                                                                                                                                                                                                                                                                  |
+| Elapsed time | `activityRunStartedAt`, `latestRunStartedAt`                                                                                                                                                                                                                                                                                                                                                                                                                                                                          |
+| PR marks     | `pullRequests[].snapshot`: `isDraft`, `checksState`, `reviewDecision`, `mergeability`                                                                                                                                                                                                                                                                                                                                                                                                                                 |
+| Stack rail   | `pullRequests[].stack.base`                                                                                                                                                                                                                                                                                                                                                                                                                                                                                           |
+| Details      | The newest complete assistant message (loaded when the block opens), `lastError`, `lastErrorClass`, `lastErrorCode`, `usageLimitResetAt`, `limitRecovery.resetAt`, `limitRecovery.autoResume`, `latestRunStopRequested`, `modelSelection.model`, `branch`, `worktreePath`, `forkedFrom`, `delegatedFrom.title`, `linkOrigin.label`, `createdBy`, `creationSource`, `createdAt`, `goal.objective`, `goal.status`, `tags`, `pinnedAt`, and `pullRequests[].snapshot`: `title`, `additions`, `deletions`, `changedFiles` |
+| Project card | `repositoryIdentity.owner` and `repositoryIdentity.name` of the project                                                                                                                                                                                                                                                                                                                                                                                                                                               |
 
 ### Tree type
 

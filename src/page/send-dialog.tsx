@@ -1,5 +1,5 @@
 import { LoaderCircle, Send } from "lucide-react";
-import { createContext, useContext, useState, type ReactNode } from "react";
+import { createContext, useContext, useEffect, useState, type ReactNode } from "react";
 
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { Button } from "@/components/ui/button";
@@ -122,6 +122,30 @@ export function ActionForm({
   );
 }
 
+/** The tail of a thread's last message. `undefined` while the first answer for `id` loads, `null` when there is none or the fetch fails. Refetches when `id` or `key` changes, and keeps the previous text of the same thread until the new answer comes. */
+export function useLastMessage(id: string, key: string | null): string | null | undefined {
+  const url = `/t3/last-message?id=${encodeURIComponent(id)}&v=${encodeURIComponent(key ?? "")}`;
+  const [got, setGot] = useState<{ id: string; text: string | null }>();
+  useEffect(() => {
+    let alive = true;
+    void fetch(url)
+      .then((r) => (r.ok ? r.json() : { text: null }))
+      .catch(() => ({ text: null }))
+      .then((b: { text: string | null }) => alive && setGot({ id, text: b.text }));
+    return () => {
+      alive = false;
+    };
+  }, [id, url]);
+  return got?.id === id ? got.text : undefined;
+}
+
+/** A muted, scrollable box with the message text. */
+export const LastMessage = ({ text }: { text: string }) => (
+  <div className="max-h-40 overflow-auto rounded-[6px] bg-muted p-2 text-xs break-words whitespace-pre-wrap text-muted-foreground">
+    {text}
+  </div>
+);
+
 type Props = {
   threadIds: string[];
   live: Map<string, ThreadNode>;
@@ -142,6 +166,7 @@ function SendForm({ threadIds, live, titles, message, fixed, onSent }: Props) {
     return t?.title || threadIds[0];
   });
   const selected = live.get(target);
+  const last = useLastMessage(target, selected?.updatedAt ?? null);
 
   return (
     <ActionForm
@@ -195,6 +220,17 @@ function SendForm({ threadIds, live, titles, message, fixed, onSent }: Props) {
         <p className="m-0 text-xs text-muted-foreground">
           This thread is working. The message waits for its next turn.
         </p>
+      )}
+      {selected?.status === "needs-input" && selected.phrase === "Approval" && (
+        <p className="m-0 text-xs text-muted-foreground">
+          This thread waits for an approval. A message does not approve the request. Approve it in T3.
+        </p>
+      )}
+      {last && (
+        <div className="grid gap-1">
+          <span className="text-xs text-muted-foreground">Last message</span>
+          <LastMessage text={last} />
+        </div>
       )}
       <Textarea
         aria-label="Message"

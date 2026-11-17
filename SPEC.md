@@ -254,13 +254,14 @@ The server runs the T3 CLI as a child process (`Bun.spawn`), like the brief runn
 
 ### HTTP contract
 
-Ids go in the JSON body, not in the path, because ids hold `:` and `%`. The module `src/server/send.ts` exports a service with `routes`, as `briefService` does. The response types live in `src/shared/send.ts`.
+Ids go in the JSON body, not in the path, because ids hold `:` and `%`. The read-only `GET /t3/last-message` takes the id as a query value. The module `src/server/send.ts` exports a service with `routes`, as `briefService` does. The response types live in `src/shared/send.ts`.
 
-| Route            | Body                                                    | Success                                                               |
-| ---------------- | ------------------------------------------------------- | --------------------------------------------------------------------- |
-| `GET /t3/cli`    | none                                                    | `200 { available: boolean, path: string }`                            |
-| `POST /t3/send`  | `{ threadId: string, message: string }`                 | `200 { delivery: "started" \| "queued" \| "steered" \| "restarted" }` |
-| `POST /t3/start` | `{ projectId: string, title: string, message: string }` | `200 { threadId: string }`                                            |
+| Route                      | Body                                                    | Success                                                                          |
+| -------------------------- | ------------------------------------------------------- | -------------------------------------------------------------------------------- |
+| `GET /t3/cli`              | none                                                    | `200 { available: boolean, path: string }`                                       |
+| `POST /t3/send`            | `{ threadId: string, message: string }`                 | `200 { delivery: "started" \| "queued" \| "steered" \| "restarted" }`            |
+| `GET /t3/last-message?id=` | none                                                    | `200 { text: string \| null }`. `400` without `id`. `404` for an unknown thread. |
+| `POST /t3/start`           | `{ projectId: string, title: string, message: string }` | `200 { threadId: string }`                                                       |
 
 `delivery` comes from the `send --json` output. `threadId` comes from the `start --json` output.
 
@@ -291,6 +292,8 @@ One reusable component on the shadcn Dialog (Radix).
 - **Target, from a row:** fixed. The dialog shows the icon and title of the row, with no picker.
 - **Message:** a textarea, editable. From a step, it starts with the step prompt. From a row, it is empty. Confirm send is disabled while the message is empty after trim.
 - **Busy note:** when the target status is `working`, `starting` or `waiting`, a muted line under the target says "This thread is working. The message waits for its next turn." Other statuses show no note.
+- **Last message:** a muted box above the textarea, with the label "Last message". It shows the end of the last message of the target thread, in a box of at most 10 rem with scroll. It loads when the dialog opens and again when the target changes. It shows nothing while it loads or when the thread has no message.
+- **Approval note:** when the target status is `needs-input` and its phrase is "Approval", a muted line says "This thread waits for an approval. A message does not approve the request. Approve it in T3."
 - **Buttons:** Cancel and Confirm send.
 - **Keys:** Cmd/Ctrl+Enter sends, Escape cancels, and Enter makes a new line.
 - **In flight:** Confirm send shows a spinner. Until the request ends, the fields, Cancel, Escape and the outside click do nothing. Thus a cancel never hides a message that was sent.
