@@ -56,6 +56,7 @@ Decided at charting (by the user):
 - **Builders:** `/wayfinder-implement` dispatches each key to its own session.
 
 - [How does a row that waits on the user show its phrase and Wait?](tickets/01-row-wait-look.md): Sol position (beside the icon), the row end keeps the age; needs-you rows show phrase + Wait, failed shows "Failed" only, no-Wait rows show the phrase only. Reversal of #18 confirmed.
+- [How do the waiting sections of the flat view sort by Wait?](tickets/02-sort-by-wait-rules.md): oldest Wait first in Needs input, Plan ready and Your turn, with both sort choices; drag off there, stored order kept; no-Wait rows last; a stack sorts by its oldest Wait in the section's status set. Override of `SPEC.md:103` confirmed.
 
 ## Not yet specified
 

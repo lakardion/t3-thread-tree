@@ -1,8 +1,8 @@
 ---
 title: How do the waiting sections of the flat view sort by Wait?
 type: grilling
-status: open
-assignee:
+status: closed
+assignee: damian.lucero
 blocked-by: [01-row-wait-look]
 ---
 
@@ -26,3 +26,15 @@ Decide:
 ## On resolution
 
 Write the `## Spec` and `## Done when` of [the build ticket](05-sort-by-wait-build.md) from the answer.
+
+## Resolution
+
+The user agreed to these rules:
+
+- **Reversal confirmed.** In the flat view with "Group by: Status", the Needs input, Plan ready and Your turn sections sort by **Wait**. This overrides the manual order of `SPEC.md:103` in these three sections only. The other sections keep their order.
+- **Sort menu.** The Wait order applies with "Manual" and with "Last updated". The menu changes only the other sections.
+- **Drag.** Drag is off in the three sections. The stored flat order (`thread-tree:order`, list `flat`) stays unchanged, so a row that stops waiting goes back to its stored position. Drag stays on in the other sections with "Manual".
+- **Order.** Oldest Wait first. A row with no `since` (a guest message) goes last. Ties keep the input order (the manual order with "Manual", the `lastRun` order with "Last updated").
+- **Stacks.** A stack sorts by the oldest Wait of its threads whose status is in its section's set. Example: a stack in Needs input sorts by its oldest needs-input thread.
+- **Subthreads.** They stay under their parent and do not change its position. The parent's own Wait sorts the unit.
+- **Tree view and "Group by: None".** They keep their order, with no Wait sort.

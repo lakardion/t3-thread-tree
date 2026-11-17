@@ -2,7 +2,7 @@
 title: Which thread does "Open next" open, and where is the control?
 type: grilling
 status: open
-assignee:
+assignee: damian.lucero
 blocked-by: [01-row-wait-look]
 ---
 
