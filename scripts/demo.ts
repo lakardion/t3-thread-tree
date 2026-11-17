@@ -1,6 +1,6 @@
 /** Serves the page with made-up threads, run through the real tree rules. No T3 needed. */
 import index from "../src/page/index.html";
-import { briefInput, briefService, type Outcome } from "../src/server/brief.ts";
+import { briefInput, briefService, lastMessageRoutes, type Outcome } from "../src/server/brief.ts";
 import { buildTree } from "../src/server/build-tree.ts";
 import { cliPath, type CliRun, sendService } from "../src/server/send.ts";
 import type { Pr, Project, Thread } from "../src/server/t3.ts";
@@ -189,26 +189,53 @@ const threads: Thread[] = [
   }),
   t("Rewrite the install page", { id: "launched", projectId: "docs" }),
   t("DOC-16 · Archive the old tutorial", { projectId: "docs", settledAt: ago(60) }),
+  t("Cache rollout dispatch", { id: "dispatch", projectId: "api", ...completed }),
+  t("Search revamp map", { id: "search", projectId: "api", status: "idle" }),
+  t("Search: plan the new index", { id: "search-plan", projectId: "api", ...completed }),
+  t("Search: build the index writer", { id: "search-w", projectId: "api", status: "running" }),
+  t("Search: backfill old documents", { id: "search-b", projectId: "api", pending: request("user_input") }),
+  t("Search: rank by freshness", { id: "search-r", projectId: "api", snoozedUntil: later(45) }),
+  ...[4201, 4202, 4203].map((own, i) =>
+    t(`cache-0${i + 1} · ${["Add the cache client", "Cache the search results", "Purge on write"][i]}`, {
+      id: `cache-${i + 1}`,
+      projectId: "api",
+      status: i === 2 ? "running" : "idle",
+      prs: [4201, 4202, 4203].map((n) =>
+        n === own ? pr(n, "created", "open", { stackBase: "main", checks: "passing" }) : pr(n, "stack"),
+      ),
+    }),
+  ),
 ];
 /** The thread that the push steps add to API-77 and remove again. */
 const extra = t("API-77 · Add a per-key quota dashboard", { projectId: "api" });
-const spawners: Record<string, string> = { m1: "map", m2: "map", m3: "map", launched: "map" };
+const spawners: Record<string, string> = {
+  m1: "map",
+  m2: "map",
+  m3: "map",
+  launched: "map",
+  "cache-1": "dispatch",
+  "cache-2": "cache-1",
+  "cache-3": "cache-2",
+  "search-plan": "search",
+  "search-r": "search",
+  "search-w": "search-plan",
+  "search-b": "search-plan",
+};
 const projects = new Map<string, Project>([
   ["storefront", { title: "storefront", repo: "acme/storefront" }],
   ["api", { title: "api-gateway", repo: "acme/api-gateway" }],
   ["docs", { title: "docs-site", repo: null }],
 ]);
 
-const projectsFor = (settled: boolean) =>
-  buildTree({ threads, projects, spawnerOf: (id) => spawners[id], environmentId: "demo", settled, now });
-const treeFor = (settled: boolean) =>
+const projectsFor = (settled: boolean, nest = false) =>
+  buildTree({ threads, projects, spawnerOf: (id) => spawners[id], environmentId: "demo", settled, nest, now });
+const treeFor = (settled: boolean, nest: boolean) =>
   JSON.stringify({
     conn: process.env.CONN ?? "up",
     lastUpdate: new Date(now).toISOString(),
     linear: { workspace: "acme", teams: ["SHOP"] },
-    projects: projectsFor(settled),
+    projects: projectsFor(settled, nest),
   });
-let trees = { open: treeFor(false), settled: treeFor(true) };
 
 /** The model part of the sample brief. Code makes the `answer`, `fix` and `merge` actions from the tree, so these threads have none of them. `demo-27` is settled, so its link shows struck through. */
 const SAMPLE: BriefAction[] = [
@@ -296,6 +323,18 @@ const sender = sendService({
   run: stubCli,
 });
 
+/** Stub last messages by thread id. Other threads get one line from their title. The ids in `NO_MESSAGE` have none. */
+const MESSAGES: Record<string, string> = {
+  "demo-2":
+    "The saved cards list works. One open point: should a new card become the default at once, or only when the user picks it?",
+  "demo-15":
+    "The retry queue needs a new table. I will run the migration next:\n\nbun run db:migrate --name retry_queue\n\nApprove the command to continue.",
+  "demo-21": "The retry policy change is ready. I need to run the load test script before I confirm the numbers.",
+};
+const NO_MESSAGE = new Set(["demo-5", "map", "demo-16", "launched"]);
+const lastMessage = (id: string) =>
+  NO_MESSAGE.has(id) ? null : (MESSAGES[id] ?? `I finished the work on "${byId(id).title}".`);
+
 const byId = (id: string) => threads.find((th) => th.id === id)!;
 const setPr = (id: string, n: number, over: Partial<Pr>) => {
   const th = byId(id);
@@ -334,7 +373,6 @@ if (process.env.PUSH === "1") {
   let step = 0;
   setInterval(() => {
     STEPS[step++ % STEPS.length]();
-    trees = { open: treeFor(false), settled: treeFor(true) };
     pushes.forEach((push) => push());
   }, 3000);
 }
@@ -348,13 +386,16 @@ const server = Bun.serve({
     "/": index,
     ...brief.routes,
     ...sender.routes,
+    ...lastMessageRoutes({ read: lastMessage, has: (id) => threads.some((th) => th.id === id) }),
     "/events": async (req) => {
       server.timeout(req, 0);
       await Bun.sleep(Number(process.env.DELAY ?? 0));
-      const settled = new URL(req.url).searchParams.get("settled") === "1";
+      const params = new URL(req.url).searchParams;
+      const settled = params.get("settled") === "1";
+      const nest = params.get("nest") === "1";
       const enc = new TextEncoder();
       let send: (event: string, data: string) => void;
-      const push = () => send("", settled ? trees.settled : trees.open);
+      const push = () => send("", treeFor(settled, nest));
       return new Response(
         new ReadableStream({
           start(ctrl) {

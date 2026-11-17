@@ -75,10 +75,11 @@ A **top-level thread** has no native `parentThreadId`. A **subagent** has `relat
 6. **Placement.** A thread is always placed in its own `projectId`. Apply the first rule that matches:
    1. A title that starts with `Review #` goes under `Project › Reviews › <key>`, or `Project › Reviews › No issue key` if it has no key.
    2. A keyed thread goes under `Project › <key>`.
-   3. A keyless thread with a visible spawner in the same project nests under that spawner.
-   4. Any other keyless thread goes under `Project › No issue key`.
+   3. A keyless thread in a PR stack goes under `Project › PR stack #<n>`, where `<n>` is the bottom PR of the stack. All keyless threads of one stack share this group, and it gets the stack rail. A stack outranks the spawner.
+   4. With launch nesting on, a keyless thread with a visible spawner in the same project nests under that spawner. Launch nesting is a page setting, off by default; the page sends it as `nest=1` on `/events`.
+   5. Any other keyless thread goes under `Project › No issue key`.
 7. **Launcher threads** get no special rule.
-8. **PR stack:** it adds no level to the tree. Each thread in a stack shows a badge with its position, for example `⧉ 3/6`. Key groups in one project that share a stack sit next to each other, in stack order.
+8. **PR stack:** it adds no level to the tree. Each thread in a stack shows a badge with its position, for example `⧉ 3/6`. Key groups and the stack group in one project that share a stack sit next to each other, in stack order. A group with no PR of its own in the stack goes after the others.
    - Stack membership: the thread's open PRs with `source` `created`, `stack` or `agent`.
    - Stack order: as computed by `build.py` on branch `prototype/005-tree-ui`.
 9. **Order:**
@@ -92,7 +93,7 @@ A **top-level thread** has no native `parentThreadId`. A **subagent** has `relat
 
 ## UI
 
-The page shows an outline tree: Project, group, thread. Each thread row has a status dot, a title link to `t3code://threads/<environmentId>/<threadId>`, a stack badge and PR links. Closed rows are saved in `localStorage`. A toggle shows settled threads. When a Linear workspace is set, an issue key links to its Linear issue. With team keys set, only a key of a listed team links. The "View" panel keeps the workspace and teams in `localStorage`; `LINEAR_WORKSPACE` and `LINEAR_TEAMS` give the default. A banner shows when T3 is down, when no token is set, or when T3 rejects the token. The token banners open the "View" panel.
+The page shows an outline tree: Project, group, thread. Each thread row has a status dot, a title link to `t3code://threads/<environmentId>/<threadId>`, a stack badge and PR links. Closed rows are saved in `localStorage`. A toggle shows settled threads. A second toggle turns on launch nesting. When a Linear workspace is set, an issue key links to its Linear issue. With team keys set, only a key of a listed team links. The "View" panel keeps the workspace and teams in `localStorage`; `LINEAR_WORKSPACE` and `LINEAR_TEAMS` give the default. A banner shows when T3 is down, when no token is set, or when T3 rejects the token. The token banners open the "View" panel.
 
 The header holds the title, the filter with the Needs-you count ("All", "Needs you N"), "What's next", a sort menu ("Manual", "Last updated"), a Tree / Flat switch, one button that is fold all in the tree and a "Group by" menu ("None", "Status") in the flat view, and a "View" button. "View" opens a panel on the right, beside the tree. Its header stays in view while the panel scrolls, and Escape closes it. The panel has three groups. "Updates" (desktop app only) has the version, the update state and its action. "View" has show settled, reset order and the theme as three icons (Light, System, Dark). "Setup" has three folds, closed at first: T3 token, Linear links and the status icon legend. A fold shows its state at the right: green text when set, yellow text with a warning sign when not set, a blue info icon for the legend. The token banners open the panel with the T3 token fold open. When the panel opens in the desktop app, it checks for updates, but not when the last good check is less than 60 s old.
 
@@ -253,13 +254,14 @@ The server runs the T3 CLI as a child process (`Bun.spawn`), like the brief runn
 
 ### HTTP contract
 
-Ids go in the JSON body, not in the path, because ids hold `:` and `%`. The module `src/server/send.ts` exports a service with `routes`, as `briefService` does. The response types live in `src/shared/send.ts`.
+Ids go in the JSON body, not in the path, because ids hold `:` and `%`. The read-only `GET /t3/last-message` takes the id as a query value. The module `src/server/send.ts` exports a service with `routes`, as `briefService` does. The response types live in `src/shared/send.ts`.
 
-| Route            | Body                                                    | Success                                                               |
-| ---------------- | ------------------------------------------------------- | --------------------------------------------------------------------- |
-| `GET /t3/cli`    | none                                                    | `200 { available: boolean, path: string }`                            |
-| `POST /t3/send`  | `{ threadId: string, message: string }`                 | `200 { delivery: "started" \| "queued" \| "steered" \| "restarted" }` |
-| `POST /t3/start` | `{ projectId: string, title: string, message: string }` | `200 { threadId: string }`                                            |
+| Route                      | Body                                                    | Success                                                                          |
+| -------------------------- | ------------------------------------------------------- | -------------------------------------------------------------------------------- |
+| `GET /t3/cli`              | none                                                    | `200 { available: boolean, path: string }`                                       |
+| `POST /t3/send`            | `{ threadId: string, message: string }`                 | `200 { delivery: "started" \| "queued" \| "steered" \| "restarted" }`            |
+| `GET /t3/last-message?id=` | none                                                    | `200 { text: string \| null }`. `400` without `id`. `404` for an unknown thread. |
+| `POST /t3/start`           | `{ projectId: string, title: string, message: string }` | `200 { threadId: string }`                                                       |
 
 `delivery` comes from the `send --json` output. `threadId` comes from the `start --json` output.
 
@@ -290,6 +292,8 @@ One reusable component on the shadcn Dialog (Radix).
 - **Target, from a row:** fixed. The dialog shows the icon and title of the row, with no picker.
 - **Message:** a textarea, editable. From a step, it starts with the step prompt. From a row, it is empty. Confirm send is disabled while the message is empty after trim.
 - **Busy note:** when the target status is `working`, `starting` or `waiting`, a muted line under the target says "This thread is working. The message waits for its next turn." Other statuses show no note.
+- **Last message:** a muted box above the textarea, with the label "Last message". It shows the end of the last message of the target thread, in a box of at most 10 rem with scroll. It loads when the dialog opens and again when the target changes. It shows nothing while it loads or when the thread has no message.
+- **Approval note:** when the target status is `needs-input` and its phrase is "Approval", a muted line says "This thread waits for an approval. A message does not approve the request. Approve it in T3."
 - **Buttons:** Cancel and Confirm send.
 - **Keys:** Cmd/Ctrl+Enter sends, Escape cancels, and Enter makes a new line.
 - **In flight:** Confirm send shows a spinner. Until the request ends, the fields, Cancel, Escape and the outside click do nothing. Thus a cancel never hides a message that was sent.

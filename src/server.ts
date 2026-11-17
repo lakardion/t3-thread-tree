@@ -2,7 +2,7 @@ import { homedir } from "node:os";
 import { join } from "node:path";
 
 import index from "./page/index.html";
-import { briefInput, briefService, detectClis } from "./server/brief.ts";
+import { briefInput, briefService, detectClis, lastMessageRoutes } from "./server/brief.ts";
 import { buildTree } from "./server/build-tree.ts";
 import { mayBeLaunched, needsScan, openLineage } from "./server/lineage.ts";
 import { checkCli, cliPath, sendService } from "./server/send.ts";
@@ -82,12 +82,12 @@ function resolveSpawners() {
   }, 2000);
 }
 
-type Client = { settled: boolean; send: (data: string, event?: string) => void };
+type Client = { settled: boolean; nest: boolean; send: (data: string, event?: string) => void };
 const clients = new Set<Client>();
 
 const linear = parseLinear(process.env.LINEAR_WORKSPACE, process.env.LINEAR_TEAMS);
 
-const treeFor = (settled: boolean): Tree => ({
+const treeFor = (settled: boolean, nest = false): Tree => ({
   conn: ready ? conn : "connecting",
   lastUpdate,
   linear,
@@ -97,6 +97,7 @@ const treeFor = (settled: boolean): Tree => ({
     spawnerOf: (id) => spawners.get(id),
     environmentId,
     settled,
+    nest,
     now: Date.now(),
   }),
 });
@@ -105,10 +106,11 @@ let timer: ReturnType<typeof setTimeout> | undefined;
 function changed() {
   clearTimeout(timer);
   timer = setTimeout(() => {
-    const cache = new Map<boolean, string>();
+    const cache = new Map<string, string>();
     for (const c of clients) {
-      if (!cache.has(c.settled)) cache.set(c.settled, JSON.stringify(treeFor(c.settled)));
-      c.send(cache.get(c.settled)!);
+      const key = `${c.settled}:${c.nest}`;
+      if (!cache.has(key)) cache.set(key, JSON.stringify(treeFor(c.settled, c.nest)));
+      c.send(cache.get(key)!);
     }
   }, 150);
 }
@@ -194,6 +196,7 @@ const server = Bun.serve({
     "/": index,
     ...brief.routes,
     ...send.routes,
+    ...lastMessageRoutes({ read: (id) => lineage.lastMessages([id]).get(id) ?? null, has: (id) => threads.has(id) }),
     "/token": {
       /** JSON only: a cross-site form cannot send it without a CORS preflight, which this server does not answer. */
       POST: async (req) => {
@@ -210,7 +213,9 @@ const server = Bun.serve({
     },
     "/events": (req) => {
       server.timeout(req, 0);
-      const settled = new URL(req.url).searchParams.get("settled") === "1";
+      const params = new URL(req.url).searchParams;
+      const settled = params.get("settled") === "1";
+      const nest = params.get("nest") === "1";
       const enc = new TextEncoder();
       let client: Client;
       return new Response(
@@ -218,11 +223,12 @@ const server = Bun.serve({
           start(ctrl) {
             client = {
               settled,
+              nest,
               send: (d, event) => ctrl.enqueue(enc.encode(`${event ? `event: ${event}\n` : ""}data: ${d}\n\n`)),
             };
             clients.add(client);
             if (settled) scanIfNeeded();
-            client.send(JSON.stringify(treeFor(settled)));
+            client.send(JSON.stringify(treeFor(settled, nest)));
             client.send(JSON.stringify(brief.state()), "brief");
           },
           cancel() {
