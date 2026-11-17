@@ -7,8 +7,10 @@ import {
   codeActions,
   digestOf,
   filterAnswer,
+  lastMessageRoutes,
   parseAnswer,
   stdinFor,
+  tailOf,
   type InputThread,
   type Outcome,
 } from "../src/server/brief.ts";
@@ -209,6 +211,31 @@ describe("digestOf", () => {
   });
   test("a multi-line message tail is indented on every line", () => {
     expect(digestOf(node("A"), "t1", "a\nb", NOW)).toContain("\n  a\n  b");
+  });
+});
+
+describe("tailOf", () => {
+  test("a short message stays; a long one keeps its last 600 characters after a …", () => {
+    expect(tailOf("short")).toBe("short");
+    expect(tailOf("x".repeat(300) + "y".repeat(700))).toBe("…" + "y".repeat(600));
+  });
+});
+
+describe("lastMessageRoutes", () => {
+  const messages: Record<string, string | null> = { "env:thread%3A1": "z".repeat(700), quiet: null };
+  const get = lastMessageRoutes({ read: (id) => messages[id] ?? null, has: (id) => id in messages })["/t3/last-message"]
+    .GET;
+  const call = (query: string) => get(new Request(`http://x/t3/last-message${query}`));
+  test("400 without an id; 404 for an unknown thread", async () => {
+    expect(call("").status).toBe(400);
+    expect(call("?id=nope").status).toBe(404);
+  });
+  test("null text when the thread has no message", async () => {
+    expect(await call("?id=quiet").json()).toEqual({ text: null });
+  });
+  test("a long message comes back as its tail, for an id with : and %3A", async () => {
+    const res = call(`?id=${encodeURIComponent("env:thread%3A1")}`);
+    expect(await res.json()).toEqual({ text: "…" + "z".repeat(600) });
   });
 });
 
