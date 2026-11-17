@@ -1,4 +1,13 @@
-import { allThreads, bySince, NO_KEY, REVIEWS, type Branch, type Status, type ThreadNode } from "../shared/tree.ts";
+import {
+  allThreads,
+  bySince,
+  flat,
+  NO_KEY,
+  REVIEWS,
+  type Branch,
+  type Status,
+  type ThreadNode,
+} from "../shared/tree.ts";
 import { stackRuns } from "./format.ts";
 import { isPinned } from "./order.ts";
 
@@ -78,7 +87,15 @@ export function flatten(projects: Branch[]): FlatUnit[] {
   ]);
 }
 
-const unitThreads = (u: FlatUnit): ThreadNode[] => (u.kind === "thread" ? [u.t] : u.run.flatMap((g) => g.threads));
+/**
+ * The threads that place and sort a unit: all its threads, subthreads at any depth, without the settled ones.
+ * When all are settled, all of them.
+ */
+const unitThreads = (u: FlatUnit): ThreadNode[] => {
+  const all = u.kind === "thread" ? flat(u.t) : u.run.flatMap(allThreads);
+  const live = all.filter((t) => !t.settled);
+  return live.length > 0 ? live : all;
+};
 
 /** Sorts units across projects, newest first. A stack counts its newest thread. Ties keep the input order. */
 export const sortFlat = (units: FlatUnit[]): FlatUnit[] =>
@@ -100,7 +117,7 @@ const sectionIndex = (st: Status) => SECTIONS.findIndex(([, , statuses]) => stat
 /** The sections that sort by Wait, oldest first, and have no drag. */
 export const WAIT_SECTIONS = new Set(["needs-input", "plan-ready", "your-turn"]);
 
-/** The oldest `since` of the top-level threads of a unit that are in `statuses`. `null` when none has one. */
+/** The oldest `since` of the unit threads that are in `statuses`. `null` when none has one. */
 const waitOf = (u: FlatUnit, statuses: Status[]): string | null =>
   unitThreads(u)
     .filter((t) => statuses.includes(t.status))
@@ -108,8 +125,8 @@ const waitOf = (u: FlatUnit, statuses: Status[]): string | null =>
     .toSorted(bySince)[0] ?? null;
 
 /**
- * Groups units by status, in section order, and drops empty sections. A thread goes by its own status, a stack by
- * its most urgent thread. Units keep their input order, except in a waiting section: there the oldest Wait comes
+ * Groups units by status, in section order, and drops empty sections. A unit goes by its most urgent thread,
+ * subthreads included. Units keep their input order, except in a waiting section: there the oldest Wait comes
  * first, units with no Wait last, and ties keep the input order.
  */
 export function sections(units: FlatUnit[]): { key: string; label: string; units: FlatUnit[] }[] {

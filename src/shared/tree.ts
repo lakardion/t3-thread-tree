@@ -112,7 +112,7 @@ export function parseLinear(workspace = "", teams = ""): Linear | null {
   };
 }
 
-const flat = (t: ThreadNode): ThreadNode[] => [t, ...t.children.flatMap(flat)];
+export const flat = (t: ThreadNode): ThreadNode[] => [t, ...t.children.flatMap(flat)];
 export const allThreads = (b: Branch): ThreadNode[] => [...b.branches.flatMap(allThreads), ...b.threads.flatMap(flat)];
 
 /** Oldest `since` first, `null` last. ISO timestamps sort the same as text. */
