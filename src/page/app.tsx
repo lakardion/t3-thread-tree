@@ -58,6 +58,7 @@ import { ToggleGroup, ToggleGroupItem } from "@/components/ui/toggle-group";
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
 import { cn } from "@/lib/utils";
 
+import appIcon from "../../assets/icon.svg" with { type: "text" };
 import type { BriefState, Cli } from "../shared/brief.ts";
 import type { UpdateState } from "../shared/desktop.ts";
 import type { CliStatus } from "../shared/send.ts";
@@ -72,10 +73,12 @@ import {
 } from "../shared/tree.ts";
 import {
   countAttention,
+  favicon,
   needsYou,
   needsYouThreads,
   notifyEvents,
   onlyNeedsYou,
+  tabTitle,
   type Statuses,
   waits,
 } from "./attention.ts";
@@ -1797,8 +1800,12 @@ function App() {
     forget(ORDER_KEY);
   };
 
+  const tabCount = tree ? needsYouThreads(tree.projects).length : 0;
+
   return (
     <TooltipProvider>
+      <title>{tabTitle(tabCount)}</title>
+      <link rel="icon" type="image/svg+xml" href={favicon(appIcon, tabCount)} />
       <header className="mb-3.5 flex flex-none flex-wrap items-center gap-x-4 gap-y-3 text-muted-foreground">
         <h1 className="m-0 text-[15px] font-semibold text-foreground">Thread tree</h1>
         <ToggleGroup
