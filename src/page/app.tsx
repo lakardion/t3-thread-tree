@@ -131,11 +131,6 @@ import {
   type SortBy,
 } from "./view.ts";
 
-/** The tab icon; its href follows the needs-you count. */
-const iconLink = document.head.appendChild(
-  Object.assign(document.createElement("link"), { rel: "icon", type: "image/svg+xml" }),
-);
-
 const TOKEN_CMD =
   "~/.t3/bin/t3 auth session issue --scope orchestration:read --label thread-tree --ttl 52w --token-only";
 const CLOSED_KEY = "thread-tree:closed";
@@ -1587,12 +1582,6 @@ function App() {
     window.desktopBridge.setNeedsYou(list);
   }, [tree]);
 
-  useEffect(() => {
-    const n = tree ? needsYouThreads(tree.projects).length : 0;
-    document.title = tabTitle(n);
-    iconLink.href = favicon(appIcon, n);
-  }, [tree]);
-
   const lastStatuses = useRef<Statuses | null>(null);
   useEffect(() => {
     if (!window.desktopBridge || !tree) return;
@@ -1760,8 +1749,12 @@ function App() {
     forget(ORDER_KEY);
   };
 
+  const tabCount = tree ? needsYouThreads(tree.projects).length : 0;
+
   return (
     <TooltipProvider>
+      <title>{tabTitle(tabCount)}</title>
+      <link rel="icon" type="image/svg+xml" href={favicon(appIcon, tabCount)} />
       <header className="mb-3.5 flex flex-none flex-wrap items-center gap-x-4 gap-y-3 text-muted-foreground">
         <h1 className="m-0 text-[15px] font-semibold text-foreground">Thread tree</h1>
         <ToggleGroup
