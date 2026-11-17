@@ -19,6 +19,10 @@ _Avoid_: ancestry, history
 **Launched thread**:
 A top-level thread that an agent started with a launch tool. T3 does not record its spawner as a parent.
 
+**Launch nesting**:
+Showing a keyless **Launched thread** under its visible spawner, instead of in its project's "No issue key" group. It is a user setting and is off by default.
+_Avoid_: launcher nesting, lineage view
+
 **Issue key**:
 A tracker key in a thread title, such as `JED-4313` or `ENG-6081`. It groups the work thread and its review threads.
 _Avoid_: ticket id, slug
@@ -73,6 +77,8 @@ _Avoid_: launch, spawn, create
 - A **Project** holds many **Issue keys**; an **Issue key** holds one or more **Spawn lineage** trees.
 - A **Thread** has zero or one parent and zero or more **Subthreads**.
 - A **PR stack** can span threads of more than one **Issue key**.
+- A thread in a **PR stack** always shows in its stack block, whatever its **Issue key**, spawner or **Launch nesting**. Review threads are the exception: they stay in Reviews.
+- The keyless threads of one **PR stack** share one group, named after the bottom PR (`PR stack #61`).
 
 ## Example dialogue
 

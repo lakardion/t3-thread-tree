@@ -2,6 +2,7 @@ import { describe, expect, test } from "bun:test";
 
 import {
   countAttention,
+  favicon,
   needsYou,
   needsYouThreads,
   nextTarget,
@@ -9,6 +10,7 @@ import {
   onlyNeedsYou,
   openNextQueue,
   remember,
+  tabTitle,
   type Statuses,
   waits,
 } from "../src/page/attention.ts";
@@ -297,5 +299,28 @@ describe("nextTarget and remember", () => {
   });
   test("is null for an empty queue", () => {
     expect(nextTarget([], new Set())).toBeNull();
+  });
+});
+
+describe("tabTitle", () => {
+  test("plain for 0, counted otherwise", () => {
+    expect(tabTitle(0)).toBe("Thread tree");
+    expect(tabTitle(5)).toBe("(5) Thread tree");
+  });
+});
+
+describe("favicon", () => {
+  const svg = '<svg><path fill="#fff"/></svg>';
+  const decode = (u: string) => decodeURIComponent(u.slice("data:image/svg+xml,".length));
+  test("is an encoded SVG data URL with no raw #", () => {
+    const u = favicon(svg, 0);
+    expect(u.startsWith("data:image/svg+xml,")).toBe(true);
+    expect(u.includes("#")).toBe(false);
+  });
+  test("is the plain icon for 0 and adds one dot otherwise", () => {
+    expect(decode(favicon(svg, 0))).toBe(svg);
+    const dotted = decode(favicon(svg, 3));
+    expect(dotted.split("<circle").length - 1).toBe(1);
+    expect(dotted.startsWith("<svg><path")).toBe(true);
   });
 });

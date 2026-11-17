@@ -14,6 +14,40 @@ export function stackRuns(bs: Branch[]): Branch[][] {
 /** The PR a stack group opened: the first PR of its thread with a stack position. */
 export const ownPr = (g: Branch): PrNode | undefined => allThreads(g).find((t) => t.stack?.pos)?.prs[0];
 
+/** The stack position of the PR a stack group opened, or undefined when no thread of it has one. */
+export const ownPos = (g: Branch): number | undefined =>
+  allThreads(g).find((t) => t.stack?.pos)?.stack?.pos ?? undefined;
+
+/** The label of a stack stop: its position, with " of total" when the run hides some PRs of the stack. */
+export const stopLabel = (n: number | undefined, total: number, partial: boolean): string =>
+  n === undefined ? "" : partial ? `${n} of ${total}` : `${n}`;
+
+type RailStop = { id: string; label: string; p: PrNode | undefined; n: number | undefined };
+type RailRow = { t: ThreadNode; chip: string | undefined; stop: RailStop; n: number | undefined };
+
+/**
+ * The stops and rows of one stack run. Each thread with a stack position is a stop, in position order;
+ * a group with no such thread is one stop. A row with no stop of its own takes its group's first stop.
+ * A stop's number is its stack position, so it stays right when a filter hides other stops.
+ */
+export function railRows(run: Branch[]): { stops: RailStop[]; rows: RailRow[] } {
+  const stops: RailStop[] = [];
+  const rows: RailRow[] = [];
+  for (const g of run) {
+    const chip = isKeyGroup(g) ? g.label : undefined;
+    const byPos = g.threads.filter((t) => t.stack?.pos).toSorted((a, b) => a.stack!.pos! - b.stack!.pos!);
+    const own = new Map(byPos.map((t) => [t.id, { id: t.id, label: g.label, p: t.prs[0], n: t.stack!.pos! }]));
+    const first = own.values().next().value ?? { id: g.id, label: g.label, p: ownPr(g), n: ownPos(g) };
+    stops.push(...(own.size ? own.values() : [first]));
+    [...byPos, ...g.threads.filter((x) => !own.has(x.id))].forEach((t, j) => {
+      const stop = own.get(t.id);
+      const numbered = stop ?? (!own.size && j === 0 ? first : undefined);
+      rows.push({ t, chip, stop: stop ?? first, n: numbered?.n });
+    });
+  }
+  return { stops, rows };
+}
+
 /**
  * The rail color of a stack PR: grey when draft or unknown, red when blocked, green when approved, blue otherwise.
  * The `-fg` tokens keep 4.5:1 contrast against `--background` text in both themes.
