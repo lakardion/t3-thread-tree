@@ -1,7 +1,7 @@
 ---
 title: Show the your-turn count next to the Needs-you count
 type: wayfinder:task
-status: open
+status: in-review
 assignee: claude (status-groups-05)
 blocked-by: [02-count-format, 04-context-rows-build]
 ---
