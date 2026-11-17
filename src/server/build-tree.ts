@@ -220,8 +220,12 @@ export function buildTree(input: BuildInput): Branch[] {
     const { t } = n;
     const sp = spawnerOf(t.id);
     const spawner = sp ? all.get(sp) : undefined;
+    /** A stack outranks lineage: keyless mates share one group, so the stack keeps its rail. */
+    const si = stackIdOf.get(t.id);
+    const stackKey = si === undefined ? null : `PR stack #${stacks[si].order[0]}`;
     if (t.title.startsWith("Review #")) addTo(t.projectId, REVIEWS, n);
     else if (n.key) addTo(t.projectId, n.key, n);
+    else if (stackKey) addTo(t.projectId, stackKey, n);
     else {
       const vs = visibleSpawner(t.id);
       if (vs && visible.get(vs)!.projectId === t.projectId) nodes.get(vs)!.children.push(n);
@@ -250,7 +254,7 @@ export function buildTree(input: BuildInput): Branch[] {
     /** Groups that share a stack sit together, in stack order, at the slot of the oldest member. */
     const stackOf = (g: Group) => g.nodes.map((n) => stackIdOf.get(n.id)).find((s) => s !== undefined);
     const minPos = (g: Group, si: number) =>
-      Math.min(...g.nodes.filter((n) => stackIdOf.get(n.id) === si).map((n) => n.stack?.pos ?? 0));
+      Math.min(...g.nodes.filter((n) => stackIdOf.get(n.id) === si).map((n) => n.stack?.pos ?? Infinity));
     const placed = new Set<Group>();
     const ordered: Group[] = [];
     for (const g of gs) {
