@@ -2,7 +2,7 @@
 title: Add "Open next"
 type: wayfinder:task
 status: open
-assignee:
+assignee: damian.lucero
 blocked-by: [03-open-next-rules, 04-row-wait-build, 05-sort-by-wait-build]
 ---
 
