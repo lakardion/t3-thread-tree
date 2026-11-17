@@ -26,7 +26,7 @@ _Screenshots use made-up data from `bun run demo`._
 - **Flat view.** The Tree and Flat buttons in the header switch the layout. Flat shows all threads of all projects in one list.
   - The list has no folds.
   - Drag works with "Manual" sort. The flat list has its own order, apart from the tree. With "Group by", a row moves only inside its group.
-  - Each row shows the project icon and name, and the issue key as a chip. On a phone, the project shows as an icon only.
+  - Each row shows the project icon and name, and the issue key as a chip. On a phone, the project shows as an icon only. Each row and PR stack has a left edge in the project color, as in the tree.
   - A review thread has a teal eye before its title.
   - A subthread sits under its parent. A PR stack stays one block.
   - "Last updated" sorts across all projects. "Manual" starts as the tree order.
