@@ -49,6 +49,16 @@ export const needsYouThreads = (projects: Branch[]): NeedsYouThread[] =>
       waiting(t) ? [{ id: t.id, title: t.title, environmentId: envOf(t), since: t.since, status: t.status }] : [],
     );
 
+/** The tab title, with the count of threads that need the user when it is not 0. */
+export const tabTitle = (n: number): string => (n > 0 ? `(${n}) Thread tree` : "Thread tree");
+
+/** The app icon as a data URL, with an amber dot in the top-right corner when `n` is not 0. */
+export const favicon = (svg: string, n: number): string => {
+  const dot = '<circle cx="800" cy="224" r="200" fill="#f59e0b" stroke="#141c1a" stroke-width="48"/>';
+  const out = n > 0 ? svg.replace("</svg>", `${dot}</svg>`) : svg;
+  return `data:image/svg+xml,${encodeURIComponent(out)}`;
+};
+
 export type Statuses = Map<string, Status>;
 
 const notifies = (s: Status): s is NotifyStatus => s === "needs-input" || s === "plan-ready" || s === "failed";

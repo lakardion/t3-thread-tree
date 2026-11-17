@@ -58,6 +58,7 @@ import { ToggleGroup, ToggleGroupItem } from "@/components/ui/toggle-group";
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
 import { cn } from "@/lib/utils";
 
+import appIcon from "../../assets/icon.svg" with { type: "text" };
 import type { BriefState, Cli } from "../shared/brief.ts";
 import type { UpdateState } from "../shared/desktop.ts";
 import type { CliStatus } from "../shared/send.ts";
@@ -72,10 +73,12 @@ import {
 } from "../shared/tree.ts";
 import {
   countAttention,
+  favicon,
   needsYou,
   needsYouThreads,
   notifyEvents,
   onlyNeedsYou,
+  tabTitle,
   type Statuses,
   waits,
 } from "./attention.ts";
@@ -127,6 +130,11 @@ import {
   type Layout,
   type SortBy,
 } from "./view.ts";
+
+/** The tab icon; its href follows the needs-you count. */
+const iconLink = document.head.appendChild(
+  Object.assign(document.createElement("link"), { rel: "icon", type: "image/svg+xml" }),
+);
 
 const TOKEN_CMD =
   "~/.t3/bin/t3 auth session issue --scope orchestration:read --label thread-tree --ttl 52w --token-only";
@@ -1577,6 +1585,12 @@ function App() {
     if (key === sentNeedsYou.current) return;
     sentNeedsYou.current = key;
     window.desktopBridge.setNeedsYou(list);
+  }, [tree]);
+
+  useEffect(() => {
+    const n = tree ? needsYouThreads(tree.projects).length : 0;
+    document.title = tabTitle(n);
+    iconLink.href = favicon(appIcon, n);
   }, [tree]);
 
   const lastStatuses = useRef<Statuses | null>(null);
