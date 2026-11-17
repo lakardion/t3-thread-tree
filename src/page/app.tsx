@@ -27,14 +27,24 @@ import {
   LoaderCircle,
   Moon,
   Send,
+  Settings,
   SkipForward,
-  SlidersHorizontal,
   Sun,
   TriangleAlert,
   X,
 } from "lucide-react";
 import { MorphIcon } from "morphicons/react";
-import { createContext, Fragment, useCallback, useContext, useEffect, useRef, useState, type ReactNode } from "react";
+import {
+  createContext,
+  Fragment,
+  useCallback,
+  useContext,
+  useEffect,
+  useRef,
+  useState,
+  type ReactNode,
+  type RefObject,
+} from "react";
 import { flushSync } from "react-dom";
 import { createRoot } from "react-dom/client";
 
@@ -541,8 +551,18 @@ function useUpdate(): UpdateState | undefined {
 /** Circumference of the r=6 ring. */
 const RING = 2 * Math.PI * 6;
 
-/** The View button. An update shows as a dot, and a running install as a progress ring in place of the icon. */
-function ViewButton({ update, open, toggle }: { update: UpdateState | undefined; open: boolean; toggle: () => void }) {
+/** An update shows as a dot, and a running install as a progress ring in place of the cog. */
+function SettingsButton({
+  buttonRef,
+  update,
+  open,
+  toggle,
+}: {
+  buttonRef: RefObject<HTMLButtonElement | null>;
+  update: UpdateState | undefined;
+  open: boolean;
+  toggle: () => void;
+}) {
   const install = update?.install ?? null;
   const running = install !== null && install.stage !== "failed";
   const spinning = install?.stage === "unpacking" || (install?.stage === "downloading" && install.progress === null);
@@ -562,10 +582,12 @@ function ViewButton({ update, open, toggle }: { update: UpdateState | undefined;
   const dot = install?.stage === "failed" ? "bg-destructive" : !install && update?.release ? "bg-primary" : null;
   return (
     <Button
+      ref={buttonRef}
       variant={open ? "secondary" : "ghost"}
-      size="sm"
+      size="icon-sm"
       aria-expanded={open}
-      aria-label={note ? `View and settings, ${note}` : "View and settings"}
+      aria-label={note ? `Settings, ${note}` : "Settings"}
+      title="Settings"
       onClick={toggle}
     >
       {running ? (
@@ -589,19 +611,18 @@ function ViewButton({ update, open, toggle }: { update: UpdateState | undefined;
         </svg>
       ) : (
         <span className="relative inline-flex">
-          <SlidersHorizontal />
+          <Settings aria-hidden />
           {dot && (
             <span className={cn("absolute -top-0.5 -right-0.5 size-1.5 rounded-full ring-2 ring-background", dot)} />
           )}
         </span>
       )}
-      View
     </Button>
   );
 }
 
 /** The version row, with the update state as its hint, and a bar while an install runs. */
-function UpdateRows({ update }: { update: UpdateState }) {
+function UpdateRow({ update }: { update: UpdateState }) {
   const { release, install, checking, checkedAt, checkFailed } = update;
   const bridge = window.desktopBridge;
   const recheck = (label: string, variant: "ghost" | "outline") => (
@@ -661,8 +682,9 @@ function UpdateRows({ update }: { update: UpdateState }) {
     line = `Up to date · checked ${hhmm(checkedAt!)}`;
     action = recheck("Check again", "ghost");
   }
+  const showProgress = bar !== undefined;
   return (
-    <>
+    <div>
       <Row
         label={
           <>
@@ -673,12 +695,20 @@ function UpdateRows({ update }: { update: UpdateState }) {
       >
         {action}
       </Row>
-      {bar !== undefined && (
-        <div className="px-3 pb-3">
-          <Progress value={bar} aria-label="Update progress" />
+      <div
+        aria-hidden={!showProgress}
+        className={cn(
+          "grid transition-[grid-template-rows,opacity] duration-250 ease-in-out motion-reduce:transition-none",
+          showProgress ? "grid-rows-[1fr] opacity-100" : "grid-rows-[0fr] opacity-0",
+        )}
+      >
+        <div className="min-h-0 overflow-hidden">
+          <div className="px-3 pb-3">
+            <Progress value={bar === undefined ? 100 : bar} aria-label="Update progress" />
+          </div>
         </div>
-      )}
-    </>
+      </div>
+    </div>
   );
 }
 
@@ -689,6 +719,7 @@ const linearSummary = (l: Tree["linear"]) =>
 
 type PanelProps = LinearProps & {
   close: () => void;
+  buttonRef: RefObject<HTMLButtonElement | null>;
   settled: boolean;
   setSettled: (v: boolean) => void;
   snoozed: boolean;
@@ -707,21 +738,33 @@ type PanelProps = LinearProps & {
 
 /** View options and settings, beside the list so a change shows at once. */
 function SettingsPanel(p: PanelProps) {
-  const { close } = p;
+  const { close, buttonRef } = p;
+  const panelRef = useRef<HTMLElement>(null);
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => e.key === "Escape" && close();
+    const onClick = (e: MouseEvent) => {
+      const target = e.target;
+      if (target instanceof Node && !panelRef.current?.contains(target) && !buttonRef.current?.contains(target)) {
+        close();
+      }
+    };
     addEventListener("keydown", onKey);
-    return () => removeEventListener("keydown", onKey);
-  }, [close]);
+    document.addEventListener("click", onClick, true);
+    return () => {
+      removeEventListener("keydown", onKey);
+      document.removeEventListener("click", onClick, true);
+    };
+  }, [close, buttonRef]);
   useEffect(() => window.desktopBridge?.checkUpdates(false), []);
   const token = tokenSummary(p.conn);
   return (
     <aside
-      aria-label="View and settings"
+      ref={panelRef}
+      aria-label="Settings"
       className="fixed top-0 right-0 z-40 flex h-full w-[380px] max-w-full flex-col overflow-y-auto border-l bg-card shadow-xl"
     >
       <div className="sticky top-0 z-10 flex items-center justify-between border-b bg-card px-4 py-3">
-        <h2 className="m-0 text-[15px] font-semibold">View and settings</h2>
+        <h2 className="m-0 text-[15px] font-semibold">Settings</h2>
         <Button variant="ghost" size="icon-sm" aria-label="Close" onClick={close}>
           <X />
         </Button>
@@ -729,7 +772,7 @@ function SettingsPanel(p: PanelProps) {
       <div className="grid content-start gap-4 p-4">
         {p.update && (
           <Group title="Updates" accent={p.update.release !== null && p.update.install === null}>
-            <UpdateRows update={p.update} />
+            <UpdateRow update={p.update} />
           </Group>
         )}
         <Group title="View">
@@ -1765,6 +1808,7 @@ function App() {
   });
   const linear = linearSet ?? tree?.linear ?? null;
   const [settingsOpen, setSettingsOpen] = useState(false);
+  const settingsButtonRef = useRef<HTMLButtonElement>(null);
   const [seen, setSeen] = useState<ReadonlySet<string>>(new Set());
   const [tokenOpen, setTokenOpen] = useState(false);
   const update = useUpdate();
@@ -2089,7 +2133,8 @@ function App() {
               }}
             />
           )}
-          <ViewButton
+          <SettingsButton
+            buttonRef={settingsButtonRef}
             update={update}
             open={settingsOpen}
             toggle={() => {
@@ -2210,6 +2255,7 @@ function App() {
       {settingsOpen && (
         <SettingsPanel
           close={closeSettings}
+          buttonRef={settingsButtonRef}
           linear={linear}
           setLinear={setLinear}
           settled={settled}
