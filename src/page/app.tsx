@@ -622,7 +622,7 @@ function SettingsButton({
 }
 
 /** The version row, with the update state as its hint, and a bar while an install runs. */
-function UpdateRows({ update }: { update: UpdateState }) {
+function UpdateRow({ update }: { update: UpdateState }) {
   const { release, install, checking, checkedAt, checkFailed } = update;
   const bridge = window.desktopBridge;
   const recheck = (label: string, variant: "ghost" | "outline") => (
@@ -683,7 +683,7 @@ function UpdateRows({ update }: { update: UpdateState }) {
     action = recheck("Check again", "ghost");
   }
   return (
-    <>
+    <div>
       <Row
         label={
           <>
@@ -699,7 +699,7 @@ function UpdateRows({ update }: { update: UpdateState }) {
           <Progress value={bar} aria-label="Update progress" />
         </div>
       )}
-    </>
+    </div>
   );
 }
 
@@ -763,7 +763,7 @@ function SettingsPanel(p: PanelProps) {
       <div className="grid content-start gap-4 p-4">
         {p.update && (
           <Group title="Updates" accent={p.update.release !== null && p.update.install === null}>
-            <UpdateRows update={p.update} />
+            <UpdateRow update={p.update} />
           </Group>
         )}
         <Group title="View">
