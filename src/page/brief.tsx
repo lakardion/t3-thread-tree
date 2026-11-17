@@ -48,8 +48,15 @@ export function BriefControls(p: {
 }) {
   const none = p.clis?.length === 0;
   const button = (
-    <Button size="sm" className="rounded-r-none" disabled={!p.cli || p.running} onClick={p.run}>
-      <Sparkles /> What's next
+    <Button
+      size="sm"
+      className="rounded-r-none max-[720px]:rounded-r-md!"
+      aria-label="What's next"
+      disabled={!p.cli || p.running}
+      onClick={p.run}
+    >
+      <Sparkles />
+      <span className="max-[720px]:hidden">What's next</span>
     </Button>
   );
   return (
@@ -66,10 +73,10 @@ export function BriefControls(p: {
         ) : (
           button
         )}
-        <ButtonGroupSeparator className="bg-primary-foreground/30" />
+        <ButtonGroupSeparator className="bg-primary-foreground/30 max-[720px]:hidden" />
         <DropdownMenu modal={false}>
           <DropdownMenuTrigger asChild disabled={!p.clis?.length}>
-            <Button size="icon-sm" className="w-7" aria-label="Model">
+            <Button size="icon-sm" className="w-7 max-[720px]:hidden" aria-label="Model">
               <ChevronDown />
             </Button>
           </DropdownMenuTrigger>
@@ -86,7 +93,7 @@ export function BriefControls(p: {
           </DropdownMenuContent>
         </DropdownMenu>
       </ButtonGroup>
-      <span className="flex items-center gap-1 text-xs text-muted-foreground">
+      <span className="flex items-center gap-1 text-xs text-muted-foreground max-[720px]:hidden">
         {p.cli && <ProviderIcon cli={p.cli} className="size-3" />}
         {p.clis?.find((c) => c.id === p.cli)?.label ?? "No model"}
       </span>
