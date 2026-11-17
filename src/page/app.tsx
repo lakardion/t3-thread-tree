@@ -125,6 +125,7 @@ import { CliGate, LastMessage, SendDialog, useLastMessage } from "./send-dialog.
 import { LEGEND, LegendIcon, STATUS, StatusIcon } from "./status-icon.tsx";
 import { Swap, useChanges } from "./swap.tsx";
 import {
+  closedCounts,
   FLAT,
   flatLists,
   flatten,
@@ -1256,6 +1257,30 @@ const Icons = ({ b }: { b: Branch }) => (
   </span>
 );
 
+/** A status icon and a number for each status group of a closed project. */
+function Counts({ groups }: { groups: ReturnType<typeof closedCounts> }) {
+  const tip = groups.map((g) => `${g.n} ${g.label}`).join(", ");
+  return (
+    <Tooltip>
+      <TooltipTrigger asChild>
+        <span
+          role="img"
+          aria-label={tip}
+          className="relative z-10 inline-flex items-center gap-2 text-[11px] text-muted-foreground tabular-nums"
+        >
+          {groups.map((g) => (
+            <span key={g.label} className="inline-flex items-center gap-0.5">
+              <LegendIcon status={g.status} phrase="" />
+              {g.n}
+            </span>
+          ))}
+        </span>
+      </TooltipTrigger>
+      <TooltipContent className="max-w-64">{tip}</TooltipContent>
+    </Tooltip>
+  );
+}
+
 type Fold = { closed: Set<string>; toggle: (id: string) => void; fold: (ids: string[], shut: boolean) => void };
 
 /** Opens `self` and all `inner` ids when one of them is closed, else closes all `inner` ids. Hidden with no `inner` ids. */
@@ -1585,6 +1610,7 @@ function ProjectBlock({ b, closed, toggle, fold }: { b: Branch } & Fold) {
   const open = !closed.has(b.id);
   const lists = useContext(Lists);
   const color = projectHex(b.label);
+  const counts = closedCounts(allThreads(b));
   const render = (ref: RefFn, handleRef?: RefFn) => (
     <li ref={ref} className="border-l-[3px] not-last:border-b" style={{ borderLeftColor: color }}>
       <Collapsible asChild open={open} onOpenChange={() => toggle(b.id)}>
@@ -1601,7 +1627,7 @@ function ProjectBlock({ b, closed, toggle, fold }: { b: Branch } & Fold) {
                 {b.label}
               </span>
             </CollapsibleTrigger>
-            {!open && <Icons b={b} />}
+            {!open && (counts.length > 0 ? <Counts groups={counts} /> : <Icons b={b} />)}
             <FoldAll inner={foldIds(b)} self={b.id} name={b.label} closed={closed} fold={fold} className={ROW_FOLD} />
           </div>
           <div className="min-w-0 px-1 pb-1">

@@ -2,6 +2,7 @@ import { describe, expect, test } from "bun:test";
 
 import { applyOrder } from "../src/page/order.ts";
 import {
+  closedCounts,
   flatLists,
   flatten,
   folds,
@@ -14,7 +15,7 @@ import {
   sortTree,
   vtName,
 } from "../src/page/view.ts";
-import { NO_KEY, REVIEWS, type Branch, type Status, type ThreadNode } from "../src/shared/tree.ts";
+import { allThreads, NO_KEY, REVIEWS, type Branch, type Status, type ThreadNode } from "../src/shared/tree.ts";
 
 const T = (n: number) => `2026-11-12T12:00:${String(n).padStart(2, "0")}.000Z`;
 const thread = (
@@ -435,5 +436,25 @@ describe("hidden snoozed threads", () => {
   });
   test("a snoozed thread still places in Idle and snoozed by default", () => {
     expect(sequence(units, "status").map((i) => i.id)).toEqual(["sec:idle", "t:s"]);
+  });
+});
+
+describe("closedCounts", () => {
+  const some = (...st: Status[]) => st.map((s, i) => thread(`t${i}`, null, [], s));
+  test("is empty with 4 threads", () => {
+    expect(closedCounts(some("working", "working", "done", "done"))).toEqual([]);
+  });
+  test("counts a status group in section order, with the first status, a lower-case label, and no empty group", () => {
+    const ts = some("done", "interrupted", "needs-input", "failed", "your-turn", "needs-input");
+    expect(closedCounts(ts)).toEqual([
+      { status: "needs-input", label: "needs input", n: 2 },
+      { status: "your-turn", label: "your turn", n: 1 },
+      { status: "failed", label: "failed", n: 2 },
+      { status: "done", label: "done", n: 1 },
+    ]);
+  });
+  test("counts subthreads toward the threshold", () => {
+    const ts = [thread("a", null, some("working", "working", "working", "working"))];
+    expect(closedCounts(allThreads(branch("b", ts))).length).toBe(1);
   });
 });
