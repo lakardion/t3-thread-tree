@@ -1,6 +1,6 @@
 /** Serves the page with made-up threads, run through the real tree rules. No T3 needed. */
 import index from "../src/page/index.html";
-import { briefInput, briefService, type Outcome } from "../src/server/brief.ts";
+import { briefInput, briefService, lastMessageRoutes, type Outcome } from "../src/server/brief.ts";
 import { buildTree } from "../src/server/build-tree.ts";
 import { cliPath, type CliRun, sendService } from "../src/server/send.ts";
 import type { Pr, Project, Thread } from "../src/server/t3.ts";
@@ -296,6 +296,18 @@ const sender = sendService({
   run: stubCli,
 });
 
+/** Stub last messages by thread id. Other threads get one line from their title. The ids in `NO_MESSAGE` have none. */
+const MESSAGES: Record<string, string> = {
+  "demo-2":
+    "The saved cards list works. One open point: should a new card become the default at once, or only when the user picks it?",
+  "demo-15":
+    "The retry queue needs a new table. I will run the migration next:\n\nbun run db:migrate --name retry_queue\n\nApprove the command to continue.",
+  "demo-21": "The retry policy change is ready. I need to run the load test script before I confirm the numbers.",
+};
+const NO_MESSAGE = new Set(["demo-5", "map", "demo-16", "launched"]);
+const lastMessage = (id: string) =>
+  NO_MESSAGE.has(id) ? null : (MESSAGES[id] ?? `I finished the work on "${byId(id).title}".`);
+
 const byId = (id: string) => threads.find((th) => th.id === id)!;
 const setPr = (id: string, n: number, over: Partial<Pr>) => {
   const th = byId(id);
@@ -348,6 +360,7 @@ const server = Bun.serve({
     "/": index,
     ...brief.routes,
     ...sender.routes,
+    ...lastMessageRoutes({ read: lastMessage, has: (id) => threads.some((th) => th.id === id) }),
     "/events": async (req) => {
       server.timeout(req, 0);
       await Bun.sleep(Number(process.env.DELAY ?? 0));

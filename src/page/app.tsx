@@ -110,7 +110,7 @@ import {
 } from "./order.ts";
 import { Presence, useMotion } from "./presence.tsx";
 import { ProjectIcon, projectHex } from "./project-icon.tsx";
-import { CliGate, SendDialog } from "./send-dialog.tsx";
+import { CliGate, LastMessage, SendDialog, useLastMessage } from "./send-dialog.tsx";
 import { LEGEND, LegendIcon, STATUS, StatusIcon } from "./status-icon.tsx";
 import { Swap, useChanges } from "./swap.tsx";
 import {
@@ -899,12 +899,18 @@ function DetailBlock({ t }: { t: ThreadNode }) {
     .filter(Boolean)
     .join(" · ");
   const tags = [d.tags.join(", "), d.pinned && "Pinned"].filter(Boolean).join(" · ");
+  const last = useLastMessage(t.id, t.updatedAt);
   return (
     <dl className="m-0 grid grid-cols-[auto_1fr] gap-x-3 gap-y-0.5 py-1 pl-[156px] text-xs max-[720px]:pl-7">
       {d.request && <Line label="Request">{d.request}</Line>}
       {d.error && (
         <Line label="Error">
           {[[d.error.class, d.error.code].filter(Boolean).join(" · "), d.error.text].filter(Boolean).join(" ")}
+        </Line>
+      )}
+      {last && (
+        <Line label="Last message">
+          <LastMessage text={last} />
         </Line>
       )}
       {limit && <Line label="Limit">{limit}</Line>}
