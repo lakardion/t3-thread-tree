@@ -1,5 +1,6 @@
 import { describe, expect, test } from "bun:test";
 
+import { applyOrder } from "../src/page/order.ts";
 import {
   flatLists,
   flatten,
@@ -237,6 +238,82 @@ describe("sections", () => {
     const header = sequence(units, "status")[0];
     expect(header.kind === "section" && header.count).toBe(2);
   });
+  describe("waiting sections", () => {
+    const waiting = (
+      id: string,
+      since: number | null,
+      status: Status = "your-turn",
+      children: ThreadNode[] = [],
+      run = 1,
+    ) =>
+      flatten([
+        project("p", [
+          branch(`g${id}`, [{ ...thread(id, run, children, status), since: since === null ? null : T(since) }]),
+        ]),
+      ])[0];
+    const first = (units: ReturnType<typeof flatten>) => ids(sections(units)[0].units);
+    test("sorts Needs input, Plan ready and Your turn by the oldest since first", () => {
+      for (const status of ["needs-input", "plan-ready", "your-turn"] as const)
+        expect(first([waiting("a", 5, status), waiting("b", 2, status), waiting("c", 9, status)])).toEqual([
+          "t:b",
+          "t:a",
+          "t:c",
+        ]);
+    });
+    test("puts a unit with no since last and keeps ties in input order", () => {
+      expect(
+        first([waiting("a", null), waiting("b", 3), waiting("c", 3), waiting("d", null), waiting("e", 1)]),
+      ).toEqual(["t:e", "t:b", "t:c", "t:a", "t:d"]);
+    });
+    test("sorts a stack by the oldest since of its threads in the section statuses", () => {
+      const [stack] = flatten([
+        project("p", [
+          branch(
+            "s1",
+            [
+              { ...thread("x", 1, [], "your-turn"), since: T(7) },
+              { ...thread("z", 1, [], "your-turn"), since: T(3) },
+              { ...thread("y", 1, [], "done"), since: T(1) },
+            ],
+            [],
+            "st",
+          ),
+        ]),
+      ]);
+      expect(first([waiting("a", 5), stack, waiting("b", 9)])).toEqual(["stack:p:st", "t:a", "t:b"]);
+    });
+    test("does not move a parent by the since of its subthread", () => {
+      const sub = { ...thread("c", 1, [], "your-turn"), since: T(1) };
+      expect(first([waiting("a", 5, "your-turn", [sub]), waiting("b", 3)])).toEqual(["t:b", "t:a"]);
+    });
+    test("keeps the input order in other sections", () => {
+      const units = [waiting("a", 5, "working"), waiting("b", 2, "working")];
+      expect(first(units)).toEqual(["t:a", "t:b"]);
+    });
+    test("sorts by Wait for the manual and the last-updated order", () => {
+      const units = [waiting("a", 5), waiting("b", 2), waiting("c", 9)];
+      expect(first(units)).toEqual(["t:b", "t:a", "t:c"]);
+      expect(first(sortFlat(units))).toEqual(["t:b", "t:a", "t:c"]);
+      const tied = [waiting("d", 4), waiting("e", 4, "your-turn", [], 9)];
+      expect(first(tied)).toEqual(["t:d", "t:e"]);
+      expect(first(sortFlat(tied))).toEqual(["t:e", "t:d"]);
+    });
+    test("keeps the input order without grouping", () => {
+      const units = [waiting("a", 5), waiting("b", 2)];
+      expect(sequence(units, "none")).toEqual(units);
+    });
+    test("puts a row that stops waiting back at its stored place", () => {
+      const units = [waiting("a", 5), waiting("b", 2), waiting("c", 9, "working")];
+      const stored = ["t:c", "t:a", "t:b"];
+      const [, working] = sections(applyOrder(units, (u) => u.id, stored));
+      expect(ids(working.units)).toEqual(["t:c"]);
+      const stopped = [waiting("a", 5, "working"), units[1], units[2]];
+      expect(sections(applyOrder(stopped, (u) => u.id, stored)).map((s) => [s.key, ids(s.units)])).toEqual([
+        ["your-turn", ["t:b"]],
+        ["working", ["t:c", "t:a"]],
+      ]);
+    });
+  });
   test("itemIds lists a stack with its threads", () => {
     const [stack] = flatten([project("p", [branch("s1", [thread("a")], [], "st")])]);
     expect(itemIds(stack)).toEqual(["stack:p:st", "a"]);
@@ -247,6 +324,15 @@ describe("flatLists", () => {
   const units = flatten([project("p", [branch("g", [thread("a", 1, [], "done"), thread("b", 1, [], "working")])])]);
   test("holds all unit ids under the flat key when ungrouped", () => {
     expect([...flatLists(sequence(units, "none"))]).toEqual([["flat", ["t:a", "t:b"]]]);
+  });
+  test("gives a waiting section no list and keeps its ids out of the flat list", () => {
+    const mixed = flatten([
+      project("p", [branch("g", [thread("a", 1, [], "your-turn"), thread("b", 1, [], "working")])]),
+    ]);
+    expect([...flatLists(sequence(mixed, "status"))]).toEqual([
+      ["flat", ["t:b"]],
+      ["flat:working", ["t:b"]],
+    ]);
   });
   test("adds the unit ids of each section when grouped", () => {
     expect([...flatLists(sequence(units, "status"))]).toEqual([

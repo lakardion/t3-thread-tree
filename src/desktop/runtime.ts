@@ -3,6 +3,7 @@ import { createServer } from "node:net";
 import * as v from "valibot";
 
 import type { NeedsYouThread, NotifyStatus, UpdateState } from "../shared/desktop.ts";
+import { bySince } from "../shared/tree.ts";
 
 /** The first port from `start` up that a server can listen on at 127.0.0.1. */
 export async function pickPort(start = 4773): Promise<number> {
@@ -44,10 +45,7 @@ const TRAY_MAX = 10;
 
 /** The menu-bar thread items, longest wait first. `url: null` means "show the window". */
 export function trayItems(threads: NeedsYouThread[]): { label: string; url: string | null }[] {
-  /** ISO timestamps sort the same as text. */
-  const sorted = threads.toSorted((a, b) =>
-    a.since === b.since ? 0 : a.since === null ? 1 : b.since === null ? -1 : a.since < b.since ? -1 : 1,
-  );
+  const sorted = threads.toSorted((a, b) => bySince(a.since, b.since));
   const items: { label: string; url: string | null }[] = sorted.slice(0, TRAY_MAX).map((t) => ({
     label: `${STATUS_TITLE[t.status]} · ${t.title}`,
     url: threadUrl(t.environmentId, t.id),

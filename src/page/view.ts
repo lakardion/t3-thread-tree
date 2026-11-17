@@ -1,4 +1,4 @@
-import { allThreads, NO_KEY, REVIEWS, type Branch, type Status, type ThreadNode } from "../shared/tree.ts";
+import { allThreads, bySince, NO_KEY, REVIEWS, type Branch, type Status, type ThreadNode } from "../shared/tree.ts";
 import { stackRuns } from "./format.ts";
 import { isPinned } from "./order.ts";
 
@@ -97,15 +97,33 @@ export const SECTIONS: [key: string, label: string, statuses: Status[]][] = [
 
 const sectionIndex = (st: Status) => SECTIONS.findIndex(([, , statuses]) => statuses.includes(st));
 
+/** The sections that sort by Wait, oldest first, and have no drag. */
+export const WAIT_SECTIONS = new Set(["needs-input", "plan-ready", "your-turn"]);
+
+/** The oldest `since` of the top-level threads of a unit that are in `statuses`. `null` when none has one. */
+const waitOf = (u: FlatUnit, statuses: Status[]): string | null =>
+  unitThreads(u)
+    .filter((t) => statuses.includes(t.status))
+    .map((t) => t.since)
+    .toSorted(bySince)[0] ?? null;
+
 /**
  * Groups units by status, in section order, and drops empty sections. A thread goes by its own status, a stack by
- * its most urgent thread. Units keep their input order.
+ * its most urgent thread. Units keep their input order, except in a waiting section: there the oldest Wait comes
+ * first, units with no Wait last, and ties keep the input order.
  */
 export function sections(units: FlatUnit[]): { key: string; label: string; units: FlatUnit[] }[] {
   const at = (u: FlatUnit) => Math.min(...unitThreads(u).map((t) => sectionIndex(t.status)));
-  return SECTIONS.map(([key, label], i) => ({ key, label, units: units.filter((u) => at(u) === i) })).filter(
-    (s) => s.units.length > 0,
-  );
+  return SECTIONS.map(([key, label, statuses], i) => {
+    const inSection = units.filter((u) => at(u) === i);
+    return {
+      key,
+      label,
+      units: WAIT_SECTIONS.has(key)
+        ? inSection.toSorted((a, b) => bySince(waitOf(a, statuses), waitOf(b, statuses)))
+        : inSection,
+    };
+  }).filter((s) => s.units.length > 0);
 }
 
 /** The flat sequence: the units, or section headers each followed by its units. */
@@ -126,15 +144,20 @@ export const FLAT = "flat";
 /** The drag list of one status section. A row drags only inside its section. */
 export const sectionList = (key: string) => `${FLAT}:${key}`;
 
-/** The drag lists of a flat sequence: all unit ids under `FLAT`, and the unit ids of each section header. */
+/**
+ * The drag lists of a flat sequence: all unit ids under `FLAT`, and the unit ids of each section header. A waiting
+ * section has no list, and its units are not under `FLAT`, so its rows have no drag.
+ */
 export function flatLists(items: FlatItem[]): Map<string, string[]> {
   const lists = new Map<string, string[]>([[FLAT, []]]);
   let section: string[] | undefined;
+  let waiting = false;
   for (const i of items) {
     if (i.kind === "section") {
-      section = [];
-      lists.set(sectionList(i.key), section);
-    } else {
+      waiting = WAIT_SECTIONS.has(i.key);
+      section = waiting ? undefined : [];
+      if (section) lists.set(sectionList(i.key), section);
+    } else if (!waiting) {
       lists.get(FLAT)!.push(i.id);
       section?.push(i.id);
     }
