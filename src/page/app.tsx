@@ -1956,30 +1956,33 @@ function App() {
             aria-label={needsTip ? `Needs you, ${needsTip}` : "Needs you"}
             className={cn(FILTER_ITEM, "gap-1.5 px-2.5")}
           >
-            Needs you
-            {needsTip && (
-              /** The tooltip sits inside the item so that the item keeps `data-state`. */
-              <Tooltip>
-                <TooltipTrigger asChild>
-                  <span className="flex items-center gap-1">
-                    {counts.needYou > 0 && (
-                      <span className="rounded-[4px] bg-status-needs-input px-1 text-[11px] text-white tabular-nums">
-                        {counts.needYou}
-                      </span>
-                    )}
-                    {counts.needYou > 0 && counts.yourTurn > 0 && (
-                      <span aria-hidden className="text-muted-foreground">
-                        ·
-                      </span>
-                    )}
-                    {counts.yourTurn > 0 && (
-                      <span className="text-[11px] text-muted-foreground tabular-nums">{counts.yourTurn}</span>
-                    )}
-                  </span>
-                </TooltipTrigger>
-                <TooltipContent>{needsTip}</TooltipContent>
-              </Tooltip>
-            )}
+            {/** One baseline for the label and the numbers: centered, the smaller numbers look raised. */}
+            <span className="flex items-baseline gap-1.5">
+              Needs you
+              {needsTip && (
+                /** The tooltip sits inside the item so that the item keeps `data-state`. */
+                <Tooltip>
+                  <TooltipTrigger asChild>
+                    <span className="flex items-baseline gap-1">
+                      {counts.needYou > 0 && (
+                        <span className="rounded-[4px] bg-status-needs-input px-1 text-[11px] text-white tabular-nums">
+                          {counts.needYou}
+                        </span>
+                      )}
+                      {counts.needYou > 0 && counts.yourTurn > 0 && (
+                        <span aria-hidden className="text-muted-foreground">
+                          ·
+                        </span>
+                      )}
+                      {counts.yourTurn > 0 && (
+                        <span className="text-[11px] text-muted-foreground tabular-nums">{counts.yourTurn}</span>
+                      )}
+                    </span>
+                  </TooltipTrigger>
+                  <TooltipContent>{needsTip}</TooltipContent>
+                </Tooltip>
+              )}
+            </span>
           </ToggleGroupItem>
         </ToggleGroup>
         <OpenNextButton target={target} title={openNextTitle} now={now} open={openNext} />
