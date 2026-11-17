@@ -87,12 +87,15 @@ export function flatten(projects: Branch[]): FlatUnit[] {
   ]);
 }
 
+/** All threads of a unit, subthreads at any depth. */
+const everyThread = (u: FlatUnit): ThreadNode[] => (u.kind === "thread" ? flat(u.t) : u.run.flatMap(allThreads));
+
 /**
  * The threads that place and sort a unit: all its threads, subthreads at any depth, without the settled ones.
  * When all are settled, all of them.
  */
 const unitThreads = (u: FlatUnit): ThreadNode[] => {
-  const all = u.kind === "thread" ? flat(u.t) : u.run.flatMap(allThreads);
+  const all = everyThread(u);
   const live = all.filter((t) => !t.settled);
   return live.length > 0 ? live : all;
 };
@@ -129,13 +132,14 @@ const waitOf = (u: FlatUnit, statuses: Status[]): string | null =>
  * subthreads included. Units keep their input order, except in a waiting section: there the oldest Wait comes
  * first, units with no Wait last, and ties keep the input order.
  */
-export function sections(units: FlatUnit[]): { key: string; label: string; units: FlatUnit[] }[] {
+export function sections(units: FlatUnit[]): { key: string; label: string; statuses: Status[]; units: FlatUnit[] }[] {
   const at = (u: FlatUnit) => Math.min(...unitThreads(u).map((t) => sectionIndex(t.status)));
   return SECTIONS.map(([key, label, statuses], i) => {
     const inSection = units.filter((u) => at(u) === i);
     return {
       key,
       label,
+      statuses,
       units: WAIT_SECTIONS.has(key)
         ? inSection.toSorted((a, b) => bySince(waitOf(a, statuses), waitOf(b, statuses)))
         : inSection,
@@ -143,14 +147,40 @@ export function sections(units: FlatUnit[]): { key: string; label: string; units
   }).filter((s) => s.units.length > 0);
 }
 
-/** The flat sequence: the units, or section headers each followed by its units. */
+/** True when the thread is a context row in a section of `statuses`: it is settled or has another status. */
+export const isContext = (t: ThreadNode, statuses: Status[]): boolean => t.settled || !statuses.includes(t.status);
+
+/** True when a stack row folds in a section of `statuses`: it and all its subthreads are context rows. */
+export const folds = (t: ThreadNode, statuses: Status[]): boolean => flat(t).every((x) => isContext(x, statuses));
+
+/**
+ * The flat sequence: the units, or section headers each followed by its units. A header counts the threads that
+ * match its section, subthreads included. Context rows are not counted.
+ */
 export const sequence = (units: FlatUnit[], groupBy: GroupBy): FlatItem[] =>
   groupBy === "status"
     ? sections(units).flatMap((s): FlatItem[] => [
-        { kind: "section", id: `sec:${s.key}`, key: s.key, label: s.label, count: s.units.length },
+        {
+          kind: "section",
+          id: `sec:${s.key}`,
+          key: s.key,
+          label: s.label,
+          count: s.units.flatMap(everyThread).filter((t) => !isContext(t, s.statuses)).length,
+        },
         ...s.units,
       ])
     : units;
+
+/**
+ * The statuses of the section header above the item `i`. `null` without grouping, for a header, or for an item that
+ * is not in `items`.
+ */
+export const sectionOf = (items: FlatItem[], i: FlatItem): Status[] | null => {
+  const at = items.findIndex((x) => x.id === i.id);
+  if (i.kind === "section" || at < 0) return null;
+  const head = items.slice(0, at).findLast((x) => x.kind === "section");
+  return SECTIONS.find(([key]) => key === head?.key)?.[2] ?? null;
+};
 
 /** The ids that a flat item puts in the row-order signature. */
 export const itemIds = (i: FlatItem): string[] =>

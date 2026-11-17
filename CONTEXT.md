@@ -40,6 +40,9 @@ An unsettled top-level thread (any status, snoozed included), or a subagent whos
 The threads that wait on the user: status needs input or plan ready. The Dock badge, the header count and the menu-bar list show this set. A notification fires when a thread enters this set, or fails. The "Needs you" filter also keeps your-turn threads.
 _Avoid_: attention, unread
 
+**Context row**:
+A row that shows only to give context. In a status section, it is a thread whose status is not one of the section's statuses, or a settled thread. In the "Needs you" filter, it is a kept spawner that does not match. A context row shows muted; in a PR stack in a status section, it folds behind "+N other threads". A section count leaves context rows out.
+
 **Wait**:
 The time since a thread started to wait on the user. It counts from the request for needs input, and from the run completion for plan ready and your turn. A row that waits on the user shows it beside the phrase.
 _Avoid_: age (age is the time since the last update)
