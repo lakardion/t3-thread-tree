@@ -2,7 +2,7 @@
 title: Show the phrase and the Wait on rows that wait on the user
 type: wayfinder:task
 status: open
-assignee:
+assignee: damian.lucero
 blocked-by: [01-row-wait-look]
 ---
 
