@@ -1,4 +1,4 @@
-import { Check, ChevronDown, Copy, MessageSquarePlus, RotateCw, Send, Sparkles, X } from "lucide-react";
+import { Check, ChevronDown, Copy, List, MessageSquarePlus, RotateCw, Send, Sparkles, X } from "lucide-react";
 import { useEffect, useState } from "react";
 
 import { Alert, AlertDescription } from "@/components/ui/alert";
@@ -19,7 +19,7 @@ import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip
 import type { ActionKind, BriefAction, BriefState, Cli } from "../shared/brief.ts";
 import type { CliStatus } from "../shared/send.ts";
 import type { Branch, ThreadNode } from "../shared/tree.ts";
-import { ProviderIcon } from "./provider-icon.tsx";
+import { MorphProviderIcon, ProviderIcon } from "./provider-icon.tsx";
 import { CliGate, SendDialog } from "./send-dialog.tsx";
 import { markKey } from "./send.ts";
 import { StartDialog } from "./start-dialog.tsx";
@@ -47,6 +47,7 @@ export function BriefControls(p: {
   run: () => void;
 }) {
   const none = p.clis?.length === 0;
+  const model = p.clis?.find((c) => c.id === p.cli)?.label;
   const button = (
     <Button
       size="sm"
@@ -55,49 +56,43 @@ export function BriefControls(p: {
       disabled={!p.cli || p.running}
       onClick={p.run}
     >
-      <Sparkles />
+      {p.cli ? <MorphProviderIcon cli={p.cli} /> : <List />}
       <span className="max-[720px]:hidden">What's next</span>
     </Button>
   );
   return (
-    <div className="flex items-center gap-2">
-      <ButtonGroup>
-        {none ? (
-          <Tooltip>
-            <TooltipTrigger asChild>
-              {/* oxlint-disable-next-line jsx-a11y/no-noninteractive-tabindex -- a disabled button gets no focus, so the wrapper takes it to show the tooltip */}
-              <span tabIndex={0}>{button}</span>
-            </TooltipTrigger>
-            <TooltipContent>No logged-in claude or codex CLI found</TooltipContent>
-          </Tooltip>
-        ) : (
-          button
-        )}
-        <ButtonGroupSeparator className="bg-primary-foreground/30 max-[720px]:hidden" />
-        <DropdownMenu modal={false}>
-          <DropdownMenuTrigger asChild disabled={!p.clis?.length}>
-            <Button size="icon-sm" className="w-7 max-[720px]:hidden" aria-label="Model">
-              <ChevronDown />
-            </Button>
-          </DropdownMenuTrigger>
-          <DropdownMenuContent align="end" className="min-w-44">
-            <DropdownMenuLabel className="text-xs text-muted-foreground">Model</DropdownMenuLabel>
-            <DropdownMenuRadioGroup value={p.cli ?? ""} onValueChange={(v) => p.setCli(v as Cli)}>
-              {p.clis?.map((c) => (
-                <DropdownMenuRadioItem key={c.id} value={c.id}>
-                  <ProviderIcon cli={c.id} className="size-3.5" />
-                  {c.label}
-                </DropdownMenuRadioItem>
-              ))}
-            </DropdownMenuRadioGroup>
-          </DropdownMenuContent>
-        </DropdownMenu>
-      </ButtonGroup>
-      <span className="flex items-center gap-1 text-xs text-muted-foreground max-[720px]:hidden">
-        {p.cli && <ProviderIcon cli={p.cli} className="size-3" />}
-        {p.clis?.find((c) => c.id === p.cli)?.label ?? "No model"}
-      </span>
-    </div>
+    <ButtonGroup>
+      {none ? (
+        <Tooltip>
+          <TooltipTrigger asChild>
+            {/* oxlint-disable-next-line jsx-a11y/no-noninteractive-tabindex -- a disabled button gets no focus, so the wrapper takes it to show the tooltip */}
+            <span tabIndex={0}>{button}</span>
+          </TooltipTrigger>
+          <TooltipContent>No logged-in claude or codex CLI found</TooltipContent>
+        </Tooltip>
+      ) : (
+        button
+      )}
+      <ButtonGroupSeparator className="bg-primary-foreground/30 max-[720px]:hidden" />
+      <DropdownMenu modal={false}>
+        <DropdownMenuTrigger asChild disabled={!p.clis?.length}>
+          <Button size="icon-sm" className="w-7 max-[720px]:hidden" aria-label={model ? `Model: ${model}` : "Model"}>
+            <ChevronDown />
+          </Button>
+        </DropdownMenuTrigger>
+        <DropdownMenuContent align="end" className="min-w-44">
+          <DropdownMenuLabel className="text-xs text-muted-foreground">Model</DropdownMenuLabel>
+          <DropdownMenuRadioGroup value={p.cli ?? ""} onValueChange={(v) => p.setCli(v as Cli)}>
+            {p.clis?.map((c) => (
+              <DropdownMenuRadioItem key={c.id} value={c.id}>
+                <ProviderIcon cli={c.id} className="size-3.5" />
+                {c.label}
+              </DropdownMenuRadioItem>
+            ))}
+          </DropdownMenuRadioGroup>
+        </DropdownMenuContent>
+      </DropdownMenu>
+    </ButtonGroup>
   );
 }
 
