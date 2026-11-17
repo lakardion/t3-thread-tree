@@ -63,6 +63,10 @@ _Avoid_: native app, Electron app
 The tree served on a local port and opened in a browser tab, with no Dock badge, notifications or menu-bar entry.
 _Avoid_: web app, web version
 
+**Focus list**:
+Up to three threads that the user chose to continue, shown above the tree. It is local to this page: it changes no T3 state and does not reorder the tree.
+_Avoid_: Now and Next, pins, favorites, working set
+
 **Next-step brief**:
 A model-written, ranked list of recommended actions over the active threads. Each action links to one or more threads. The user asks for it with the "What's next" button.
 _Avoid_: suggestion, summary, advice
