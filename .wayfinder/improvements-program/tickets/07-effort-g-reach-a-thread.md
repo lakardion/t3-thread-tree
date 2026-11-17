@@ -2,7 +2,7 @@
 title: Effort G: get to a thread fast
 type: task
 status: open
-assignee: 
+assignee: damian.lucero
 blocked-by: []
 ---
 
