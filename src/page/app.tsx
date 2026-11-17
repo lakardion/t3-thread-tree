@@ -1308,7 +1308,7 @@ function StackRail({
     <Collapsible asChild open={open} onOpenChange={() => toggle(`rail:${id}`)}>
       <li
         ref={ref}
-        className="relative my-1 ml-7 rounded-[10px] border border-dashed border-border"
+        className="relative my-1 rounded-[10px] border border-dashed border-border"
         style={{ viewTransitionName: vtName("s", run[0].id) }}
       >
         <div
