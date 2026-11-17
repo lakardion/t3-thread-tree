@@ -26,7 +26,7 @@ The destination is reached when every route key is done and no map ticket is ope
 
 ## Stacks
 
-- 03-section-fold-build ← 04-quiet-working-build ← 05-closed-counts-build. The stack starts from `main` after the wait-time and status-groups stacks merge. Each key branches from the branch of the key before it.
+- main ← less-noise-03-fold-flat-sections (#82) ← less-noise-04-quiet-working-rows (#83) ← 05-closed-counts-build. GitHub stack #84. The stack starts from `main` after the wait-time and status-groups stacks merge. Each key branches from the branch of the key before it.
 
 ## Notes
 
