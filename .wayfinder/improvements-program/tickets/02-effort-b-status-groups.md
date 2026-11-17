@@ -2,7 +2,7 @@
 title: Effort B: status groups that agree
 type: task
 status: open
-assignee: 
+assignee: damian.lucero
 blocked-by: []
 ---
 
