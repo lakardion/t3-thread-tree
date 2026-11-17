@@ -30,7 +30,7 @@ Row (`ThreadRow` in `src/page/app.tsx`):
 Docs:
 
 - `SPEC.md` and `DESIGN-SPEC.md`: describe the row text, and note that it reverses `d602e6e` (#18) for these rows only. Add **Wait** to `CONTEXT.md` if it is not there. Update `README.md` ("What you get").
-- One PR. The user tests it with `bun run demo` and the real app, and merges it.
+- One draft PR in the stack 04 ← 05 ← 06. The user tests the stack with `bun run demo` and the real app, and merges it.
 
 ## Done when
 
@@ -38,4 +38,4 @@ Docs:
 - In `bun run demo`, light and dark, desktop and phone width: needs-input, plan-ready and your-turn rows show "<phrase> <Wait>" beside the icon; the failed row shows "Failed"; the guest-message row shows "Guest message"; calm rows show no text.
 - The row-end age is unchanged, and details show an "Updated" line.
 - `SPEC.md`, `DESIGN-SPEC.md`, `CONTEXT.md` and `README.md` are updated.
-- `bun run check` passes. The PR is open, and the session stops for the user to test and merge.
+- `bun run check` passes. The draft PR is open, and the session hands off to the next key.

@@ -22,7 +22,7 @@ Rules from [the Open next rules](03-open-next-rules.md) › Resolution.
 - It writes nothing to T3. It opens `t3code://threads/<environmentId>/<threadId>` (`threadUrl`, `src/desktop/runtime.ts`).
 - The blocker on 05-sort-by-wait-build is forced: it keeps the order M04 → M05 → M19.
 - Update `SPEC.md` and `README.md`.
-- One PR. The user tests and merges it.
+- One draft PR in the stack 04 ← 05 ← 06. The user tests the stack and merges it.
 
 ## Done when
 

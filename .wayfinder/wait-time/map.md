@@ -10,7 +10,7 @@ Resume the decision tickets with `/wayfinder .wayfinder/wait-time/map.md`. Resum
 
 ## Destination
 
-A row that waits on the user shows what it wants and for how long. The flat view's waiting sections sort by **Wait**. One "Open next" control opens the thread that waited longest. The three items M04, M05 and M19 are merged to `main`, one PR each, in that order. The user tests each PR and merges it.
+A row that waits on the user shows what it wants and for how long. The flat view's waiting sections sort by **Wait**. One "Open next" control opens the thread that waited longest. The three items M04, M05 and M19 are merged to `main`, one PR each, in that order, as one stack 04 ← 05 ← 06. The user tests the stack and merges it, bottom PR first.
 
 ## Route
 
@@ -19,21 +19,21 @@ Source: markdown tickets in `tickets/`. The keys form one chain, in the order of
 ### Lane 1
 
 1. [Show the phrase and the Wait on rows that wait on the user](tickets/04-row-wait-build.md) — after [the row look](tickets/01-row-wait-look.md) closes
-2. [Sort the waiting sections of the flat view by Wait](tickets/05-sort-by-wait-build.md) — after 04-row-wait-build is merged, and after [the sort rules](tickets/02-sort-by-wait-rules.md) close
-3. [Add "Open next"](tickets/06-open-next-build.md) — after 05-sort-by-wait-build is merged (forced), and after [the Open next rules](tickets/03-open-next-rules.md) close
+2. [Sort the waiting sections of the flat view by Wait](tickets/05-sort-by-wait-build.md) — stacks on 04-row-wait-build, and after [the sort rules](tickets/02-sort-by-wait-rules.md) close
+3. [Add "Open next"](tickets/06-open-next-build.md) — stacks on 05-sort-by-wait-build (forced), and after [the Open next rules](tickets/03-open-next-rules.md) close
 
 The destination is reached when every route key is done and no map ticket is open.
 
 ## Stacks
 
-<!-- none: no key stacks on an open PR -->
+- 04-row-wait-build ← 05-sort-by-wait-build ← 06-open-next-build. Each key branches from the branch of the key before it.
 
 ## Notes
 
-- Mode: manual
-- **Merge gate (map rule, wins over the skill).** A route key unblocks its dependents only when its PR is merged to `main` and its ticket is `closed`. A key in review unblocks nothing. No stacked PRs.
-- **The PR stops for the user.** The build session opens the PR and stops. The user tests it with `bun run demo` and the real app, then merges it. No auto-merge.
-- **Rollback.** Each item merges as its own PR, so `git revert` removes it cleanly. The user tests each item before the next release tag. No feature toggles.
+- Mode: autopilot
+- **Stack gate.** A route key unblocks the next key in its chain when its draft PR opens. The next key stacks on its branch.
+- **The stack stops for the user.** Each build session opens a draft PR and hands off to the next key. The user tests the stack with `bun run demo` and the real app, then merges it, bottom PR first. No auto-merge.
+- **Rollback.** Each item still merges as its own PR, so `git revert` removes it cleanly. The user tests each item before the next release tag. No feature toggles.
 - **Execution lives in this map** (override of plan, don't do): route keys deliver code and PRs. Decision tickets come first; each decision ticket writes the `## Spec` of its build ticket when it closes.
 - **Spec:** each route ticket, then `SPEC.md`, `DESIGN-SPEC.md` and `CONTEXT.md`. A ticket wins over the spec. Each key updates the spec line that it reverses, and `README.md` for its visible feature (see `CLAUDE.md`).
 - **Source:** the closed map [improvements](../improvements/map.md). The item details, options and file:line references (at `5bf8567`) are in [the merged review](../improvements/research/03-merged-review.md) › M04, M05, M19. The order and the rules are in [Order the merged list and group it into efforts](../improvements/tickets/04-order-and-group.md).
@@ -50,6 +50,7 @@ Decided at charting (by the user):
 
 - **Destination:** decide, then build. The map ends when the three PRs are merged.
 - **Merge:** manual. The user tests and merges each PR. The next key starts after the merge.
+- **Mode changed to autopilot (by the user, 2026-11-17):** the three build keys run unattended as one stack of draft PRs. This replaces the merge gate and the no-stack rule above.
 - **M04 look:** decided with a prototype ticket that shows the Opus and Sol variants.
 - **Reversals:** each is confirmed in the ticket where it applies. The row look ticket confirms the reversal of `d602e6e` (#18). The sort rules ticket confirms the override of `SPEC.md:103`.
 - **Glossary:** new term **Wait** in `CONTEXT.md`.

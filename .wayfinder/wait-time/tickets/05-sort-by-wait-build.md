@@ -30,7 +30,7 @@ Drag:
 Docs:
 
 - Update `SPEC.md:103` (manual order in the flat view) for the three sections, and `DESIGN-SPEC.md` if it describes the flat drag. Update `README.md` ("What you get").
-- One PR. The user tests it with `bun run demo` and the real app, and merges it.
+- One draft PR in the stack 04 ← 05 ← 06. The user tests the stack with `bun run demo` and the real app, and merges it.
 
 ## Done when
 
@@ -38,4 +38,4 @@ Docs:
 - In `bun run demo`, light and dark, desktop and phone width: the waiting sections show the longest Wait at the top, and their rows do not drag; rows in the other sections still drag with "Manual".
 - A row that stops waiting goes back to its stored flat position.
 - `SPEC.md` and `README.md` are updated.
-- `bun run check` passes. The PR is open, and the session stops for the user to test and merge.
+- `bun run check` passes. The draft PR is open, and the session hands off to the next key.
