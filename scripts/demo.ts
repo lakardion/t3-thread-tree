@@ -189,10 +189,29 @@ const threads: Thread[] = [
   }),
   t("Rewrite the install page", { id: "launched", projectId: "docs" }),
   t("DOC-16 · Archive the old tutorial", { projectId: "docs", settledAt: ago(60) }),
+  t("Cache rollout dispatch", { id: "dispatch", projectId: "api", ...completed }),
+  ...[4201, 4202, 4203].map((own, i) =>
+    t(`cache-0${i + 1} · ${["Add the cache client", "Cache the search results", "Purge on write"][i]}`, {
+      id: `cache-${i + 1}`,
+      projectId: "api",
+      status: i === 2 ? "running" : "idle",
+      prs: [4201, 4202, 4203].map((n) =>
+        n === own ? pr(n, "created", "open", { stackBase: "main", checks: "passing" }) : pr(n, "stack"),
+      ),
+    }),
+  ),
 ];
 /** The thread that the push steps add to API-77 and remove again. */
 const extra = t("API-77 · Add a per-key quota dashboard", { projectId: "api" });
-const spawners: Record<string, string> = { m1: "map", m2: "map", m3: "map", launched: "map" };
+const spawners: Record<string, string> = {
+  m1: "map",
+  m2: "map",
+  m3: "map",
+  launched: "map",
+  "cache-1": "dispatch",
+  "cache-2": "cache-1",
+  "cache-3": "cache-2",
+};
 const projects = new Map<string, Project>([
   ["storefront", { title: "storefront", repo: "acme/storefront" }],
   ["api", { title: "api-gateway", repo: "acme/api-gateway" }],

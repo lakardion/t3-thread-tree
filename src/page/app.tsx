@@ -87,8 +87,8 @@ import {
   groupIds,
   isKeyGroup,
   linearHref,
-  ownPr,
   prTone,
+  railRows,
   stackRuns,
   stripKey,
 } from "./format.ts";
@@ -1297,10 +1297,7 @@ function StackRail({
 }: { run: Branch[]; sort?: Sort; flat?: boolean; project?: Branch } & Fold) {
   const { id, total, base } = run[0].stack!;
   const open = flat || !closed.has(`rail:${id}`);
-  const stops = run.map((g) => ({ g, p: ownPr(g) }));
-  const rows = stops.flatMap(({ g, p }, i) =>
-    g.threads.map((t, j) => ({ t, g, color: prTone(p), n: j ? undefined : i + 1 })),
-  );
+  const { stops, rows } = railRows(run);
   const render = (ref: RefFn, handleRef?: RefFn) => (
     <Collapsible asChild open={open} onOpenChange={() => toggle(`rail:${id}`)}>
       <li
@@ -1334,14 +1331,14 @@ function StackRail({
                 {base}
               </code>
             )}
-            {stops.map(({ g, p }, i) => (
-              <span key={g.id} className="inline-flex items-center">
+            {stops.map(({ id: stopId, label, p }, i) => (
+              <span key={stopId} className="inline-flex items-center">
                 {(i > 0 || base) && <span className="h-0.5 w-4" style={{ background: prTone(p) }} />}
                 <a
                   href={p?.url}
                   target="_blank"
                   rel="noreferrer"
-                  title={g.label}
+                  title={label}
                   className={cn(
                     "relative z-10 inline-flex items-center gap-1 rounded-full border px-1.5 py-px font-mono text-[11px] hover:underline",
                     p?.draft && "border-dashed",
@@ -1361,9 +1358,15 @@ function StackRail({
             <Presence items={rows} keyOf={(r) => r.t.id}>
               {(r) => (
                 <li className="relative pl-6">
-                  <RailNode y={18} color={r.color} above={r.t !== rows[0].t} below={r.t !== rows.at(-1)!.t} n={r.n} />
+                  <RailNode
+                    y={18}
+                    color={prTone(r.stop.p)}
+                    above={r.t !== rows[0].t}
+                    below={r.t !== rows.at(-1)!.t}
+                    n={r.n}
+                  />
                   <ul className="m-0 list-none p-0">
-                    <ThreadRow t={r.t} chip={r.g.label} inStack />
+                    <ThreadRow t={r.t} chip={r.chip} inStack />
                   </ul>
                 </li>
               )}
