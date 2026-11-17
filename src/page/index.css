@@ -218,7 +218,6 @@
     isolation: isolate;
   }
   .thread-row[data-status="needs-input"]::before,
-  .thread-row[data-status="working"]::before,
   [data-waiting]::before {
     content: "";
     position: absolute;
@@ -246,16 +245,6 @@
       color-mix(in oklch, var(--status-needs-input) var(--wash), transparent),
       transparent 45%
     );
-  }
-  .thread-row[data-status="working"] {
-    background: linear-gradient(
-      90deg,
-      color-mix(in oklch, var(--status-working) calc(var(--wash) * 0.6), transparent),
-      transparent 35%
-    );
-  }
-  .thread-row[data-status="working"]::before {
-    background: var(--status-working);
   }
   .thread-row:hover {
     background: var(--accent);
