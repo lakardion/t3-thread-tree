@@ -458,7 +458,11 @@ describe("status", () => {
     };
     expect(s(both).since).toBe("2026-11-12T08:00:00.000Z");
     expect(s({ ...both, activityRunStartedAt: null }).since).toBe("2026-11-12T07:00:00.000Z");
-    expect(s({ status: "completed", ...DONE_AT }).since).toBeNull();
+    expect(s({ status: "completed", ...DONE_AT }).since).toBe(DONE_AT.latestRunCompletedAt);
+    expect(s({ status: "completed", interactionMode: "plan", hasPlan: true, ...DONE_AT }).since).toBe(
+      DONE_AT.latestRunCompletedAt,
+    );
+    expect(s({ status: "completed", ...DONE_AT, lastVisitedAt: "2026-11-12T11:00:00.000Z" }).since).toBeNull();
   });
 
   test("Queued, Starting and Cancelled phrases", () => {

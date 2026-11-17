@@ -935,6 +935,7 @@ function DetailBlock({ t }: { t: ThreadNode }) {
       )}
       {d.origin && <Line label="Origin">{d.origin}</Line>}
       {d.startedBy && <Line label="Started by">{d.startedBy}</Line>}
+      <Line label="Updated">{ago(t.updatedAt, now)}</Line>
       {d.createdAt && <Line label="Created">{ago(d.createdAt, now)}</Line>}
       {d.goal && (
         <Line label="Goal">
@@ -960,6 +961,17 @@ function DetailBlock({ t }: { t: ThreadNode }) {
         </Line>
       ))}
     </dl>
+  );
+}
+
+/** The phrase beside the icon on rows that wait on the user, with the Wait; failed rows show the phrase only. */
+function WaitText({ t, now }: { t: ThreadNode; now: number }) {
+  if (!needsYou(t.status) && t.status !== "failed") return null;
+  return (
+    <span className={cn(STATUS[t.status].shape, "flex-none text-[12px] font-medium whitespace-nowrap")}>
+      {t.phrase}
+      {needsYou(t.status) && t.since && <span className="font-mono tabular-nums"> {ago(t.since, now)}</span>}
+    </span>
   );
 }
 
@@ -999,6 +1011,7 @@ function ThreadRow({
         >
           {!inStack && <DragHandle handleRef={handleRef} name={t.title || t.id} />}
           <StatusIcon t={t} now={now} />
+          <WaitText t={t} now={now} />
           {pulse > 0 && <span key={pulse} aria-hidden className={cn("row-pulse", STATUS[t.status].shape)} />}
           {project && <ProjectColumn b={project} />}
           {chip && (

@@ -196,6 +196,13 @@ describe("digestOf", () => {
   test("minimal line: no key, PRs, stack, request or message", () => {
     expect(digestOf(node("A"), "t1", null, NOW)).toBe("t1 · Your turn 3h · Thread A");
   });
+  test("plan ready and your turn with a since show the Wait, not the update age", () => {
+    const since = "2026-11-13T11:30:00.000Z";
+    expect(digestOf(node("A", { since }), "t1", null, NOW)).toBe("t1 · Your turn 30m · Thread A");
+    expect(digestOf(node("A", { since, status: "plan-ready", phrase: "Plan ready" }), "t1", null, NOW)).toBe(
+      "t1 · Plan ready 30m · Thread A",
+    );
+  });
   test("stack of N when pos is null; state shows when not open", () => {
     const n = node("A", { stack: { pos: null, total: 4 }, prs: [pr({ state: "merged" })] });
     expect(digestOf(n, "t1", null, NOW)).toBe("t1 · Your turn 3h · Thread A · PRs (#12 merged) · stack of 4");
