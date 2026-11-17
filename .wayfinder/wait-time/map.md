@@ -55,6 +55,8 @@ Decided at charting (by the user):
 - **Glossary:** new term **Wait** in `CONTEXT.md`.
 - **Builders:** `/wayfinder-implement` dispatches each key to its own session.
 
+- [How does a row that waits on the user show its phrase and Wait?](tickets/01-row-wait-look.md): Sol position (beside the icon), the row end keeps the age; needs-you rows show phrase + Wait, failed shows "Failed" only, no-Wait rows show the phrase only. Reversal of #18 confirmed.
+
 ## Not yet specified
 
 <!-- none at charting -->

@@ -1,8 +1,8 @@
 ---
 title: How does a row that waits on the user show its phrase and Wait?
 type: prototype
-status: open
-assignee:
+status: closed
+assignee: damian.lucero
 blocked-by: []
 ---
 
@@ -27,3 +27,15 @@ Fixed by the review: the Wait of `needs-input` starts at the request time. The W
 ## On resolution
 
 Write the `## Spec` and `## Done when` of [the build ticket](04-row-wait-build.md) from the answer. Delete the prototype code; link a screenshot or the throwaway branch from the resolution.
+
+## Resolution
+
+The user picked these answers from the demo prototype (Opus and Sol variants, light and dark, desktop and phone):
+
+- **Position: Sol.** The phrase and the Wait sit beside the status icon, before the key and the title. On a phone, they sit on the first line, above the title.
+- **Row-end time: Sol.** The row end keeps the `updatedAt` age. Details get an "Updated" line, so the age has a label.
+- **Rows: Opus.** `needs-input`, `plan-ready` and `your-turn` show the phrase and the Wait. `failed` shows the phrase "Failed" with no time. All other rows keep the icon only.
+- **No Wait: phrase only.** A row with no `since` (a guest message) shows "Guest message" with no time and no mark.
+- **Reversal confirmed.** This item reverses `d602e6e` (#18) for the rows above only. Calm rows keep the icon only.
+
+Prototype: branch `prototype/row-wait-look` (commit `5dcf08b`), run `bun run demo` and open `?variant=opus` or `?variant=sol`. Screenshots: `.wayfinder/wait-time/assets/01-row-wait-look/` on that branch.
