@@ -87,9 +87,8 @@ import {
   groupIds,
   isKeyGroup,
   linearHref,
-  ownPos,
-  ownPr,
   prTone,
+  railRows,
   stackRuns,
   stopLabel,
   stripKey,
@@ -134,6 +133,7 @@ const TOKEN_CMD =
   "~/.t3/bin/t3 auth session issue --scope orchestration:read --label thread-tree --ttl 52w --token-only";
 const CLOSED_KEY = "thread-tree:closed";
 const SETTLED_KEY = "thread-tree:settled";
+const NEST_KEY = "thread-tree:nest";
 const FILTER_KEY = "thread-tree:filter";
 const THEME_KEY = "thread-tree:theme";
 const CLI_KEY = "thread-tree:cli";
@@ -617,6 +617,8 @@ type PanelProps = LinearProps & {
   close: () => void;
   settled: boolean;
   setSettled: (v: boolean) => void;
+  nest: boolean;
+  setNest: (v: boolean) => void;
   canReset: boolean;
   resetOrder: () => void;
   theme: Theme;
@@ -657,6 +659,9 @@ function SettingsPanel(p: PanelProps) {
         <Group title="View">
           <Row label="Show settled threads" htmlFor="settled">
             <Switch id="settled" checked={p.settled} onCheckedChange={p.setSettled} />
+          </Row>
+          <Row label="Nest launched threads" htmlFor="nest">
+            <Switch id="nest" checked={p.nest} onCheckedChange={p.setNest} />
           </Row>
           <Row label="Drag-and-drop order">
             <Button variant="outline" size="sm" disabled={!p.canReset} onClick={p.resetOrder}>
@@ -967,7 +972,7 @@ function DetailBlock({ t }: { t: ThreadNode }) {
 
 /**
  * `inStack`: the row sits on a stack rail, which holds no drag handles and shows the stack itself.
- * `project` adds the Project column of the flat list, `review` the eye.
+ * `project` adds the Project column and project edge of the flat list, `corners` rounds that edge, `review` the eye.
  */
 function ThreadRow({
   t,
@@ -975,6 +980,7 @@ function ThreadRow({
   sort,
   inStack,
   project,
+  corners,
   review,
 }: {
   t: ThreadNode;
@@ -982,6 +988,7 @@ function ThreadRow({
   sort?: Sort;
   inStack?: boolean;
   project?: Branch;
+  corners?: string;
   review?: boolean;
 }) {
   const now = useContext(Now);
@@ -994,7 +1001,11 @@ function ThreadRow({
   const noPrLabel = t.stack ? `PR stack · ${t.stack.total} PRs · no PR from this thread` : undefined;
   const render = (ref: RefFn, handleRef?: RefFn) => (
     <Collapsible asChild open={open.has(t.id)} onOpenChange={() => toggle(t.id)}>
-      <li ref={ref} className="my-px" style={{ viewTransitionName: vtName("t", t.id) }}>
+      <li
+        ref={ref}
+        className={cn("my-px", project && "border-l-[3px] pl-1", corners)}
+        style={{ viewTransitionName: vtName("t", t.id), borderLeftColor: project && projectHex(project.label) }}
+      >
         <div
           className="thread-row group/row flex min-h-9 min-w-0 items-center gap-x-2 rounded-[8px] px-2 py-1 text-[13px] leading-5 max-[720px]:flex-wrap"
           data-status={t.status}
@@ -1299,17 +1310,18 @@ function StackRail({
 }: { run: Branch[]; sort?: Sort; flat?: boolean; project?: Branch } & Fold) {
   const { id, total, base } = run[0].stack!;
   const open = flat || !closed.has(`rail:${id}`);
-  const stops = run.map((g) => ({ g, p: ownPr(g), n: ownPos(g) }));
+  const { stops, rows } = railRows(run);
   const partial = stops.filter((s) => s.n).length < total;
-  const rows = stops.flatMap(({ g, p, n }) =>
-    g.threads.map((t, j) => ({ t, g, color: prTone(p), n: j ? undefined : n })),
-  );
   const render = (ref: RefFn, handleRef?: RefFn) => (
     <Collapsible asChild open={open} onOpenChange={() => toggle(`rail:${id}`)}>
       <li
         ref={ref}
-        className="relative my-1 ml-7 rounded-[10px] border border-dashed border-border"
-        style={{ viewTransitionName: vtName("s", run[0].id) }}
+        className={cn("relative my-1 rounded-[10px] border border-dashed border-border", project && "border-l-[3px]")}
+        style={{
+          viewTransitionName: vtName("s", run[0].id),
+          borderLeftColor: project && projectHex(project.label),
+          borderLeftStyle: project && "solid",
+        }}
       >
         <div
           className="group/row relative flex min-h-7 flex-wrap items-center gap-2 rounded-[10px] px-2 text-xs"
@@ -1337,14 +1349,14 @@ function StackRail({
                 {base}
               </code>
             )}
-            {stops.map(({ g, p, n }, i) => (
-              <span key={g.id} className="inline-flex items-center">
+            {stops.map(({ id: stopId, label, p, n }, i) => (
+              <span key={stopId} className="inline-flex items-center">
                 {(i > 0 || base) && <span className="h-0.5 w-4" style={{ background: prTone(p) }} />}
                 <a
                   href={p?.url}
                   target="_blank"
                   rel="noreferrer"
-                  title={g.label}
+                  title={label}
                   className={cn(
                     "relative z-10 inline-flex items-center gap-1 rounded-full border px-1.5 py-px font-mono text-[11px] hover:underline",
                     p?.draft && "border-dashed",
@@ -1364,9 +1376,15 @@ function StackRail({
             <Presence items={rows} keyOf={(r) => r.t.id}>
               {(r) => (
                 <li className="relative pl-6">
-                  <RailNode y={18} color={r.color} above={r.t !== rows[0].t} below={r.t !== rows.at(-1)!.t} n={r.n} />
+                  <RailNode
+                    y={18}
+                    color={prTone(r.stop.p)}
+                    above={r.t !== rows[0].t}
+                    below={r.t !== rows.at(-1)!.t}
+                    n={r.n}
+                  />
                   <ul className="m-0 list-none p-0">
-                    <ThreadRow t={r.t} chip={r.g.label} inStack />
+                    <ThreadRow t={r.t} chip={r.chip} inStack />
                   </ul>
                 </li>
               )}
@@ -1379,8 +1397,16 @@ function StackRail({
   return <Sortable sort={sort}>{render}</Sortable>;
 }
 
+/** Rounds the ends of a flat thread row's project edge, except where the row next to it continues that edge. */
+const edgeCorners = (items: FlatItem[], i: FlatItem) => {
+  const at = items.findIndex((x) => x.id === i.id);
+  const joins = (o?: FlatItem) =>
+    at >= 0 && i.kind === "thread" && o?.kind === "thread" && o.project.id === i.project.id;
+  return cn(!joins(items[at - 1]) && "rounded-tl-[8px]", !joins(items[at + 1]) && "rounded-bl-[8px]");
+};
+
 /** A flat-list item: a status section header, a thread row or a PR stack. */
-function FlatRow({ i, closed, toggle, fold }: { i: FlatItem } & Fold) {
+function FlatRow({ i, corners, closed, toggle, fold }: { i: FlatItem; corners: string } & Fold) {
   const lists = useContext(Lists);
   /** The section list that holds the unit, or the whole flat list when ungrouped. */
   const list = [...lists.keys()].find((k) => k !== FLAT && lists.get(k)?.includes(i.id)) ?? FLAT;
@@ -1390,6 +1416,7 @@ function FlatRow({ i, closed, toggle, fold }: { i: FlatItem } & Fold) {
         t={i.t}
         chip={i.t.key ?? undefined}
         project={i.project}
+        corners={corners}
         review={i.review}
         sort={sortOf(lists, list, i.id, i.t.title || i.t.id)}
       />
@@ -1533,6 +1560,7 @@ const pipeline = (ps: Branch[], c: Cfg): { full: Arranged; view: Arranged & { fl
 function App() {
   const [tree, setTree] = useState<Tree | null>(null);
   const [settled, setSettled] = useState(load(SETTLED_KEY) === "1");
+  const [nest, setNest] = useState(load(NEST_KEY) === "1");
   const [needsOnly, setNeedsOnly] = useState(load(FILTER_KEY) === "needs");
   const [theme, setTheme] = useState<Theme>(() => THEMES.find((t) => t === load(THEME_KEY)) ?? "system");
   const [sortBy, setSortBy] = useState<SortBy>(() => (load(SORT_KEY) === "updated" ? "updated" : "manual"));
@@ -1671,7 +1699,8 @@ function App() {
   });
   useEffect(() => {
     save(SETTLED_KEY, settled ? "1" : "0");
-    const es = new EventSource(settled ? "/events?settled=1" : "/events");
+    save(NEST_KEY, nest ? "1" : "0");
+    const es = new EventSource(`/events?settled=${settled ? 1 : 0}&nest=${nest ? 1 : 0}`);
     es.onmessage = (e) => {
       const next = JSON.parse(e.data) as Tree;
       const cur = latest.current;
@@ -1686,7 +1715,7 @@ function App() {
       setBrief(b);
     });
     return () => es.close();
-  }, [settled]);
+  }, [settled, nest]);
 
   const projects = connecting ? undefined : view.projects;
 
@@ -1880,7 +1909,15 @@ function App() {
                             <SendTo value={{ t3cli, open: (id) => setSendTo({ id, open: true }) }}>
                               {layout === "flat" ? (
                                 <Presence key="flat" items={view.flat ?? []} keyOf={(i) => i.id}>
-                                  {(i) => <FlatRow i={i} closed={closed} toggle={toggle} fold={fold} />}
+                                  {(i) => (
+                                    <FlatRow
+                                      i={i}
+                                      corners={edgeCorners(view.flat ?? [], i)}
+                                      closed={closed}
+                                      toggle={toggle}
+                                      fold={fold}
+                                    />
+                                  )}
                                 </Presence>
                               ) : (
                                 <Presence key="tree" items={projects} keyOf={(p) => p.id}>
@@ -1923,6 +1960,8 @@ function App() {
           setLinear={setLinear}
           settled={settled}
           setSettled={setSettled}
+          nest={nest}
+          setNest={setNest}
           canReset={Object.keys(orders).length > 0}
           resetOrder={resetOrder}
           theme={theme}

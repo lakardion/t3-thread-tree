@@ -9,6 +9,7 @@ import {
   ownPos,
   phraseWith,
   prTone,
+  railRows,
   stackRuns,
   stopLabel,
   stripKey,
@@ -100,6 +101,45 @@ describe("stackRuns", () => {
   });
   test("an empty list gives no runs", () => {
     expect(stackRuns([])).toEqual([]);
+  });
+});
+
+describe("railRows", () => {
+  const pr = (n: number) => ({ n }) as PrNode;
+  const t = (id: string, pos: number | null, key: string | null = null) =>
+    ({ id, key, stack: { pos, total: 3 }, prs: pos ? [pr(100 + pos)] : [], children: [] }) as unknown as ThreadNode;
+  const g = (label: string, threads: ThreadNode[]): Branch => ({ id: label, label, branches: [], threads });
+  const show = (run: Branch[]) => {
+    const { stops, rows } = railRows(run);
+    return { stops: stops.map((s) => s.p?.n ?? null), rows: rows.map((r) => [r.t.id, r.n ?? null, r.chip ?? null]) };
+  };
+
+  test("a keyless group gets one stop per positioned thread, rows in stack order, no chip", () => {
+    expect(show([g("PR stack #101", [t("c", 3), t("a", 1), t("b", 2)])])).toEqual({
+      stops: [101, 102, 103],
+      rows: [
+        ["a", 1, null],
+        ["b", 2, null],
+        ["c", 3, null],
+      ],
+    });
+  });
+
+  test("key groups keep their chip; a thread with no position gets no number; a group with none gets an unnumbered stop", () => {
+    expect(
+      show([g("WEB-1", [t("x", 1, "WEB-1"), t("y", null, "WEB-1")]), g("WEB-2", [t("z", null, "WEB-2")])]),
+    ).toEqual({
+      stops: [101, null],
+      rows: [
+        ["x", 1, "WEB-1"],
+        ["y", null, "WEB-1"],
+        ["z", null, "WEB-2"],
+      ],
+    });
+  });
+
+  test("numbers keep the stack position when a filter hides other stops", () => {
+    expect(show([g("WEB-2", [t("b", 2, "WEB-2")])])).toEqual({ stops: [102], rows: [["b", 2, "WEB-2"]] });
   });
 });
 

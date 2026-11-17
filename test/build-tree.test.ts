@@ -72,6 +72,7 @@ function build(raws: object[], spawners: Record<string, string> = {}, over: Part
     spawnerOf: (id) => spawners[id],
     environmentId: "env-1",
     settled: false,
+    nest: true,
     now: NOW,
     ...over,
   });
@@ -195,6 +196,18 @@ describe("placement", () => {
     const [map] = child(tree, "frontend", "No issue key").threads;
     expect(map.title).toBe("Wayfinder map");
     expect(titles(map.children)).toEqual(["ticket 001"]);
+  });
+
+  test("with nesting off, a launched thread sits in No issue key and names its spawner", () => {
+    const tree = build(
+      [shell("map", "Wayfinder map"), shell("mcp:t1", "ticket 001")],
+      { "mcp:t1": "map" },
+      { nest: false },
+    );
+    const ts = child(tree, "frontend", "No issue key").threads;
+    expect(titles(ts)).toEqual(["Wayfinder map", "ticket 001"]);
+    expect(ts[0].children).toEqual([]);
+    expect(ts[1].detail.launchedBy).toEqual({ title: "Wayfinder map", href: "t3code://threads/env-1/map" });
   });
 
   test("keyed thread stays under its key even with a visible spawner", () => {
@@ -340,12 +353,45 @@ describe("PR stack", () => {
     expect(child(tree, "frontend", "WEB-20").stack).toEqual({ id: "s30", total: 2, base: null });
   });
 
-  test("a thread with no key gets no rail", () => {
+  test("a keyless stack mate joins a stack group with the rail, next to its keyed mates", () => {
     const tree = build([
       ...stacked(),
       shell("loose", "loose thread", { pullRequests: [pr(12, "stack"), pr(10, "stack")] }),
+      shell("plain", "plain thread"),
     ]);
+    expect(labels(tree[0].branches)).toEqual(["WEB-1", "WEB-2", "WEB-3", "PR stack #10", "WEB-9", "No issue key"]);
+    expect(child(tree, "frontend", "PR stack #10").stack).toEqual({ id: "s10", total: 3, base: "main" });
+    expect(titles(child(tree, "frontend", "No issue key").threads)).toEqual(["plain thread"]);
     expect("stack" in child(tree, "frontend", "No issue key")).toBe(false);
+  });
+
+  test("keyless launched stack threads share one stack group instead of nesting", () => {
+    const tree = build(
+      [
+        shell("lead", "dispatch"),
+        shell("a", "wait-time-04 one", { pullRequests: [pr(61, "created"), pr(65, "stack"), pr(67, "stack")] }),
+        shell("b", "wait-time-05 two", { pullRequests: [pr(65, "created"), pr(61, "stack"), pr(67, "stack")] }),
+        shell("c", "wait-time-06 three", { pullRequests: [pr(67, "created"), pr(61, "stack"), pr(65, "stack")] }),
+      ],
+      { a: "lead", b: "a", c: "b" },
+    );
+    expect(labels(tree[0].branches)).toEqual(["PR stack #61", "No issue key"]);
+    const g = child(tree, "frontend", "PR stack #61");
+    expect(g.stack).toEqual({ id: "s61", total: 3, base: null });
+    expect(g.threads.map((t) => [t.title, t.stack?.pos, t.children.length])).toEqual([
+      ["wait-time-04 one", 1, 0],
+      ["wait-time-05 two", 2, 0],
+      ["wait-time-06 three", 3, 0],
+    ]);
+    expect(child(tree, "frontend", "No issue key").threads[0].children).toEqual([]);
+  });
+
+  test("a review thread with stack PRs stays in Reviews", () => {
+    const tree = build([
+      ...stacked(),
+      shell("r", "Review #10 notes", { pullRequests: [pr(10, "stack"), pr(11, "stack")] }),
+    ]);
+    expect(titles(child(tree, "frontend", "Reviews", "No issue key").threads)).toEqual(["Review #10 notes"]);
   });
 
   test("node PRs leave out stack links; closed PRs are not stack members", () => {
