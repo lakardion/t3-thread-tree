@@ -34,7 +34,17 @@ import {
   X,
 } from "lucide-react";
 import { MorphIcon } from "morphicons/react";
-import { createContext, Fragment, useCallback, useContext, useEffect, useRef, useState, type ReactNode } from "react";
+import {
+  createContext,
+  Fragment,
+  useCallback,
+  useContext,
+  useEffect,
+  useRef,
+  useState,
+  type ReactNode,
+  type RefObject,
+} from "react";
 import { flushSync } from "react-dom";
 import { createRoot } from "react-dom/client";
 
@@ -543,10 +553,12 @@ const RING = 2 * Math.PI * 6;
 
 /** An update shows as a dot, and a running install as a progress ring in place of the cog. */
 function SettingsButton({
+  buttonRef,
   update,
   open,
   toggle,
 }: {
+  buttonRef: RefObject<HTMLButtonElement | null>;
   update: UpdateState | undefined;
   open: boolean;
   toggle: () => void;
@@ -570,6 +582,7 @@ function SettingsButton({
   const dot = install?.stage === "failed" ? "bg-destructive" : !install && update?.release ? "bg-primary" : null;
   return (
     <Button
+      ref={buttonRef}
       variant={open ? "secondary" : "ghost"}
       size="icon-sm"
       aria-expanded={open}
@@ -697,6 +710,7 @@ const linearSummary = (l: Tree["linear"]) =>
 
 type PanelProps = LinearProps & {
   close: () => void;
+  buttonRef: RefObject<HTMLButtonElement | null>;
   settled: boolean;
   setSettled: (v: boolean) => void;
   snoozed: boolean;
@@ -715,16 +729,28 @@ type PanelProps = LinearProps & {
 
 /** View options and settings, beside the list so a change shows at once. */
 function SettingsPanel(p: PanelProps) {
-  const { close } = p;
+  const { close, buttonRef } = p;
+  const panelRef = useRef<HTMLElement>(null);
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => e.key === "Escape" && close();
+    const onClick = (e: MouseEvent) => {
+      const target = e.target;
+      if (target instanceof Node && !panelRef.current?.contains(target) && !buttonRef.current?.contains(target)) {
+        close();
+      }
+    };
     addEventListener("keydown", onKey);
-    return () => removeEventListener("keydown", onKey);
-  }, [close]);
+    document.addEventListener("click", onClick, true);
+    return () => {
+      removeEventListener("keydown", onKey);
+      document.removeEventListener("click", onClick, true);
+    };
+  }, [close, buttonRef]);
   useEffect(() => window.desktopBridge?.checkUpdates(false), []);
   const token = tokenSummary(p.conn);
   return (
     <aside
+      ref={panelRef}
       aria-label="Settings"
       className="fixed top-0 right-0 z-40 flex h-full w-[380px] max-w-full flex-col overflow-y-auto border-l bg-card shadow-xl"
     >
@@ -1773,6 +1799,7 @@ function App() {
   });
   const linear = linearSet ?? tree?.linear ?? null;
   const [settingsOpen, setSettingsOpen] = useState(false);
+  const settingsButtonRef = useRef<HTMLButtonElement>(null);
   const [seen, setSeen] = useState<ReadonlySet<string>>(new Set());
   const [tokenOpen, setTokenOpen] = useState(false);
   const update = useUpdate();
@@ -2098,6 +2125,7 @@ function App() {
             />
           )}
           <SettingsButton
+            buttonRef={settingsButtonRef}
             update={update}
             open={settingsOpen}
             toggle={() => {
@@ -2218,6 +2246,7 @@ function App() {
       {settingsOpen && (
         <SettingsPanel
           close={closeSettings}
+          buttonRef={settingsButtonRef}
           linear={linear}
           setLinear={setLinear}
           settled={settled}
