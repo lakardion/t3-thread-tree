@@ -2,7 +2,7 @@
 title: Effort D: less noise
 type: task
 status: open
-assignee: 
+assignee: damian.lucero
 blocked-by: []
 ---
 
