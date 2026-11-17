@@ -1,7 +1,7 @@
 ---
 title: Fix the stop numbers of a filtered PR stack
 type: wayfinder:task
-status: open
+status: in-review
 assignee: damian.lucero
 blocked-by: []
 ---
