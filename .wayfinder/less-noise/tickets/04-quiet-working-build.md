@@ -2,7 +2,7 @@
 title: Remove the edge and the wash from working rows
 type: wayfinder:task
 status: open
-assignee:
+assignee: claude (less-noise-04)
 blocked-by: [03-section-fold-build]
 ---
 
