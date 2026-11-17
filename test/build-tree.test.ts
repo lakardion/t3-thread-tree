@@ -72,6 +72,7 @@ function build(raws: object[], spawners: Record<string, string> = {}, over: Part
     spawnerOf: (id) => spawners[id],
     environmentId: "env-1",
     settled: false,
+    nest: true,
     now: NOW,
     ...over,
   });
@@ -195,6 +196,18 @@ describe("placement", () => {
     const [map] = child(tree, "frontend", "No issue key").threads;
     expect(map.title).toBe("Wayfinder map");
     expect(titles(map.children)).toEqual(["ticket 001"]);
+  });
+
+  test("with nesting off, a launched thread sits in No issue key and names its spawner", () => {
+    const tree = build(
+      [shell("map", "Wayfinder map"), shell("mcp:t1", "ticket 001")],
+      { "mcp:t1": "map" },
+      { nest: false },
+    );
+    const ts = child(tree, "frontend", "No issue key").threads;
+    expect(titles(ts)).toEqual(["Wayfinder map", "ticket 001"]);
+    expect(ts[0].children).toEqual([]);
+    expect(ts[1].detail.launchedBy).toEqual({ title: "Wayfinder map", href: "t3code://threads/env-1/map" });
   });
 
   test("keyed thread stays under its key even with a visible spawner", () => {

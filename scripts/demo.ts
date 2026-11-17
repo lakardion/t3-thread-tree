@@ -190,6 +190,11 @@ const threads: Thread[] = [
   t("Rewrite the install page", { id: "launched", projectId: "docs" }),
   t("DOC-16 · Archive the old tutorial", { projectId: "docs", settledAt: ago(60) }),
   t("Cache rollout dispatch", { id: "dispatch", projectId: "api", ...completed }),
+  t("Search revamp map", { id: "search", projectId: "api", status: "idle" }),
+  t("Search: plan the new index", { id: "search-plan", projectId: "api", ...completed }),
+  t("Search: build the index writer", { id: "search-w", projectId: "api", status: "running" }),
+  t("Search: backfill old documents", { id: "search-b", projectId: "api", pending: request("user_input") }),
+  t("Search: rank by freshness", { id: "search-r", projectId: "api", snoozedUntil: later(45) }),
   ...[4201, 4202, 4203].map((own, i) =>
     t(`cache-0${i + 1} · ${["Add the cache client", "Cache the search results", "Purge on write"][i]}`, {
       id: `cache-${i + 1}`,
@@ -211,6 +216,10 @@ const spawners: Record<string, string> = {
   "cache-1": "dispatch",
   "cache-2": "cache-1",
   "cache-3": "cache-2",
+  "search-plan": "search",
+  "search-r": "search",
+  "search-w": "search-plan",
+  "search-b": "search-plan",
 };
 const projects = new Map<string, Project>([
   ["storefront", { title: "storefront", repo: "acme/storefront" }],
@@ -218,16 +227,15 @@ const projects = new Map<string, Project>([
   ["docs", { title: "docs-site", repo: null }],
 ]);
 
-const projectsFor = (settled: boolean) =>
-  buildTree({ threads, projects, spawnerOf: (id) => spawners[id], environmentId: "demo", settled, now });
-const treeFor = (settled: boolean) =>
+const projectsFor = (settled: boolean, nest = false) =>
+  buildTree({ threads, projects, spawnerOf: (id) => spawners[id], environmentId: "demo", settled, nest, now });
+const treeFor = (settled: boolean, nest: boolean) =>
   JSON.stringify({
     conn: process.env.CONN ?? "up",
     lastUpdate: new Date(now).toISOString(),
     linear: { workspace: "acme", teams: ["SHOP"] },
-    projects: projectsFor(settled),
+    projects: projectsFor(settled, nest),
   });
-let trees = { open: treeFor(false), settled: treeFor(true) };
 
 /** The model part of the sample brief. Code makes the `answer`, `fix` and `merge` actions from the tree, so these threads have none of them. `demo-27` is settled, so its link shows struck through. */
 const SAMPLE: BriefAction[] = [
@@ -353,7 +361,6 @@ if (process.env.PUSH === "1") {
   let step = 0;
   setInterval(() => {
     STEPS[step++ % STEPS.length]();
-    trees = { open: treeFor(false), settled: treeFor(true) };
     pushes.forEach((push) => push());
   }, 3000);
 }
@@ -370,10 +377,12 @@ const server = Bun.serve({
     "/events": async (req) => {
       server.timeout(req, 0);
       await Bun.sleep(Number(process.env.DELAY ?? 0));
-      const settled = new URL(req.url).searchParams.get("settled") === "1";
+      const params = new URL(req.url).searchParams;
+      const settled = params.get("settled") === "1";
+      const nest = params.get("nest") === "1";
       const enc = new TextEncoder();
       let send: (event: string, data: string) => void;
-      const push = () => send("", settled ? trees.settled : trees.open);
+      const push = () => send("", treeFor(settled, nest));
       return new Response(
         new ReadableStream({
           start(ctrl) {
