@@ -223,9 +223,35 @@ describe("sections", () => {
     ]);
     expect(sections([stack]).map((s) => s.key)).toEqual(["your-turn"]);
   });
-  test("does not move a parent by its subthread status", () => {
-    const [u] = flatten([project("p", [branch("g", [thread("a", 1, [thread("c", 1, [], "needs-input")], "done")])])]);
+  test("puts a unit in the section of its subthread when that is more urgent", () => {
+    const [u] = flatten([project("p", [branch("g", [thread("a", 1, [thread("c", 1, [], "your-turn")], "idle")])])]);
+    expect(sections([u]).map((s) => s.key)).toEqual(["your-turn"]);
+  });
+  test("places a unit by a subthread at any depth", () => {
+    const deep = flatten([
+      project("p", [branch("g", [thread("a", 1, [thread("b", 1, [thread("c", 1, [], "working")], "idle")], "idle")])]),
+    ])[0];
+    expect(sections([deep]).map((s) => s.key)).toEqual(["working"]);
+    expect(sections([unit("x", "idle"), deep]).map((s) => [s.key, ids(s.units)])).toEqual([
+      ["working", ["t:a"]],
+      ["idle", ["t:x"]],
+    ]);
+  });
+  test("does not place a unit by a settled subthread", () => {
+    const settled = { ...thread("c", 1, [], "needs-input"), settled: true };
+    const [u] = flatten([project("p", [branch("g", [thread("a", 1, [settled], "done")])])]);
     expect(sections([u]).map((s) => s.key)).toEqual(["done"]);
+  });
+  test("places a unit with only settled threads by all of them", () => {
+    const child = { ...thread("c", 1, [], "needs-input"), settled: true };
+    const [u] = flatten([project("p", [branch("g", [{ ...thread("a", 1, [child], "done"), settled: true }])])]);
+    expect(sections([u]).map((s) => s.key)).toEqual(["needs-input"]);
+  });
+  test("places a stack by a subthread of its thread", () => {
+    const [stack] = flatten([
+      project("p", [branch("s1", [thread("a", 1, [thread("c", 1, [], "needs-input")], "done")], [], "st")]),
+    ]);
+    expect(sections([stack]).map((s) => s.key)).toEqual(["needs-input"]);
   });
   test("sequence adds a header with a count before each section, or none without grouping", () => {
     const units = [unit("a", "done"), unit("b", "done")];
@@ -282,8 +308,12 @@ describe("sections", () => {
       ]);
       expect(first([waiting("a", 5), stack, waiting("b", 9)])).toEqual(["stack:p:st", "t:a", "t:b"]);
     });
-    test("does not move a parent by the since of its subthread", () => {
+    test("sorts a unit by the since of its subthread", () => {
       const sub = { ...thread("c", 1, [], "your-turn"), since: T(1) };
+      expect(first([waiting("a", 5, "your-turn", [sub]), waiting("b", 3)])).toEqual(["t:a", "t:b"]);
+    });
+    test("does not sort a unit by the since of a settled subthread", () => {
+      const sub = { ...thread("c", 1, [], "your-turn"), since: T(1), settled: true };
       expect(first([waiting("a", 5, "your-turn", [sub]), waiting("b", 3)])).toEqual(["t:b", "t:a"]);
     });
     test("keeps the input order in other sections", () => {
