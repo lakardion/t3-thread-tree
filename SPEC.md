@@ -75,10 +75,11 @@ A **top-level thread** has no native `parentThreadId`. A **subagent** has `relat
 6. **Placement.** A thread is always placed in its own `projectId`. Apply the first rule that matches:
    1. A title that starts with `Review #` goes under `Project › Reviews › <key>`, or `Project › Reviews › No issue key` if it has no key.
    2. A keyed thread goes under `Project › <key>`.
-   3. A keyless thread with a visible spawner in the same project nests under that spawner.
-   4. Any other keyless thread goes under `Project › No issue key`.
+   3. A keyless thread in a PR stack goes under `Project › PR stack #<n>`, where `<n>` is the bottom PR of the stack. All keyless threads of one stack share this group, and it gets the stack rail. A stack outranks the spawner.
+   4. A keyless thread with a visible spawner in the same project nests under that spawner.
+   5. Any other keyless thread goes under `Project › No issue key`.
 7. **Launcher threads** get no special rule.
-8. **PR stack:** it adds no level to the tree. Each thread in a stack shows a badge with its position, for example `⧉ 3/6`. Key groups in one project that share a stack sit next to each other, in stack order.
+8. **PR stack:** it adds no level to the tree. Each thread in a stack shows a badge with its position, for example `⧉ 3/6`. Key groups and the stack group in one project that share a stack sit next to each other, in stack order. A group with no PR of its own in the stack goes after the others.
    - Stack membership: the thread's open PRs with `source` `created`, `stack` or `agent`.
    - Stack order: as computed by `build.py` on branch `prototype/005-tree-ui`.
 9. **Order:**

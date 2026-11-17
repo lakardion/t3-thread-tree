@@ -340,12 +340,45 @@ describe("PR stack", () => {
     expect(child(tree, "frontend", "WEB-20").stack).toEqual({ id: "s30", total: 2, base: null });
   });
 
-  test("a thread with no key gets no rail", () => {
+  test("a keyless stack mate joins a stack group with the rail, next to its keyed mates", () => {
     const tree = build([
       ...stacked(),
       shell("loose", "loose thread", { pullRequests: [pr(12, "stack"), pr(10, "stack")] }),
+      shell("plain", "plain thread"),
     ]);
+    expect(labels(tree[0].branches)).toEqual(["WEB-1", "WEB-2", "WEB-3", "PR stack #10", "WEB-9", "No issue key"]);
+    expect(child(tree, "frontend", "PR stack #10").stack).toEqual({ id: "s10", total: 3, base: "main" });
+    expect(titles(child(tree, "frontend", "No issue key").threads)).toEqual(["plain thread"]);
     expect("stack" in child(tree, "frontend", "No issue key")).toBe(false);
+  });
+
+  test("keyless launched stack threads share one stack group instead of nesting", () => {
+    const tree = build(
+      [
+        shell("lead", "dispatch"),
+        shell("a", "wait-time-04 one", { pullRequests: [pr(61, "created"), pr(65, "stack"), pr(67, "stack")] }),
+        shell("b", "wait-time-05 two", { pullRequests: [pr(65, "created"), pr(61, "stack"), pr(67, "stack")] }),
+        shell("c", "wait-time-06 three", { pullRequests: [pr(67, "created"), pr(61, "stack"), pr(65, "stack")] }),
+      ],
+      { a: "lead", b: "a", c: "b" },
+    );
+    expect(labels(tree[0].branches)).toEqual(["PR stack #61", "No issue key"]);
+    const g = child(tree, "frontend", "PR stack #61");
+    expect(g.stack).toEqual({ id: "s61", total: 3, base: null });
+    expect(g.threads.map((t) => [t.title, t.stack?.pos, t.children.length])).toEqual([
+      ["wait-time-04 one", 1, 0],
+      ["wait-time-05 two", 2, 0],
+      ["wait-time-06 three", 3, 0],
+    ]);
+    expect(child(tree, "frontend", "No issue key").threads[0].children).toEqual([]);
+  });
+
+  test("a review thread with stack PRs stays in Reviews", () => {
+    const tree = build([
+      ...stacked(),
+      shell("r", "Review #10 notes", { pullRequests: [pr(10, "stack"), pr(11, "stack")] }),
+    ]);
+    expect(titles(child(tree, "frontend", "Reviews", "No issue key").threads)).toEqual(["Review #10 notes"]);
   });
 
   test("node PRs leave out stack links; closed PRs are not stack members", () => {

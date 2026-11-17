@@ -69,6 +69,8 @@ _Avoid_: launch, spawn, create
 - A **Project** holds many **Issue keys**; an **Issue key** holds one or more **Spawn lineage** trees.
 - A **Thread** has zero or one parent and zero or more **Subthreads**.
 - A **PR stack** can span threads of more than one **Issue key**.
+- A thread in a **PR stack** always shows in its stack block, whatever its **Issue key** or spawner. Review threads are the exception: they stay in Reviews.
+- The keyless threads of one **PR stack** share one group, named after the bottom PR (`PR stack #61`).
 
 ## Example dialogue
 
