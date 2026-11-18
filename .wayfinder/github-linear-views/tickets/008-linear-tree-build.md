@@ -31,3 +31,12 @@ Decision: [How does the main view group by Linear project and milestone?](006-gr
 - **Filters and folds.** "Needs you", "Show snoozed" and "Show settled" hide threads and never change placement. An empty group hides. The Settled list stays ungrouped below. Folds save in the closed-rows store with ids per Linear project and milestone. "Fold all" and "Show in tree" work on the new groups.
 - **Key rejected.** While Linear grouping is on and the server reports `"rejected"`, a banner shows. It opens Settings with the "Linear links" fold open, like the token banners. The tree keeps the last good data.
 - **Where to build it.** The T3-project tree is built on the server (`buildTree`, `src/server/build-tree.ts`). Choose server or page for the Linear tree from the code. The Flat view (ticket 009) flattens this tree into "Project · Milestone" sections, so keep the project and milestone ids on the branches.
+
+## Handed over from github-linear-views-007
+
+007 shipped as two chained PRs: #111 (source library) and #112 (wiring). Stack this key on `github-linear-views-007-build-linear-source-wiring`.
+
+- The page does not send `linear=1` yet. Add it to the `/events` URL in `src/page/app.tsx` while "Group by Linear project" is on. Only then does the server fetch, and only then do threads carry `linear`.
+- `ThreadNode.linear` is `{ project, milestone } | null`. `null`: no key, no answer yet, or no `linear=1`. `{ project: null }`: Linear does not know the key, or the issue has no project. Both go to "No project".
+- The key state is `tree.linearKey` (`"ok" | "no-key" | "rejected"`), on every payload. Use it to disable the "Linear project" choice when it is not `"ok"`.
+- `bun run demo` has fixed Linear data for the ticket 006 cases: two projects, the "Beta" milestone with two issues, a milestone with no date, an issue with no milestone, an issue with no project.

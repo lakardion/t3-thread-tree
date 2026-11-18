@@ -26,6 +26,8 @@ The destination is reached when every route key is done and no map ticket is ope
 
 ## Stacks
 
+- `main ← github-linear-views-007-build-linear-source (#111) ← github-linear-views-007-build-linear-source-wiring (#112)` (GitHub stack #113)
+
 ## Notes
 
 - Use [the thread glossary](../../CONTEXT.md) for **Active thread**, **Issue key**, and **PR stack**. Active subthreads follow their top-level ancestor.
