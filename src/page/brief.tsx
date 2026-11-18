@@ -170,7 +170,15 @@ function ThreadHeading({
   );
 }
 
-export function CopyPrompt({ prompt, label = "Copy prompt" }: { prompt: string; label?: string }) {
+/** Phone sizing for a row button: wide enough for its text label. */
+const PHONE_BTN = "max-[720px]:w-auto max-[720px]:gap-1 max-[720px]:px-2 max-[720px]:text-xs";
+
+/** Visible label that shows at phone width only. */
+function PhoneLabel({ children }: { children: string }) {
+  return <span className="hidden max-[720px]:inline">{children}</span>;
+}
+
+export function CopyPrompt({ prompt, label = "Copy prompt", text }: { prompt: string; label?: string; text?: string }) {
   const [done, setDone] = useState(false);
   useEffect(() => {
     if (!done) return;
@@ -183,11 +191,12 @@ export function CopyPrompt({ prompt, label = "Copy prompt" }: { prompt: string; 
         <Button
           variant="ghost"
           size="icon-xs"
-          className="flex-none text-muted-foreground"
+          className={`flex-none text-muted-foreground ${text ? PHONE_BTN : ""}`}
           aria-label={label}
           onClick={() => navigator.clipboard?.writeText(prompt).then(() => setDone(true))}
         >
           {done ? <Check /> : <Copy />}
+          {text && <PhoneLabel>{text}</PhoneLabel>}
         </Button>
       </TooltipTrigger>
       <TooltipContent className="max-w-[320px]">{done ? "Copied" : prompt}</TooltipContent>
@@ -209,12 +218,13 @@ function FocusAdd({ ids, live }: { ids: string[]; live: Map<string, ThreadNode> 
     <Button
       variant="ghost"
       size="icon-xs"
-      className="flex-none text-muted-foreground"
+      className={`flex-none text-muted-foreground ${PHONE_BTN}`}
       aria-label="Add to Focus"
       disabled={off}
       onClick={threads.length === 1 ? () => add(threads[0].id) : undefined}
     >
       <Crosshair />
+      <PhoneLabel>Focus</PhoneLabel>
     </Button>
   );
   return (
@@ -265,12 +275,13 @@ function SendPrompt(p: {
     <Button
       variant="ghost"
       size="icon-xs"
-      className="flex-none text-muted-foreground"
+      className={`flex-none text-muted-foreground ${PHONE_BTN}`}
       aria-label="Send prompt"
       disabled={off}
       onClick={() => setOpen(true)}
     >
       <Send />
+      <PhoneLabel>Send</PhoneLabel>
     </Button>
   );
   return (
@@ -302,12 +313,13 @@ function StartPrompt(p: {
     <Button
       variant="ghost"
       size="icon-xs"
-      className="flex-none text-muted-foreground"
-      aria-label="Start thread"
+      className={`flex-none text-muted-foreground ${PHONE_BTN}`}
+      aria-label="Start new thread"
       disabled={p.t3cli?.available === false}
       onClick={() => setOpen(true)}
     >
       <MessageSquarePlus />
+      <PhoneLabel>New thread</PhoneLabel>
     </Button>
   );
   return (
@@ -368,7 +380,7 @@ function Row({
   );
   return (
     <li
-      className={`flex items-start gap-2.5 rounded-[8px] px-2 py-1.5 hover:bg-accent ${mark ? "opacity-55 transition-opacity hover:opacity-100" : ""}`}
+      className={`flex items-start gap-2.5 rounded-[8px] px-2 py-1.5 hover:bg-accent max-[720px]:flex-wrap max-[720px]:gap-y-1 ${mark ? "opacity-55 transition-opacity hover:opacity-100" : ""}`}
     >
       <span className="w-4 flex-none pt-px text-right font-mono text-[11px] text-muted-foreground tabular-nums">
         {done ? <Check className="ml-auto size-3.5 text-status-done-fg" aria-label="Done" /> : rank}
@@ -391,24 +403,26 @@ function Row({
           </div>
         )}
       </div>
-      {a.prompt && (
-        <>
-          <div className={done ? "hidden" : "contents"}>
-            <SendPrompt
-              a={a}
-              prompt={a.prompt}
-              live={live}
-              titles={titles}
-              notes={mark === "changed" && at ? changedLines(a, live, snap, at) : []}
-              t3cli={t3cli}
-              onSent={onSent}
-            />
-            <StartPrompt a={a} prompt={a.prompt} live={live} projects={projects} t3cli={t3cli} />
-          </div>
-          <CopyPrompt prompt={a.prompt} />
-        </>
-      )}
-      <FocusAdd ids={a.threadIds} live={live} />
+      <div className="contents max-[720px]:flex max-[720px]:basis-full max-[720px]:flex-wrap max-[720px]:items-center max-[720px]:gap-1 max-[720px]:pl-[26px] max-[720px]:empty:hidden">
+        {a.prompt && (
+          <>
+            <div className={done ? "hidden" : "contents"}>
+              <SendPrompt
+                a={a}
+                prompt={a.prompt}
+                live={live}
+                titles={titles}
+                notes={mark === "changed" && at ? changedLines(a, live, snap, at) : []}
+                t3cli={t3cli}
+                onSent={onSent}
+              />
+              <StartPrompt a={a} prompt={a.prompt} live={live} projects={projects} t3cli={t3cli} />
+            </div>
+            <CopyPrompt prompt={a.prompt} text="Copy" />
+          </>
+        )}
+        <FocusAdd ids={a.threadIds} live={live} />
+      </div>
     </li>
   );
 }

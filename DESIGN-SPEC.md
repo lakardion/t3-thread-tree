@@ -338,6 +338,7 @@ The hover background of a row is `--accent`. It replaces the wash while the poin
 - The banner is below the header, as now.
 - The brief panel head has a disclosure chevron, like the tree folds. Folded, the head shows the count line and nothing shows below it. The list shows three open rows and a "Show all N" link button.
 - A brief row has the full thread title as its heading (bold, wraps). Line 2 has the kind chip, the Action title, the Wait and the mark badge. Line 3 has the reason.
+- At phone width (720 px and less), the row buttons sit on their own line under the reason, in line with the heading, with text labels: Send, New thread, Copy, Focus.
 - One card with all projects follows.
 
 **Attention summary.** Four count chips over the visible threads, nested threads included:
