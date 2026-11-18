@@ -12,7 +12,7 @@ Build M22: the Find control and Cmd/Ctrl+K, with the rules of [the Find rules](0
 
 ## Brief
 
-Stacks on 04-focus-list-build (forced: it keeps the order M20 → M22 → M21). It adds the shared page key handler, or extends the one that M19 added. Update `SPEC.md` and `README.md`. One draft PR.
+Starts on `main`: 04-focus-list-build (M20) is merged in #88. It adds the shared page key handler, or extends the one that M19 added. Update `SPEC.md` and `README.md`. One draft PR.
 
 ## Spec
 
