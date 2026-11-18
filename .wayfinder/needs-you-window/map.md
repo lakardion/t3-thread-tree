@@ -60,6 +60,7 @@ Decided at charting (by the user):
 - **Process:** decide with the user, then one autopilot build key. One PR, not a stack.
 
 - [How does the small window look?](tickets/01-window-look.md): a compact one-line list (status icon, project icon, linked key, title, Wait), count and Open next in a top bar, target row marked, 360×360.
+- [How does the small window behave?](tickets/02-window-rules.md): named "Up next"; the main page owns the list and skip memory and main forwards it; a row click counts as an Open next; ⌥⌘U global toggle, Window-menu and menu-bar checkbox; floating panel on all Spaces; size and place saved.
 
 ## Not yet specified
 

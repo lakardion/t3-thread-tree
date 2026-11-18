@@ -1,8 +1,8 @@
 ---
 title: How does the small window behave?
 type: grilling
-status: open
-assignee: 
+status: closed
+assignee: damian.lucero
 blocked-by: []
 ---
 
@@ -26,3 +26,17 @@ Decide:
 ## On resolution
 
 Write the rules part of the `## Spec` and `## Done when` of [the build ticket](03-window-build.md). Update `CONTEXT.md` with the name.
+
+## Resolution
+
+The user took every recommendation:
+
+- **Name.** "Up next". `CONTEXT.md` now has **Up next window** and **Open next queue** (the thread set, wider than **Needs you**).
+- **Data path.** The main page sends the queue and the target to main with a new bridge call. Main stores the last list and forwards it to the window, which loads a small page with its own preload, no SSE stream and no skip memory of its own.
+- **Clicks.** "Open next" in the window sends `openNext` to the main page. A row click also goes through the main page and adds the thread to the skip memory, in this window only.
+- **Toggle.** A checkbox "Up next" in the menu-bar menu (after "Open tree") and in the Window menu, with ⌥⌘U as a global shortcut.
+- **On top.** `type: "panel"`, floating, all Spaces, over full-screen apps, no Dock or Cmd-Tab entry.
+- **Size and place.** Saved in `up-next.json` with the `window.json` off-screen check, resizable with a minimum size. First show at the top right of the screen with the cursor.
+- **Close.** Hides the window and clears both checks. The window gets the last stored list when it loads.
+
+The full rules are in [the build ticket](03-window-build.md) › Spec › Rules.
