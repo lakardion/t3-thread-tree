@@ -2,7 +2,7 @@
 title: Show three Actions first and fold the brief
 type: wayfinder:task
 status: open
-assignee: 
+assignee: claude (better-brief-05)
 blocked-by: [02-done-and-short-rules, 04-action-marks-build]
 ---
 
