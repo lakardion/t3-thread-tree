@@ -20,4 +20,10 @@ contextBridge.exposeInMainWorld("desktopBridge", {
   checkUpdates: (force) => ipcRenderer.send("checkUpdates", force),
   installUpdate: () => ipcRenderer.send("installUpdate"),
   openRelease: () => ipcRenderer.send("openRelease"),
+  setUpNext: (list) => ipcRenderer.send("setUpNext", list),
+  onOpenThread: (cb) => {
+    const listener = (_event: unknown, id: string) => cb(id);
+    ipcRenderer.on("openThread", listener);
+    return () => void ipcRenderer.removeListener("openThread", listener);
+  },
 } satisfies DesktopBridge);

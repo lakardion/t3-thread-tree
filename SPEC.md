@@ -464,12 +464,12 @@ An app started from the Dock or Spotlight does not get the shell PATH, so the br
 
 ### Window
 
-- One window. It loads `http://127.0.0.1:<port>`. No custom scheme. When the port is not 4773, that run has its own `localStorage`, so the theme and fold state are the defaults. This is a known cost.
+- One main window, and the Up next window (see "Up next window"). The main window loads `http://127.0.0.1:<port>`. No custom scheme. When the port is not 4773, that run has its own `localStorage`, so the theme and fold state are the defaults. This is a known cost.
 - `show: false`, then show on `ready-to-show`. `contextIsolation: true`, `nodeIntegration: false`, `sandbox: true`, `backgroundThrottling: false`. The standard macOS title bar.
 - The app saves the window size and place in `window.json` in the app data folder, and restores them at start. A saved place that is off all screens is dropped.
 - **Close:** the close button hides the window. The page keeps running and drives the badge, the menu-bar entry and the notifications. A Dock click or "Open tree" shows the window again.
 - **Quit:** Cmd-Q, or "Quit" in the menu-bar menu. Launch at login is not offered.
-- **App menu:** the role menus (app, edit, view, window). The app menu also holds "Mute Notifications" and, when one exists, "Update available: vX.Y.Z…".
+- **App menu:** the role menus (app, edit, view, window). The Window menu keeps Minimize, Zoom and Bring All to Front, and adds the "Up next" check item. The app menu also holds "Mute Notifications" and, when one exists, "Update available: vX.Y.Z…".
 - External links (`t3code://`, PRs, Linear) open with `shell.openExternal`, not in the app window.
 
 ### Preload bridge
@@ -500,14 +500,32 @@ type DesktopBridge = {
   setOpenNext(title: string | null): void /** menu-bar "Open next" item */;
   onOpenNext(cb: () => void): () => void /** a click on that item */;
   openExternal(url: string): void;
+  setUpNext(list: UpNext): void /** the Up next window */;
+  onOpenThread(cb: (id: string) => void): () => void /** a row click in the Up next window */;
 };
 ```
 
-Main checks each payload by hand (types, sizes, a `t3code:`, `https:` or `http:` URL) before it acts. It accepts IPC only from the main window.
+Main checks each payload by hand (types, sizes, a `t3code:`, `https:` or `http:` URL) before it acts. It accepts IPC only from the main window, except the calls of the Up next window (see "Up next window").
 
 ### Needs you
 
 The **Needs you** set is the visible top-level threads with status `needs-input` or `plan-ready`. Settled threads do not count. The page computes it from each tree it gets (the same count as the Needs-you badge in the header) and calls `setNeedsYou`. `since` is the start of the wait, for the menu order: the request time for `needs-input`, and `latestRunCompletedAt` for `plan-ready`.
+
+### Up next window
+
+The **Up next window** is a small always-on-top window with the **Open next queue**: one row for each thread, with its Wait, and an "Open next" button. Its title, its top bar and both menu items say "Up next".
+
+- **Page:** `/up-next` on the same server, with its own preload (`up-next-preload.ts`, `window.upNextBridge`). It has no SSE stream, no tree logic and no skip memory.
+- **Data path:** the main page owns the queue, the target and the skip memory. It sends them to main with `setUpNext({ rows, targetId })`. A row holds the id, title, status, phrase, raw status, `since`, project label, issue key and Linear URL. Main checks the payload by hand, stores the last one and sends it to the Up next window. When the window loads, it asks main for the stored list, so it never opens empty while threads wait.
+- **IPC:** main takes `setUpNext` from the main window only. It takes `upNext`, `upNextOpenNext`, `upNextOpenThread` and `upNextOpenLinear` from the Up next window only.
+- **Open next:** the button sends `openNext` to the main page, as the menu-bar item does.
+- **Row click:** main sends `openThread(id)` to the main page. The page adds the thread to the skip memory and opens it, so Open next then goes to the next row. The main window does not come forward. Tree rows and menu-bar rows do not change.
+- **Key click:** a linked issue key opens Linear with `shell.openExternal`, only for an `https://linear.app/` URL. It does not touch the skip memory.
+- **Toggle:** the check item "Up next" in the Window menu and after "Open tree" in the menu-bar menu, and the shortcut ⌥⌘U. The shortcut uses `globalShortcut`, so it works in any app. When it cannot register, main logs it and the menu items still work. The window is created at its first show, hidden at start and not restored at restart.
+- **On top:** `type: "panel"`, the floating level, on all Spaces and over full-screen apps. It has no Dock or Cmd-Tab entry, and it does not take focus when it shows.
+- **Size and place:** 360×360 at first, resizable, at least 280×160. Main saves them in `up-next.json` and restores them with the same off-screen check as `window.json`. With no saved place, the window sits at the top right of the work area of the screen that holds the cursor.
+- **Close:** the close button hides the window and clears the check in both menus. Cmd-Q quits the app.
+- **Look:** a top bar with "Up next", the count and an "Open next" button (disabled with no target), then one 28 px row for each thread: status icon, project icon, issue key, title and Wait. The target row has an amber left mark and a tint. With no thread, the list shows "Nothing waits" and "Threads that need you show here." The theme follows the app theme.
 
 ### Dock badge
 
@@ -534,7 +552,7 @@ The page owns the rules. Main shows them, so the mute switch stays in main.
   1. "Open next · <title>" and a separator, only when the page has an Open next target. A click asks the page to open that target, so the item and the page button open the same thread. The page sends the title with `setOpenNext`; `null` hides the item.
   2. Up to 10 Needs-you threads, the longest wait first (oldest `since`; `null` last). Each item shows the status and the title. A click opens the thread in T3 Code.
   3. "+N more… (open tree)" when more than 10, which shows the window.
-  4. "Open tree", "Mute Notifications", "Update available: vX.Y.Z…" when one exists, "Quit".
+  4. "Open tree", "Up next" (a check item), "Mute Notifications", "Update available: vX.Y.Z…" when one exists, "Quit".
 - Main builds the menu again on each `setNeedsYou` and each `setOpenNext`.
 
 ### Token

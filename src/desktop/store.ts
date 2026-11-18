@@ -2,7 +2,15 @@ import { readFileSync, writeFileSync } from "node:fs";
 
 import * as v from "valibot";
 
-import { NeedsYouList, type NeedsYouThread, NotifyList, type NotifyEvent, OpenNextTitle } from "../shared/desktop.ts";
+import {
+  NeedsYouList,
+  type NeedsYouThread,
+  NotifyList,
+  type NotifyEvent,
+  OpenNextTitle,
+  type UpNext,
+  UpNextList,
+} from "../shared/desktop.ts";
 
 const Size = v.object({
   width: v.pipe(v.number(), v.finite(), v.gtValue(0)),
@@ -45,6 +53,12 @@ export function parseNotify(raw: unknown): NotifyEvent[] | null {
 export function parseOpenNext(raw: unknown): string | null | undefined {
   const result = v.safeParse(OpenNextTitle, raw);
   return result.success ? result.output : undefined;
+}
+
+/** A clean copy of the Up next list, or `null` when `raw` is not at most 500 well-formed rows and a target id or `null`. */
+export function parseUpNext(raw: unknown): UpNext | null {
+  const result = v.safeParse(UpNextList, raw);
+  return result.success ? result.output : null;
 }
 
 const UpdatedSchema = v.object({ version: v.string(), notes: v.string(), url: v.string() });
