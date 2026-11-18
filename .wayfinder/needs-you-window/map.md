@@ -59,6 +59,8 @@ Decided at charting (by the user):
 - **Look:** decided with a prototype ticket.
 - **Process:** decide with the user, then one autopilot build key. One PR, not a stack.
 
+- [How does the small window look?](tickets/01-window-look.md): a compact one-line list (status icon, project icon, linked key, title, Wait), count and Open next in a top bar, target row marked, 360×360.
+
 ## Not yet specified
 
 None.

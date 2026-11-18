@@ -1,8 +1,8 @@
 ---
 title: How does the small window look?
 type: prototype
-status: open
-assignee: 
+status: closed
+assignee: claude (needs-you-window-01)
 blocked-by: []
 ---
 
@@ -26,3 +26,16 @@ Decide:
 ## On resolution
 
 Write the look part of the `## Spec` and `## Done when` of [the build ticket](03-window-build.md). Delete the prototype code; link a screenshot or the throwaway branch from the resolution.
+
+## Resolution
+
+The user picked variant A, "Compact list", with these changes:
+
+- **Row.** One line, 28 px high: status icon, project icon (no name), issue key, title, Wait. No phrase text. The key links to Linear when `linearHref` gives a URL, else it is plain text. The title is cut off with an ellipsis. The Wait has the status colour, in mono digits.
+- **Click.** A click on the row (not the key) opens the thread in T3. Hover shows the full title as a tooltip.
+- **Open next.** An outline button at the right of a top bar. The row that Open next opens has an amber left mark and a tint.
+- **Count.** The top bar shows the window name and the count of all listed threads (the Open next set). The name comes from ticket 02.
+- **Size.** 360×360 by default, about 10 rows before the list scrolls. The user can resize it.
+- **Empty.** The top bar stays, with Open next disabled. The list area shows "Nothing waits" and "Threads that need you show here." in the middle.
+
+Prototype: branch `prototype/needs-you-window-look` (commit `deb3693`). Run `bun run demo` and open `?prototype=small-window&variant=A|B|C`; `&empty=1` shows the empty state. Screenshots: `.wayfinder/needs-you-window/assets/01-window-look/` on that branch.
