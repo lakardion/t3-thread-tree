@@ -236,6 +236,13 @@ const readOrigin = async (): Promise<string | null> => {
   }
 };
 
+/** A failure frame holds `exit.cause[0].error.message`. Else the frame as JSON. */
+function failureText(frame: Obj): string {
+  const cause = obj(frame.exit).cause;
+  const message = Array.isArray(cause) ? str(obj(obj(cause[0]).error).message) : null;
+  return message ?? JSON.stringify(frame).slice(0, 300);
+}
+
 /**
  * Holds the shell stream. Retries every 3 s while T3 is down or the token is rejected.
  * Each new connection starts with a fresh snapshot.
@@ -246,6 +253,8 @@ export function connectShell(opts: {
   onConn: (c: Conn) => void;
 }) {
   let ws: WebSocket | null = null;
+  let seq = 1;
+  const pending = new Map<string, { sock: WebSocket; resolve: () => void; reject: (e: Error) => void }>();
 
   const attempt = async () => {
     if (ws) return;
@@ -293,6 +302,11 @@ export function connectShell(opts: {
           }
           /** The server sends the next chunk only after an Ack. */
           send({ _tag: "Ack", requestId: m.requestId });
+        } else if (m._tag === "Exit" && typeof m.requestId === "string" && pending.has(m.requestId)) {
+          const call = pending.get(m.requestId)!;
+          pending.delete(m.requestId);
+          if (obj(m.exit)._tag === "Success") call.resolve();
+          else call.reject(new Error(failureText(m)));
         } else if (m._tag === "Exit" || m._tag === "Defect" || m._tag === "ClientProtocolError") {
           console.error("[t3] stream ended:", JSON.stringify(m).slice(0, 500));
           sock.close();
@@ -301,6 +315,11 @@ export function connectShell(opts: {
     };
     sock.onclose = () => {
       clearInterval(ping);
+      for (const [id, call] of pending) {
+        if (call.sock !== sock) continue;
+        pending.delete(id);
+        call.reject(new Error("T3 is not connected"));
+      }
       /** A socket that `reconnect` dropped reports nothing. */
       if (ws !== sock) return;
       ws = null;
@@ -312,6 +331,31 @@ export function connectShell(opts: {
   void attempt();
   setInterval(attempt, 3000);
   return {
+    /** Sends one orchestration command and resolves when T3 accepts it. */
+    dispatch(command: Record<string, unknown>): Promise<void> {
+      if (ws?.readyState !== WebSocket.OPEN) return Promise.reject(new Error("T3 is not connected"));
+      const id = String(++seq);
+      return new Promise<void>((resolve, reject) => {
+        const timer = setTimeout(() => {
+          pending.delete(id);
+          reject(new Error("timed out"));
+        }, 30_000);
+        pending.set(id, {
+          sock: ws!,
+          resolve: () => (clearTimeout(timer), resolve()),
+          reject: (e) => (clearTimeout(timer), reject(e)),
+        });
+        ws!.send(
+          JSON.stringify({
+            _tag: "Request",
+            id,
+            tag: "orchestration.dispatchCommand",
+            payload: { ...command, commandId: crypto.randomUUID() },
+            headers: [],
+          }),
+        );
+      });
+    },
     /** Drops the open socket and connects again with the current token. */
     reconnect() {
       const old = ws;

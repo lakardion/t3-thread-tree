@@ -16,6 +16,7 @@ import {
   ChevronDown,
   ChevronRight,
   CircleArrowUp,
+  CircleCheckBig,
   Contrast,
   Crosshair,
   ExternalLink,
@@ -32,6 +33,7 @@ import {
   SkipForward,
   Sun,
   TriangleAlert,
+  Undo2,
   X,
 } from "lucide-react";
 import { MorphIcon } from "morphicons/react";
@@ -149,6 +151,7 @@ import {
 import { Presence, useMotion } from "./presence.tsx";
 import { ProjectIcon, projectHex } from "./project-icon.tsx";
 import { CliGate, LastMessage, SendDialog, useLastMessage } from "./send-dialog.tsx";
+import { postSettle } from "./send.ts";
 import { LEGEND, LegendIcon, STATUS, StatusIcon } from "./status-icon.tsx";
 import { nextStop, refocusIndex, stopsIn } from "./stops.ts";
 import { Swap, useChanges } from "./swap.tsx";
@@ -174,7 +177,7 @@ import {
 } from "./view.ts";
 
 const TOKEN_CMD =
-  "~/.t3/bin/t3 auth session issue --scope orchestration:read --label thread-tree --ttl 52w --token-only";
+  "~/.t3/bin/t3 auth session issue --scope orchestration:read --scope orchestration:operate --label thread-tree --ttl 52w --token-only";
 const CLOSED_KEY = "thread-tree:closed";
 const SETTLED_KEY = "thread-tree:settled";
 const SNOOZED_KEY = "thread-tree:snoozed";
@@ -1169,6 +1172,39 @@ function FocusMark({ t }: { t: ThreadNode }) {
   );
 }
 
+function SettleButton({ t }: { t: ThreadNode }) {
+  const [busy, setBusy] = useState(false);
+  const [err, setErr] = useState<string>();
+  const label = t.settled ? "Unsettle thread" : "Settle thread";
+  return (
+    <Tooltip>
+      <TooltipTrigger asChild>
+        {/** A disabled button gets no hover, so the wrapper keeps the tooltip. */}
+        <span className={cn("inline-flex", !err && SEND_REVEAL)}>
+          <Button
+            variant="ghost"
+            size="icon"
+            className={cn(ROW_BUTTON, err && "text-destructive")}
+            aria-label={label}
+            disabled={busy}
+            onClick={async (e) => {
+              e.stopPropagation();
+              setBusy(true);
+              setErr(undefined);
+              const r = await postSettle(t.id, !t.settled);
+              setBusy(false);
+              if (!r.ok) setErr(r.err.error);
+            }}
+          >
+            {t.settled ? <Undo2 className="size-3.5" /> : <CircleCheckBig className="size-3.5" />}
+          </Button>
+        </span>
+      </TooltipTrigger>
+      <TooltipContent>{err ?? label}</TooltipContent>
+    </Tooltip>
+  );
+}
+
 /**
  * `inStack`: the row sits on a stack rail, which holds no drag handles and shows the stack itself.
  * `project` adds the Project column and project edge of the flat list, `corners` rounds that edge, `review` the eye.
@@ -1293,6 +1329,7 @@ function ThreadRow({
               </TooltipTrigger>
               <TooltipContent>Updated {new Date(t.updatedAt).toLocaleString()}</TooltipContent>
             </Tooltip>
+            <SettleButton key={String(t.settled)} t={t} />
             {sendTo && (
               <CliGate t3cli={sendTo.t3cli}>
                 <Button
