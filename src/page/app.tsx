@@ -73,6 +73,7 @@ import { cn } from "@/lib/utils";
 import appIcon from "../../assets/icon.svg" with { type: "text" };
 import type { BriefState, Cli } from "../shared/brief.ts";
 import type { UpdateState } from "../shared/desktop.ts";
+import { hits } from "../shared/find.ts";
 import type { CliStatus } from "../shared/send.ts";
 import {
   allThreads,
@@ -101,6 +102,7 @@ import {
   withoutSnoozed,
 } from "./attention.ts";
 import { BriefControls, BriefPanel, type Offered } from "./brief.tsx";
+import { FindButton, FindDialog, FIND_KEY, MAC } from "./find.tsx";
 import {
   addFocus,
   FOCUS_FULL,
@@ -113,7 +115,7 @@ import {
   removeFocus,
   replaceFocus,
 } from "./focus.ts";
-import { Focus, FocusButton, FocusStrip, slotOf, type Pending } from "./focus.tsx";
+import { Focus, FocusButton, FocusStrip, revealRow, slotOf, type Pending } from "./focus.tsx";
 import {
   ago,
   folded,
@@ -127,6 +129,7 @@ import {
   stopLabel,
   stripKey,
 } from "./format.ts";
+import { pageKey } from "./keys.ts";
 import {
   PROJECTS,
   arrange,
@@ -156,6 +159,8 @@ import {
   folds,
   isContext,
   itemIds,
+  pathFolds,
+  sectionHolding,
   sectionOf,
   sequence,
   sortFlat,
@@ -824,6 +829,9 @@ function SettingsPanel(p: PanelProps) {
           </Fold>
           <Fold label="Status icons" value={<span className="sr-only">Legend</span>} tone="info">
             <Legend />
+          </Fold>
+          <Fold label="Keys" value={<span className="sr-only">Shortcuts</span>} tone="info">
+            <Keys />
           </Fold>
         </Group>
       </div>
@@ -1761,6 +1769,28 @@ function ProjectBlock({ b, closed, toggle, fold }: { b: Branch } & Fold) {
   return <Sortable sort={sortOf(lists, PROJECTS, b.id, b.label)}>{render}</Sortable>;
 }
 
+const KEYS: [keys: string, action: string][] = [
+  ["n", "Open next"],
+  [FIND_KEY, "Find"],
+  ["1–3", "Open a Focus slot"],
+];
+
+/** The page keys. */
+const Keys = () => (
+  <dl className="m-0 grid grid-cols-[auto_minmax(0,1fr)] items-center gap-x-3 gap-y-1.5 text-xs">
+    {KEYS.map(([keys, action]) => (
+      <Fragment key={action}>
+        <dt>
+          <kbd className="rounded-[4px] border bg-muted px-1.5 py-0.5 font-mono text-[11px] text-foreground">
+            {keys}
+          </kbd>
+        </dt>
+        <dd className="m-0 text-muted-foreground">{action}</dd>
+      </Fragment>
+    ))}
+  </dl>
+);
+
 /** The meaning of each status icon. */
 const Legend = () => (
   <dl className="m-0 grid grid-cols-[auto_minmax(0,1fr)] items-center gap-x-2.5 gap-y-1.5 text-xs">
@@ -1850,6 +1880,7 @@ function App() {
   const [focus, setFocus] = useState(() => parseFocus(load(FOCUS_KEY)));
   const [focusShow, setFocusShow] = useState(load(FOCUS_SHOW_KEY) === "1");
   const [pending, setPending] = useState<Pending | null>(null);
+  const [findOpen, setFindOpen] = useState(false);
   /** A new key remounts the tree list, which drops the row moves that dnd-kit made during a drag onto the strip. */
   const [listKey, setListKey] = useState(0);
   /** The page setting wins over the server's `.env` config. */
@@ -1898,18 +1929,6 @@ function App() {
     window.desktopBridge.setOpenNext(openNextTitle);
   }, [openNextTitle]);
   useEffect(() => window.desktopBridge?.onOpenNext(() => openNextRef.current()), []);
-  useEffect(() => {
-    const onKey = (e: KeyboardEvent) => {
-      if (e.key !== "n" || e.metaKey || e.ctrlKey || e.altKey || e.shiftKey || e.repeat || e.defaultPrevented) return;
-      const el = e.target instanceof HTMLElement ? e.target : null;
-      if (el?.closest("input, textarea, [contenteditable]:not([contenteditable=false])")) return;
-      if (settingsOpenRef.current) return;
-      if (document.querySelector("[role=dialog], [role=alertdialog], [role=menu], [role=listbox]")) return;
-      openNextRef.current();
-    };
-    addEventListener("keydown", onKey);
-    return () => removeEventListener("keydown", onKey);
-  }, []);
 
   useEffect(() => {
     if (!window.desktopBridge || !tree) return;
@@ -2018,7 +2037,19 @@ function App() {
       ? pending
       : null;
   if (pending && !pend) setPending(null);
+  /** Opens the folds on the way to the row of thread `id`, stores them, then scrolls to the row and flashes it. */
+  const reveal = (id: string): Promise<boolean> => {
+    flushSync(() => {
+      if (layout === "tree") fold(pathFolds(full.projects, id), false);
+      else {
+        const key = groupBy === "status" ? sectionHolding(flatten(view.projects), snoozed, id) : null;
+        if (key && shutSections.has(key)) toggleSection(key);
+      }
+    });
+    return new Promise((done) => requestAnimationFrame(() => done(revealRow(id))));
+  };
   const focusApi = {
+    reveal,
     ids: focus,
     full: focus.length >= FOCUS_MAX,
     add: (id: string) => setFocus((ids) => addFocus(ids, id)),
@@ -2030,6 +2061,7 @@ function App() {
   const connecting = !tree || tree.conn === "connecting";
   const cfg: Cfg = { orders, needsOnly, snoozed, shutSections, sortBy, layout, groupBy, freeze };
   const { full, view } = pipeline(tree?.projects ?? [], cfg);
+  const inView = new Set(view.projects.flatMap(allThreads).map((t) => t.id));
   /** The ids of the rendered rows and section headers, in order, for a tree. */
   const rows = (ps: Branch[]) => {
     const v = pipeline(ps, cfg).view;
@@ -2041,6 +2073,35 @@ function App() {
   useEffect(() => {
     latest.current = { full, view, rows, projects: tree?.projects ?? [], connecting, focus, live };
   });
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => {
+      const el = e.target instanceof HTMLElement ? e.target : null;
+      const action = pageKey(e, {
+        mac: MAC,
+        field: !!el?.closest("input, textarea, [contenteditable]:not([contenteditable=false])"),
+        panel: settingsOpenRef.current,
+        overlay: document.querySelector("[data-find]")
+          ? "find"
+          : document.querySelector("[role=dialog], [role=alertdialog]")
+            ? "dialog"
+            : document.querySelector("[role=menu], [role=listbox]")
+              ? "menu"
+              : null,
+      });
+      if (action === null) return;
+      if (action === "find") {
+        e.preventDefault();
+        setFindOpen((o) => !o);
+      } else if (action === "next") openNextRef.current();
+      else {
+        const { focus: ids, live: threads } = latest.current;
+        const t = threads.get(ids[action]);
+        if (t) location.assign(t.href);
+      }
+    };
+    addEventListener("keydown", onKey);
+    return () => removeEventListener("keydown", onKey);
+  }, []);
   useEffect(() => {
     save(SETTLED_KEY, settled ? "1" : "0");
     save(NEST_KEY, nest ? "1" : "0");
@@ -2193,6 +2254,7 @@ function App() {
         </ToggleGroup>
         <OpenNextButton target={target} title={openNextTitle} now={now} open={openNext} />
         <FocusButton count={focus.length} shown={focusShow} setShown={setFocusShow} />
+        <FindButton open={() => setFindOpen(true)} />
         <BriefControls
           clis={clis}
           cli={pick}
@@ -2385,6 +2447,16 @@ function App() {
           tokenOpen={tokenOpen}
         />
       )}
+      <FindDialog
+        open={findOpen}
+        setOpen={setFindOpen}
+        list={hits(full.projects)}
+        focus={focus}
+        settledOn={settled}
+        canShow={(id) => inView.has(id)}
+        reveal={reveal}
+        now={now}
+      />
       <SendDialog
         fixed
         open={sendTo.open}

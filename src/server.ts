@@ -4,6 +4,7 @@ import { join } from "node:path";
 import index from "./page/index.html";
 import { briefInput, briefService, detectClis, lastMessageRoutes } from "./server/brief.ts";
 import { buildTree } from "./server/build-tree.ts";
+import { findRoutes } from "./server/find.ts";
 import { mayBeLaunched, needsScan, openLineage } from "./server/lineage.ts";
 import { checkCli, cliPath, sendService } from "./server/send.ts";
 import { connectShell, readEnvironmentId, type Project, type Thread } from "./server/t3.ts";
@@ -196,6 +197,7 @@ const server = Bun.serve({
     "/": index,
     ...brief.routes,
     ...send.routes,
+    ...findRoutes(() => treeFor(true).projects),
     ...lastMessageRoutes({ read: (id) => lineage.lastMessages([id]).get(id) ?? null, has: (id) => threads.has(id) }),
     "/token": {
       /** JSON only: a cross-site form cannot send it without a CORS preflight, which this server does not answer. */

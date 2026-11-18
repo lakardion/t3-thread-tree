@@ -7,7 +7,9 @@ import {
   flatten,
   folds,
   itemIds,
+  pathFolds,
   recency,
+  sectionHolding,
   sectionOf,
   sections,
   sequence,
@@ -457,4 +459,29 @@ describe("closedCounts", () => {
     const ts = [thread("a", null, some("working", "working", "working", "working"))];
     expect(closedCounts(allThreads(branch("b", ts))).length).toBe(1);
   });
+});
+
+describe("pathFolds", () => {
+  const tree = [
+    project("p1", [branch("g1", [thread("a")])]),
+    project("p2", [
+      branch(REVIEWS, [], [branch("r", [thread("x")])]),
+      branch("s1", [thread("b", null, [thread("c")])], [], "st"),
+    ]),
+  ];
+  test("lists the branches from the project down", () => expect(pathFolds(tree, "x")).toEqual(["p2", REVIEWS, "r"]));
+  test("adds the rail of a stack, and finds a subthread", () =>
+    expect(pathFolds(tree, "c")).toEqual(["p2", "s1", "rail:st"]));
+  test("is empty for an unknown thread", () => expect(pathFolds(tree, "zz")).toEqual([]));
+});
+
+describe("sectionHolding", () => {
+  const units = flatten([
+    project("p", [branch("g", [thread("a", null, [], "done")]), branch("h", [thread("b", null, [thread("c")])])]),
+  ]);
+  test("is the section of the unit that holds the thread", () => {
+    expect(sectionHolding(units, true, "a")).toBe("done");
+    expect(sectionHolding(units, true, "c")).toBe("working");
+  });
+  test("is null for an unknown thread", () => expect(sectionHolding(units, true, "zz")).toBeNull());
 });
