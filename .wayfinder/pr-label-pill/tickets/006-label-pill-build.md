@@ -22,3 +22,9 @@ Stack on the branch of [Build the label data path on the server](005-label-data-
 - **Setting** (`src/page/app.tsx`): a "Watched labels" `Fold` after "Linear links", in the form of the Linear form. Store under `thread-tree:labels`. Add `labels=` to the `EventSource` URL when the list is not empty, and open the stream again on a change.
 - **Pill:** one per Tree and Flat row, in the right group before the PR chips. Count the open PRs of the row, not a settled row. Order by Watched-label order, one name once, "+N" for the rest. Tooltip "<name>: #<PR>" joined with " · ". A `null` color uses the `secondary` badge colors.
 - **Check:** in the demo with the three prototype names saved, the example rows of [How does a Label pill read in the row?](002-label-pill-look.md) › Resolution show as listed there. With an empty list, no row shows a pill and `/events` has no `labels=`.
+
+## Handed over from pr-label-pill-05
+
+- `parseLabels(s)` in `src/shared/tree.ts` already splits, trims and drops empty names. Use it for the Settings field, so the page and the server parse the list the same way.
+- `type Label = { name: string; color: string | null }` is exported from `src/shared/tree.ts`; `PrNode.labels` holds only the watched matches, in the PR's own label order (sort by Watched-label order on the page).
+- `bun run demo` with `labels=ready-for-review,needs-qa-on-staging-before-merge,do-not-merge` serves the prototype labels.
