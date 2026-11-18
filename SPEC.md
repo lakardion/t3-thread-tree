@@ -93,9 +93,9 @@ A **top-level thread** has no native `parentThreadId`. A **subagent** has `relat
 
 ## UI
 
-The page shows an outline tree: Project, group, thread. Each thread row has a status icon, a title link to `t3code://threads/<environmentId>/<threadId>`, a stack badge and PR links. A row that waits on the user (needs input, plan ready or your turn) shows its phrase and the Wait beside the icon, for example "Approval 12m". The Wait is the time since `since`. A guest message has no `since`, so it shows the phrase only. A failed row shows "Failed" with no time. Other rows show no text. This reverses `d602e6e` (#18) for these rows only. The row end keeps the age of `updatedAt`. Closed rows are saved in `localStorage`. A toggle shows the Settled list below the tree or the flat list. A toggle "Show snoozed threads" hides snoozed threads when it is off; it saves `"0"` under `thread-tree:snoozed`, and it is on by default. It changes the page only: the Needs-you count, the Dock badge, the brief and the notifications do not change, and the server gets no parameter. A second toggle turns on launch nesting. When a Linear workspace is set, an issue key links to its Linear issue. With team keys set, only a key of a listed team links. The Settings panel keeps the workspace and teams in `localStorage`; `LINEAR_WORKSPACE` and `LINEAR_TEAMS` give the default. A banner shows when T3 is down, when no token is set, or when T3 rejects the token. The token banners open the Settings panel.
+The page shows an outline tree: Project, group, thread. Each thread row has a status icon, a title link to `t3code://threads/<environmentId>/<threadId>`, a stack badge, PR links and, when a PR has a Watched label, a Label pill (see "Label pills"). A row that waits on the user (needs input, plan ready or your turn) shows its phrase and the Wait beside the icon, for example "Approval 12m". The Wait is the time since `since`. A guest message has no `since`, so it shows the phrase only. A failed row shows "Failed" with no time. Other rows show no text. This reverses `d602e6e` (#18) for these rows only. The row end keeps the age of `updatedAt`. Closed rows are saved in `localStorage`. A toggle shows the Settled list below the tree or the flat list. A toggle "Show snoozed threads" hides snoozed threads when it is off; it saves `"0"` under `thread-tree:snoozed`, and it is on by default. It changes the page only: the Needs-you count, the Dock badge, the brief and the notifications do not change, and the server gets no parameter. A second toggle turns on launch nesting. When a Linear workspace is set, an issue key links to its Linear issue. With team keys set, only a key of a listed team links. The Settings panel keeps the workspace and teams in `localStorage`; `LINEAR_WORKSPACE` and `LINEAR_TEAMS` give the default. A banner shows when T3 is down, when no token is set, or when T3 rejects the token. The token banners open the Settings panel.
 
-The header holds the title, the filter ("All", "Needs you"), "Open next", "Focus", "What's next", a sort menu ("Manual", "Last updated"), a Tree / Flat switch, one button that is fold all in the tree and a "Group by" menu ("None", "Status") in the flat view, and a Settings button (a cog). The "Needs you" chip shows the Needs-you count as a badge. Then it shows the your-turn count as a muted number. A "·" sits between them when both show. Each count shows only when above 0. The tooltip reads "N need you, M your turn". The cog opens the Settings panel on the right, beside the tree. Its header stays in view while the panel scrolls, and Escape closes it. The panel has three groups. "Updates" (desktop app only) has the version, the update state and its action. "View" has show settled, show snoozed, nest launched threads, reset order and the theme as three icons (Light, System, Dark). "Setup" has four folds, closed at first: T3 token, Linear links, the status icon legend and Keys. A fold shows its state at the right: green text when set, yellow text with a warning sign when not set, a blue info icon for the legend and for Keys. The Keys fold lists `j k ↑ ↓` Move, Enter Open, `o` Details or fold, `l h` Expand, collapse, `s` Send, `n` Open next, ⌘K (Ctrl+K off macOS) Find, and `1`–`3` Open a Focus slot, each key as a `<kbd>` element. The token banners open the panel with the T3 token fold open. When the panel opens in the desktop app, it checks for updates, but not when the last good check is less than 60 s old.
+The header holds the title, the filter ("All", "Needs you"), "Open next", "Focus", "What's next", a sort menu ("Manual", "Last updated"), a Tree / Flat switch, one button that is fold all in the tree and a "Group by" menu ("None", "Status") in the flat view, and a Settings button (a cog). The "Needs you" chip shows the Needs-you count as a badge. Then it shows the your-turn count as a muted number. A "·" sits between them when both show. Each count shows only when above 0. The tooltip reads "N need you, M your turn". The cog opens the Settings panel on the right, beside the tree. Its header stays in view while the panel scrolls, and Escape closes it. The panel has three groups. "Updates" (desktop app only) has the version, the update state and its action. "View" has show settled, show snoozed, nest launched threads, reset order and the theme as three icons (Light, System, Dark). "Setup" has five folds, closed at first: T3 token, Linear links, Watched labels (see "Label pills"), the status icon legend and Keys. A fold shows its state at the right: green text when set, yellow text with a warning sign when not set (Watched labels shows a neutral "None" instead), a blue info icon for the legend and for Keys. The Keys fold lists `j k ↑ ↓` Move, Enter Open, `o` Details or fold, `l h` Expand, collapse, `s` Send, `n` Open next, ⌘K (Ctrl+K off macOS) Find, and `1`–`3` Open a Focus slot, each key as a `<kbd>` element. The token banners open the panel with the T3 token fold open. When the panel opens in the desktop app, it checks for updates, but not when the last good check is less than 60 s old.
 
 A pending request wins over snooze. A snoozed thread with a pending request shows as needs input.
 
@@ -147,6 +147,52 @@ The header has a System / Light / Dark choice. The full design is in [DESIGN-SPE
 4. The page renders each tree it gets. It does not apply diffs.
 5. `Bun.serve` closes a connection after 10 s with no bytes. Call `server.timeout(req, 0)` on the SSE request.
 6. Stop the push timer when the client disconnects.
+7. The page also sends `nest=1` (launch nesting) and `labels=<names>` (the Watched labels, see "Label pills"). The backend builds one tree for each set of parameters and sends it to all connections with that set.
+
+## Label pills
+
+Source: map [pr-label-pill](.wayfinder/pr-label-pill/map.md), tickets [Where do PR labels come from, and how fresh are they?](.wayfinder/pr-label-pill/tickets/001-label-data-source.md) (research on branch `research/pr-label-source`), [How does a Label pill read in the row?](.wayfinder/pr-label-pill/tickets/002-label-pill-look.md) (prototype on branch `prototype/label-pill-look`), [How does the Watched labels section in Settings work?](.wayfinder/pr-label-pill/tickets/003-watched-labels-setting.md).
+
+A Tree or Flat row shows a **Label pill** when one of its PRs has a **Watched label**. The user sets the Watched labels in Settings. The list is empty by default, so no pill shows until the user adds a name.
+
+### Watched labels setting
+
+- **Fold.** Settings › Setup, after "Linear links", before "Status icons". Label: "Watched labels". State text: the names joined by ", ", green. With an empty list: "None", neutral tone, not a warning.
+- **Form.** One text field, label "Label names", placeholder `ready-for-review`. Hint: "Separate names with commas. A row shows a pill when one of its PRs has one of these labels. Empty: no pills." A Save button and the "Saved." text, as in the Linear form.
+- **Parse.** Split on commas, trim the spaces at the two ends of each name, and drop empty names. Keep the order: it is the order of the pill.
+- **Storage.** Page storage, key `thread-tree:labels`, the names joined by ",". No server env value. One list for all repos.
+- **Stream.** The page sends the list on `/events` as `labels=<names>`, URL-encoded, only when the list is not empty. A change of the list opens the stream again, as a change of `settled` does.
+
+### Match
+
+A PR label matches a Watched label when the two names are equal, case-insensitive. No substring match.
+
+### Labels from T3
+
+The shell stream has no labels. The server reads them with the T3 RPC `pullRequests.detail` on the open shell socket. The `orchestration:read` token can call it.
+
+- **Decode.** Each PR link keeps `host` and `repository` from the stream, and the snapshot `updatedAt`.
+- **Call.** A unary Effect RPC `Request` on the shell socket, with its own request id, tag `pullRequests.detail`, and payload `{ projectId, repository, number, host, allowStale: false }`. `projectId` is the thread's. The answer is an `Exit` frame with that request id; its value holds `labels: { name, color, description? }[]` and `updatedAt`. An `Exit` for a detail request does not close the socket; only the `Exit` of the shell request does.
+- **Which PRs.** Open PR links with a source other than `stack` and `stack-dismissed`, on top-level threads that are not settled and not archived. These are the PRs that a row can count.
+- **When.** Only while at least one connection sends a non-empty `labels` list. The server keeps, per PR (`host`, `repository`, `number`), the snapshot `updatedAt` of its last call. It calls `detail` for a PR when that value differs from the snapshot `updatedAt` on the stream, or when it has no value. This covers the first snapshot, a new PR, a label change on GitHub (it moves `updatedAt`), the first client with a list, and a reconnect (a fresh snapshot with the same `updatedAt` makes no call). A link with no snapshot yet has the value "": it gets one call, then the next call comes when its snapshot arrives. The server saves the value when an answer comes, also a failed answer, and not when a call starts. A call dropped by a socket close saves nothing, so the PR gets a call after the reconnect.
+- **Push.** An answer that changes the labels of a PR calls the debounced tree push, as a stream change does.
+- **Stale answer.** T3 caches a detail for 60 s. When the answer's `updatedAt` is older than the snapshot `updatedAt`, the server calls once more after 60 s.
+- **Rate.** At most 4 calls at a time. No polling: the server calls only on a stream change.
+- **Store.** The server keeps all labels of each PR in memory, for all connections. It does not keep them per connection, so a new name or a new tab makes no new call.
+- **Tree.** Each `PrNode` gets `labels: { name: string; color: string | null }[]`: only the labels that match the connection's list. A settled thread's PRs get `[]`. With no list, all PRs get `[]`.
+- **Failure.** When T3 is down, the socket closes, or the call fails, the server keeps the last labels. It calls again on the next `updatedAt` change. A call in flight when the socket closes is dropped.
+- **Freshness.** T3 syncs a PR every minute when it changed in the last 30 minutes, else every 5 minutes. So a label change shows in about 2 minutes, or up to about 6 minutes for a quiet PR. T3 does not sync settled threads.
+
+### Label pill
+
+- **Counts.** The open PRs of the row (`state` `open`), all of them, also past the first two chips. Merged and closed PRs do not count. Stack PRs are not row PRs, so they do not count. A settled row has no pill.
+- **Where.** One pill per row, in the right group, before the PR chips. Tree and Flat rows only: not in the details block, the PR stack rail or the Focus cards.
+- **Several matches.** The pill shows the first matching name in Watched-label order, then "+N" for the other matching names. One label on two PRs counts as one name.
+- **Name.** The lucide `Tag` icon, then the initials of the first three words of the label in upper case, mono font. Words split on any character that is not a letter or digit: `ready-for-review` gives "RFR", `do-not-merge` gives "DNM".
+- **Color.** The label color (six hex digits with no `#`, as T3 gives it) fills the pill. The text and icon are black when `0.299 r + 0.587 g + 0.114 b > 150`, else white. A label with no color (GitLab can give `null`) uses the `secondary` badge colors.
+- **Tooltip.** Each match as "<name>: #<PR>", joined with " · ". Example: "ready-for-review: #3004". The pill is focusable, so the tooltip opens from the keyboard.
+- **Phone width.** No change. The pill is at most three letters and "+N".
+- **Before the first answer.** No pill and no placeholder. The pill shows when the labels arrive.
 
 ## "What's next" and the Next-step brief
 
@@ -541,3 +587,7 @@ These facts are not confirmed against a real stream. The research used the MCP t
 - `toolName` for callers that are not Claude (for example Codex) in the lineage lookup.
 - Whether `codex exec --ignore-user-config` skips a global `~/.codex/AGENTS.md`. If not, the brief run sees it.
 - Whether a `bun-darwin-arm64` cross-compile on ubuntu runs on a Mac, and whether Bun's compiled binary loads `.env` from its working folder.
+- Label pills: the frame shape of a unary `pullRequests.detail` answer (an `Exit` with `Success` and the value), and the form of `repository` that the call takes (the research passed it as the stream link gives it).
+- Label pills: that the token scope `orchestration:read` covers `pullRequests.detail`. The research saw `Success` but read the scope from T3 source only.
+- Label pills: whether a GitLab label change moves the merge request `updated_at`. If not, a GitLab pill changes only on the next other change.
+- Label pills: the label-change-to-pill time was taken from T3 sync code, not timed live.

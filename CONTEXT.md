@@ -95,6 +95,14 @@ _Avoid_: post, push, dispatch
 A new top-level thread in a project, with a first message, through the `t3` CLI, after the user confirms it in the start dialog. T3 records it as a **Launched thread** with no spawner.
 _Avoid_: launch, spawn, create
 
+**Watched label**:
+A GitHub label name that the user lists in the Settings panel. The list is empty by default, so no **Label pill** shows until the user adds a name.
+_Avoid_: tracked label, filter label
+
+**Label pill**:
+A small mark in a thread row that shows a **Watched label** on one of the row's PRs, for example `ready-for-review`.
+_Avoid_: label tag, label chip
+
 ## Relationships
 
 - A **Project** holds many **Issue keys**; an **Issue key** holds one or more **Spawn lineage** trees.
