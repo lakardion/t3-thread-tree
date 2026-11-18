@@ -77,6 +77,7 @@ Decided at charting (by the user):
 - [Effort G: get to a thread fast](tickets/07-effort-g-reach-a-thread.md): the [reach-a-thread map](../reach-a-thread/map.md) is closed; the Focus list, Find and row keys are merged (#88, #89, #91).
 
 - [Effort A: wait time on the row](tickets/01-effort-a-wait-time.md): the wait-time map is closed; #61, #65, #67 merged.
+- [Effort I: a small Needs-you window](tickets/09-effort-i-needs-you-window.md): the [needs-you-window map](../needs-you-window/map.md) is closed; the Up next window is merged (#100).
 - Lane 1 (effort C): M02 (#62) and M03 (#69) merged.
 - Lane 3 (effort H): M18 merged (#63); M17 (#68) open.
 
