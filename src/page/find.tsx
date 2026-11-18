@@ -4,7 +4,6 @@ import { useEffect, useRef, useState, type KeyboardEvent, type ReactNode } from 
 import { Button } from "@/components/ui/button";
 import { Command, CommandGroup, CommandInput, CommandItem, CommandList } from "@/components/ui/command";
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "@/components/ui/dialog";
-import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import { cn } from "@/lib/utils";
 
 import { find, type Hit } from "../shared/find.ts";
@@ -19,26 +18,6 @@ export const FIND_KEY = MAC ? "⌘K" : "Ctrl+K";
 /** The most threads that the empty query lists. */
 const RECENT_MAX = 8;
 const SETTLED_ROW = "find:settled-search";
-
-export function FindButton({ open }: { open: () => void }) {
-  return (
-    <Tooltip>
-      <TooltipTrigger asChild>
-        <Button
-          variant="outline"
-          size="sm"
-          aria-label="Find"
-          aria-keyshortcuts={MAC ? "Meta+K" : "Control+K"}
-          onClick={open}
-        >
-          <Search />
-          <span className="max-[720px]:hidden">Find</span>
-        </Button>
-      </TooltipTrigger>
-      <TooltipContent>Find {FIND_KEY}</TooltipContent>
-    </Tooltip>
-  );
-}
 
 /** The recent threads of the empty query: the Focus threads, then the newest updated. */
 const recent = (list: Hit[], focus: string[]): Hit[] => {
