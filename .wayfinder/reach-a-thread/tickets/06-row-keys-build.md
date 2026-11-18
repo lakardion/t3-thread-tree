@@ -1,7 +1,7 @@
 ---
 title: Add the keyboard path through the rows
 type: wayfinder:task
-status: in-review
+status: closed
 assignee: damian.lucero
 blocked-by: [03-page-keys, 05-find-build]
 ---
