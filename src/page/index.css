@@ -120,6 +120,16 @@
     outline: 2px solid var(--ring);
     outline-offset: 2px;
   }
+  :has(> [data-stop]:focus-visible) {
+    outline: 2px solid var(--ring);
+    outline-offset: -2px;
+  }
+  [data-stop]:focus-visible {
+    outline: none;
+  }
+  [data-stop] {
+    scroll-margin-top: 2rem;
+  }
   /** The padding sits here, not on body: the dialog scroll lock resets the body padding. */
   #root {
     @apply mx-auto flex h-dvh max-w-[1232px] flex-col p-4;

@@ -150,6 +150,7 @@ import { Presence, useMotion } from "./presence.tsx";
 import { ProjectIcon, projectHex } from "./project-icon.tsx";
 import { CliGate, LastMessage, SendDialog, useLastMessage } from "./send-dialog.tsx";
 import { LEGEND, LegendIcon, STATUS, StatusIcon } from "./status-icon.tsx";
+import { nextStop, refocusIndex, stopsIn } from "./stops.ts";
 import { Swap, useChanges } from "./swap.tsx";
 import {
   closedCounts,
@@ -1239,6 +1240,7 @@ function ThreadRow({
               "max-[720px]:basis-full max-[720px]:pl-5",
             )}
             href={t.href}
+            data-stop={t.id}
           >
             {(chip ? stripKey(t.title, chip) : t.title) || t.id}
           </a>
@@ -1438,7 +1440,10 @@ function GroupRow({ b, closed, toggle, fold, sort }: { b: Branch; sort?: Sort } 
           data-waiting={!open && waits(b) ? "" : undefined}
         >
           <DragHandle handleRef={handleRef} name={b.label} />
-          <CollapsibleTrigger className="flex min-w-0 cursor-pointer items-center gap-2 select-none after:absolute after:inset-0 max-[720px]:min-h-11">
+          <CollapsibleTrigger
+            data-stop={b.id}
+            className="flex min-w-0 cursor-pointer items-center gap-2 select-none after:absolute after:inset-0 max-[720px]:min-h-11"
+          >
             <Chevron open={open} />
             {b.label === REVIEWS && <Eye className="size-3.5 flex-none text-review" aria-hidden />}
             <span
@@ -1570,6 +1575,7 @@ function StackRail({
             </span>
           ) : (
             <CollapsibleTrigger
+              data-stop={`rail:${id}`}
               className="flex cursor-pointer items-center gap-1 text-muted-foreground select-none after:absolute after:inset-0 max-[720px]:min-h-11"
               aria-label={`PR stack · ${total} PRs`}
               title={`PR stack · ${total} PRs`}
@@ -1699,8 +1705,9 @@ function FlatRow({
           <button
             type="button"
             aria-expanded={i.open}
+            data-stop={`sec:${i.key}`}
             onClick={() => toggleSection(i.key)}
-            className="flex h-7 w-full cursor-pointer items-center gap-2 rounded-[8px] px-2 text-xs font-semibold text-muted-foreground select-none hover:bg-accent focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring focus-visible:outline-solid max-[720px]:min-h-11"
+            className="flex h-7 w-full cursor-pointer items-center gap-2 rounded-[8px] px-2 text-xs font-semibold text-muted-foreground select-none hover:bg-accent max-[720px]:min-h-11"
           >
             <Chevron open={i.open} />
             {i.label}
@@ -1726,7 +1733,10 @@ function ProjectBlock({ b, closed, toggle, fold }: { b: Branch } & Fold) {
             data-waiting={!open && waits(b) ? "" : undefined}
           >
             <DragHandle handleRef={handleRef} name={b.label} />
-            <CollapsibleTrigger className="flex min-w-0 cursor-pointer items-center gap-1.5 select-none after:absolute after:inset-0">
+            <CollapsibleTrigger
+              data-stop={b.id}
+              className="flex min-w-0 cursor-pointer items-center gap-1.5 select-none after:absolute after:inset-0"
+            >
               <Chevron open={open} />
               <ProjectIcon name={b.label} />
               <span className="min-w-0 truncate text-[13px] font-semibold" title={b.repo ?? b.label}>
@@ -1770,6 +1780,11 @@ function ProjectBlock({ b, closed, toggle, fold }: { b: Branch } & Fold) {
 }
 
 const KEYS: [keys: string, action: string][] = [
+  ["j k ↑ ↓", "Move"],
+  ["Enter", "Open"],
+  ["o", "Details or fold"],
+  ["l h", "Expand, collapse"],
+  ["s", "Send"],
   ["n", "Open next"],
   [FIND_KEY, "Find"],
   ["1–3", "Open a Focus slot"],
@@ -1985,7 +2000,29 @@ function App() {
     return () => mq.removeEventListener("change", apply);
   }, [theme]);
 
+  const listRef = useRef<HTMLDivElement>(null);
+  /** The thread or header stop that has focus, and its index in the stop list. */
+  const last = useRef<{ id: string; index: number } | null>(null);
+  /** Moves focus to the header of fold `id` when focus is inside the fold, before the fold closes. True when it moved. */
+  const holdFocus = (id: string) => {
+    const root = listRef.current;
+    const active = document.activeElement;
+    const header = root?.querySelector<HTMLElement>(`[data-stop="${CSS.escape(id)}"]`);
+    if (!root || !header || !active || active === header) return false;
+    let inside = !!header.closest("[data-slot=collapsible]")?.contains(active);
+    if (id.startsWith("sec:")) {
+      const next = [...root.querySelectorAll('[data-stop^="sec:"]')].find(
+        (h) => header.compareDocumentPosition(h) & Node.DOCUMENT_POSITION_FOLLOWING,
+      );
+      inside =
+        !!(header.compareDocumentPosition(active) & Node.DOCUMENT_POSITION_FOLLOWING) &&
+        !(next && next.compareDocumentPosition(active) & Node.DOCUMENT_POSITION_FOLLOWING);
+    }
+    if (inside) header.focus({ preventScroll: true });
+    return inside;
+  };
   const toggle = (id: string) => {
+    if (!closed.has(id)) holdFocus(id);
     const n = new Set(closed);
     if (n.has(id)) n.delete(id);
     else n.add(id);
@@ -1993,6 +2030,7 @@ function App() {
     save(CLOSED_KEY, JSON.stringify([...n]));
   };
   const toggleSection = (key: string) => {
+    if (!shutSections.has(key)) holdFocus(`sec:${key}`);
     const n = new Set(shutSections);
     if (n.has(key)) n.delete(key);
     else n.add(key);
@@ -2000,6 +2038,7 @@ function App() {
     save(SECTIONS_KEY, JSON.stringify([...n]));
   };
   const fold = (ids: string[], shut: boolean) => {
+    if (shut) for (const id of ids) if (holdFocus(id)) break;
     const n = new Set(closed);
     for (const id of ids) {
       if (shut) n.add(id);
@@ -2076,7 +2115,9 @@ function App() {
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
       const el = e.target instanceof HTMLElement ? e.target : null;
+      const active = document.activeElement;
       const action = pageKey(e, {
+        stop: active?.matches("[data-stop]") ? (active.closest(".thread-row") ? "thread" : "header") : null,
         mac: MAC,
         field: !!el?.closest("input, textarea, [contenteditable]:not([contenteditable=false])"),
         panel: settingsOpenRef.current,
@@ -2093,7 +2134,34 @@ function App() {
         e.preventDefault();
         setFindOpen((o) => !o);
       } else if (action === "next") openNextRef.current();
-      else {
+      else if (action === "down" || action === "up") {
+        const root = listRef.current;
+        if (!root) return;
+        const stops = stopsIn(root);
+        const at = active instanceof HTMLElement ? stops.indexOf(active) : -1;
+        const box = root.getBoundingClientRect();
+        const to =
+          at < 0
+            ? stops.find((s) => {
+                const r = s.getBoundingClientRect();
+                return r.bottom > box.top && r.top < box.bottom;
+              })
+            : stops[nextStop(stops.length, at, action === "down" ? 1 : -1) ?? -1];
+        if (!to) return;
+        e.preventDefault();
+        to.focus({ preventScroll: true });
+        to.scrollIntoView({ block: "nearest" });
+      } else if (action === "toggle" || action === "expand" || action === "collapse") {
+        const row = active?.closest(".thread-row");
+        const btn = row ? row.querySelector<HTMLElement>("[aria-label=Details]") : active;
+        const expanded = btn?.getAttribute("aria-expanded") === "true";
+        if (btn instanceof HTMLElement && (action === "toggle" || expanded === (action === "collapse"))) btn.click();
+      } else if (action === "send") {
+        active
+          ?.closest(".thread-row")
+          ?.querySelector<HTMLElement>('[aria-label="Send message"]:not(:disabled)')
+          ?.click();
+      } else {
         const { focus: ids, live: threads } = latest.current;
         const t = threads.get(ids[action]);
         if (t) location.assign(t.href);
@@ -2101,7 +2169,46 @@ function App() {
     };
     addEventListener("keydown", onKey);
     return () => removeEventListener("keydown", onKey);
-  }, []);
+  }, [listRef]);
+  useEffect(() => {
+    const root = listRef.current;
+    if (!root) return;
+    const onIn = (e: FocusEvent) => {
+      const t = e.target;
+      last.current =
+        t instanceof HTMLElement && t.matches("[data-stop]")
+          ? { id: t.dataset.stop!, index: stopsIn(root).indexOf(t) }
+          : null;
+    };
+    const clear = () => (last.current = null);
+    /** Keeps focus on the same stop, or on the stop at its old index when it left, as the tree updates. */
+    const mo = new MutationObserver(() => {
+      const l = last.current;
+      if (!l) return;
+      const stops = stopsIn(root);
+      const active = document.activeElement;
+      if (active instanceof HTMLElement && active.matches("[data-stop]")) {
+        /** A leaving row is inert and out of the stops; it keeps its old index. */
+        const at = stops.indexOf(active);
+        if (at >= 0) l.index = at;
+      } else if (active === document.body) {
+        const i = refocusIndex(
+          stops.map((s) => s.dataset.stop!),
+          l,
+        );
+        if (i < 0) last.current = null;
+        else stops[i].focus({ preventScroll: true });
+      }
+    });
+    mo.observe(root, { childList: true, subtree: true, attributeFilter: ["inert"] });
+    document.addEventListener("focusin", onIn);
+    document.addEventListener("pointerdown", clear, true);
+    return () => {
+      mo.disconnect();
+      document.removeEventListener("focusin", onIn);
+      document.removeEventListener("pointerdown", clear, true);
+    };
+  }, [listRef, last]);
   useEffect(() => {
     save(SETTLED_KEY, settled ? "1" : "0");
     save(NEST_KEY, nest ? "1" : "0");
@@ -2301,7 +2408,7 @@ function App() {
           />
         </div>
       </header>
-      <div className="min-h-0 flex-1 overflow-y-auto">
+      <div ref={listRef} className="min-h-0 flex-1 overflow-y-auto">
         <Focus value={focusApi}>
           {tree?.conn === "down" && (
             <Alert className="mb-3 border-l-[3px] border-l-status-needs-input">
