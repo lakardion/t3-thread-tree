@@ -1,7 +1,7 @@
 ---
 title: Mark done and changed Actions
 type: wayfinder:task
-status: open
+status: in-review
 assignee: claude (better-brief-04)
 blocked-by: [01-brief-row-look, 02-done-and-short-rules, 03-answer-actions-build]
 ---
