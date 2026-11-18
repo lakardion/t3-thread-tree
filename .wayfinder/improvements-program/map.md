@@ -26,7 +26,7 @@ Efforts in the chosen order. A, B, D, E, G and I are map tickets (each runs its 
 | 6 | E. A brief that helps you choose | M11, M10, M12, M14, M15 | [ticket](tickets/06-effort-e-brief.md) → [better-brief map](../better-brief/map.md) |
 | 7 | G. Get to a thread fast | M20, M22, M21 | [ticket](tickets/07-effort-g-reach-a-thread.md) |
 | 8 | H. Phone and tab polish | M18, M17 | Lane 3 |
-| 9 | I. Needs-you window | M23 | [ticket](tickets/09-effort-i-needs-you-window.md), after A |
+| 9 | I. Needs-you window | M23 | [ticket](tickets/09-effort-i-needs-you-window.md) → [needs-you-window map](../needs-you-window/map.md) |
 
 ### Lane 1
 
