@@ -75,6 +75,8 @@ Decided at charting (by the user):
 
 - [Effort D: less noise](tickets/04-effort-d-less-noise.md): the [less-noise map](../less-noise/map.md) is closed; all three build keys are merged to `main`.
 
+- [Effort G: get to a thread fast](tickets/07-effort-g-reach-a-thread.md): the [reach-a-thread map](../reach-a-thread/map.md) is closed; the Focus list, Find and row keys are merged (#88, #89, #91).
+
 ## Not yet specified
 
 None.
