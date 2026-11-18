@@ -26,7 +26,7 @@ The destination is reached when every route key is done and no map ticket is ope
 
 ## Stacks
 
-- 05-find-build ← 06-row-keys-build, on `main`. 04-focus-list-build merged alone in #88, so 05 branches from `main`; 06 branches from 05.
+- 05-find-build (#89) ← 06-row-keys-build, on `main`. 04-focus-list-build merged alone in #88, so 05 branches from `main`; 06 branches from 05.
 - The stack starts on `main` after the wait-time stack (M04 ← M05 ← M19) merges, because M19 adds the first page key (`n`) and the "Open next" header button. The decision tickets do not wait for it.
 
 ## Notes

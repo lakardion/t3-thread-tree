@@ -54,3 +54,7 @@ Decided in [the page keys](03-page-keys.md).
 - The Keys fold lists the row keys.
 - Tests cover the stop order and the "row left" fallback.
 - `bun run check` passes, and `bun run demo` looks right in light and dark mode, desktop and phone width. `SPEC.md` and `README.md` are updated. One draft PR.
+
+## Handed over from reach-a-thread-05
+
+The shared page key handler is in place (#89). `pageKey(e, ctx)` in `src/page/keys.ts` decides each key press; it is pure and tested in `test/keys.test.ts`. The one `keydown` effect in `src/page/app.tsx` builds `ctx` (`field`, `panel`, `overlay`, `mac`) from the DOM and runs the action. Add `j`/`k`, `o` and `s` as new return values of `pageKey`, with their cases in the test, and add them to the `KEYS` legend in `app.tsx` (the Keys fold). The plain-key guard already returns null in a field, with the View panel open, in Find, a dialog, a menu or a listbox, and with a modifier or a repeat.
