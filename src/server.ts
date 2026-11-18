@@ -6,13 +6,14 @@ import upNext from "./page/up-next.html";
 import { briefInput, briefService, detectClis, lastMessageRoutes } from "./server/brief.ts";
 import { buildTree } from "./server/build-tree.ts";
 import { findRoutes } from "./server/find.ts";
+import { labelStore } from "./server/labels.ts";
 import { mayBeLaunched, needsScan, openLineage } from "./server/lineage.ts";
 import { checkCli, cliPath, sendService } from "./server/send.ts";
 import { settleRoutes } from "./server/settle.ts";
 import { settledPage, settledRoutes, settledSignature } from "./server/settled.ts";
 import { connectShell, readEnvironmentId, type Project, type Thread } from "./server/t3.ts";
 import { parseToken, readToken, tokenResponse, writeToken } from "./server/token.ts";
-import { parseLinear, type Conn, type Tree } from "./shared/tree.ts";
+import { parseLabels, parseLinear, type Conn, type Tree } from "./shared/tree.ts";
 
 const threads = new Map<string, Thread>();
 const projects = new Map<string, Project>();
@@ -85,12 +86,12 @@ function resolveSpawners() {
   }, 2000);
 }
 
-type Client = { nest: boolean; send: (data: string, event?: string) => void };
+type Client = { nest: boolean; labels: string[]; send: (data: string, event?: string) => void };
 const clients = new Set<Client>();
 
 const linear = parseLinear(process.env.LINEAR_WORKSPACE, process.env.LINEAR_TEAMS);
 
-const treeFor = (settled: boolean, nest = false): Tree => ({
+const treeFor = (settled: boolean, nest = false, labels: string[] = []): Tree => ({
   conn: ready ? conn : "connecting",
   lastUpdate,
   linear,
@@ -103,7 +104,16 @@ const treeFor = (settled: boolean, nest = false): Tree => ({
     settled,
     nest,
     now: Date.now(),
+    labels,
+    labelsOf: store.labelsOf,
   }),
+});
+
+const active = () => [...clients].some((c) => c.labels.length > 0);
+const store = labelStore({
+  detail: (r) =>
+    shell.detail(r).catch((e: Error) => (e.message === "T3 is not connected" ? "dropped" : Promise.reject(e))),
+  onChange: () => changed(),
 });
 
 let timer: ReturnType<typeof setTimeout> | undefined;
@@ -112,8 +122,8 @@ function changed() {
   timer = setTimeout(() => {
     const cache = new Map<string, string>();
     for (const c of clients) {
-      const key = String(c.nest);
-      if (!cache.has(key)) cache.set(key, JSON.stringify(treeFor(false, c.nest)));
+      const key = `${c.nest}|${c.labels.join(",")}`;
+      if (!cache.has(key)) cache.set(key, JSON.stringify(treeFor(false, c.nest, c.labels)));
       c.send(cache.get(key)!);
     }
   }, 150);
@@ -169,6 +179,7 @@ const shell = connectShell({
         break;
     }
     resolveSpawners();
+    store.sync(threads.values(), active());
     changed();
     checkReady();
   },
@@ -231,6 +242,7 @@ const server = Bun.serve({
       server.timeout(req, 0);
       const params = new URL(req.url).searchParams;
       const nest = params.get("nest") === "1";
+      const labels = parseLabels(params.get("labels") ?? "");
       const enc = new TextEncoder();
       let client: Client;
       return new Response(
@@ -238,14 +250,17 @@ const server = Bun.serve({
           start(ctrl) {
             client = {
               nest,
+              labels,
               send: (d, event) => ctrl.enqueue(enc.encode(`${event ? `event: ${event}\n` : ""}data: ${d}\n\n`)),
             };
             clients.add(client);
-            client.send(JSON.stringify(treeFor(false, nest)));
+            if (labels.length) store.sync(threads.values(), true);
+            client.send(JSON.stringify(treeFor(false, nest, labels)));
             client.send(JSON.stringify(brief.state()), "brief");
           },
           cancel() {
             clients.delete(client);
+            store.sync(threads.values(), active());
           },
         }),
         { headers: { "Content-Type": "text/event-stream", "Cache-Control": "no-store" } },
