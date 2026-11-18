@@ -18,15 +18,15 @@ Source: markdown tickets in `tickets/`. The keys form one chain, in the order of
 
 ### Lane 1
 
-1. [Add the Focus list](tickets/04-focus-list-build.md) (M20) — after [the Focus list look](tickets/01-focus-list-look.md) closes and the wait-time stack is merged
-2. [Add Find](tickets/05-find-build.md) (M22) — stacks on 04-focus-list-build (forced), and after [the Find rules](tickets/02-find-rules.md) and [the page keys](tickets/03-page-keys.md) close
+1. [Add the Focus list](tickets/04-focus-list-build.md) (M20) — merged in #88 (`0b15066`)
+2. [Add Find](tickets/05-find-build.md) (M22) — starts on `main` (04-focus-list-build is merged), and after [the Find rules](tickets/02-find-rules.md) and [the page keys](tickets/03-page-keys.md) close
 3. [Add the keyboard path through the rows](tickets/06-row-keys-build.md) (M21) — stacks on 05-find-build, and after [the page keys](tickets/03-page-keys.md) close
 
 The destination is reached when every route key is done and no map ticket is open.
 
 ## Stacks
 
-- 04-focus-list-build ← 05-find-build ← 06-row-keys-build. Each key branches from the branch of the key before it.
+- 05-find-build ← 06-row-keys-build, on `main`. 04-focus-list-build merged alone in #88, so 05 branches from `main`; 06 branches from 05.
 - The stack starts on `main` after the wait-time stack (M04 ← M05 ← M19) merges, because M19 adds the first page key (`n`) and the "Open next" header button. The decision tickets do not wait for it.
 
 ## Notes
@@ -62,7 +62,7 @@ Decided at charting (by the user):
 
 ## Not yet specified
 
-- How "Show in tree" (Find) and `j`/`k` (row keys) act on folded projects, a closed stack and the flat view. It hangs on the Find rules and the page keys. It may become part of their build specs, or a ticket of its own.
+- How "Show in tree" (Find) and `j`/`k` (row keys) act on folded projects, a closed stack and the flat view. The Focus list shipped without an unfold: its Show in tree scrolls to the row and flashes it, or says "Hidden in the tree". Find can reuse `revealRow` in `src/page/focus.tsx` and the `data-thread` attribute on `.thread-row`. It hangs on the Find rules and the page keys. It may become part of their build specs, or a ticket of its own.
 
 ## Out of scope
 
