@@ -102,7 +102,7 @@ import {
   withoutSnoozed,
 } from "./attention.ts";
 import { BriefControls, BriefPanel, type Offered } from "./brief.tsx";
-import { FindButton, FindDialog, FIND_KEY, MAC } from "./find.tsx";
+import { FindDialog, FIND_KEY, MAC } from "./find.tsx";
 import {
   addFocus,
   FOCUS_FULL,
@@ -2361,7 +2361,6 @@ function App() {
         </ToggleGroup>
         <OpenNextButton target={target} title={openNextTitle} now={now} open={openNext} />
         <FocusButton count={focus.length} shown={focusShow} setShown={setFocusShow} />
-        <FindButton open={() => setFindOpen(true)} />
         <BriefControls
           clis={clis}
           cli={pick}
