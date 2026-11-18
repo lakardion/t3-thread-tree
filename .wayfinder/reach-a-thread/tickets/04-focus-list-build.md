@@ -2,7 +2,7 @@
 title: Add the Focus list
 type: wayfinder:task
 status: open
-assignee:
+assignee: damian.lucero
 blocked-by: [01-focus-list-look]
 ---
 
