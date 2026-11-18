@@ -1,6 +1,7 @@
 import { ago } from "../page/format.ts";
 /** The tree rules: visibility, placement, stack order and status. Pure, so `bun test` covers it. */
 import {
+  LINEAR_REVIEWS,
   NO_KEY,
   NO_MILESTONE,
   NO_PROJECT,
@@ -452,11 +453,11 @@ export function buildLinearTree(input: BuildInput): Branch[] {
   const reviewBranch: Branch[] = reviews.length
     ? [
         {
-          id: "lf:reviews",
+          id: LINEAR_REVIEWS,
           label: REVIEWS,
           linear: {},
           threads: [],
-          branches: reviewGroups(place(reviews), "lf:reviews"),
+          branches: reviewGroups(place(reviews), LINEAR_REVIEWS),
         },
       ]
     : [];

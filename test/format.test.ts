@@ -4,6 +4,7 @@ import {
   ago,
   folded,
   foldIds,
+  shortDate,
   groupIds,
   initials,
   ink,
@@ -326,5 +327,21 @@ describe("labelPill", () => {
   });
   test("a null color passes through", () => {
     expect(labelPill(row([pr(1, ["do-not-merge"], "open", null)]), W)?.label.color).toBeNull();
+  });
+});
+
+describe("shortDate", () => {
+  test("shows the day as written, whatever the time zone", () => {
+    const zone = process.env.TZ;
+    try {
+      for (const tz of ["America/Los_Angeles", "Pacific/Auckland", "UTC"]) {
+        process.env.TZ = tz;
+        expect(shortDate("2026-12-04")).toBe("Dec 4");
+        expect(shortDate("2027-01-01")).toBe("Jan 1");
+      }
+    } finally {
+      if (zone === undefined) delete process.env.TZ;
+      else process.env.TZ = zone;
+    }
   });
 });

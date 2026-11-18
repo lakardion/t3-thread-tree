@@ -1,6 +1,6 @@
 import { arrayMove } from "@dnd-kit/helpers";
 
-import { NO_KEY, REVIEWS, type Branch, type ThreadNode } from "../shared/tree.ts";
+import { isFallback, isLinearReviews, NO_KEY, REVIEWS, type Branch, type ThreadNode } from "../shared/tree.ts";
 import { stackRuns } from "./format.ts";
 
 /** The stored order: list key to the ids of that list. */
@@ -30,6 +30,9 @@ export const runUnitId = (projectId: string, run: Branch[]) =>
 
 /** Reviews and No issue key: Reviews stays first, No issue key stays last, and neither moves. */
 export const isPinned = (b: Branch): boolean => b.label === REVIEWS || b.label === NO_KEY;
+
+/** True for the Linear tree: its top-level branches carry `linear`. */
+export const isLinear = (projects: Branch[]): boolean => projects.some((p) => p.linear);
 
 const isRun = (u: Unit): u is Branch[] => Array.isArray(u);
 const isBranch = (u: Unit): u is Branch => !Array.isArray(u) && "branches" in u;
@@ -71,6 +74,8 @@ function applyFreeze<T extends Unit>(
 /**
  * The tree with the user order applied at each level, and the ids and units of each list.
  * Reviews stays first and No issue key last. Subthreads keep the base order. The input is not changed.
+ * A Linear tree orders its projects, the threads of each milestone and fallback group, and the Reviews subgroups.
+ * Milestones and fallback groups do not move.
  */
 export function arrange(projects: Branch[], orders: Orders, freeze?: Freeze): Arranged {
   const lists = new Map<string, string[]>();
@@ -102,6 +107,17 @@ export function arrange(projects: Branch[], orders: Orders, freeze?: Freeze): Ar
       ],
     };
   };
+  if (isLinear(projects)) {
+    const milestones = (p: Branch): Branch => ({ ...p, branches: p.branches.map(group) });
+    const top = put(
+      PROJECTS,
+      projects.filter((b) => !isFallback(b)),
+      (b) => b.id,
+      isBranch,
+    ).map(milestones);
+    const fallbacks = projects.filter(isFallback).map((b) => (isLinearReviews(b) ? reviews(b) : group(b)));
+    return { projects: [...top, ...fallbacks], lists, units };
+  }
   const ordered = put(PROJECTS, projects, (b) => b.id, isBranch).map(project);
   return { projects: ordered, lists, units };
 }

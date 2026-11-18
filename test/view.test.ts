@@ -1,5 +1,6 @@
 import { describe, expect, test } from "bun:test";
 
+import { foldIds } from "../src/page/format.ts";
 import { applyOrder } from "../src/page/order.ts";
 import {
   closedCounts,
@@ -485,4 +486,40 @@ describe("sectionHolding", () => {
     expect(sectionHolding(units, true, "c")).toBe("working");
   });
   test("is null for an unknown thread", () => expect(sectionHolding(units, true, "zz")).toBeNull());
+});
+
+describe("Linear tree", () => {
+  const lin = (b: Branch): Branch => ({ ...b, linear: {} });
+  const tree = () => [
+    lin(
+      branch(
+        "lp:a",
+        [],
+        [lin(branch("lm:m1", [thread("old", 1), thread("new", 5)])), lin(branch("lm:m2", [thread("x", 9)]))],
+      ),
+    ),
+    lin(branch("lp:b", [], [lin(branch("lm:m3", [thread("y", 20)]))])),
+    lin(
+      branch("lf:reviews", [], [branch("lf:reviews:K", [thread("r1", 2)]), branch("lf:reviews:L", [thread("r2", 8)])]),
+    ),
+    lin(branch("lf:none", [thread("n1", 3), thread("n2", 7)])),
+  ];
+
+  test("sortTree keeps project and milestone order and sorts threads newest first", () => {
+    const out = sortTree(tree());
+    expect(ids(out)).toEqual(["lp:a", "lp:b", "lf:reviews", "lf:none"]);
+    expect(ids(out[0].branches)).toEqual(["lm:m1", "lm:m2"]);
+    expect(ids(out[0].branches[0].threads)).toEqual(["new", "old"]);
+    expect(ids(out[3].threads)).toEqual(["n2", "n1"]);
+  });
+
+  test("sortTree sorts the Reviews subgroups newest first", () => {
+    expect(ids(sortTree(tree())[2].branches)).toEqual(["lf:reviews:L", "lf:reviews:K"]);
+  });
+
+  test("foldIds and pathFolds cover the milestones", () => {
+    expect(foldIds(tree()[0])).toEqual(["lm:m1", "lm:m2"]);
+    expect(pathFolds(tree(), "x")).toEqual(["lp:a", "lm:m2"]);
+    expect(pathFolds(tree(), "n1")).toEqual(["lf:none"]);
+  });
 });

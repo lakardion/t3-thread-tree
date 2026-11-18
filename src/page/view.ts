@@ -2,6 +2,7 @@ import {
   allThreads,
   bySince,
   flat,
+  isLinearReviews,
   NO_KEY,
   REVIEWS,
   type Branch,
@@ -9,7 +10,7 @@ import {
   type ThreadNode,
 } from "../shared/tree.ts";
 import { stackRuns } from "./format.ts";
-import { isPinned } from "./order.ts";
+import { isLinear, isPinned } from "./order.ts";
 
 export type SortBy = "manual" | "updated";
 export type Layout = "tree" | "flat";
@@ -32,8 +33,15 @@ const byNewest = <T>(items: T[], by: (t: T) => number): T[] =>
  * Sorts an arranged tree by recency. Projects keep their order. In a project, Reviews stays first and No issue key last;
  * the groups between them, and the threads in each group, sort newest first. A stack run moves as one block and keeps
  * its inner order. Subthreads keep their order. Ties keep the input order. The input is not changed.
+ * A Linear tree keeps its project and milestone order and sorts only the threads of each group.
  */
 export function sortTree(projects: Branch[]): Branch[] {
+  if (isLinear(projects))
+    return projects.map((p) =>
+      isLinearReviews(p)
+        ? { ...p, branches: byNewest(p.branches.map(threadsSorted), newestRun) }
+        : { ...threadsSorted(p), branches: p.branches.map(threadsSorted) },
+    );
   return projects.map((p) => {
     const keys = stackRuns(p.branches.filter((b) => !isPinned(b)));
     return {

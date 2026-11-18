@@ -133,3 +133,7 @@ export function labelPill(t: ThreadNode, watched: string[]): { label: Label; mor
     tip: hits.map((h) => `${h.l.name}: #${h.n}`).join(" · "),
   };
 }
+
+/** "2026-12-04" as "Dec 4". Read as UTC, so the local zone never moves the day. */
+export const shortDate = (d: string) =>
+  new Date(d).toLocaleDateString(undefined, { month: "short", day: "numeric", timeZone: "UTC" });

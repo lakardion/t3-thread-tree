@@ -4,7 +4,7 @@ import type { Branch, ThreadNode } from "./tree.ts";
 export type Hit = { t: ThreadNode; project: string; parent: string | null };
 
 const withChildren = (t: ThreadNode, project: string, parent: string | null): Hit[] => [
-  { t, project, parent },
+  { t, project: t.t3Project?.label ?? project, parent },
   ...t.children.flatMap((c) => withChildren(c, project, t.title || t.id)),
 ];
 

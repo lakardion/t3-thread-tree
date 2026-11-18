@@ -167,3 +167,52 @@ describe("prune", () => {
     expect(prune({ a: ["z", "gone", "x"], b: ["q"] }, lists)).toEqual({ a: ["z", "x"] });
   });
 });
+
+describe("arrange on a Linear tree", () => {
+  const lin = (b: Branch): Branch => ({ ...b, linear: {} });
+  const sampleL = () => [
+    lin(
+      branch(
+        "lp:a",
+        [],
+        [
+          lin(branch("lm:m1", [thread("t1"), thread("t2")])),
+          lin(branch("lm:m2", [thread("t3")])),
+          lin(branch("lm:a:none", [thread("t4")])),
+        ],
+      ),
+    ),
+    lin(branch("lp:b", [], [lin(branch("lm:m3", [thread("t5")]))])),
+    lin(branch("lf:reviews", [], [branch("lf:reviews:K", [thread("t6")]), branch("lf:reviews:L", [thread("t7")])])),
+    lin(branch("lf:none", [thread("t8"), thread("t9")])),
+    lin(branch("lf:nokey", [thread("t10")])),
+  ];
+
+  test("a stored project order applies, and fallbacks stay last in server order", () => {
+    const { projects, lists } = arrange(sampleL(), { projects: ["lp:b", "lp:a"] });
+    expect(ids(projects)).toEqual(["lp:b", "lp:a", "lf:reviews", "lf:none", "lf:nokey"]);
+    expect(lists.get("projects")).toEqual(["lp:b", "lp:a"]);
+  });
+
+  test("a stored project order cannot move a fallback", () => {
+    const { projects } = arrange(sampleL(), { projects: ["lf:none", "lp:b", "lp:a"] });
+    expect(ids(projects)).toEqual(["lp:b", "lp:a", "lf:reviews", "lf:none", "lf:nokey"]);
+  });
+
+  test("milestones keep server order and have no list", () => {
+    const { projects, lists } = arrange(sampleL(), { "groups:lp:a": ["lm:a:none", "lm:m1"] });
+    expect(ids(projects[0].branches)).toEqual(["lm:m1", "lm:m2", "lm:a:none"]);
+    expect(lists.has("groups:lp:a")).toBe(false);
+  });
+
+  test("threads reorder inside a milestone and inside No project", () => {
+    const { projects } = arrange(sampleL(), { "threads:lm:m1": ["t:t2", "t:t1"], "threads:lf:none": ["t:t9", "t:t8"] });
+    expect(ids(projects[0].branches[0].threads)).toEqual(["t2", "t1"]);
+    expect(ids(projects[3].threads)).toEqual(["t9", "t8"]);
+  });
+
+  test("the key subgroups of Reviews reorder", () => {
+    const { projects } = arrange(sampleL(), { "groups:lf:reviews": ["lf:reviews:L", "lf:reviews:K"] });
+    expect(ids(projects[2].branches)).toEqual(["lf:reviews:L", "lf:reviews:K"]);
+  });
+});

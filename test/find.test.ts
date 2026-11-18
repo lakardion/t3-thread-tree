@@ -106,3 +106,15 @@ describe("GET /find", () => {
     expect(await get("/find")).toEqual([]);
   });
 });
+
+describe("hits with a Linear tree", () => {
+  test("the project field is the T3 project of the thread, nested threads included", () => {
+    const t = (id: string, label: string, children: ThreadNode[] = []): ThreadNode => ({
+      ...thread(id, {}, children),
+      t3Project: { id: `p:${label}`, label },
+    });
+    const got = hits([branch("lp:x", [], [branch("lm:m", [t("a", "frontend", [t("b", "backend")])])])]);
+    expect(got.map((h) => h.project)).toEqual(["frontend", "backend"]);
+    expect(find(got, "backend").map((h) => h.t.id)).toEqual(["b"]);
+  });
+});
