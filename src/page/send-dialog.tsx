@@ -151,6 +151,8 @@ type Props = {
   live: Map<string, ThreadNode>;
   titles?: Record<string, string>;
   message: string;
+  /** Muted lines above the message. */
+  notes?: string[];
   /** Shows the first thread as a fixed target instead of a picker. */
   fixed?: boolean;
   onOpenChange: (open: boolean) => void;
@@ -158,7 +160,7 @@ type Props = {
 };
 
 /** Mounted only while open, so each open starts from the initial draft and target. */
-function SendForm({ threadIds, live, titles, message, fixed, onSent }: Props) {
+function SendForm({ threadIds, live, titles, message, notes, fixed, onSent }: Props) {
   const [target, setTarget] = useState(() => threadIds.find((id) => live.has(id)) ?? "");
   const [draft, setDraft] = useState(message);
   const [fixedTitle] = useState(() => {
@@ -232,6 +234,11 @@ function SendForm({ threadIds, live, titles, message, fixed, onSent }: Props) {
           <LastMessage text={last} />
         </div>
       )}
+      {notes?.map((n) => (
+        <p key={n} className="m-0 text-xs text-muted-foreground">
+          {n}
+        </p>
+      ))}
       <Textarea
         aria-label="Message"
         className="max-h-60 min-h-32"

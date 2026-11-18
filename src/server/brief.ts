@@ -4,7 +4,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 
 import { ago, phraseWith, stripKey } from "../page/format.ts";
-import type { BriefAction, BriefState, Cli } from "../shared/brief.ts";
+import type { BriefAction, BriefRun, BriefState, Cli, Snapshot } from "../shared/brief.ts";
 import { allThreads, bySince, type Branch, type ThreadNode } from "../shared/tree.ts";
 import guideText from "./next-step-prompt.md" with { type: "text" };
 
@@ -104,12 +104,13 @@ export function questionOf(message: string): string | null {
 
 /** The first rule that matches the thread, or `null`. */
 function codeAction(n: ThreadNode): BriefAction | null {
-  const make = (kind: BriefAction["kind"], title: string, reason: string, prompt: string | null) => ({
+  const make = (kind: BriefAction["kind"], title: string, reason: string, prompt: string | null, pr?: number) => ({
     kind,
     title,
     reason,
     threadIds: [n.id],
     prompt,
+    ...(pr && { pr }),
   });
   if (n.status === "needs-input") {
     const title =
@@ -135,6 +136,7 @@ function codeAction(n: ThreadNode): BriefAction | null {
       `Fix PR #${broken.n}`,
       `PR #${broken.n} has ${listOf(hit.map(([, fact]) => fact))}.`,
       `${hit.map(([, , step]) => step).join(", ")}, and push.`,
+      broken.n,
     );
   }
   const ready = n.prs.find(
@@ -146,6 +148,7 @@ function codeAction(n: ThreadNode): BriefAction | null {
       `Merge PR #${ready.n}`,
       `PR #${ready.n} is approved, its checks pass, and it has no conflicts.`,
       null,
+      ready.n,
     );
   return null;
 }
@@ -166,7 +169,7 @@ export function codeActions(nodes: ThreadNode[]): { actions: BriefAction[]; cove
 }
 
 export type BriefInput = {
-  code: { actions: BriefAction[]; titles: Record<string, string> };
+  code: { actions: BriefAction[]; titles: Record<string, string> } & Snapshot;
   threads: InputThread[];
 };
 
@@ -189,6 +192,8 @@ export function briefInput(
     code: {
       actions: withReasons,
       titles: Object.fromEntries(nodes.filter((n) => covered.has(n.id)).map((n) => [n.id, n.title])),
+      statuses: Object.fromEntries(nodes.map((n) => [n.id, n.status])),
+      since: Object.fromEntries(nodes.filter((n) => answerIds.includes(n.id)).map((n) => [n.id, n.since])),
     },
     threads: rest.map((n, i) => ({
       id: n.id,
@@ -371,7 +376,7 @@ function workDirs() {
   return (dirs = { cwd, schema });
 }
 
-export type Outcome = Extract<BriefState, { status: "done" | "failed" }>;
+export type Outcome = Extract<BriefRun, { status: "done" | "failed" }>;
 export type Run = { done: Promise<Outcome | null>; cancel: () => void };
 
 /** One CLI run. `done` gives `null` after `cancel()`. */
@@ -479,7 +484,13 @@ export function briefService(o: {
                 !out
                   ? before
                   : out.status === "done"
-                    ? { ...out, actions: [...code.actions, ...out.actions], titles: { ...code.titles, ...out.titles } }
+                    ? {
+                        ...out,
+                        statuses: code.statuses,
+                        since: code.since,
+                        actions: [...code.actions, ...out.actions],
+                        titles: { ...code.titles, ...out.titles },
+                      }
                     : { ...out, ...code },
               );
             });

@@ -251,6 +251,7 @@ type Action = {
   reason: string /** one sentence */;
   threadIds: string[] /** ≥ 1 */;
   prompt: string | null /** paste-ready message for the first thread's agent */;
+  pr?: number /** the PR of a code "fix" or "merge" action; the model never sets it */;
 };
 type Answer = { actions: Action[] }; /** 0–7 from the model, in rank order */
 ```
@@ -274,6 +275,8 @@ type BriefState =
       startedAt: string;
       actions: BriefAction[];
       titles: Record<string, string>;
+      statuses: Record<string, Status>;
+      since: Record<string, string | null>;
     }
   | {
       status: "done";
@@ -282,6 +285,8 @@ type BriefState =
       rulesOnly?: true;
       actions: BriefAction[];
       titles: Record<string, string>;
+      statuses: Record<string, Status>;
+      since: Record<string, string | null>;
     }
   | {
       status: "failed";
@@ -290,10 +295,12 @@ type BriefState =
       stderrTail: string;
       actions: BriefAction[];
       titles: Record<string, string>;
+      statuses: Record<string, Status>;
+      since: Record<string, string | null>;
     };
 ```
 
-`BriefAction` is `Action` after the id filter. The state type lives in a shared module, like `Tree`. In `running` and `failed`, `actions` and `titles` hold the code actions only, so the page can show them at once and after a model failure. In `done`, `actions` holds the code actions first, then the model actions. `rulesOnly` is set when no thread went to the model, so the actions come from code alone. A new run replaces the last brief only when it ends; a cancel returns to the state before the run.
+`BriefAction` is `Action` after the id filter. The state type lives in a shared module, like `Tree`. In `running` and `failed`, `actions` and `titles` hold the code actions only, so the page can show them at once and after a model failure. In `done`, `actions` holds the code actions first, then the model actions. `rulesOnly` is set when no thread went to the model, so the actions come from code alone. `statuses` and `since` are the snapshot of the tree at brief time. The server takes it when the run starts, rules-only runs too. `statuses` holds the status of every thread that went into the brief, code threads and model threads. `since` holds the `since` of each `answer` thread. A new run replaces the last brief only when it ends; a cancel returns to the state before the run.
 
 - `GET /brief/clis`: the offered CLIs, as `{ id, label }[]`.
 - `POST /brief/run` with `{ cli }`: starts a run. 409 when a run is active, 400 for a CLI that is not offered.
@@ -312,6 +319,8 @@ The full look is in ticket 04. In short:
 - **States:** loading ("Reading N threads…" with the letter wave, and "Cancel"); error (alert, "The brief failed.", "Retry", the stderr tail); empty ("Nothing needs you right now."); the ranked actions. In `running`, the code actions show at once as rows above the loading line. In `failed`, they show above the error. In `done`, all rows run in one rank order.
 - **Action row:** rank, kind chip, title, and for an `answer` row the live Wait of its thread (the status phrase with its age, in mono; it updates each minute). The reason is on its own line below. Then the thread links, and a copy icon for `prompt` (none when `prompt` is `null`).
 - **Kind chips:** answer = `needs-input`, merge = `done`, unblock = `plan`, fix = `failed`, review = `working`, clean-up = `idle`.
+- **Marks:** in `done`, each row has a mark or none (see "Marks"). Rows with no mark come first in rank order. Changed rows follow, then done rows, each group in rank order. Each row keeps its rank in the brief. A done row shows a check in place of the rank, its title struck through, and a "Done" badge (Check icon) after the Wait. A changed row keeps its rank and shows a "Changed" badge (RefreshCw icon) after the Wait. Marked rows have 55 % opacity, and 100 % on hover. A done row hides Send and Start thread and keeps Copy. A changed row keeps both. "Sent to" shows together with the mark. In `running` and `failed`, no row has a mark.
+- **Mark bar:** under the panel head, only when a row has a mark. It shows "N done · M changed since HH:MM" on the left, with a zero count left out and the time of `generatedAt`. The counts are Actions, not threads. "Run again" (RotateCw icon, link button) on the right starts a run like "What's next".
 - **Thread links:** each link shows the live `StatusIcon` and title from the current tree, and opens the thread in T3. A thread that is not in the live tree shows its saved title struck through. The brief text does not change.
 
 ## Send message
@@ -374,6 +383,19 @@ A thread row, top-level or subthread, in the tree and in the flat list, has a se
 - **Result:** the row changes through the stream: it leaves the live list. With "Show settled threads" on, it shows in the Settled list with the "Settled" chip after the next fetch.
 - **Failure:** the icon turns red and stays visible. The tooltip shows the error until the next click. A token without the `orchestration:operate` scope gives the error "The T3 token cannot settle. Issue a new token with the command in Settings."
 
+### Marks
+
+The page computes the mark of each Action from the live tree and the snapshot. It makes no model call. "Run again" is the only refresh. The rules, in order:
+
+- **Done, all kinds:** every linked thread is settled or out of the tree. With only some gone, the rules below apply to the live threads.
+- **Done, `answer`:** no linked thread is `needs-input` or `plan-ready`.
+- **Done, `fix`:** the PR in `pr` has no failing checks, no conflict and no requested changes, or it is merged or closed, or it is no longer on the thread.
+- **Done, `merge`:** the PR in `pr` is merged or closed, or it is no longer on the thread.
+- **Changed, `review`, `clean-up` and `unblock`:** any linked thread has a status that differs from `statuses`.
+- **Changed, `answer`:** any linked thread has a status that differs from `statuses`, or a `since` that differs from `since`, while it still waits.
+- `fix` and `merge` are never changed.
+- Done wins over changed. Any other Action is open.
+
 ### Send dialog
 
 One reusable component on the shadcn Dialog (Radix).
@@ -383,6 +405,7 @@ One reusable component on the shadcn Dialog (Radix).
   - A thread row, top-level or subthread: a send icon at the row end, next to the details chevron, after the settle icon (see "Settle icon"). Its tooltip says "Send message". It shows on hover and on keyboard focus within the row. On touch devices (`(hover: none)`), at every width, it always shows. The icon stops propagation, so it does not open the thread and does not start a drag.
 - **Target, from a step:** a picker (shadcn Select) with the threads of the step. Each option shows the live `StatusIcon` and the title. A thread that is not in the current tree shows its saved title struck through and is disabled. The first enabled thread is selected at open. With no enabled thread, Confirm send is disabled.
 - **Target, from a row:** fixed. The dialog shows the icon and title of the row, with no picker.
+- **Changed lines:** for a changed step, one muted line per linked thread whose status differs from the snapshot, above the message: "Changed since HH:MM: <title> was <old>, now <new>". The time is the brief time.
 - **Message:** a textarea, editable. From a step, it starts with the step prompt. From a row, it is empty. Confirm send is disabled while the message is empty after trim.
 - **Busy note:** when the target status is `working`, `starting` or `waiting`, a muted line under the target says "This thread is working. The message waits for its next turn." Other statuses show no note.
 - **Last message:** a muted box above the textarea, with the label "Last message". It shows the end of the last message of the target thread, in a box of at most 10 rem with scroll. It loads when the dialog opens and again when the target changes. It shows nothing while it loads or when the thread has no message.
