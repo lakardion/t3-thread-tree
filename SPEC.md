@@ -38,7 +38,7 @@ Source: [How can a local process read T3 thread data live?](.wayfinder/tickets/0
 
 ### Token
 
-- The user issues the token once with `~/.t3/bin/t3 auth session issue --scope orchestration:read --label thread-tree --ttl 52w --token-only`.
+- The user issues the token once with `~/.t3/bin/t3 auth session issue --scope orchestration:read --scope orchestration:operate --label thread-tree --ttl 52w --token-only | pbcopy`. `pbcopy` puts the token on the macOS clipboard.
 - The user pastes it in the "T3 token" password field of the Settings panel. The page sends `POST /token` with `{"token": "…"}` (JSON only, so a cross-site form cannot send it). The server checks it (one line, at most 4096 bytes), writes it to the token file (mode `0600`), drops the open socket and connects again. The user can replace it at any time.
 - **Token file:** `T3_TOKEN_FILE`, else `~/.config/t3-thread-tree/token`. When the file holds no token, `T3_TOKEN` from the env is the fallback.
 - With no token, the tree `conn` is `no-token`. If T3 rejects the token (HTTP 401), it is `unauthorized`. Both banners link to the token field.
@@ -274,7 +274,7 @@ The user can send a message to one thread, and start a thread in a project, from
 
 ### Transport
 
-The server runs the T3 CLI as a child process (`Bun.spawn`), like the brief runner. It uses T3's own login. The `orchestration:read` token and the read-only database do not change.
+The server runs the T3 CLI as a child process (`Bun.spawn`), like the brief runner. It uses T3's own login. The token needs the `orchestration:operate` scope for settle. The database stays read-only.
 
 - **Send:** `<bin> thread send --json <threadId> -`.
 - **Start:** `<bin> thread start --json --title=<title> <projectId> -`.
@@ -315,13 +315,24 @@ The wrapper exit code 127 ("T3 Code has moved…") is a `502`, so the user sees 
 
 The page reads `GET /t3/cli` once at load. When `available` is false, every send and start control shows disabled, with the tooltip "No t3 CLI at <path>. Set T3_BIN in .env." This is the same disabled-with-tooltip pattern as the "What's next" button.
 
+### Settle icon
+
+A thread row, top-level or subthread, in the tree and in the flat list, has a settle icon at its end, just before the send icon. It does not depend on the `t3` CLI.
+
+- **Icon:** `CircleCheckBig` with the label "Settle thread". On a settled row (shown with "Show settled threads"): `Undo2` with the label "Unsettle thread". The tooltip shows the label.
+- **Reveal:** like the send icon. It shows on hover and on keyboard focus within the row, and always on `(hover: none)`.
+- **Click:** one click, with no dialog. The icon stops propagation, so it does not open the thread and does not start a drag. It is disabled while the request runs.
+- **Request:** `POST /t3/settle` with `{ threadId, settled }` and a JSON content type. The server sends `thread.settle` or `thread.unsettle` to T3 over the stream socket. This needs the `orchestration:operate` scope.
+- **Result:** the row changes through the stream: it leaves the list, or shows the "Settled" chip when "Show settled threads" is on.
+- **Failure:** the icon turns red and stays visible. The tooltip shows the error until the next click. A token without the `orchestration:operate` scope gives the error "The T3 token cannot settle. Issue a new token with the command in Settings."
+
 ### Send dialog
 
 One reusable component on the shadcn Dialog (Radix).
 
 - **Opens from:**
   - A "What's next" step that has a `prompt`: a send icon next to the copy icon. The copy icon stays.
-  - A thread row, top-level or subthread: a send icon at the row end, next to the details chevron. It shows on hover and on keyboard focus within the row. On touch devices (`(hover: none)`), at every width, it always shows. The icon stops propagation, so it does not open the thread and does not start a drag.
+  - A thread row, top-level or subthread: a send icon at the row end, next to the details chevron, after the settle icon (see "Settle icon"). Its tooltip says "Send message". It shows on hover and on keyboard focus within the row. On touch devices (`(hover: none)`), at every width, it always shows. The icon stops propagation, so it does not open the thread and does not start a drag.
 - **Target, from a step:** a picker (shadcn Select) with the threads of the step. Each option shows the live `StatusIcon` and the title. A thread that is not in the current tree shows its saved title struck through and is disabled. The first enabled thread is selected at open. With no enabled thread, Confirm send is disabled.
 - **Target, from a row:** fixed. The dialog shows the icon and title of the row, with no picker.
 - **Message:** a textarea, editable. From a step, it starts with the step prompt. From a row, it is empty. Confirm send is disabled while the message is empty after trim.

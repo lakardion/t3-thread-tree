@@ -15,7 +15,11 @@ export type Result = { ok: true } | { ok: false; err: SendError };
 async function post(path: string, body: object): Promise<Result> {
   let r: Response;
   try {
-    r = await fetch(path, { method: "POST", body: JSON.stringify(body) });
+    r = await fetch(path, {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify(body),
+    });
   } catch {
     return { ok: false, err: { error: "The server did not answer.", exitCode: null, stderrTail: "" } };
   }
@@ -28,6 +32,8 @@ async function post(path: string, body: object): Promise<Result> {
 }
 
 export const postSend = (threadId: string, message: string) => post("/t3/send", { threadId, message });
+
+export const postSettle = (threadId: string, settled: boolean) => post("/t3/settle", { threadId, settled });
 
 export const postStart = (projectId: string, title: string, message: string) =>
   post("/t3/start", { projectId, title, message });

@@ -7,6 +7,7 @@ import { buildTree } from "./server/build-tree.ts";
 import { findRoutes } from "./server/find.ts";
 import { mayBeLaunched, needsScan, openLineage } from "./server/lineage.ts";
 import { checkCli, cliPath, sendService } from "./server/send.ts";
+import { settleRoutes } from "./server/settle.ts";
 import { connectShell, readEnvironmentId, type Project, type Thread } from "./server/t3.ts";
 import { parseToken, readToken, writeToken } from "./server/token.ts";
 import { parseLinear, type Conn, type Tree } from "./shared/tree.ts";
@@ -197,6 +198,7 @@ const server = Bun.serve({
     "/": index,
     ...brief.routes,
     ...send.routes,
+    ...settleRoutes({ dispatch: (c) => shell.dispatch(c), hasThread: (id) => threads.get(id)?.gone === false }),
     ...findRoutes(() => treeFor(true).projects),
     ...lastMessageRoutes({ read: (id) => lineage.lastMessages([id]).get(id) ?? null, has: (id) => threads.has(id) }),
     "/token": {

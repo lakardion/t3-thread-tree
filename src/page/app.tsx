@@ -16,6 +16,7 @@ import {
   ChevronDown,
   ChevronRight,
   CircleArrowUp,
+  CircleCheckBig,
   Contrast,
   Crosshair,
   ExternalLink,
@@ -32,6 +33,7 @@ import {
   SkipForward,
   Sun,
   TriangleAlert,
+  Undo2,
   X,
 } from "lucide-react";
 import { MorphIcon } from "morphicons/react";
@@ -101,7 +103,7 @@ import {
   waits,
   withoutSnoozed,
 } from "./attention.ts";
-import { BriefControls, BriefPanel, type Offered } from "./brief.tsx";
+import { BriefControls, BriefPanel, CopyPrompt, type Offered } from "./brief.tsx";
 import { FindDialog, FIND_KEY, MAC } from "./find.tsx";
 import {
   addFocus,
@@ -149,6 +151,7 @@ import {
 import { Presence, useMotion } from "./presence.tsx";
 import { ProjectIcon, projectHex } from "./project-icon.tsx";
 import { CliGate, LastMessage, SendDialog, useLastMessage } from "./send-dialog.tsx";
+import { postSettle } from "./send.ts";
 import { LEGEND, LegendIcon, STATUS, StatusIcon } from "./status-icon.tsx";
 import { nextStop, refocusIndex, stopsIn } from "./stops.ts";
 import { Swap, useChanges } from "./swap.tsx";
@@ -174,7 +177,7 @@ import {
 } from "./view.ts";
 
 const TOKEN_CMD =
-  "~/.t3/bin/t3 auth session issue --scope orchestration:read --label thread-tree --ttl 52w --token-only";
+  "~/.t3/bin/t3 auth session issue --scope orchestration:read --scope orchestration:operate --label thread-tree --ttl 52w --token-only | pbcopy";
 const CLOSED_KEY = "thread-tree:closed";
 const SETTLED_KEY = "thread-tree:settled";
 const SNOOZED_KEY = "thread-tree:snoozed";
@@ -818,10 +821,13 @@ function SettingsPanel(p: PanelProps) {
           <Fold label="T3 token" value={token} tone={token === "Connected" ? "ok" : "warn"} defaultOpen={p.tokenOpen}>
             <div className="grid gap-2">
               <p className={cn(HINT, "m-0")}>
-                The app reads your threads from T3 with this token. Run this command in a terminal to issue one, then
-                paste it below. Paste a new one at any time to replace it.
+                The app reads your threads from T3 with this token. Run this command in a terminal. It issues a token
+                and copies it to the clipboard. Then paste it below. Paste a new one at any time to replace it.
               </p>
-              <code className="rounded-[6px] bg-muted p-2 text-xs break-all select-all">{TOKEN_CMD}</code>
+              <div className="flex items-start gap-1">
+                <code className="flex-1 rounded-[6px] bg-muted p-2 text-xs break-all select-all">{TOKEN_CMD}</code>
+                <CopyPrompt prompt={TOKEN_CMD} label="Copy command" />
+              </div>
               <TokenForm />
             </div>
           </Fold>
@@ -1169,6 +1175,39 @@ function FocusMark({ t }: { t: ThreadNode }) {
   );
 }
 
+function SettleButton({ t }: { t: ThreadNode }) {
+  const [busy, setBusy] = useState(false);
+  const [err, setErr] = useState<string>();
+  const label = t.settled ? "Unsettle thread" : "Settle thread";
+  return (
+    <Tooltip>
+      <TooltipTrigger asChild>
+        {/** A disabled button gets no hover, so the wrapper keeps the tooltip. */}
+        <span className={cn("inline-flex", !err && SEND_REVEAL)}>
+          <Button
+            variant="ghost"
+            size="icon"
+            className={cn(ROW_BUTTON, err && "text-destructive")}
+            aria-label={label}
+            disabled={busy}
+            onClick={async (e) => {
+              e.stopPropagation();
+              setBusy(true);
+              setErr(undefined);
+              const r = await postSettle(t.id, !t.settled);
+              setBusy(false);
+              if (!r.ok) setErr(r.err.error);
+            }}
+          >
+            {t.settled ? <Undo2 className="size-3.5" /> : <CircleCheckBig className="size-3.5" />}
+          </Button>
+        </span>
+      </TooltipTrigger>
+      <TooltipContent>{err ?? label}</TooltipContent>
+    </Tooltip>
+  );
+}
+
 /**
  * `inStack`: the row sits on a stack rail, which holds no drag handles and shows the stack itself.
  * `project` adds the Project column and project edge of the flat list, `corners` rounds that edge, `review` the eye.
@@ -1293,21 +1332,27 @@ function ThreadRow({
               </TooltipTrigger>
               <TooltipContent>Updated {new Date(t.updatedAt).toLocaleString()}</TooltipContent>
             </Tooltip>
+            <SettleButton key={String(t.settled)} t={t} />
             {sendTo && (
               <CliGate t3cli={sendTo.t3cli}>
-                <Button
-                  variant="ghost"
-                  size="icon"
-                  className={cn(ROW_BUTTON, SEND_REVEAL)}
-                  aria-label="Send message"
-                  disabled={sendTo.t3cli?.available === false}
-                  onClick={(e) => {
-                    e.stopPropagation();
-                    sendTo.open(t.id);
-                  }}
-                >
-                  <Send className="size-3.5" />
-                </Button>
+                <Tooltip>
+                  <TooltipTrigger asChild>
+                    <Button
+                      variant="ghost"
+                      size="icon"
+                      className={cn(ROW_BUTTON, SEND_REVEAL)}
+                      aria-label="Send message"
+                      disabled={sendTo.t3cli?.available === false}
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        sendTo.open(t.id);
+                      }}
+                    >
+                      <Send className="size-3.5" />
+                    </Button>
+                  </TooltipTrigger>
+                  <TooltipContent>Send message</TooltipContent>
+                </Tooltip>
               </CliGate>
             )}
             <FocusMark t={t} />
@@ -2309,7 +2354,8 @@ function App() {
   const tabCount = tree ? needsYouThreads(tree.projects).length : 0;
 
   return (
-    <TooltipProvider>
+    /** A tooltip covers the row above, so a hoverable one stays open while the pointer moves up. */
+    <TooltipProvider disableHoverableContent>
       <title>{tabTitle(tabCount)}</title>
       <link rel="icon" type="image/svg+xml" href={favicon(appIcon, tabCount)} />
       <header className="mb-3.5 flex flex-none flex-wrap items-center gap-x-4 gap-y-3 text-muted-foreground">
