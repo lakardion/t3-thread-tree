@@ -61,6 +61,7 @@ Decided at charting (by the user):
 - **Terms:** **done** and **changed** go to `CONTEXT.md` as states of an **Action**. The rules ticket confirms them.
 
 - [How does a brief row look, on desktop and phone?](tickets/01-brief-row-look.md): the thread title is the heading; kind, verb and Wait below; the reason is the last question of the last message (not the first sentence); marked rows go to the end under a "N done · N changed since HH:MM · Run again" bar; phone moves labelled buttons below.
+- [When is an Action done or changed, and what does the short brief show?](tickets/02-done-and-short-rules.md): live rules per code kind; all linked threads gone = done for every kind; changed = any status change (model kinds) or a moved Wait (answer); done rows hide Send; first 3 open rows, marked rows always behind "Show all N"; fold open by default and saved; terms **Open**, **Done**, **Changed**.
 
 ## Not yet specified
 
