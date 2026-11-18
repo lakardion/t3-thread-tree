@@ -33,6 +33,7 @@ import type { CliStatus } from "../shared/send.ts";
 import type { Branch, ThreadNode } from "../shared/tree.ts";
 import { FOCUS_FULL } from "./focus.ts";
 import { Focus } from "./focus.tsx";
+import { phraseWith } from "./format.ts";
 import { MorphProviderIcon, ProviderIcon } from "./provider-icon.tsx";
 import { CliGate, SendDialog } from "./send-dialog.tsx";
 import { markKey } from "./send.ts";
@@ -307,6 +308,7 @@ function Row({
   a,
   i,
   live,
+  now,
   titles,
   projects,
   t3cli,
@@ -315,6 +317,7 @@ function Row({
 }: {
   a: BriefAction;
   i: number;
+  now: number;
   live: Map<string, ThreadNode>;
   titles: Record<string, string>;
   projects: Branch[];
@@ -322,6 +325,7 @@ function Row({
   sent: string[] | undefined;
   onSent: (key: string, threadId: string) => void;
 }) {
+  const waiting = a.kind === "answer" ? live.get(a.threadIds[0]) : undefined;
   return (
     <li className="flex items-start gap-2.5 rounded-[8px] px-2 py-1.5 hover:bg-accent">
       <span className="w-4 flex-none pt-px text-right font-mono text-[11px] text-muted-foreground tabular-nums">
@@ -331,8 +335,9 @@ function Row({
       <div className="min-w-0 flex-1">
         <div className="flex flex-wrap items-baseline gap-x-2">
           <span className="font-[650]">{a.title}</span>
-          <span className="text-xs text-muted-foreground">{a.reason}</span>
+          {waiting && <span className="font-mono text-[11px] text-muted-foreground">{phraseWith(waiting, now)}</span>}
         </div>
+        <div className="text-xs text-muted-foreground">{a.reason}</div>
         {sent && (
           <div className="mt-0.5 flex items-center gap-1 text-xs text-muted-foreground">
             <Check className="size-3" aria-hidden />
@@ -361,6 +366,7 @@ export function BriefPanel(p: {
   state: BriefState;
   clis: Offered | null;
   live: Map<string, ThreadNode>;
+  now: number;
   projects: Branch[];
   t3cli: CliStatus | null;
   sent: Map<string, string[]>;
@@ -379,6 +385,7 @@ export function BriefPanel(p: {
           a={a}
           i={i}
           live={p.live}
+          now={p.now}
           titles={s.titles}
           projects={p.projects}
           t3cli={p.t3cli}

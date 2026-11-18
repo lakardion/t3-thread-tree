@@ -9,6 +9,7 @@ import {
   filterAnswer,
   lastMessageRoutes,
   parseAnswer,
+  questionOf,
   stdinFor,
   tailOf,
   type InputThread,
@@ -45,6 +46,14 @@ function node(id: string, over: Partial<ThreadNode> = {}): ThreadNode {
 const branch = (threads: ThreadNode[], branches: Branch[] = []): Branch => ({ id: "b", label: "b", branches, threads });
 
 describe("briefInput", () => {
+  test("an answer reason is the question of the last message; no message keeps the fixed reason", () => {
+    const tree = [branch([node("Q", { status: "needs-input" }), node("R", { status: "needs-input" })])];
+    let asked: string[] = [];
+    const { code } = briefInput(tree, (ids) => ((asked = ids), new Map([["Q", "Done. Which one?"]])), NOW);
+    expect(asked).toEqual(["Q", "R"]);
+    expect(code.actions.map((a) => a.reason)).toEqual(["Which one?", "The agent waits for your input."]);
+  });
+
   test("drops working, starting, waiting and snoozed threads before the message query; keeps launched children", () => {
     const tree = [
       branch([
@@ -70,7 +79,7 @@ describe("briefInput", () => {
     const tree = [branch([node("Q", { status: "needs-input" }), node("A"), node("B")])];
     let asked: string[] = [];
     const { code, threads } = briefInput(tree, (ids) => ((asked = ids), new Map()), NOW);
-    expect(asked).toEqual(["A", "B"]);
+    expect(asked).toEqual(["A", "B", "Q"]);
     expect(threads.map((t) => [t.id, t.ref])).toEqual([
       ["A", "t1"],
       ["B", "t2"],
@@ -112,6 +121,24 @@ describe("codeActions", () => {
       },
     ]);
     expect(one({ status: "plan-ready" })[0]).toMatchObject({ kind: "answer", title: "Review the plan", prompt: null });
+  });
+  test("an answer title is the verb of the request kind", () => {
+    const req = (request: string | null, phrase = "Approval") =>
+      one({ status: "needs-input", phrase, detail: { request } as ThreadNode["detail"] })[0].title;
+    expect(req("command · 3m")).toBe("Approve the command");
+    expect(req("user_input · 1m")).toBe("Answer the question");
+    expect(req("mystery · 1m")).toBe("Answer the agent");
+    expect(req(null)).toBe("Answer the agent");
+    expect(req("command · 3m", "Guest message")).toBe("Reply to the guest");
+  });
+  test("answers go oldest Wait first, no Wait last, then fix and merge", () => {
+    const { actions } = codeActions([
+      node("F", { prs: [pr({ conflicting: true })] }),
+      node("N", { status: "needs-input" }),
+      node("B", { status: "plan-ready", since: "2026-11-13T11:00:00.000Z" }),
+      node("A", { status: "needs-input", since: "2026-11-13T10:00:00.000Z" }),
+    ]);
+    expect(actions.map((a) => a.threadIds[0])).toEqual(["A", "B", "N", "F"]);
   });
   test("a fix names one fact, or three joined, with the steps in fixed order", () => {
     expect(one({ prs: [pr({ checks: "failing" })] })).toEqual([
@@ -171,6 +198,32 @@ describe("codeActions", () => {
     ]);
     expect(actions.map((a) => a.threadIds[0])).toEqual(["Q", "P", "F1", "F2", "M"]);
     expect([...covered].toSorted()).toEqual(["F1", "F2", "M", "P", "Q"]);
+  });
+});
+
+describe("questionOf", () => {
+  test("the last question wins", () => {
+    expect(questionOf("Which one? Or this one? Fine.")).toBe("Or this one?");
+  });
+  test("a question may end in closing marks", () => {
+    expect(questionOf("Done.\n**Ready to merge?**\nNotes follow.")).toBe("**Ready to merge?**");
+  });
+  test("with no question, the last sentence; a trailing bullet counts", () => {
+    expect(questionOf("Done. All good.")).toBe("All good.");
+    expect(questionOf("Pick:\n- option a\n- option b")).toBe("- option b");
+  });
+  test("drops a leading ellipsis and splits on newlines", () => {
+    expect(questionOf("…tail of a sentence\nReady?")).toBe("Ready?");
+    expect(questionOf("…only")).toBe("only");
+  });
+  test("cuts at 140 characters with an ellipsis", () => {
+    const out = questionOf(`${"x".repeat(200)}?`)!;
+    expect(out).toBe(`${"x".repeat(139)}…`);
+    expect(out.length).toBe(140);
+  });
+  test("empty text gives null", () => {
+    expect(questionOf("")).toBeNull();
+    expect(questionOf(" \n ")).toBeNull();
   });
 });
 

@@ -2716,6 +2716,7 @@ function App() {
               state={brief}
               clis={clis}
               live={live}
+              now={now}
               projects={tree?.projects ?? []}
               t3cli={t3cli}
               sent={sent}
