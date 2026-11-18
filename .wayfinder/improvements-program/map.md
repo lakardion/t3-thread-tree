@@ -23,7 +23,7 @@ Efforts in the chosen order. A, B, D, E, G and I are map tickets (each runs its 
 | 3 | C. Small bugs | M02, M03 | Lane 1 |
 | 4 | D. Less noise | M09, M13, M16 | [ticket](tickets/04-effort-d-less-noise.md) → [less-noise map](../less-noise/map.md) |
 | 5 | F. Last message on demand | M08 | Lane 2 |
-| 6 | E. A brief that helps you choose | M11, M10, M12, M14, M15 | [ticket](tickets/06-effort-e-brief.md), after F |
+| 6 | E. A brief that helps you choose | M11, M10, M12, M14, M15 | [ticket](tickets/06-effort-e-brief.md) → [better-brief map](../better-brief/map.md) |
 | 7 | G. Get to a thread fast | M20, M22, M21 | [ticket](tickets/07-effort-g-reach-a-thread.md) |
 | 8 | H. Phone and tab polish | M18, M17 | Lane 3 |
 | 9 | I. Needs-you window | M23 | [ticket](tickets/09-effort-i-needs-you-window.md), after A |
