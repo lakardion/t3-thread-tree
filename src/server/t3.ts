@@ -255,22 +255,37 @@ export function connectShell(opts: {
   let ws: WebSocket | null = null;
   let seq = 1;
   const pending = new Map<string, { sock: WebSocket; resolve: () => void; reject: (e: Error) => void }>();
+  /** Counts `reconnect` calls. A report from an older generation describes an old token, so it is dropped. */
+  let gen = 0;
+  let waiters: ((c: Conn) => void)[] = [];
+  const report = (c: Conn, g: number) => {
+    if (g !== gen) return;
+    opts.onConn(c);
+    const done = waiters;
+    waiters = [];
+    for (const w of done) w(c);
+  };
 
   const attempt = async () => {
     if (ws) return;
+    const g = gen;
     const origin = await readOrigin();
-    if (!origin) return opts.onConn("down");
+    /** A `reconnect` during an await makes this attempt stale: it must not report or open a socket. */
+    if (g !== gen) return;
+    if (!origin) return report("down", g);
     const token = opts.token();
-    if (!token) return opts.onConn("no-token");
+    if (!token) return report("no-token", g);
     const url = `${origin}/ws?orchestrationProtocol=2`;
     const headers = { Authorization: `Bearer ${token}` };
     /** A WebSocket upgrade failure hides the HTTP status, so probe it with a plain GET first. */
     try {
       const probe = await fetch(url, { headers });
-      if (probe.status === 401 || probe.status === 403) return opts.onConn("unauthorized");
+      if (g !== gen) return;
+      if (probe.status === 401 || probe.status === 403) return report("unauthorized", g);
     } catch {
-      return opts.onConn("down");
+      return report("down", g);
     }
+    if (g !== gen) return;
     /** Bun accepts `{ headers }` here; the DOM lib type only knows protocols. */
     const sock = new WebSocket(url.replace(/^http/, "ws"), { headers } as unknown as string[]);
     ws = sock;
@@ -291,7 +306,7 @@ export function connectShell(opts: {
       const parsed: unknown = JSON.parse(String(ev.data));
       for (const m of (Array.isArray(parsed) ? parsed : [parsed]).map(obj)) {
         if (m._tag === "Chunk") {
-          opts.onConn("up");
+          report("up", g);
           for (const v of Array.isArray(m.values) ? m.values : []) {
             const e = decodeItem(v);
             if (e?.kind === "snapshot") {
@@ -323,7 +338,7 @@ export function connectShell(opts: {
       /** A socket that `reconnect` dropped reports nothing. */
       if (ws !== sock) return;
       ws = null;
-      opts.onConn("down");
+      report("down", g);
     };
     sock.onerror = () => sock.close();
   };
@@ -356,12 +371,16 @@ export function connectShell(opts: {
         );
       });
     },
-    /** Drops the open socket and connects again with the current token. */
-    reconnect() {
-      const old = ws;
-      ws = null;
-      old?.close();
-      void attempt();
+    /** Drops the open socket and connects again with the current token. Resolves with the first outcome. */
+    reconnect(): Promise<Conn> {
+      gen++;
+      return new Promise<Conn>((resolve) => {
+        waiters.push(resolve);
+        const old = ws;
+        ws = null;
+        old?.close();
+        void attempt();
+      });
     },
   };
 }

@@ -60,7 +60,7 @@ _Screenshots use made-up data from `bun run demo`._
   - **Updates.** In the desktop app, this group comes first. It shows the app version and the update state. The panel checks for a new version each time it opens, but not more than once in 60 s. A button updates the app in place and shows the progress.
   - **View.** Rows that stay open: show settled threads, show snoozed threads, nest launched threads, reset the drag-and-drop order, and the theme (Light, System or Dark, as icons).
   - **Setup.** Folds that stay closed until you open them. Each fold shows its state at the right: green text when it is set, yellow text with a warning sign when it is not set.
-    - **T3 token.** A password field for the token, with the command that issues one and copies it to the clipboard (macOS), and a button that copies the command. Paste a new token at any time to replace it. The app saves it and reconnects, with no restart. When the token is missing or T3 rejects it, a banner shows with a link that opens the panel with this fold open.
+    - **T3 token.** A password field for the token, with the command that issues one and copies it to the clipboard (macOS), and a button that copies the command. Paste a new token at any time to replace it. The app saves it and reconnects, with no restart. A bar shows while it connects, then a line tells you if T3 accepted the token. When the token is missing or T3 rejects it, a banner shows with a link that opens the panel with this fold open.
     - **Linear links.** Type your Linear workspace, and issue keys link to their issue. Add team keys to link only the keys of those teams.
     - **Status icons.** A legend of all icons, shown with a blue info icon.
     - **Keys.** A list of the page keys, shown with a blue info icon.
