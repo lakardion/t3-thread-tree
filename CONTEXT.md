@@ -55,6 +55,14 @@ _Avoid_: age (age is the time since the last update)
 The tree in its own macOS window, with a Dock icon, a Dock badge, notifications and a menu-bar entry. It shows the same page as the **Browser version** and stays alive when its window closes.
 _Avoid_: native app, Electron app
 
+**Open next queue**:
+The threads that "Open next" can open: needs input, plan ready or your turn, not settled, subthreads included, oldest **Wait** first. It is wider than **Needs you**, because it has your-turn threads too.
+_Avoid_: waiting list, Needs-you list
+
+**Up next window**:
+A small always-on-top window of the **Desktop app** that lists the **Open next queue**, each thread with its **Wait**, and has "Open next". The UI calls it Up next. It only opens threads and changes no T3 state.
+_Avoid_: mini window, small window, Needs-you window
+
 **Browser version**:
 The tree served on a local port and opened in a browser tab, with no Dock badge, notifications or menu-bar entry.
 _Avoid_: web app, web version
