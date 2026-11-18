@@ -332,7 +332,7 @@ One reusable component on the shadcn Dialog (Radix).
 
 - **Opens from:**
   - A "What's next" step that has a `prompt`: a send icon next to the copy icon. The copy icon stays.
-  - A thread row, top-level or subthread: a send icon at the row end, next to the details chevron, after the settle icon (see "Settle icon"). It shows on hover and on keyboard focus within the row. On touch devices (`(hover: none)`), at every width, it always shows. The icon stops propagation, so it does not open the thread and does not start a drag.
+  - A thread row, top-level or subthread: a send icon at the row end, next to the details chevron, after the settle icon (see "Settle icon"). Its tooltip says "Send message". It shows on hover and on keyboard focus within the row. On touch devices (`(hover: none)`), at every width, it always shows. The icon stops propagation, so it does not open the thread and does not start a drag.
 - **Target, from a step:** a picker (shadcn Select) with the threads of the step. Each option shows the live `StatusIcon` and the title. A thread that is not in the current tree shows its saved title struck through and is disabled. The first enabled thread is selected at open. With no enabled thread, Confirm send is disabled.
 - **Target, from a row:** fixed. The dialog shows the icon and title of the row, with no picker.
 - **Message:** a textarea, editable. From a step, it starts with the step prompt. From a row, it is empty. Confirm send is disabled while the message is empty after trim.

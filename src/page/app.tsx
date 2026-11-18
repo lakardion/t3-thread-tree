@@ -1335,19 +1335,24 @@ function ThreadRow({
             <SettleButton key={String(t.settled)} t={t} />
             {sendTo && (
               <CliGate t3cli={sendTo.t3cli}>
-                <Button
-                  variant="ghost"
-                  size="icon"
-                  className={cn(ROW_BUTTON, SEND_REVEAL)}
-                  aria-label="Send message"
-                  disabled={sendTo.t3cli?.available === false}
-                  onClick={(e) => {
-                    e.stopPropagation();
-                    sendTo.open(t.id);
-                  }}
-                >
-                  <Send className="size-3.5" />
-                </Button>
+                <Tooltip>
+                  <TooltipTrigger asChild>
+                    <Button
+                      variant="ghost"
+                      size="icon"
+                      className={cn(ROW_BUTTON, SEND_REVEAL)}
+                      aria-label="Send message"
+                      disabled={sendTo.t3cli?.available === false}
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        sendTo.open(t.id);
+                      }}
+                    >
+                      <Send className="size-3.5" />
+                    </Button>
+                  </TooltipTrigger>
+                  <TooltipContent>Send message</TooltipContent>
+                </Tooltip>
               </CliGate>
             )}
             <FocusMark t={t} />
