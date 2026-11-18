@@ -1,8 +1,8 @@
 ---
 title: How does the Focus list look and work?
 type: prototype
-status: open
-assignee:
+status: closed
+assignee: damian.lucero
 blocked-by: []
 ---
 
@@ -27,3 +27,25 @@ Make a prototype with two or three variants and decide:
 ## On resolution
 
 Write the `## Spec` and `## Done when` of [the build ticket](04-focus-list-build.md) from the answer. Link the prototype.
+
+## Prototype
+
+Branch `wayfinder/reach-a-thread`, commits `287b1af`, `26b66b7` and `2821d44` (removed after this ticket closed). Six variants on the real page: A to C by Sol (rebuilt in `2821d44`), D to F by Opus in `src/page/focus-proto.tsx`. To look at them again, check out `2821d44`, run `PORT=4788 bun run demo` and open `http://127.0.0.1:4788/?variant=D`.
+
+## Resolution
+
+Decided with the user. The build spec is in [Add the Focus list](04-focus-list-build.md).
+
+- **Layout:** prototype D, a strip of three fixed slot cards above the tree. Stacked at phone width.
+- **Opt-in:** hidden by default. A Focus header button with the count shows or hides it. The choice is kept in `localStorage`.
+- **Add:** a ⌖ row button and an "Add to Focus" control on brief Actions.
+- **Drag:** drag a row from the tree or the flat view onto the strip. A drop on an empty slot adds. A drop on a filled card replaces it after a quick confirmation in the card.
+- **At 3 of 3:** the add buttons refuse with a hint. Only a drop on a card replaces.
+- **Remove and order:** × on the slot or the pressed ⌖. No reorder inside the strip.
+- **Settled or deleted:** leaves the list by itself.
+- **Slot:** status icon, Wait, full title, Open, Show in tree. Show in tree scrolls, then flashes the row visibly.
+- **Store:** `localStorage`. No T3 writes.
+- **Waiting count:** the header Needs-you count is enough.
+- **Keys 1 to 3:** handed to [the page keys](03-page-keys.md).
+- **Name:** the domain term stays **Focus list**. The UI label is **Focus**.
+- **Side fix in the build:** a pointer cursor on all row buttons.

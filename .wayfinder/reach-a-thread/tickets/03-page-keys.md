@@ -16,7 +16,7 @@ Source: [the merged review](../../improvements/research/03-merged-review.md) ›
 
 Decide:
 
-- **Key list.** `n`, Cmd/Ctrl+K (Find), `/` as a second Find key?, `j`/`k`, Enter, `o` (details), `s` (send), Escape. Any key for the Focus list?
+- **Key list.** `n`, Cmd/Ctrl+K (Find), `/` as a second Find key?, `j`/`k`, Enter, `o` (details), `s` (send), Escape. Any key for the Focus list? [The Focus list look](01-focus-list-look.md) hands over keys 1 to 3 to open a Focus slot.
 - **Guards.** One rule for all keys, or Cmd/Ctrl+K also inside fields?
 - **Roving focus.** One tab stop for the row list; `j`/`k` (and the arrow keys?) move. Which rows count: subthreads, stack rows, project and group headers? What about folded projects and the flat view? Where does focus start, and what happens on a tree update?
 - **Clash with drag.** Space and Enter start a keyboard drag on the handle (`@dnd-kit/dom` default). Enter on a row opens in T3.

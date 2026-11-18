@@ -58,6 +58,8 @@ Decided at charting (by the user):
 - **Term:** **Focus list** in `CONTEXT.md`. The Focus list ticket confirms the final name.
 - **Keys:** one decision ticket for all page keys and their guards. M21's rules are part of it.
 
+- [How does the Focus list look and work?](tickets/01-focus-list-look.md): prototype D, a strip of 3 slot cards above the tree, hidden by default behind a Focus header button; add from the row (⌖) and from brief Actions; drag a row onto the strip (a drop on a card replaces it after a confirmation); buttons refuse at 3 of 3; settled or deleted threads leave; `localStorage`; UI label "Focus"; keys 1 to 3 go to the page keys.
+
 ## Not yet specified
 
 - How "Show in tree" (Find) and `j`/`k` (row keys) act on folded projects, a closed stack and the flat view. It hangs on the Find rules and the page keys. It may become part of their build specs, or a ticket of its own.
