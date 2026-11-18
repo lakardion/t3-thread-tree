@@ -1,7 +1,7 @@
 ---
 title: Effort A: wait time on the row
 type: task
-status: open
+status: closed
 assignee: damian.lucero
 blocked-by: []
 ---

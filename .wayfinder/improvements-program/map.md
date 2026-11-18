@@ -46,8 +46,7 @@ The destination is reached when every route key is done and no map ticket is ope
 
 ## Stacks
 
-- Lane 1 (stack #71): `main ← improvements-program-03-fix-filtered-stack-numbers (#62) ← improvements-program-10-close-group-tooltip (#69)`
-- Lane 3 (stack #70): `main ← improvements-program-08-tab-title-count (#63) ← improvements-program-11-phone-view-menu (#68)`
+- Lane 3: `main ← improvements-program-11-phone-view-menu (#68)`. #63 is merged; #68 waits for the user.
 
 ## Notes
 
@@ -76,6 +75,10 @@ Decided at charting (by the user):
 - [Effort D: less noise](tickets/04-effort-d-less-noise.md): the [less-noise map](../less-noise/map.md) is closed; all three build keys are merged to `main`.
 
 - [Effort G: get to a thread fast](tickets/07-effort-g-reach-a-thread.md): the [reach-a-thread map](../reach-a-thread/map.md) is closed; the Focus list, Find and row keys are merged (#88, #89, #91).
+
+- [Effort A: wait time on the row](tickets/01-effort-a-wait-time.md): the wait-time map is closed; #61, #65, #67 merged.
+- Lane 1 (effort C): M02 (#62) and M03 (#69) merged.
+- Lane 3 (effort H): M18 merged (#63); M17 (#68) open.
 
 ## Not yet specified
 
