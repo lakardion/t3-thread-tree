@@ -2,7 +2,7 @@
 title: Effort I: a small Needs-you window
 type: task
 status: open
-assignee: 
+assignee: damian.lucero
 blocked-by: [01-effort-a-wait-time]
 ---
 
