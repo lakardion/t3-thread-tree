@@ -5,6 +5,7 @@ import {
   Crosshair,
   List,
   MessageSquarePlus,
+  RefreshCw,
   RotateCw,
   Send,
   Sparkles,
@@ -28,7 +29,17 @@ import {
 } from "@/components/ui/dropdown-menu";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 
-import type { ActionKind, BriefAction, BriefState, Cli } from "../shared/brief.ts";
+import {
+  changedLines,
+  hhmm,
+  markRows,
+  type ActionKind,
+  type BriefAction,
+  type BriefState,
+  type Cli,
+  type Mark,
+  type Snapshot,
+} from "../shared/brief.ts";
 import type { CliStatus } from "../shared/send.ts";
 import type { Branch, ThreadNode } from "../shared/tree.ts";
 import { FOCUS_FULL } from "./focus.ts";
@@ -51,8 +62,6 @@ const KIND: Record<ActionKind, { label: string; token: string }> = {
   review: { label: "Review", token: "working" },
   "clean-up": { label: "Clean up", token: "idle" },
 };
-
-const hhmm = (iso: string) => new Date(iso).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" });
 
 export function BriefControls(p: {
   clis: Offered | null;
@@ -230,6 +239,7 @@ function SendPrompt(p: {
   prompt: string;
   live: Map<string, ThreadNode>;
   titles: Record<string, string>;
+  notes: string[];
   t3cli: CliStatus | null;
   onSent: (key: string, threadId: string) => void;
 }) {
@@ -257,6 +267,7 @@ function SendPrompt(p: {
         live={p.live}
         titles={p.titles}
         message={p.prompt}
+        notes={p.notes}
         onSent={(id) => p.onSent(markKey(p.a), id)}
       />
     </>
@@ -306,7 +317,10 @@ function LoadingText({ text }: { text: string }) {
 
 function Row({
   a,
-  i,
+  rank,
+  mark,
+  snap,
+  at,
   live,
   now,
   titles,
@@ -316,7 +330,10 @@ function Row({
   onSent,
 }: {
   a: BriefAction;
-  i: number;
+  rank: number;
+  mark: Mark | null;
+  snap: Snapshot;
+  at: string | null;
   now: number;
   live: Map<string, ThreadNode>;
   titles: Record<string, string>;
@@ -326,16 +343,26 @@ function Row({
   onSent: (key: string, threadId: string) => void;
 }) {
   const waiting = a.kind === "answer" ? live.get(a.threadIds[0]) : undefined;
+  const done = mark === "done";
+  const badge = mark && (
+    <Badge variant="outline" className="gap-1 px-1.5 py-0 text-[11px] font-normal text-muted-foreground">
+      {done ? <Check className="size-3" aria-hidden /> : <RefreshCw className="size-3" aria-hidden />}
+      {done ? "Done" : "Changed"}
+    </Badge>
+  );
   return (
-    <li className="flex items-start gap-2.5 rounded-[8px] px-2 py-1.5 hover:bg-accent">
+    <li
+      className={`flex items-start gap-2.5 rounded-[8px] px-2 py-1.5 hover:bg-accent ${mark ? "opacity-55 transition-opacity hover:opacity-100" : ""}`}
+    >
       <span className="w-4 flex-none pt-px text-right font-mono text-[11px] text-muted-foreground tabular-nums">
-        {i + 1}
+        {done ? <Check className="ml-auto size-3.5 text-status-done-fg" aria-label="Done" /> : rank}
       </span>
       <KindChip kind={a.kind} />
       <div className="min-w-0 flex-1">
         <div className="flex flex-wrap items-baseline gap-x-2">
-          <span className="font-[650]">{a.title}</span>
+          <span className={`font-[650] ${done ? "line-through" : ""}`}>{a.title}</span>
           {waiting && <span className="font-mono text-[11px] text-muted-foreground">{phraseWith(waiting, now)}</span>}
+          {badge}
         </div>
         <div className="text-xs text-muted-foreground">{a.reason}</div>
         {sent && (
@@ -352,8 +379,18 @@ function Row({
       </div>
       {a.prompt && (
         <>
-          <SendPrompt a={a} prompt={a.prompt} live={live} titles={titles} t3cli={t3cli} onSent={onSent} />
-          <StartPrompt a={a} prompt={a.prompt} live={live} projects={projects} t3cli={t3cli} />
+          <div className={done ? "hidden" : "contents"}>
+            <SendPrompt
+              a={a}
+              prompt={a.prompt}
+              live={live}
+              titles={titles}
+              notes={mark === "changed" && at ? changedLines(a, live, snap, at) : []}
+              t3cli={t3cli}
+              onSent={onSent}
+            />
+            <StartPrompt a={a} prompt={a.prompt} live={live} projects={projects} t3cli={t3cli} />
+          </div>
           <CopyPrompt prompt={a.prompt} />
         </>
       )}
@@ -377,13 +414,22 @@ export function BriefPanel(p: {
 }) {
   const s = p.state;
   const label = s.status !== "idle" ? (p.clis?.find((c) => c.id === s.cli)?.label ?? s.cli) : "";
-  const rows = s.status !== "idle" && s.actions.length > 0 && (
+  const marked = s.status === "done" ? markRows(s.actions, p.live, s) : null;
+  const placed = s.status === "idle" ? [] : (marked ?? s.actions.map((a, i) => ({ a, i, mark: null })));
+  const count = (m: Mark) => placed.filter((r) => r.mark === m).length;
+  const bar = [count("done") && `${count("done")} done`, count("changed") && `${count("changed")} changed`]
+    .filter(Boolean)
+    .join(" · ");
+  const rows = s.status !== "idle" && placed.length > 0 && (
     <ol className="m-0 list-none p-1.5">
-      {s.actions.map((a, i) => (
+      {placed.map(({ a, i, mark }) => (
         <Row
           key={i}
           a={a}
-          i={i}
+          rank={i + 1}
+          mark={mark}
+          snap={s}
+          at={s.status === "done" ? s.generatedAt : null}
           live={p.live}
           now={p.now}
           titles={s.titles}
@@ -415,6 +461,14 @@ export function BriefPanel(p: {
           <X />
         </Button>
       </div>
+      {s.status === "done" && bar && (
+        <div className="flex items-center border-b bg-muted/50 px-3 py-1 text-xs text-muted-foreground">
+          {bar} since {hhmm(s.generatedAt)}
+          <Button variant="link" size="xs" className="ml-auto" onClick={p.run}>
+            <RotateCw /> Run again
+          </Button>
+        </div>
+      )}
       {rows}
       {s.status === "running" && (
         <div className={`flex items-center gap-3 px-3 py-3 ${s.actions.length > 0 ? "border-t" : ""}`}>

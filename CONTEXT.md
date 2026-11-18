@@ -83,6 +83,18 @@ _Avoid_: suggestion, summary, advice
 One ranked item of a **Next-step brief**. It has a kind (answer, merge, fix, review, clean-up, unblock) and links to one or more top-level threads.
 _Avoid_: step, task, todo
 
+**Open**:
+An **Action** whose facts still hold.
+_Avoid_: active, pending
+
+**Done**:
+An **Action** whose rule no longer holds in the live tree, or whose linked threads all left the tree or settled.
+_Avoid_: resolved, closed
+
+**Changed**:
+An **Action** with a linked thread whose status or **Wait** differs from the brief time. The Action may be out of date.
+_Avoid_: stale, outdated
+
 **Digest**:
 The compact text form of one thread that the model reads for a **Next-step brief**: one line of facts, then the tail of the last assistant message. Code builds it on each click.
 _Avoid_: summary, snapshot

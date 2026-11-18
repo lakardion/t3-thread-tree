@@ -75,6 +75,14 @@ describe("briefInput", () => {
     expect(input[1].digest).toBe("t2 · Your turn 3h · Thread L");
     expect(input[0].digest).toBe("t1 · Your turn 3h · Thread A\n  done");
   });
+  test("the snapshot holds the status of code and model threads, and the since of answer threads", () => {
+    const since = "2026-11-13T10:00:00.000Z";
+    const tree = [branch([node("Q", { status: "needs-input", since }), node("M"), node("W", { status: "working" })])];
+    const { code } = briefInput(tree, () => new Map(), NOW);
+    expect(code.statuses).toEqual({ Q: "needs-input", M: "your-turn" });
+    expect(code.since).toEqual({ Q: since });
+  });
+
   test("covered threads leave the model input; refs restart over the rest; code titles are set", () => {
     const tree = [branch([node("Q", { status: "needs-input" }), node("A"), node("B")])];
     let asked: string[] = [];
@@ -148,6 +156,7 @@ describe("codeActions", () => {
         reason: "PR #12 has failing checks.",
         threadIds: ["A"],
         prompt: "fix the failing checks, and push.",
+        pr: 12,
       },
     ]);
     expect(
@@ -170,6 +179,7 @@ describe("codeActions", () => {
         reason: "PR #12 is approved, its checks pass, and it has no conflicts.",
         threadIds: ["A"],
         prompt: null,
+        pr: 12,
       },
     ]);
     expect(one({ prs: [pr({ ...ready, draft: true })] })).toEqual([]);
@@ -403,10 +413,11 @@ describe("briefService", () => {
     threadIds: [id],
     prompt: null,
   });
-  const CODE = { actions: [act("Q", "answer")], titles: { Q: "Thread Q" } };
+  const SNAP = { statuses: { Q: "needs-input" as const }, since: { Q: null } };
+  const CODE = { actions: [act("Q", "answer")], titles: { Q: "Thread Q" }, ...SNAP };
 
   /** A run that ends when the test calls `finish`, or with `null` on cancel. */
-  function setup(code = { actions: [], titles: {} } as BriefInput["code"]) {
+  function setup(code: BriefInput["code"] = { actions: [], titles: {}, statuses: {}, since: {} }) {
     let finish!: (o: Outcome | null) => void;
     const changes: string[] = [];
     const svc = briefService({
@@ -474,6 +485,7 @@ describe("briefService", () => {
       status: "done",
       actions: [act("Q", "answer"), act("A", "review")],
       titles: { Q: "Thread Q", A: "Thread A" },
+      ...SNAP,
     });
     expect(svc.state()).not.toHaveProperty("rulesOnly");
   });
