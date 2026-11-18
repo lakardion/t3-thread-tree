@@ -16,4 +16,8 @@ Build M15 with the look of [the brief row look](01-brief-row-look.md). Stacks on
 
 ## Spec
 
-Written by the decision tickets when they close.
+Look from [the brief row look](01-brief-row-look.md) › Resolution.
+
+- At 720 px and less (the app breakpoint), hide the buttons on the right of the row. Show them on a line below the reason, in line with the heading (left padding past the rank).
+- On that line, the buttons show text labels: Send, New thread, Copy, Focus. Desktop keeps icon buttons with tooltips.
+- Check at 390 px, light and dark: no horizontal scroll, the heading and the reason wrap, and the marks bar fits on one line.

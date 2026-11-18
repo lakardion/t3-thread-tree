@@ -60,6 +60,8 @@ Decided at charting (by the user):
 - **Tickets:** one prototype for the brief row look (M11, M14, M15 and the marks), one grilling for the rules (M10, M12).
 - **Terms:** **done** and **changed** go to `CONTEXT.md` as states of an **Action**. The rules ticket confirms them.
 
+- [How does a brief row look, on desktop and phone?](tickets/01-brief-row-look.md): the thread title is the heading; kind, verb and Wait below; the reason is the last question of the last message (not the first sentence); marked rows go to the end under a "N done · N changed since HH:MM · Run again" bar; phone moves labelled buttons below.
+
 ## Not yet specified
 
 None.
