@@ -4,6 +4,7 @@ import { foldIds } from "../src/page/format.ts";
 import { applyOrder } from "../src/page/order.ts";
 import {
   closedCounts,
+  FLAT,
   flatLists,
   flatten,
   folds,
@@ -11,6 +12,7 @@ import {
   pathFolds,
   recency,
   sectionHolding,
+  sectionList,
   sectionOf,
   sections,
   sequence,
@@ -521,5 +523,96 @@ describe("Linear tree", () => {
     expect(foldIds(tree()[0])).toEqual(["lm:m1", "lm:m2"]);
     expect(pathFolds(tree(), "x")).toEqual(["lp:a", "lm:m2"]);
     expect(pathFolds(tree(), "n1")).toEqual(["lf:none"]);
+  });
+});
+
+describe("Linear flat", () => {
+  const lin = (b: Branch, date?: string): Branch => ({ ...b, label: b.id, linear: date ? { date } : {} });
+  const named = (b: Branch, label: string): Branch => ({ ...b, label });
+  const tree = (): Branch[] => [
+    named(
+      lin(
+        branch(
+          "lp:a",
+          [],
+          [
+            named(lin(branch("lm:m1", [thread("old", 1), thread("new", 5, [thread("kid")])]), "2026-12-04"), "M1"),
+            named(lin(branch("lm:a:none", [thread("x", 9)])), "No milestone"),
+            named(lin(branch("lm:m9", [])), "Empty"),
+          ],
+        ),
+      ),
+      "P",
+    ),
+    named(
+      lin(
+        branch(
+          "lf:reviews",
+          [],
+          [branch("lf:reviews:K", [thread("r1", 2)]), branch("lf:reviews:L", [thread("r2", 8)])],
+        ),
+      ),
+      "Reviews",
+    ),
+    named(lin(branch("lf:none", [thread("n1", 3), thread("n2", 7)])), "No project"),
+    named(lin(branch("lf:nokey", [thread("k1", 4)])), "No issue key"),
+  ];
+  const seq = (shut: string[] = [], units = flatten(tree())) => sequence(units, "linear", new Set(shut), true, tree());
+  const heads = (items: ReturnType<typeof seq>) =>
+    items.flatMap((i) => (i.kind === "section" ? [`${i.label}|${i.count}|${i.date ?? ""}`] : []));
+
+  test("flatten keeps the No project and No issue key threads", () => {
+    expect(ids(flatten(tree()))).toEqual(["t:old", "t:new", "t:x", "t:r1", "t:r2", "t:n1", "t:n2", "t:k1"]);
+  });
+
+  test("flatten marks every Reviews unit as review", () => {
+    const review = flatten(tree()).flatMap((u) => (u.kind === "thread" ? [[u.t.id, u.review]] : []));
+    expect(review.filter(([, r]) => r).map(([id]) => id)).toEqual(["r1", "r2"]);
+  });
+
+  test("flatten ignores a milestone named like a fallback", () => {
+    const p = lin(branch("lp:z", [], [named(lin(branch("lm:z", [thread("w")])), REVIEWS)]));
+    expect(flatten([p]).map((u) => u.kind === "thread" && u.review)).toEqual([false]);
+  });
+
+  test("sequence makes one section per milestone and fallback, in tree order, with counts and date", () => {
+    expect(heads(seq())).toEqual([
+      "P · M1|3|2026-12-04",
+      "P · No milestone|1|",
+      "Reviews|2|",
+      "No project|2|",
+      "No issue key|1|",
+    ]);
+  });
+
+  test("sequence keeps the unit order inside a section, for manual and updated sort", () => {
+    const m1 = (units: ReturnType<typeof flatten>) => ids(seq([], units).slice(1, 3));
+    expect(m1(flatten(tree()))).toEqual(["t:old", "t:new"]);
+    expect(m1(sortFlat(flatten(tree())))).toEqual(["t:new", "t:old"]);
+  });
+
+  test("a shut section keeps its header and count, and no units", () => {
+    const items = seq(["lm:m1"]);
+    expect(heads(items)[0]).toBe("P · M1|3|2026-12-04");
+    expect(ids(items)).not.toContain("t:old");
+    expect(items[0]).toMatchObject({ kind: "section", open: false });
+  });
+
+  test("a Linear section has no statuses, so no context rows", () => {
+    const items = seq();
+    expect(items[0]).toMatchObject({ kind: "section", statuses: null });
+    expect(sectionOf(items, items[1])).toBeNull();
+  });
+
+  test("flatLists has one list per section, all units under FLAT", () => {
+    const lists = flatLists(seq());
+    expect(lists.get(FLAT)).toHaveLength(8);
+    expect(lists.get(sectionList("lm:m1"))).toEqual(["t:old", "t:new"]);
+    expect(lists.get(sectionList("lf:reviews"))).toEqual(["t:r1", "t:r2"]);
+  });
+
+  test("sectionHolding finds the milestone of a subthread", () => {
+    expect(sectionHolding(flatten(tree()), true, "kid", "linear", tree())).toBe("lm:m1");
+    expect(sectionHolding(flatten(tree()), true, "zz", "linear", tree())).toBeNull();
   });
 });
