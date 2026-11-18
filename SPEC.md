@@ -324,6 +324,7 @@ The full look is in ticket 04. In short:
 - **Three first:** the list shows the first 3 open rows. Marked rows always stay behind "Show all", also when fewer than 3 rows are open. The link button "Show all N" sits under the list and counts every Action. It shows when there are more than 3 Actions or at least one marked row. With all rows shown, it reads "Show less". When no row is open, the list shows "Nothing open · Show all N". "Show all" is not saved. A new run resets it.
 - **Fold:** a chevron in the panel head folds the panel. The panel is open by default. The page saves the state under `thread-tree:brief-fold` (`"1"` or `"0"`). Folded, the head shows "10 Actions · 3 done · 1 changed" in place of the stamp, with a zero part left out, and nothing shows below the head. "What's next" and "Run again" unfold the panel.
 - **Thread headings:** each thread of the Action has one heading, in bold. It shows the live `StatusIcon` and the full title from the current tree, and it opens the thread in T3. The title wraps and is not cut. A thread that is not in the live tree shows its saved title muted and struck through. The brief text does not change.
+- **Phone:** at 720 px and less, the buttons of a row move to their own line under the reason, in line with the headings, and show text labels: Send, New thread, Copy and Focus. The line is left out when the row has no button. On wider screens the row keeps the icons at the right, with tooltips. The `aria-label` of the start button is "Start new thread".
 
 ## Send message
 
