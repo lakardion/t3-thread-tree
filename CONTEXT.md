@@ -19,6 +19,10 @@ _Avoid_: ancestry, history
 **Launched thread**:
 A top-level thread that an agent started with a launch tool. T3 does not record its spawner as a parent.
 
+**Launch nesting**:
+Showing a keyless **Launched thread** under its visible spawner, instead of in its project's "No issue key" group. It is a user setting and is off by default.
+_Avoid_: launcher nesting, lineage view
+
 **Issue key**:
 A tracker key in a thread title, such as `JED-4313` or `ENG-6081`. It groups the work thread and its review threads.
 _Avoid_: ticket id, slug
@@ -33,16 +37,43 @@ A T3 Code project, usually one repo.
 An unsettled top-level thread (any status, snoozed included), or a subagent whose top-level ancestor is active. The default view shows only active threads.
 
 **Needs you**:
-The threads that wait on the user: status needs input or plan ready. The Dock badge, the header count and the menu-bar list show this set. A notification fires when a thread enters this set, or fails. The "Needs you" filter also keeps your-turn threads.
+The threads that wait on the user: status needs input or plan ready. The Dock badge, the Needs-you badge in the header and the menu-bar list show this set. A notification fires when a thread enters this set, or fails. The "Needs you" filter also keeps your-turn threads, and the header shows their count next to the Needs-you count.
 _Avoid_: attention, unread
+
+**Context row**:
+A row that shows only to give context. In a status section, it is a thread whose status is not one of the section's statuses, or a settled thread. In the "Needs you" filter, it is a kept spawner that does not match. A context row shows muted; in a PR stack in a status section, it folds behind "+N other threads". A section count leaves context rows out.
+
+**Status section**:
+A group of the flat view, with "Group by Status", that holds the threads of one or more statuses, most urgent first. Its header counts the threads that match it. It folds.
+_Avoid_: status group, bucket
+
+**Wait**:
+The time since a thread started to wait on the user. It counts from the request for needs input, and from the run completion for plan ready and your turn. A row that waits on the user shows it beside the phrase.
+_Avoid_: age (age is the time since the last update)
 
 **Desktop app**:
 The tree in its own macOS window, with a Dock icon, a Dock badge, notifications and a menu-bar entry. It shows the same page as the **Browser version** and stays alive when its window closes.
 _Avoid_: native app, Electron app
 
+**Open next queue**:
+The threads that "Open next" can open: needs input, plan ready or your turn, not settled, subthreads included, oldest **Wait** first. It is wider than **Needs you**, because it has your-turn threads too.
+_Avoid_: waiting list, Needs-you list
+
+**Up next window**:
+A small always-on-top window of the **Desktop app** that lists the **Open next queue**, each thread with its **Wait**, and has "Open next". The UI calls it Up next. It only opens threads and changes no T3 state.
+_Avoid_: mini window, small window, Needs-you window
+
 **Browser version**:
 The tree served on a local port and opened in a browser tab, with no Dock badge, notifications or menu-bar entry.
 _Avoid_: web app, web version
+
+**Focus list**:
+Up to three threads that the user chose to continue, shown above the tree. It is opt-in: the strip is hidden until the user turns it on. The UI calls it Focus. The user adds a thread from a row, from the brief, or by drag. A settled or deleted thread leaves the list. It is local to this page: it changes no T3 state and does not reorder the tree.
+_Avoid_: Now and Next, pins, favorites, working set
+
+**Find**:
+The control that finds any thread by title, issue key, project, branch or PR number, and opens it or shows it in the tree. It searches the active threads, and the settled threads on request.
+_Avoid_: search, quick open, command palette
 
 **Next-step brief**:
 A model-written, ranked list of recommended actions over the active threads. Each action links to one or more threads. The user asks for it with the "What's next" button.
@@ -51,6 +82,18 @@ _Avoid_: suggestion, summary, advice
 **Action**:
 One ranked item of a **Next-step brief**. It has a kind (answer, merge, fix, review, clean-up, unblock) and links to one or more top-level threads.
 _Avoid_: step, task, todo
+
+**Open**:
+An **Action** whose facts still hold.
+_Avoid_: active, pending
+
+**Done**:
+An **Action** whose rule no longer holds in the live tree, or whose linked threads all left the tree or settled.
+_Avoid_: resolved, closed
+
+**Changed**:
+An **Action** with a linked thread whose status or **Wait** differs from the brief time. The Action may be out of date.
+_Avoid_: stale, outdated
 
 **Digest**:
 The compact text form of one thread that the model reads for a **Next-step brief**: one line of facts, then the tail of the last assistant message. Code builds it on each click.
@@ -64,11 +107,21 @@ _Avoid_: post, push, dispatch
 A new top-level thread in a project, with a first message, through the `t3` CLI, after the user confirms it in the start dialog. T3 records it as a **Launched thread** with no spawner.
 _Avoid_: launch, spawn, create
 
+**Watched label**:
+A GitHub label name that the user lists in the Settings panel. The list is empty by default, so no **Label pill** shows until the user adds a name.
+_Avoid_: tracked label, filter label
+
+**Label pill**:
+A small mark in a thread row that shows a **Watched label** on one of the row's PRs, for example `ready-for-review`.
+_Avoid_: label tag, label chip
+
 ## Relationships
 
 - A **Project** holds many **Issue keys**; an **Issue key** holds one or more **Spawn lineage** trees.
 - A **Thread** has zero or one parent and zero or more **Subthreads**.
 - A **PR stack** can span threads of more than one **Issue key**.
+- A thread in a **PR stack** always shows in its stack block, whatever its **Issue key**, spawner or **Launch nesting**. Review threads are the exception: they stay in Reviews.
+- The keyless threads of one **PR stack** share one group, named after the bottom PR (`PR stack #61`).
 
 ## Example dialogue
 

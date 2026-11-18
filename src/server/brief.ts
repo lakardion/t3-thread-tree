@@ -4,8 +4,8 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 
 import { ago, phraseWith, stripKey } from "../page/format.ts";
-import type { BriefAction, BriefState, Cli } from "../shared/brief.ts";
-import { allThreads, type Branch, type ThreadNode } from "../shared/tree.ts";
+import type { BriefAction, BriefRun, BriefState, Cli, Snapshot } from "../shared/brief.ts";
+import { allThreads, bySince, type Branch, type ThreadNode } from "../shared/tree.ts";
 import guideText from "./next-step-prompt.md" with { type: "text" };
 
 export const CLIS: Record<Cli, { label: string; status: string[] }> = {
@@ -32,6 +32,24 @@ export type InputThread = { id: string; ref: string; title: string; digest: stri
 const MSG_TAIL = 600;
 const NO_ACTION = new Set(["working", "starting", "waiting", "snoozed"]);
 
+/** The last `MSG_TAIL` characters of a message, with a leading `…` when it was cut. */
+export const tailOf = (message: string) => (message.length > MSG_TAIL ? `…${message.slice(-MSG_TAIL)}` : message);
+
+/** `GET /t3/last-message?id=`: the tail of a thread's last message. The id is a query value because ids hold `:`. */
+export function lastMessageRoutes(o: { read: (id: string) => string | null; has: (id: string) => boolean }) {
+  return {
+    "/t3/last-message": {
+      GET: (req: Request) => {
+        const id = new URL(req.url).searchParams.get("id");
+        if (!id) return new Response("Missing id.", { status: 400 });
+        if (!o.has(id)) return new Response("Unknown thread.", { status: 404 });
+        const message = o.read(id);
+        return Response.json({ text: message ? tailOf(message) : null });
+      },
+    },
+  };
+}
+
 /** One thread as text: a line of facts, then the indented tail of the last assistant message. */
 export function digestOf(n: ThreadNode, ref: string, message: string | null, now: number): string {
   const prs = n.prs.map((p) =>
@@ -50,8 +68,7 @@ export function digestOf(n: ThreadNode, ref: string, message: string | null, now
     .filter(Boolean)
     .join(" · ");
   if (!message) return line;
-  const tail = message.length > MSG_TAIL ? `…${message.slice(-MSG_TAIL)}` : message;
-  return `${line}\n${tail.replace(/^/gm, "  ")}`;
+  return `${line}\n${tailOf(message).replace(/^/gm, "  ")}`;
 }
 
 const KIND_RANK: BriefAction["kind"][] = ["answer", "fix", "merge"];
@@ -60,16 +77,48 @@ const MODEL_KINDS: BriefAction["kind"][] = ["review", "clean-up", "unblock"];
 const listOf = (items: string[]) =>
   items.length > 1 ? `${items.slice(0, -1).join(", ")} and ${items.at(-1)}` : (items[0] ?? "");
 
+/** Answer title per request kind, the part of `detail.request` before ` · `. */
+const VERB: Record<string, string> = {
+  user_input: "Answer the question",
+  "mcp-elicitation": "Fill in the form",
+  command: "Approve the command",
+  "file-change": "Approve the file change",
+  "file-read": "Approve the file read",
+  permission: "Grant the permission",
+  dynamic_tool_call: "Approve the tool call",
+};
+
+const QUESTION_MAX = 140;
+
+/** The last question of a message, else its last sentence or line, cut at `QUESTION_MAX`. `null` when the message has no text. */
+export function questionOf(message: string): string | null {
+  const parts = message
+    .replace(/^…/, "")
+    .split(/(?<=[.?!])\s+|\n+/)
+    .map((x) => x.trim())
+    .filter(Boolean);
+  const hit = parts.findLast((x) => /\?[*_"'`)\]]*$/.test(x)) ?? parts.at(-1);
+  if (!hit) return null;
+  return hit.length > QUESTION_MAX ? `${hit.slice(0, QUESTION_MAX - 1).trimEnd()}…` : hit;
+}
+
 /** The first rule that matches the thread, or `null`. */
 function codeAction(n: ThreadNode): BriefAction | null {
-  const make = (kind: BriefAction["kind"], title: string, reason: string, prompt: string | null) => ({
+  const make = (kind: BriefAction["kind"], title: string, reason: string, prompt: string | null, pr?: number) => ({
     kind,
     title,
     reason,
     threadIds: [n.id],
     prompt,
+    ...(pr && { pr }),
   });
-  if (n.status === "needs-input") return make("answer", "Answer the agent", "The agent waits for your input.", null);
+  if (n.status === "needs-input") {
+    const title =
+      n.phrase === "Guest message"
+        ? "Reply to the guest"
+        : (VERB[n.detail.request?.split(" · ")[0] ?? ""] ?? "Answer the agent");
+    return make("answer", title, "The agent waits for your input.", null);
+  }
   if (n.status === "plan-ready")
     return make("answer", "Review the plan", "The plan is ready and waits for your approval.", null);
   const broken = n.prs.find(
@@ -87,6 +136,7 @@ function codeAction(n: ThreadNode): BriefAction | null {
       `Fix PR #${broken.n}`,
       `PR #${broken.n} has ${listOf(hit.map(([, fact]) => fact))}.`,
       `${hit.map(([, , step]) => step).join(", ")}, and push.`,
+      broken.n,
     );
   }
   const ready = n.prs.find(
@@ -98,21 +148,28 @@ function codeAction(n: ThreadNode): BriefAction | null {
       `Merge PR #${ready.n}`,
       `PR #${ready.n} is approved, its checks pass, and it has no conflicts.`,
       null,
+      ready.n,
     );
   return null;
 }
 
-/** At most one action per thread. Grouped by kind in rank order, tree order inside a kind. */
+/** At most one action per thread. Grouped by kind in rank order. Answers go oldest Wait first, the other kinds keep tree order. */
 export function codeActions(nodes: ThreadNode[]): { actions: BriefAction[]; covered: Set<string> } {
-  const found = nodes.flatMap((n) => codeAction(n) ?? []);
+  const found = nodes.flatMap((n) => {
+    const a = codeAction(n);
+    return a ? [[n, a] as const] : [];
+  });
   return {
-    actions: KIND_RANK.flatMap((kind) => found.filter((a) => a.kind === kind)),
-    covered: new Set(found.flatMap((a) => a.threadIds)),
+    actions: KIND_RANK.flatMap((kind) => {
+      const pairs = found.filter(([, a]) => a.kind === kind);
+      return (kind === "answer" ? pairs.toSorted(([a], [b]) => bySince(a.since, b.since)) : pairs).map(([, a]) => a);
+    }),
+    covered: new Set(found.flatMap(([, a]) => a.threadIds)),
   };
 }
 
 export type BriefInput = {
-  code: { actions: BriefAction[]; titles: Record<string, string> };
+  code: { actions: BriefAction[]; titles: Record<string, string> } & Snapshot;
   threads: InputThread[];
 };
 
@@ -125,9 +182,19 @@ export function briefInput(
   const nodes = projects.flatMap(allThreads).filter((n) => !NO_ACTION.has(n.status));
   const { actions, covered } = codeActions(nodes);
   const rest = nodes.filter((n) => !covered.has(n.id));
-  const msgs = lastMessages(rest.map((n) => n.id));
+  const answerIds = actions.flatMap((a) => (a.kind === "answer" ? a.threadIds : []));
+  const msgs = lastMessages([...rest.map((n) => n.id), ...answerIds]);
+  const withReasons = actions.map((a) => {
+    const msg = a.kind === "answer" ? msgs.get(a.threadIds[0]) : null;
+    return msg ? { ...a, reason: questionOf(tailOf(msg)) ?? a.reason } : a;
+  });
   return {
-    code: { actions, titles: Object.fromEntries(nodes.filter((n) => covered.has(n.id)).map((n) => [n.id, n.title])) },
+    code: {
+      actions: withReasons,
+      titles: Object.fromEntries(nodes.filter((n) => covered.has(n.id)).map((n) => [n.id, n.title])),
+      statuses: Object.fromEntries(nodes.map((n) => [n.id, n.status])),
+      since: Object.fromEntries(nodes.filter((n) => answerIds.includes(n.id)).map((n) => [n.id, n.since])),
+    },
     threads: rest.map((n, i) => ({
       id: n.id,
       ref: `t${i + 1}`,
@@ -309,7 +376,7 @@ function workDirs() {
   return (dirs = { cwd, schema });
 }
 
-export type Outcome = Extract<BriefState, { status: "done" | "failed" }>;
+export type Outcome = Extract<BriefRun, { status: "done" | "failed" }>;
 export type Run = { done: Promise<Outcome | null>; cancel: () => void };
 
 /** One CLI run. `done` gives `null` after `cancel()`. */
@@ -369,7 +436,7 @@ type Offered = { id: Cli; label: string }[];
 /** The one in-memory brief state, its routes, and one run at a time. */
 export function briefService(o: {
   clis: Promise<Offered>;
-  input: (settled: boolean) => BriefInput;
+  input: () => BriefInput;
   onChange: () => void;
   run?: (cli: Cli, threads: InputThread[]) => Run;
 }) {
@@ -387,7 +454,7 @@ export function briefService(o: {
           if (!(await o.clis).some((c) => c.id === cli))
             return new Response("This CLI is not offered.", { status: 400 });
           if (active) return new Response("A run is active.", { status: 409 });
-          const { code, threads } = o.input(new URL(req.url).searchParams.get("settled") === "1");
+          const { code, threads } = o.input();
           const cliId = cli!;
           if (threads.length === 0) {
             set({ status: "done", cli: cliId, generatedAt: new Date().toISOString(), rulesOnly: true, ...code });
@@ -417,7 +484,13 @@ export function briefService(o: {
                 !out
                   ? before
                   : out.status === "done"
-                    ? { ...out, actions: [...code.actions, ...out.actions], titles: { ...code.titles, ...out.titles } }
+                    ? {
+                        ...out,
+                        statuses: code.statuses,
+                        since: code.since,
+                        actions: [...code.actions, ...out.actions],
+                        titles: { ...code.titles, ...out.titles },
+                      }
                     : { ...out, ...code },
               );
             });

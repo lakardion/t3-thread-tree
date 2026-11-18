@@ -79,6 +79,12 @@ describe("trayItems", () => {
     );
     expect(ids).toEqual(["Needs input · t1", "Needs input · t2", "Needs input · b", "Needs input · n1"]);
   });
+  test("a plan ready with an older since sorts before a needs input with a newer one", () => {
+    const ids = trayItems([th("n", "2026-01-02"), th("p", "2026-01-01", "plan-ready"), th("g", null)]).map(
+      (i) => i.label,
+    );
+    expect(ids).toEqual(["Plan ready · p", "Needs input · n", "Needs input · g"]);
+  });
   test("label has the status and the URL encodes env and id", () => {
     expect(trayItems([{ ...th("a b", null, "plan-ready"), environmentId: "e/1" }])).toEqual([
       { label: "Plan ready · a b", url: "t3code://threads/e%2F1/a%20b" },

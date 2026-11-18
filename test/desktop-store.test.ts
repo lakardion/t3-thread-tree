@@ -3,7 +3,16 @@ import { mkdtempSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 
-import { parseBounds, parseNeedsYou, parseNotify, parseSettings, readJson, writeJson } from "../src/desktop/store.ts";
+import {
+  parseBounds,
+  parseNeedsYou,
+  parseNotify,
+  parseOpenNext,
+  parseSettings,
+  parseUpNext,
+  readJson,
+  writeJson,
+} from "../src/desktop/store.ts";
 
 const screens = [
   { x: 0, y: 0, width: 1000, height: 800 },
@@ -44,6 +53,17 @@ describe("parseNotify", () => {
       [{ kind: "summary", count: 1.5 }],
     ];
     for (const raw of bad) expect(parseNotify(raw)).toBeNull();
+  });
+});
+
+describe("parseOpenNext", () => {
+  test("accepts a string and null", () => {
+    expect(parseOpenNext("Title")).toBe("Title");
+    expect(parseOpenNext(null)).toBeNull();
+  });
+  test("rejects a number and a too-long string", () => {
+    expect(parseOpenNext(1)).toBeUndefined();
+    expect(parseOpenNext("x".repeat(501))).toBeUndefined();
   });
 });
 
@@ -111,5 +131,32 @@ describe("parseNeedsYou", () => {
   test("rejects a missing or other status", () => {
     expect(parseNeedsYou([{ ...item, status: undefined }])).toBeNull();
     expect(parseNeedsYou([{ ...item, status: "failed" }])).toBeNull();
+  });
+});
+
+describe("parseUpNext", () => {
+  const row = {
+    id: "t1",
+    title: "SHOP-1 Fix it",
+    status: "needs-input" as const,
+    phrase: "Approval",
+    raw: "pending approval",
+    since: "2026-11-12T10:00:00.000Z",
+    project: "shop",
+    key: "SHOP-1",
+    linearUrl: "https://linear.app/acme/issue/SHOP-1",
+  };
+  test("round-trips a list and drops extra keys", () => {
+    const list = { rows: [row], targetId: "t1" };
+    expect(parseUpNext(list)).toEqual(list);
+    expect(parseUpNext({ rows: [{ ...row, extra: 1 }], targetId: null, more: 1 })).toEqual({
+      rows: [row],
+      targetId: null,
+    });
+  });
+  test("rejects a bad status, a missing targetId and more than 500 rows", () => {
+    expect(parseUpNext({ rows: [{ ...row, status: "working" }], targetId: null })).toBeNull();
+    expect(parseUpNext({ rows: [row] })).toBeNull();
+    expect(parseUpNext({ rows: Array.from({ length: 501 }, () => row), targetId: null })).toBeNull();
   });
 });

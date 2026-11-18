@@ -8,29 +8,29 @@ The design merges two proposals: [A, "Harbor"](.wayfinder/design-overhaul/resear
 
 Each row gives the choice and its one reason.
 
-| Part            | Choice                                                                                                                                             | Reason                                                                     |
-| --------------- | -------------------------------------------------------------------------------------------------------------------------------------------------- | -------------------------------------------------------------------------- |
-| Palette         | Harbor (A), with the stronger borders of B and no lowered text opacity (B)                                                                         | Only Harbor has a dot token and a text token for each status.              |
-| Row             | One line of 36 px with a status column: icon, phrase and elapsed time (merge)                                                                      | The tree stays dense and the phrase is in view.                            |
-| Details         | An inline details block below the row, opened by a button (B)                                                                                      | It works with keyboard and touch, and it stays open during stream updates. |
-| Details content | The curated set of A: no ids, no housekeeping fields                                                                                               | Each line helps a decision, and the decoder stays small.                   |
-| Motion          | Working: the ring turns (B). Needs input: the left edge breathes (A). All other states are still. A live change fades in and flashes the row once. | Motion then means "alive" or "waiting for you".                            |
-| Projects        | One shared card. Each project is a block with a one-line header (T3 monogram and name) and a left edge in the project color                        | All projects show in less height, and the user finds a project by color.   |
-| Gradients       | Color gradients for state and for the stack only (A, reduced)                                                                                      | Calm rows stay flat, so a gradient keeps its meaning.                      |
-| Layout          | Fold single-thread key groups (A), stack rail (A), centered column of 1200 px maximum (B), one status shape per thread on closed rows (A)          | Fewer rows, a visible stack, and no wide gap between title and chips.      |
-| Header          | Attention summary (A), "Needs you" filter (A), theme choice (B), first-load skeleton (A)                                                           | They answer "what needs me?" before the user reads the tree.               |
-| Inventory       | Row: status phrase, elapsed time, age, PR marks. All other useful fields: details.                                                                 | The row holds only what the user scans.                                    |
+| Part            | Choice                                                                                                                                                                                                            | Reason                                                                     |
+| --------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | -------------------------------------------------------------------------- |
+| Palette         | Harbor (A), with the stronger borders of B and no lowered text opacity (B)                                                                                                                                        | Only Harbor has a dot token and a text token for each status.              |
+| Row             | One line of 36 px with a status column: icon, phrase and elapsed time (merge)                                                                                                                                     | The tree stays dense and the phrase is in view.                            |
+| Details         | An inline details block below the row, opened by a button (B)                                                                                                                                                     | It works with keyboard and touch, and it stays open during stream updates. |
+| Details content | The curated set of A: no ids, no housekeeping fields                                                                                                                                                              | Each line helps a decision, and the decoder stays small.                   |
+| Motion          | Working: the ring turns (B). Needs input: the left edge breathes (A). All other states are still. A live change fades in and flashes the row once.                                                                | Motion then means "alive" or "waiting for you".                            |
+| Projects        | One shared card. Each project is a block with a one-line header (T3 monogram and name) and a left edge in the project color                                                                                       | All projects show in less height, and the user finds a project by color.   |
+| Gradients       | Color gradients for state and for the stack only (A, reduced)                                                                                                                                                     | Calm rows stay flat, so a gradient keeps its meaning.                      |
+| Layout          | Fold single-thread key groups (A), stack rail (A), centered column of 1200 px maximum (B), one status shape per thread on closed rows, status counts on a closed project or tree group with 5 or more threads (A) | Fewer rows, a visible stack, and no wide gap between title and chips.      |
+| Header          | Attention summary (A), "Needs you" filter (A), theme choice (B), first-load skeleton (A)                                                                                                                          | They answer "what needs me?" before the user reads the tree.               |
+| Inventory       | Row: status phrase, elapsed time, age, PR marks. All other useful fields: details.                                                                                                                                | The row holds only what the user scans.                                    |
 
-Rejected from both proposals: the last message of a thread, in any place; subagent and background task counts, in any place; a model chip, tags, pin, limit and stop flags on the row (they are in details); exhaustive details with ids (B); a hover card (A); a popover for extra PR links (B).
+Rejected from both proposals: subagent and background task counts, in any place; a model chip, tags, pin, limit and stop flags on the row (they are in details); exhaustive details with ids (B); a hover card (A); a popover for extra PR links (B).
 
 ### Changes to the "not shown" rules
 
-| Rule from the rough tree UI                       | Result                                                                                  |
-| ------------------------------------------------- | --------------------------------------------------------------------------------------- |
-| No update age                                     | Overturned. The row shows the age.                                                      |
-| No launched-by hint                               | Overturned. Details show "Launched by" when the thread does not nest under its spawner. |
-| No last message                                   | Kept.                                                                                   |
-| No subagent rows, counts or signals (tree rule 2) | Kept. The page does not read `pendingBackgroundTasks`.                                  |
+| Rule from the rough tree UI                       | Result                                                                                                        |
+| ------------------------------------------------- | ------------------------------------------------------------------------------------------------------------- |
+| No update age                                     | Overturned. The row shows the age.                                                                            |
+| No launched-by hint                               | Overturned. Details show "Launched by" when the thread does not nest under its spawner.                       |
+| No last message                                   | Overturned for the details block and the send dialog. They load it on demand. The row still shows no message. |
+| No subagent rows, counts or signals (tree rule 2) | Kept. The page does not read `pendingBackgroundTasks`.                                                        |
 
 ### Correction to SPEC.md › UI
 
@@ -179,8 +179,8 @@ The backend sends `phrase` and `since`. The page adds the elapsed time from `sin
 | `working`     | `LoaderCircle`        | "Working"                                     | `activityRunStartedAt`, else `latestRunStartedAt` | The icon turns         |
 | `starting`    | `CircleDashed`        | "Queued" for `queued`, else "Starting"        | none                                              | none                   |
 | `waiting`     | `CirclePause`         | "Waiting"                                     | none                                              | none                   |
-| `plan-ready`  | `ListChecks`          | "Plan ready"                                  | none                                              | none                   |
-| `your-turn`   | `CircleCheck`         | "Your turn"                                   | none                                              | none                   |
+| `plan-ready`  | `ListChecks`          | "Plan ready"                                  | `latestRunCompletedAt`                            | none                   |
+| `your-turn`   | `CircleCheck`         | "Your turn"                                   | `latestRunCompletedAt`                            | none                   |
 | `done`        | `Check`               | "Done"                                        | none                                              | none                   |
 | `failed`      | `CircleX`             | "Failed"                                      | none                                              | none                   |
 | `interrupted` | `Square`              | "Interrupted", or "Cancelled" for `cancelled` | none                                              | none                   |
@@ -276,7 +276,7 @@ A project card, a group or a thread row that a push adds or removes also moves.
 
 ## Gradients
 
-Five gradients, all static. No gradient on text, on the page background, or on a row with another status.
+Four gradients, all static. No gradient on text, on the page background, or on a row with another status.
 
 ```css
 /* Project card header: neutral. */
@@ -292,20 +292,18 @@ Five gradients, all static. No gradient on text, on the page background, or on a
     transparent 45%
   );
 }
-.thread-row[data-status="needs-input"]::before {
+.thread-row[data-status="needs-input"]::before,
+[data-waiting]::before {
   background: var(--status-needs-input);
 }
 
-/* Working: weaker wash and a 2 px left edge. */
-.thread-row[data-status="working"] {
-  background: linear-gradient(
+/* A closed row that hides a waiting thread. `background-image` keeps the row's own background color. */
+[data-waiting] {
+  background-image: linear-gradient(
     90deg,
-    color-mix(in oklch, var(--status-working) calc(var(--wash) * 0.6), transparent),
-    transparent 35%
+    color-mix(in oklch, var(--status-needs-input) var(--wash), transparent),
+    transparent 45%
   );
-}
-.thread-row[data-status="working"]::before {
-  background: var(--status-working);
 }
 
 /* The edge. */
@@ -313,7 +311,7 @@ Five gradients, all static. No gradient on text, on the page background, or on a
   position: relative;
 }
 .thread-row[data-status="needs-input"]::before,
-.thread-row[data-status="working"]::before {
+[data-waiting]::before {
   content: "";
   position: absolute;
   left: 0;
@@ -338,6 +336,9 @@ The hover background of a row is `--accent`. It replaces the wash while the poin
 - One centered column: `max-width: 1200px`, 16 px side padding.
 - Header, one line that wraps: the title "Thread tree" (15 px, semibold), the attention summary, the "All / Needs you" filter, then at the right the "Reset order" button, the "show settled" switch and the theme choice. "Reset order" is a ghost `sm` button. It shows only when the user has a stored order. A click clears the stored order.
 - The banner is below the header, as now.
+- The brief panel head has a disclosure chevron, like the tree folds. Folded, the head shows the count line and nothing shows below it. The list shows three open rows and a "Show all N" link button.
+- A brief row has the full thread title as its heading (bold, wraps). Line 2 has the kind chip, the Action title, the Wait and the mark badge. Line 3 has the reason.
+- At phone width (720 px and less), the row buttons sit on their own line under the reason, in line with the heading, with text labels: Send, New thread, Copy, Focus.
 - One card with all projects follows.
 
 **Attention summary.** Four count chips over the visible threads, nested threads included:
@@ -349,7 +350,7 @@ The hover background of a row is `--accent`. It replaces the wash while the poin
 | "N your turn" | `your-turn`                      | Outline                                                       |
 | "N stopped"   | `failed`, `interrupted`          | Outline                                                       |
 
-**"Needs you" filter.** It keeps the threads with status `needs-input`, `plan-ready` or `your-turn`, and the groups and projects that hold them. A thread that matches keeps its place under a spawner that does not match; that spawner row stays, in muted color. The filter runs on the page. The backend tree does not change. The page stores the choice in `localStorage` under `thread-tree:filter`.
+**"Needs you" filter.** It keeps the threads with status `needs-input`, `plan-ready` or `your-turn`, and the groups and projects that hold them. A thread that matches keeps its place under a spawner that does not match; that spawner row stays, in muted color. The chip shows the needs-you count as a badge. Then it shows "·" and the your-turn count as a muted 11 px tabular number. Each count shows only when above 0. The "·" shows only when both counts show. The tooltip reads "N need you, M your turn". It sits inside the item, so the item keeps its `data-state`. The filter runs on the page. The backend tree does not change. The page stores the choice in `localStorage` under `thread-tree:filter`.
 
 **States of the page:**
 
@@ -363,7 +364,7 @@ The hover background of a row is `--accent`. It replaces the wash while the poin
 - Each project is a block with a header row of 32 px above its groups: handle, disclosure chevron, monogram, project name (13 px, semibold). The name stays on one line and truncates. The repository `owner/name` is the name tooltip.
 - The monogram and the project color come from the T3 Code rule, so a project looks the same as in T3: two letters on a 16 px rounded square, in the project color on a 14% wash of it. The color is one of 18 Tailwind hues, from a hash of the project name.
 - The block has a 3 px left edge in the project color. The project color is never on a row, so color on a row still means status.
-- A closed project shows one status icon for each thread in the header row, in tree order.
+- A closed project or tree group with 5 or more threads shows a count for each status section in the header row: the status icon and the number, in section order, with no empty section. Subthreads count. The tooltip and the `aria-label` give the same counts in words, for example "3 needs input, 1 plan ready". A closed project or tree group with fewer threads shows one status icon for each thread, in tree order. Closed PR stacks keep their stack header.
 - Below the header: the groups, 4 px padding.
 
 ### Groups
@@ -382,30 +383,33 @@ Key groups of one project that share a PR stack sit together (tree rule 8). The 
 - **Body.** One row for each top-level thread of the groups, with no group headers and the issue key as the row chip. The rows sit 12 px in, on a vertical line. The first row of each group has a filled node with the stack position; other rows have a hollow node. Thread rows in the block have no stack chip.
 - **Color.** Stops, nodes and line segments take the color of their PR: `--status-failed-fg` when checks fail, the PR conflicts or a review asks for changes; `--status-done-fg` when approved; `--muted-foreground` for a draft; `--status-working-fg` otherwise. These tokens keep 4.5:1 contrast with the `--background` number text in both themes.
 - **Fold.** The open or closed state is saved with the other folds.
+- **Other threads.** In a status section of the flat view, a row folds when it and all its subthreads are context rows. The header then has a dashed pill button, "+N other threads" (11 px, muted, `relative z-10`, 44 px high under 720 px). It shows the folded rows, muted, and then reads "Hide N other threads". Its state is not saved. The rail numbers follow the shown rows.
 
 ### Thread row
 
 One line when the title fits, `min-height: 36px`, radius 8 px, 13 px text with a 20 px line height.
 
 ```
-[icon] [phrase + time  ] [KEY] Title ...............  [Input] [until] [stack] [#PR] [#PR] [+N] [age] [details]
- 12px   120px column      chip  flex, wraps            right group, gap 6px
+[icon] [phrase + Wait] [KEY] Title ...............  [Input] [until] [stack] [#PR] [#PR] [+N] [age] [details]
+ 12px   needs-you rows  chip  flex, wraps            right group, gap 6px
 ```
 
-| Part           | Rule                                                                                                                                                                                                                            |
-| -------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| Icon           | 12 px, in `--status-<name>`. A tooltip shows the raw T3 status.                                                                                                                                                                 |
-| Phrase         | 12 px, weight 500, in the status text color. The column is 120 px wide and does not wrap.                                                                                                                                       |
-| Key chip       | Only on a folded group. Mono 11 px, muted, outline.                                                                                                                                                                             |
-| Title          | The link to T3. Weight 500; weight 650 when the status is `your-turn`. `--muted-foreground` when the status is `snoozed` or the thread is settled. It wraps and is never cut.                                                   |
-| "Input" chip   | Outline. Only when a request with `blocking: false` is pending.                                                                                                                                                                 |
-| "until" note   | "until Fri 10:42" in an outline chip, when `snoozedUntil` is in the future. It also shows on a `needs-input` row of a snoozed thread.                                                                                           |
-| "Settled" chip | Outline, muted. Only with "show settled" on, on a settled thread.                                                                                                                                                               |
-| Stack chip     | `.chip-stack`, the `Layers` icon and "2/4", or the icon alone when the thread created no PR in the stack, with the tooltip and accessible name "PR stack · 4 PRs · no PR from this thread". Not shown on rows in a stack block. |
-| PR chips       | The first two PRs, then a "+N" button that opens the details block.                                                                                                                                                             |
-| Age            | Relative age of `updatedAt`, mono 11 px, muted, `tabular-nums`. The tooltip shows "Updated" and the exact time.                                                                                                                 |
-| Details button | Ghost icon button with `ChevronDown`, `aria-expanded`, label "Details".                                                                                                                                                         |
-| Handle         | Ghost icon button with `GripVertical`, the first item of the row. See "Drag to reorder".                                                                                                                                        |
+| Part           | Rule                                                                                                                                                                                                                                                                                                                                                                                                                                                    |
+| -------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Icon           | 12 px, in `--status-<name>`. A tooltip shows the raw T3 status.                                                                                                                                                                                                                                                                                                                                                                                         |
+| Phrase         | Only on rows that wait on the user (`needs-input`, `plan-ready`, `your-turn`) and on `failed` rows. It sits beside the icon, 12 px, weight 500, in the status color, with no fixed column, and does not wrap. The Wait follows it in mono, `tabular-nums`: the time since `since`. `failed` rows and guest messages show the phrase only. Other rows show no text. This reverses `d602e6e` (#18), which removed the phrase column, for these rows only. |
+| Key chip       | Only on a folded group. Mono 11 px, muted, outline.                                                                                                                                                                                                                                                                                                                                                                                                     |
+| Title          | The link to T3. Weight 500; weight 650 when the status is `your-turn`. `--muted-foreground` when the status is `snoozed` or the thread is settled, and for a context row (a row in a status section with another status, or a settled row). It wraps and is never cut.                                                                                                                                                                                  |
+| "Input" chip   | Outline. Only when a request with `blocking: false` is pending.                                                                                                                                                                                                                                                                                                                                                                                         |
+| "until" note   | "until Fri 10:42" in an outline chip, when `snoozedUntil` is in the future. It also shows on a `needs-input` row of a snoozed thread.                                                                                                                                                                                                                                                                                                                   |
+| "Settled" chip | Outline, muted. On the rows of the Settled list.                                                                                                                                                                                                                                                                                                                                                                                                        |
+| Stack chip     | `.chip-stack`, the `Layers` icon and "2/4", or the icon alone when the thread created no PR in the stack, with the tooltip and accessible name "PR stack · 4 PRs · no PR from this thread". Not shown on rows in a stack block.                                                                                                                                                                                                                         |
+| Label pill     | One pill, before the PR chips. Only when an open PR of the row has a Watched label. A `Badge` with the `Tag` icon and the initials of the first matching name (mono, 11 px), filled with the label color; black or white text by luminance. "+N" shows the other matching names. The tooltip lists each match as "name: #PR".                                                                                                                           |
+| PR chips       | The first two PRs, then a "+N" button that opens the details block.                                                                                                                                                                                                                                                                                                                                                                                     |
+| Age            | Relative age of `updatedAt`, mono 11 px, muted, `tabular-nums`. The tooltip shows "Updated" and the exact time.                                                                                                                                                                                                                                                                                                                                         |
+| Settle button  | Ghost icon button with `CircleCheckBig`, or `Undo2` on a settled row, just before the send icon. It shows on hover and focus, always on touch, and turns `text-destructive` after a failure.                                                                                                                                                                                                                                                            |
+| Details button | Ghost icon button with `ChevronDown`, `aria-expanded`, label "Details".                                                                                                                                                                                                                                                                                                                                                                                 |
+| Handle         | Ghost icon button with `GripVertical`, the first item of the row. See "Drag to reorder".                                                                                                                                                                                                                                                                                                                                                                |
 
 **PR chip.** "#2102" in mono 11 px, a link to the PR, with these marks:
 
@@ -435,17 +439,21 @@ A ghost `icon-sm` button with the `ArrowDownUp` icon, before fold all. Its label
 
 ### Flat view
 
-The Tree / Flat switch is a `ToggleGroup` of two icons (`ListTree`, `List`) with tooltips, built like the theme choice. Fold all and "Group by" share one header button. In the tree, it is fold all. In flat, it opens the "Group by" menu (None, Status), with the `Rows3` icon. On a view switch, the button stays and its icon morphs between the fold arrows and `Rows3`. The page shows one card with one list. Drag works with "Manual" sort and follows "Drag to reorder". The flat list has its own stored order (list key `flat`).
+The Tree / Flat switch is a `ToggleGroup` of two icons (`ListTree`, `List`) with tooltips, built like the theme choice. Fold all and "Group by" share one header button. In the tree, it is fold all. In flat, it opens the "Group by" menu (None, Status), with the `Rows3` icon. On a view switch, the button stays and its icon morphs between the fold arrows and `Rows3`. The page shows one card with one list. Drag works with "Manual" sort and follows "Drag to reorder". With "Group by Status", drag is off in Needs input, Plan ready and Your turn. The flat list has its own stored order (list key `flat`).
 
-- **Thread row.** The status icon comes first. The Project column follows: the project icon and name (`w-32`, truncated). Under 720 px, only the icon shows. Then the issue key chip (a Linear link when set), then the teal `Eye` for a review thread (`text-review`), then the title. The PR chips, the details chevron and the send icon stay as in the tree. The handle sits first, as in the tree.
+- **Thread row.** The status icon comes first. The Project column follows: the project icon and name (`w-32`, truncated). Under 720 px, only the icon shows. Then the issue key chip (a Linear link when set), then the teal `Eye` for a review thread (`text-review`), then the title. The Label pill, the PR chips, the details chevron, the settle icon and the send icon stay as in the tree. The handle sits first, as in the tree.
 - **Subthreads.** They sit under the parent, indented, always open, in base order, with no Project column.
 - **Stack block.** One block with the rail header and numbered rows. The header has the `Layers` icon with no chevron, then the Project column, then the stops. It is always open.
-- **Section headers.** With "Group by Status", a non-collapsible row of 28 px: the label (12 px, semibold, muted) and the count. Order: Needs input, Plan ready, Your turn, Failed, Working, Idle and snoozed, Done. Empty sections are hidden.
+- **Section headers.** With "Group by Status", a fold button of 28 px with a chevron, as in a tree fold header: the label (12 px, semibold, muted) and the count of matching threads, subthreads included, settled threads left out. Order: Needs input, Plan ready, Your turn, Failed, Working, Idle and snoozed, Done. Empty sections are hidden. "Idle and snoozed" and "Done" start closed.
 - **Motion.** One `Presence` holds headers and rows, so a row that changes section slides. Each header has a `view-transition-name`. A switch between Tree and Flat cross-fades the headers, chevrons and fold buttons, and the Project column and key chips. The old and new snapshots keep their own size (`height: 100%; width: auto`), so a row does not stretch.
+
+### Settled list
+
+With "Show settled threads" on, a card below the tree or flat list holds the Settled list. Its header reads "Settled" and the count (12 px, semibold, muted), with no fold. The rows are thread rows with the "Settled" chip, with no drag handle. While a page loads, five skeleton rows show after the rows, with `aria-busy` on the list.
 
 ### Drag to reorder
 
-The user reorders projects, key groups (a stack run is one block), review groups and top-level threads. A list with fewer than two visible items has no handle. Subthreads, groups inside a stack rail, Reviews and No issue key have no handle. No drag crosses lists. The flat list is one list, or one list for each status section when grouped; a row drags only inside its section, and all sections share one stored order.
+The user reorders projects, key groups (a stack run is one block), review groups and top-level threads. A list with fewer than two visible items has no handle. Subthreads, groups inside a stack rail, Reviews and No issue key have no handle. No drag crosses lists. The flat list is one list, or one list for each status section when grouped; a row drags only inside its section, and all sections share one stored order. Needs input, Plan ready and Your turn have no drag.
 
 - **Handle.** A ghost icon `Button` with the `GripVertical` icon, `cursor-grab`, label "Move <name>". It sits at the start of the row: before the status icon on a thread row, and before the chevron or icon on a group header, a stack rail label row and a project. It keeps its space, so nothing shifts on hover. A row with no handle keeps an empty space of the same size, so the status icons and titles line up.
 - **Visibility.** The handle is hidden until the pointer is over its own row, or the handle has focus. It always shows on a touch screen. A hover on a parent does not show the handles of child rows.
@@ -462,22 +470,24 @@ The details button opens a block below the row, inside the same list item, inden
 
 The block is a two-column list of label and value, 12 px. It shows a line only when the value is present. Paths, branches and ids of models are in mono.
 
-| Line        | Value                                                                                                                                                         |
-| ----------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| Request     | The raw request kind and its age: "command · 3m".                                                                                                             |
-| Error       | `lastErrorClass`, `lastErrorCode`, then `lastError` as plain text.                                                                                            |
-| Limit       | "resets 14:00" from `usageLimitResetAt` or `limitRecovery.resetAt`, and "auto-resume" when `limitRecovery.autoResume` is true.                                |
-| Run         | "Stop requested" when `latestRunStopRequested` is true.                                                                                                       |
-| Model       | `modelSelection.model`, and "plan mode" when `interactionMode` is `plan`.                                                                                     |
-| Branch      | `branch`.                                                                                                                                                     |
-| Worktree    | `worktreePath`, with the home folder as `~`.                                                                                                                  |
-| Launched by | The title of the spawner, as a link to that thread in T3. Only when the thread has a spawner and does not nest under it.                                      |
-| Origin      | "Fork of `<title>`" from `forkedFrom` when the source thread is known, "Delegated from `<title>`" from `delegatedFrom`, or "via `<label>`" from `linkOrigin`. |
-| Started by  | `createdBy` and `creationSource`: "agent via mcp".                                                                                                            |
-| Created     | Relative age of `createdAt`.                                                                                                                                  |
-| Goal        | `goal.objective` and `goal.status`.                                                                                                                           |
-| Tags        | `tags` as plain text. "Pinned" when `pinnedAt` is set.                                                                                                        |
-| PRs         | One line for each PR, all PRs of the row: number, title, state, checks, review, "+212 -40 · 9 files".                                                         |
+| Line         | Value                                                                                                                                                         |
+| ------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Request      | The raw request kind and its age: "command · 3m".                                                                                                             |
+| Error        | `lastErrorClass`, `lastErrorCode`, then `lastError` as plain text.                                                                                            |
+| Last message | The end of the newest complete assistant message, in a scroll box. It loads when the block opens.                                                             |
+| Limit        | "resets 14:00" from `usageLimitResetAt` or `limitRecovery.resetAt`, and "auto-resume" when `limitRecovery.autoResume` is true.                                |
+| Run          | "Stop requested" when `latestRunStopRequested` is true.                                                                                                       |
+| Model        | `modelSelection.model`, and "plan mode" when `interactionMode` is `plan`.                                                                                     |
+| Branch       | `branch`.                                                                                                                                                     |
+| Worktree     | `worktreePath`, with the home folder as `~`.                                                                                                                  |
+| Launched by  | The title of the spawner, as a link to that thread in T3. Only when the thread has a spawner and does not nest under it.                                      |
+| Origin       | "Fork of `<title>`" from `forkedFrom` when the source thread is known, "Delegated from `<title>`" from `delegatedFrom`, or "via `<label>`" from `linkOrigin`. |
+| Started by   | `createdBy` and `creationSource`: "agent via mcp".                                                                                                            |
+| Updated      | Relative age of `updatedAt`, the same as the row end.                                                                                                         |
+| Created      | Relative age of `createdAt`.                                                                                                                                  |
+| Goal         | `goal.objective` and `goal.status`.                                                                                                                           |
+| Tags         | `tags` as plain text. "Pinned" when `pinnedAt` is set.                                                                                                        |
+| PRs          | One line for each PR, all PRs of the row: number, title, state, checks, review, "+212 -40 · 9 files".                                                         |
 
 ### Typography and focus
 
@@ -510,14 +520,14 @@ All new stream fields are optional or nullable in the T3 shell schema (`Orchestr
 
 ### New fields to decode from the stream
 
-| For          | Thread fields                                                                                                                                                                                                                                                                                                                                                                                                                                    |
-| ------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
-| Status       | `activityRunStatus`, `blockedOnThreadWait`, `pendingRuntimeRequest.createdAt`, `pendingRuntimeRequest.blocking`, `pendingGuestMessageCount`, `hasActionableProposedPlan`, `interactionMode`, `latestRunCompletedAt`, `lastVisitedAt`                                                                                                                                                                                                             |
-| Elapsed time | `activityRunStartedAt`, `latestRunStartedAt`                                                                                                                                                                                                                                                                                                                                                                                                     |
-| PR marks     | `pullRequests[].snapshot`: `isDraft`, `checksState`, `reviewDecision`, `mergeability`                                                                                                                                                                                                                                                                                                                                                            |
-| Stack rail   | `pullRequests[].stack.base`                                                                                                                                                                                                                                                                                                                                                                                                                      |
-| Details      | `lastError`, `lastErrorClass`, `lastErrorCode`, `usageLimitResetAt`, `limitRecovery.resetAt`, `limitRecovery.autoResume`, `latestRunStopRequested`, `modelSelection.model`, `branch`, `worktreePath`, `forkedFrom`, `delegatedFrom.title`, `linkOrigin.label`, `createdBy`, `creationSource`, `createdAt`, `goal.objective`, `goal.status`, `tags`, `pinnedAt`, and `pullRequests[].snapshot`: `title`, `additions`, `deletions`, `changedFiles` |
-| Project card | `repositoryIdentity.owner` and `repositoryIdentity.name` of the project                                                                                                                                                                                                                                                                                                                                                                          |
+| For          | Thread fields                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                         |
+| ------------ | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Status       | `activityRunStatus`, `blockedOnThreadWait`, `pendingRuntimeRequest.createdAt`, `pendingRuntimeRequest.blocking`, `pendingGuestMessageCount`, `hasActionableProposedPlan`, `interactionMode`, `latestRunCompletedAt`, `lastVisitedAt`                                                                                                                                                                                                                                                                                  |
+| Elapsed time | `activityRunStartedAt`, `latestRunStartedAt`                                                                                                                                                                                                                                                                                                                                                                                                                                                                          |
+| PR marks     | `pullRequests[].snapshot`: `isDraft`, `checksState`, `reviewDecision`, `mergeability`                                                                                                                                                                                                                                                                                                                                                                                                                                 |
+| Stack rail   | `pullRequests[].stack.base`                                                                                                                                                                                                                                                                                                                                                                                                                                                                                           |
+| Details      | The newest complete assistant message (loaded when the block opens), `lastError`, `lastErrorClass`, `lastErrorCode`, `usageLimitResetAt`, `limitRecovery.resetAt`, `limitRecovery.autoResume`, `latestRunStopRequested`, `modelSelection.model`, `branch`, `worktreePath`, `forkedFrom`, `delegatedFrom.title`, `linkOrigin.label`, `createdBy`, `creationSource`, `createdAt`, `goal.objective`, `goal.status`, `tags`, `pinnedAt`, and `pullRequests[].snapshot`: `title`, `additions`, `deletions`, `changedFiles` |
+| Project card | `repositoryIdentity.owner` and `repositoryIdentity.name` of the project                                                                                                                                                                                                                                                                                                                                                                                                                                               |
 
 ### Tree type
 
@@ -537,6 +547,8 @@ export type Status =
   | "snoozed"
   | "idle";
 
+export type Label = { name: string; color: string | null };
+
 export type PrNode = {
   n: number;
   url: string;
@@ -549,6 +561,8 @@ export type PrNode = {
   additions: number | null;
   deletions: number | null;
   changedFiles: number | null;
+  /** Only the labels the connection watches. */
+  labels: Label[];
 };
 
 export type Detail = {

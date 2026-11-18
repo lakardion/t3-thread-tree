@@ -16,7 +16,9 @@ import {
   ChevronDown,
   ChevronRight,
   CircleArrowUp,
+  CircleCheckBig,
   Contrast,
+  Crosshair,
   ExternalLink,
   Eye,
   GripVertical,
@@ -27,19 +29,33 @@ import {
   LoaderCircle,
   Moon,
   Send,
-  SlidersHorizontal,
+  Settings,
+  SkipForward,
   Sun,
+  Tag,
   TriangleAlert,
+  Undo2,
   X,
 } from "lucide-react";
 import { MorphIcon } from "morphicons/react";
-import { createContext, Fragment, useCallback, useContext, useEffect, useRef, useState, type ReactNode } from "react";
+import {
+  createContext,
+  Fragment,
+  useCallback,
+  useContext,
+  useEffect,
+  useRef,
+  useState,
+  type ReactNode,
+  type RefObject,
+} from "react";
 import { flushSync } from "react-dom";
 import { createRoot } from "react-dom/client";
 
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
+import { ButtonGroup } from "@/components/ui/button-group";
 import { Card, CardContent } from "@/components/ui/card";
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
 import {
@@ -64,13 +80,16 @@ import { cn } from "@/lib/utils";
 import appIcon from "../../assets/icon.svg" with { type: "text" };
 import type { BriefState, Cli } from "../shared/brief.ts";
 import type { UpdateState } from "../shared/desktop.ts";
+import { hits } from "../shared/find.ts";
 import type { CliStatus } from "../shared/send.ts";
 import {
   allThreads,
+  parseLabels,
   parseLinear,
   REVIEWS,
   type Branch,
   type PrNode,
+  type Status,
   type ThreadNode,
   type Tree,
 } from "../shared/tree.ts";
@@ -79,25 +98,50 @@ import {
   favicon,
   needsYou,
   needsYouThreads,
+  needsYouTip,
+  nextTarget,
   notifyEvents,
   onlyNeedsYou,
+  openNextQueue,
+  remember,
   tabTitle,
   type Statuses,
+  upNextList,
   waits,
+  withoutSnoozed,
 } from "./attention.ts";
-import { BriefControls, BriefPanel, type Offered } from "./brief.tsx";
+import { BriefControls, BriefPanel, CopyPrompt, type Offered } from "./brief.tsx";
+import { FindDialog, FIND_KEY, MAC } from "./find.tsx";
+import {
+  addFocus,
+  FOCUS_FULL,
+  FOCUS_KEY,
+  FOCUS_MAX,
+  FOCUS_SHOW_KEY,
+  focusDrop,
+  parseFocus,
+  pruneFocus,
+  removeFocus,
+  replaceFocus,
+} from "./focus.ts";
+import { Focus, FocusButton, FocusStrip, revealRow, slotOf, type Pending } from "./focus.tsx";
 import {
   ago,
   folded,
   foldIds,
   groupIds,
+  initials,
+  ink,
   isKeyGroup,
+  labelPill,
   linearHref,
-  ownPr,
   prTone,
+  railRows,
   stackRuns,
+  stopLabel,
   stripKey,
 } from "./format.ts";
+import { pageKey } from "./keys.ts";
 import {
   PROJECTS,
   arrange,
@@ -116,14 +160,22 @@ import {
 } from "./order.ts";
 import { Presence, useMotion } from "./presence.tsx";
 import { ProjectIcon, projectHex } from "./project-icon.tsx";
-import { CliGate, SendDialog } from "./send-dialog.tsx";
+import { CliGate, LastMessage, SendDialog, useLastMessage } from "./send-dialog.tsx";
+import { postSettle } from "./send.ts";
 import { LEGEND, LegendIcon, STATUS, StatusIcon } from "./status-icon.tsx";
+import { nextStop, refocusIndex, stopsIn } from "./stops.ts";
 import { Swap, useChanges } from "./swap.tsx";
 import {
+  closedCounts,
   FLAT,
   flatLists,
   flatten,
+  folds,
+  isContext,
   itemIds,
+  pathFolds,
+  sectionHolding,
+  sectionOf,
   sequence,
   sortFlat,
   sortTree,
@@ -140,17 +192,22 @@ const iconLink = document.head.appendChild(
 );
 
 const TOKEN_CMD =
-  "~/.t3/bin/t3 auth session issue --scope orchestration:read --label thread-tree --ttl 52w --token-only";
+  "~/.t3/bin/t3 auth session issue --scope orchestration:read --scope orchestration:operate --label thread-tree --ttl 52w --token-only | pbcopy";
 const CLOSED_KEY = "thread-tree:closed";
 const SETTLED_KEY = "thread-tree:settled";
+const SNOOZED_KEY = "thread-tree:snoozed";
+const SECTIONS_KEY = "thread-tree:sections";
+const NEST_KEY = "thread-tree:nest";
 const FILTER_KEY = "thread-tree:filter";
 const THEME_KEY = "thread-tree:theme";
 const CLI_KEY = "thread-tree:cli";
 const ORDER_KEY = "thread-tree:order";
 const LINEAR_KEY = "thread-tree:linear";
+const LABELS_KEY = "thread-tree:labels";
 const SORT_KEY = "thread-tree:sort";
 const LAYOUT_KEY = "thread-tree:layout";
 const GROUP_KEY = "thread-tree:group";
+const BRIEF_FOLD_KEY = "thread-tree:brief-fold";
 const THEMES = ["system", "light", "dark"] as const;
 type Theme = (typeof THEMES)[number];
 
@@ -161,15 +218,17 @@ function TokenForm() {
   const [message, setMessage] = useState<{ text: string; error: boolean }>();
   const submit = async () => {
     setSaving(true);
+    setMessage(undefined);
     try {
       const res = await fetch("/token", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ token: value }),
       });
+      /** Any answer but 400 means the server saved the token. */
+      if (res.status !== 400) setValue("");
       if (!res.ok) throw new Error((await res.text()) || `Save failed (${res.status})`);
-      setValue("");
-      setMessage({ text: "Saved. Reconnecting to T3…", error: false });
+      setMessage({ text: "Connected to T3.", error: false });
     } catch (e) {
       setMessage({ text: e instanceof Error ? e.message : String(e), error: true });
     }
@@ -182,7 +241,7 @@ function TokenForm() {
         void submit();
       }}
     >
-      <div className="flex gap-2">
+      <ButtonGroup className="mt-1.5 w-full">
         <Input
           type="password"
           aria-label="T3 token"
@@ -191,11 +250,20 @@ function TokenForm() {
           value={value}
           onChange={(e) => setValue(e.target.value)}
         />
-        <Button type="submit" size="sm" disabled={!value || saving}>
+        <Button type="submit" disabled={!value || saving}>
           Save
         </Button>
-      </div>
-      {message && <p className={cn("mt-1 text-xs", message.error && "text-destructive")}>{message.text}</p>}
+      </ButtonGroup>
+      <p aria-live="polite" className={cn("mt-2 text-xs", message?.error && "text-destructive")}>
+        {saving ? (
+          <span className="inline-flex items-center gap-1.5">
+            <LoaderCircle className="size-3 animate-spin motion-reduce:animate-none" /> Saving and connecting to T3…
+          </span>
+        ) : (
+          message?.text
+        )}
+      </p>
+      <ProgressReveal show={saving} value={null} label="Connection progress" className="pt-1.5" />
     </form>
   );
 }
@@ -248,6 +316,43 @@ function LinearForm({ linear, setLinear }: LinearProps) {
   );
 }
 
+type LabelsProps = { labels: string[]; setLabels: (s: string) => void };
+
+/** Mounts with the panel, so the field starts from the current setting each time it opens. */
+function LabelsForm({ labels, setLabels }: LabelsProps) {
+  const [value, setValue] = useState(labels.join(", "));
+  const [saved, setSaved] = useState(false);
+  return (
+    <form
+      className="grid gap-3"
+      onSubmit={(e) => {
+        e.preventDefault();
+        setLabels(value);
+        setSaved(true);
+      }}
+    >
+      <div className="grid gap-1.5">
+        <Label htmlFor="watched-labels">Label names</Label>
+        <Input
+          id="watched-labels"
+          placeholder="ready-for-review"
+          value={value}
+          onChange={(e) => setValue(e.target.value)}
+        />
+        <p className={HINT}>
+          Separate names with commas. A row shows a pill when one of its PRs has one of these labels. Empty: no pills.
+        </p>
+      </div>
+      <div className="flex items-center justify-end gap-2">
+        {saved && <span className={HINT}>Saved.</span>}
+        <Button type="submit" size="sm">
+          Save
+        </Button>
+      </div>
+    </form>
+  );
+}
+
 /** One labelled group: a title outside a card of rows. */
 const Group = ({ title, children, accent }: { title: string; children: ReactNode; accent?: boolean }) => (
   <section className="grid gap-1.5">
@@ -281,11 +386,12 @@ const Row = ({
   </div>
 );
 
-type Tone = "ok" | "warn" | "info";
+type Tone = "ok" | "warn" | "info" | "none";
 const TONE: Record<Tone, { cls: string; Icon: typeof Info | null }> = {
   ok: { cls: "text-status-done-fg", Icon: null },
   warn: { cls: "text-status-needs-input-fg", Icon: TriangleAlert },
   info: { cls: "text-status-working-fg", Icon: Info },
+  none: { cls: "text-muted-foreground", Icon: null },
 };
 
 /** A row that folds open, with its current value at the right. */
@@ -351,33 +457,53 @@ const ThemeToggle = ({ theme, setTheme }: { theme: Theme; setTheme: (t: Theme) =
   </ToggleGroup>
 );
 
+/**
+ * Controlled props for a tooltip around a menu trigger, and the menu's `onCloseAutoFocus`. The focus that returns to
+ * the trigger when the menu closes does not open the tooltip. It relies on Radix focusing the trigger synchronously
+ * after `onCloseAutoFocus`.
+ */
+function useQuietTip() {
+  const [open, setOpen] = useState(false);
+  const quiet = useRef(false);
+  return {
+    tip: { open, onOpenChange: (o: boolean) => setOpen(o && !quiet.current) },
+    onCloseAutoFocus: () => {
+      quiet.current = true;
+      queueMicrotask(() => (quiet.current = false));
+    },
+  };
+}
+
 const SORTS: [SortBy, string][] = [
   ["manual", "Manual"],
   ["updated", "Last updated"],
 ];
-const SortMenu = ({ sortBy, setSortBy }: { sortBy: SortBy; setSortBy: (s: SortBy) => void }) => (
-  <DropdownMenu modal={false}>
-    <Tooltip>
-      <TooltipTrigger asChild>
-        <DropdownMenuTrigger asChild>
-          <Button variant="ghost" size="icon-sm" aria-label="Sort">
-            <ArrowDownUp />
-          </Button>
-        </DropdownMenuTrigger>
-      </TooltipTrigger>
-      <TooltipContent>Sort: {SORTS.find(([s]) => s === sortBy)?.[1]}</TooltipContent>
-    </Tooltip>
-    <DropdownMenuContent align="end" className="min-w-40">
-      <DropdownMenuRadioGroup value={sortBy} onValueChange={(v) => setSortBy(v as SortBy)}>
-        {SORTS.map(([s, name]) => (
-          <DropdownMenuRadioItem key={s} value={s}>
-            {name}
-          </DropdownMenuRadioItem>
-        ))}
-      </DropdownMenuRadioGroup>
-    </DropdownMenuContent>
-  </DropdownMenu>
-);
+const SortMenu = ({ sortBy, setSortBy }: { sortBy: SortBy; setSortBy: (s: SortBy) => void }) => {
+  const { tip, onCloseAutoFocus } = useQuietTip();
+  return (
+    <DropdownMenu modal={false}>
+      <Tooltip {...tip}>
+        <TooltipTrigger asChild>
+          <DropdownMenuTrigger asChild>
+            <Button variant="ghost" size="icon-sm" aria-label="Sort">
+              <ArrowDownUp />
+            </Button>
+          </DropdownMenuTrigger>
+        </TooltipTrigger>
+        <TooltipContent>Sort: {SORTS.find(([s]) => s === sortBy)?.[1]}</TooltipContent>
+      </Tooltip>
+      <DropdownMenuContent align="end" className="min-w-40" onCloseAutoFocus={onCloseAutoFocus}>
+        <DropdownMenuRadioGroup value={sortBy} onValueChange={(v) => setSortBy(v as SortBy)}>
+          {SORTS.map(([s, name]) => (
+            <DropdownMenuRadioItem key={s} value={s}>
+              {name}
+            </DropdownMenuRadioItem>
+          ))}
+        </DropdownMenuRadioGroup>
+      </DropdownMenuContent>
+    </DropdownMenu>
+  );
+};
 
 const LAYOUTS: [Layout, string, typeof List][] = [
   ["tree", "Tree", ListTree],
@@ -425,12 +551,13 @@ function FoldOrGroup({
   setGroupBy,
 }: { flat: boolean; inner: string[]; groupBy: GroupBy; setGroupBy: (g: GroupBy) => void } & Omit<Fold, "toggle">) {
   const [menu, setMenu] = useState(false);
+  const { tip, onCloseAutoFocus } = useQuietTip();
   if (!flat && inner.length === 0) return null;
   const shut = inner.every((id) => !closed.has(id));
   const label = flat ? "Group by" : `${shut ? "Collapse" : "Expand"} all`;
   return (
     <DropdownMenu modal={false} open={flat && menu} onOpenChange={setMenu}>
-      <Tooltip>
+      <Tooltip {...tip}>
         <TooltipTrigger asChild>
           <DropdownMenuTrigger asChild>
             <Button
@@ -447,7 +574,7 @@ function FoldOrGroup({
         </TooltipTrigger>
         <TooltipContent>{flat ? `Group by: ${GROUPS.find(([g]) => g === groupBy)?.[1]}` : label}</TooltipContent>
       </Tooltip>
-      <DropdownMenuContent align="end" className="min-w-40">
+      <DropdownMenuContent align="end" className="min-w-40" onCloseAutoFocus={onCloseAutoFocus}>
         <DropdownMenuRadioGroup value={groupBy} onValueChange={(v) => setGroupBy(v as GroupBy)}>
           {GROUPS.map(([g, name]) => (
             <DropdownMenuRadioItem key={g} value={g}>
@@ -480,11 +607,12 @@ function ViewMenu({
   setGroupBy: (g: GroupBy) => void;
   inner: string[];
 } & Omit<Fold, "toggle">) {
+  const { tip, onCloseAutoFocus } = useQuietTip();
   const flat = layout === "flat";
   const shut = inner.every((id) => !closed.has(id));
   return (
     <DropdownMenu modal={false}>
-      <Tooltip>
+      <Tooltip {...tip}>
         <TooltipTrigger asChild>
           <DropdownMenuTrigger asChild>
             <Button variant="ghost" size="icon-sm" aria-label="Sort and layout">
@@ -494,7 +622,7 @@ function ViewMenu({
         </TooltipTrigger>
         <TooltipContent>Sort and layout</TooltipContent>
       </Tooltip>
-      <DropdownMenuContent align="end" className="min-w-40">
+      <DropdownMenuContent align="end" className="min-w-40" onCloseAutoFocus={onCloseAutoFocus}>
         <DropdownMenuLabel>Sort</DropdownMenuLabel>
         <DropdownMenuRadioGroup value={sortBy} onValueChange={(v) => setSortBy(v as SortBy)}>
           {SORTS.map(([s, name]) => (
@@ -537,6 +665,43 @@ function ViewMenu({
   );
 }
 
+/** Opens the next thread that waits on the user. Disabled with no target. */
+function OpenNextButton({
+  target,
+  title,
+  now,
+  open,
+}: {
+  target: ThreadNode | null;
+  title: string | null;
+  now: number;
+  open: () => void;
+}) {
+  const button = (
+    <Button variant="outline" size="sm" aria-label="Open next" aria-keyshortcuts="n" disabled={!target} onClick={open}>
+      <SkipForward />
+      <span className="max-[720px]:hidden">Open next</span>
+    </Button>
+  );
+  return (
+    <Tooltip>
+      <TooltipTrigger asChild>
+        {target ? (
+          button
+        ) : (
+          /* oxlint-disable-next-line jsx-a11y/no-noninteractive-tabindex -- a disabled button gets no focus, so the wrapper takes it to show the tooltip */
+          <span tabIndex={0}>{button}</span>
+        )}
+      </TooltipTrigger>
+      <TooltipContent>
+        {target
+          ? [target.phrase, title, target.since && ago(target.since, now)].filter(Boolean).join(" · ")
+          : "Nothing waits"}
+      </TooltipContent>
+    </Tooltip>
+  );
+}
+
 /** Follows the update state of the main process. Undefined in the browser. */
 function useUpdate(): UpdateState | undefined {
   const [state, setState] = useState<UpdateState>();
@@ -553,8 +718,18 @@ function useUpdate(): UpdateState | undefined {
 /** Circumference of the r=6 ring. */
 const RING = 2 * Math.PI * 6;
 
-/** The View button. An update shows as a dot, and a running install as a progress ring in place of the icon. */
-function ViewButton({ update, open, toggle }: { update: UpdateState | undefined; open: boolean; toggle: () => void }) {
+/** An update shows as a dot, and a running install as a progress ring in place of the cog. */
+function SettingsButton({
+  buttonRef,
+  update,
+  open,
+  toggle,
+}: {
+  buttonRef: RefObject<HTMLButtonElement | null>;
+  update: UpdateState | undefined;
+  open: boolean;
+  toggle: () => void;
+}) {
   const install = update?.install ?? null;
   const running = install !== null && install.stage !== "failed";
   const spinning = install?.stage === "unpacking" || (install?.stage === "downloading" && install.progress === null);
@@ -574,10 +749,12 @@ function ViewButton({ update, open, toggle }: { update: UpdateState | undefined;
   const dot = install?.stage === "failed" ? "bg-destructive" : !install && update?.release ? "bg-primary" : null;
   return (
     <Button
+      ref={buttonRef}
       variant={open ? "secondary" : "ghost"}
-      size="sm"
+      size="icon-sm"
       aria-expanded={open}
-      aria-label={note ? `View and settings, ${note}` : "View and settings"}
+      aria-label={note ? `Settings, ${note}` : "Settings"}
+      title="Settings"
       onClick={toggle}
     >
       {running ? (
@@ -601,19 +778,47 @@ function ViewButton({ update, open, toggle }: { update: UpdateState | undefined;
         </svg>
       ) : (
         <span className="relative inline-flex">
-          <SlidersHorizontal />
+          <Settings aria-hidden />
           {dot && (
             <span className={cn("absolute -top-0.5 -right-0.5 size-1.5 rounded-full ring-2 ring-background", dot)} />
           )}
         </span>
       )}
-      <span className="max-[720px]:hidden">View</span>
     </Button>
   );
 }
 
+/** A bar that collapses away when `show` is false. A `value` of null is indeterminate. */
+function ProgressReveal({
+  show,
+  value,
+  label,
+  className,
+}: {
+  show: boolean;
+  value: number | null;
+  label: string;
+  className?: string;
+}) {
+  return (
+    <div
+      aria-hidden={!show}
+      className={cn(
+        "grid transition-[grid-template-rows,opacity] duration-250 ease-in-out motion-reduce:transition-none",
+        show ? "grid-rows-[1fr] opacity-100" : "grid-rows-[0fr] opacity-0",
+      )}
+    >
+      <div className="min-h-0 overflow-hidden">
+        <div className={className}>
+          <Progress value={value} aria-label={label} />
+        </div>
+      </div>
+    </div>
+  );
+}
+
 /** The version row, with the update state as its hint, and a bar while an install runs. */
-function UpdateRows({ update }: { update: UpdateState }) {
+function UpdateRow({ update }: { update: UpdateState }) {
   const { release, install, checking, checkedAt, checkFailed } = update;
   const bridge = window.desktopBridge;
   const recheck = (label: string, variant: "ghost" | "outline") => (
@@ -673,8 +878,9 @@ function UpdateRows({ update }: { update: UpdateState }) {
     line = `Up to date · checked ${hhmm(checkedAt!)}`;
     action = recheck("Check again", "ghost");
   }
+  const showProgress = bar !== undefined;
   return (
-    <>
+    <div>
       <Row
         label={
           <>
@@ -685,12 +891,13 @@ function UpdateRows({ update }: { update: UpdateState }) {
       >
         {action}
       </Row>
-      {bar !== undefined && (
-        <div className="px-3 pb-3">
-          <Progress value={bar} aria-label="Update progress" />
-        </div>
-      )}
-    </>
+      <ProgressReveal
+        show={showProgress}
+        value={bar === undefined ? 100 : bar}
+        label="Update progress"
+        className="px-3 pb-3"
+      />
+    </div>
   );
 }
 
@@ -699,37 +906,55 @@ const tokenSummary = (conn: Tree["conn"] | undefined) =>
 const linearSummary = (l: Tree["linear"]) =>
   l ? [l.workspace, l.teams.join(", ")].filter(Boolean).join(" · ") : "Not set";
 
-type PanelProps = LinearProps & {
-  close: () => void;
-  settled: boolean;
-  setSettled: (v: boolean) => void;
-  canReset: boolean;
-  resetOrder: () => void;
-  theme: Theme;
-  setTheme: (t: Theme) => void;
-  update: UpdateState | undefined;
-  conn: Tree["conn"] | undefined;
-  /** Opens the T3 token fold. */
-  tokenOpen: boolean;
-};
+type PanelProps = LinearProps &
+  LabelsProps & {
+    close: () => void;
+    buttonRef: RefObject<HTMLButtonElement | null>;
+    settled: boolean;
+    setSettled: (v: boolean) => void;
+    snoozed: boolean;
+    setSnoozed: (v: boolean) => void;
+    nest: boolean;
+    setNest: (v: boolean) => void;
+    canReset: boolean;
+    resetOrder: () => void;
+    theme: Theme;
+    setTheme: (t: Theme) => void;
+    update: UpdateState | undefined;
+    conn: Tree["conn"] | undefined;
+    /** Opens the T3 token fold. */
+    tokenOpen: boolean;
+  };
 
 /** View options and settings, beside the list so a change shows at once. */
 function SettingsPanel(p: PanelProps) {
-  const { close } = p;
+  const { close, buttonRef } = p;
+  const panelRef = useRef<HTMLElement>(null);
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => e.key === "Escape" && close();
+    const onClick = (e: MouseEvent) => {
+      const target = e.target;
+      if (target instanceof Node && !panelRef.current?.contains(target) && !buttonRef.current?.contains(target)) {
+        close();
+      }
+    };
     addEventListener("keydown", onKey);
-    return () => removeEventListener("keydown", onKey);
-  }, [close]);
+    document.addEventListener("click", onClick, true);
+    return () => {
+      removeEventListener("keydown", onKey);
+      document.removeEventListener("click", onClick, true);
+    };
+  }, [close, buttonRef]);
   useEffect(() => window.desktopBridge?.checkUpdates(false), []);
   const token = tokenSummary(p.conn);
   return (
     <aside
-      aria-label="View and settings"
+      ref={panelRef}
+      aria-label="Settings"
       className="fixed top-0 right-0 z-40 flex h-full w-[380px] max-w-full flex-col overflow-y-auto border-l bg-card shadow-xl"
     >
       <div className="sticky top-0 z-10 flex items-center justify-between border-b bg-card px-4 py-3">
-        <h2 className="m-0 text-[15px] font-semibold">View and settings</h2>
+        <h2 className="m-0 text-[15px] font-semibold">Settings</h2>
         <Button variant="ghost" size="icon-sm" aria-label="Close" onClick={close}>
           <X />
         </Button>
@@ -737,12 +962,18 @@ function SettingsPanel(p: PanelProps) {
       <div className="grid content-start gap-4 p-4">
         {p.update && (
           <Group title="Updates" accent={p.update.release !== null && p.update.install === null}>
-            <UpdateRows update={p.update} />
+            <UpdateRow update={p.update} />
           </Group>
         )}
         <Group title="View">
           <Row label="Show settled threads" htmlFor="settled">
             <Switch id="settled" checked={p.settled} onCheckedChange={p.setSettled} />
+          </Row>
+          <Row label="Show snoozed threads" htmlFor="snoozed">
+            <Switch id="snoozed" checked={p.snoozed} onCheckedChange={p.setSnoozed} />
+          </Row>
+          <Row label="Nest launched threads" htmlFor="nest">
+            <Switch id="nest" checked={p.nest} onCheckedChange={p.setNest} />
           </Row>
           <Row label="Drag-and-drop order">
             <Button variant="outline" size="sm" disabled={!p.canReset} onClick={p.resetOrder}>
@@ -757,18 +988,31 @@ function SettingsPanel(p: PanelProps) {
           <Fold label="T3 token" value={token} tone={token === "Connected" ? "ok" : "warn"} defaultOpen={p.tokenOpen}>
             <div className="grid gap-2">
               <p className={cn(HINT, "m-0")}>
-                The app reads your threads from T3 with this token. Run this command in a terminal to issue one, then
-                paste it below. Paste a new one at any time to replace it.
+                The app reads your threads from T3 with this token. Run this command in a terminal. It issues a token
+                and copies it to the clipboard. Then paste it below. Paste a new one at any time to replace it.
               </p>
-              <code className="rounded-[6px] bg-muted p-2 text-xs break-all select-all">{TOKEN_CMD}</code>
+              <div className="flex items-start gap-1">
+                <code className="flex-1 rounded-[6px] bg-muted p-2 text-xs break-all select-all">{TOKEN_CMD}</code>
+                <CopyPrompt prompt={TOKEN_CMD} label="Copy command" />
+              </div>
               <TokenForm />
             </div>
           </Fold>
           <Fold label="Linear links" value={linearSummary(p.linear)} tone={p.linear ? "ok" : "warn"}>
             <LinearForm linear={p.linear} setLinear={p.setLinear} />
           </Fold>
+          <Fold
+            label="Watched labels"
+            value={p.labels.length ? p.labels.join(", ") : "None"}
+            tone={p.labels.length ? "ok" : "none"}
+          >
+            <LabelsForm labels={p.labels} setLabels={p.setLabels} />
+          </Fold>
           <Fold label="Status icons" value={<span className="sr-only">Legend</span>} tone="info">
             <Legend />
+          </Fold>
+          <Fold label="Keys" value={<span className="sr-only">Shortcuts</span>} tone="info">
+            <Keys />
           </Fold>
         </Group>
       </div>
@@ -807,15 +1051,48 @@ const Details = createContext<{ open: Set<string>; toggle: (id: string) => void;
 /** Opens the send dialog for a thread. Null where rows cannot send. */
 const SendTo = createContext<{ t3cli: CliStatus | null; open: (id: string) => void } | null>(null);
 const NeedsOnly = createContext(false);
+/** The statuses of the status section that holds the row. Null outside one. */
+const Section = createContext<Status[] | null>(null);
 const Linear = createContext<Tree["linear"]>(null);
+/** The label names that rows show as pills, in pill order. */
+const Watched = createContext<string[]>([]);
 /** The rendered ids of each list, by list key. */
 const Lists = createContext(new Map<string, string[]>());
 /** No list, so no row is sortable. */
 const NO_LISTS = new Map<string, string[]>();
 
+/** One pill for the row's Watched labels: the first name's initials on its color, "+N" for the other names. */
+function LabelPill({ t }: { t: ThreadNode }) {
+  const pill = labelPill(t, useContext(Watched));
+  if (!pill) return null;
+  const { label, more, tip } = pill;
+  return (
+    <Tooltip>
+      <TooltipTrigger asChild>
+        <Badge
+          variant={label.color ? "outline" : "secondary"}
+          className={cn(
+            "min-w-0 gap-0.5 rounded-full px-1 py-0 font-mono text-[11px] font-medium",
+            label.color && "border-transparent",
+          )}
+          style={label.color ? { background: `#${label.color}`, color: ink(label.color) } : undefined}
+          tabIndex={0}
+          role="img"
+          aria-label={tip}
+        >
+          <Tag className="size-3" />
+          <span className="truncate">{initials(label.name)}</span>
+          {more > 0 && <span className="flex-none opacity-70">{`+${more}`}</span>}
+        </Badge>
+      </TooltipTrigger>
+      <TooltipContent>{tip}</TooltipContent>
+    </Tooltip>
+  );
+}
+
 const CHIP = "gap-1 rounded-[6px] px-1.5 py-0 text-[11px] font-normal text-muted-foreground";
 const ROW_BUTTON =
-  "size-5 rounded-[6px] text-muted-foreground motion-reduce:transition-none pointer-coarse:min-h-11 pointer-coarse:min-w-11 focus-visible:border-transparent focus-visible:ring-0 focus-visible:outline-2 focus-visible:outline-solid focus-visible:outline-offset-2 focus-visible:outline-ring";
+  "size-5 cursor-pointer rounded-[6px] text-muted-foreground disabled:cursor-default motion-reduce:transition-none pointer-coarse:min-h-11 pointer-coarse:min-w-11 focus-visible:border-transparent focus-visible:ring-0 focus-visible:outline-2 focus-visible:outline-solid focus-visible:outline-offset-2 focus-visible:outline-ring";
 const SEND_REVEAL =
   "opacity-0 group-hover/row:opacity-100 group-focus-within/row:opacity-100 [@media(hover:none)]:opacity-100";
 const FILTER_ITEM =
@@ -828,7 +1105,8 @@ const Mark = ({ title, children }: { title: string; children: ReactNode }) => (
 );
 
 type RefFn = (el: Element | null) => void;
-type Sort = { id: string; list: string; index: number; name: string };
+/** `thread`: the id of the thread that the unit shows, which a drop on the Focus strip adds. */
+type Sort = { id: string; list: string; index: number; name: string; thread?: string };
 
 /** A unit gets sort props only when its list has two or more units and it is in the list. */
 const sortOf = (lists: Map<string, string[]>, list: string, id: string, name: string): Sort | undefined => {
@@ -872,7 +1150,7 @@ function SortHook({ sort, children }: { sort: Sort; children: (ref: RefFn, handl
     group: sort.list,
     type: sort.list,
     accept: sort.list,
-    data: { name: sort.name },
+    data: { name: sort.name, thread: sort.thread },
     collisionDetector: leadingEdge,
   });
   const both = useCallback<RefFn>(
@@ -987,12 +1265,18 @@ function DetailBlock({ t }: { t: ThreadNode }) {
     .filter(Boolean)
     .join(" · ");
   const tags = [d.tags.join(", "), d.pinned && "Pinned"].filter(Boolean).join(" · ");
+  const last = useLastMessage(t.id, t.updatedAt);
   return (
     <dl className="m-0 grid grid-cols-[auto_1fr] gap-x-3 gap-y-0.5 py-1 pl-[156px] text-xs max-[720px]:pl-7">
       {d.request && <Line label="Request">{d.request}</Line>}
       {d.error && (
         <Line label="Error">
           {[[d.error.class, d.error.code].filter(Boolean).join(" · "), d.error.text].filter(Boolean).join(" ")}
+        </Line>
+      )}
+      {last && (
+        <Line label="Last message">
+          <LastMessage text={last} />
         </Line>
       )}
       {limit && <Line label="Limit">{limit}</Line>}
@@ -1023,6 +1307,7 @@ function DetailBlock({ t }: { t: ThreadNode }) {
       )}
       {d.origin && <Line label="Origin">{d.origin}</Line>}
       {d.startedBy && <Line label="Started by">{d.startedBy}</Line>}
+      <Line label="Updated">{ago(t.updatedAt, now)}</Line>
       {d.createdAt && <Line label="Created">{ago(d.createdAt, now)}</Line>}
       {d.goal && (
         <Line label="Goal">
@@ -1051,9 +1336,86 @@ function DetailBlock({ t }: { t: ThreadNode }) {
   );
 }
 
+/** The phrase beside the icon on rows that wait on the user, with the Wait; failed rows show the phrase only. */
+function WaitText({ t, now }: { t: ThreadNode; now: number }) {
+  if (!needsYou(t.status) && t.status !== "failed") return null;
+  return (
+    <span className={cn(STATUS[t.status].shape, "flex-none text-[12px] font-medium whitespace-nowrap")}>
+      {t.phrase}
+      {needsYou(t.status) && t.since && <span className="font-mono tabular-nums"> {ago(t.since, now)}</span>}
+    </span>
+  );
+}
+
+/** Adds the thread to the Focus list, or removes it. Settled threads leave the list, so they get no button. */
+function FocusMark({ t }: { t: ThreadNode }) {
+  const { ids, add, remove, full } = useContext(Focus);
+  if (t.settled) return null;
+  const on = ids.includes(t.id);
+  const label = on ? "Remove from Focus" : "Add to Focus";
+  return (
+    <Tooltip>
+      <TooltipTrigger asChild>
+        {/** A disabled button gets no hover, so the wrapper keeps the tooltip. */}
+        <span className={cn("inline-flex", !on && SEND_REVEAL)}>
+          <Button
+            variant="ghost"
+            size="icon"
+            className={cn(ROW_BUTTON, on && "text-foreground")}
+            aria-label={label}
+            aria-pressed={on}
+            disabled={!on && full}
+            onClick={(e) => {
+              e.stopPropagation();
+              if (on) remove(t.id);
+              else add(t.id);
+            }}
+          >
+            <Crosshair className={cn("size-3.5", on && "stroke-[2.5]")} />
+          </Button>
+        </span>
+      </TooltipTrigger>
+      <TooltipContent>{!on && full ? FOCUS_FULL : label}</TooltipContent>
+    </Tooltip>
+  );
+}
+
+function SettleButton({ t }: { t: ThreadNode }) {
+  const [busy, setBusy] = useState(false);
+  const [err, setErr] = useState<string>();
+  const label = t.settled ? "Unsettle thread" : "Settle thread";
+  return (
+    <Tooltip>
+      <TooltipTrigger asChild>
+        {/** A disabled button gets no hover, so the wrapper keeps the tooltip. */}
+        <span className={cn("inline-flex", !err && SEND_REVEAL)}>
+          <Button
+            variant="ghost"
+            size="icon"
+            className={cn(ROW_BUTTON, err && "text-destructive")}
+            aria-label={label}
+            disabled={busy}
+            onClick={async (e) => {
+              e.stopPropagation();
+              setBusy(true);
+              setErr(undefined);
+              const r = await postSettle(t.id, !t.settled);
+              setBusy(false);
+              if (!r.ok) setErr(r.err.error);
+            }}
+          >
+            {t.settled ? <Undo2 className="size-3.5" /> : <CircleCheckBig className="size-3.5" />}
+          </Button>
+        </span>
+      </TooltipTrigger>
+      <TooltipContent>{err ?? label}</TooltipContent>
+    </Tooltip>
+  );
+}
+
 /**
  * `inStack`: the row sits on a stack rail, which holds no drag handles and shows the stack itself.
- * `project` adds the Project column of the flat list, `review` the eye.
+ * `project` adds the Project column and project edge of the flat list, `corners` rounds that edge, `review` the eye.
  */
 function ThreadRow({
   t,
@@ -1061,6 +1423,7 @@ function ThreadRow({
   sort,
   inStack,
   project,
+  corners,
   review,
 }: {
   t: ThreadNode;
@@ -1068,11 +1431,13 @@ function ThreadRow({
   sort?: Sort;
   inStack?: boolean;
   project?: Branch;
+  corners?: string;
   review?: boolean;
 }) {
   const now = useContext(Now);
   const { open, toggle, show } = useContext(Details);
-  const dim = useContext(NeedsOnly) && !needsYou(t.status);
+  const section = useContext(Section);
+  const dim = (useContext(NeedsOnly) && !needsYou(t.status)) || (section !== null && isContext(t, section));
   const linear = useContext(Linear);
   const sendTo = useContext(SendTo);
   const chipHref = chip ? linearHref(chip, linear) : null;
@@ -1080,13 +1445,19 @@ function ThreadRow({
   const noPrLabel = t.stack ? `PR stack · ${t.stack.total} PRs · no PR from this thread` : undefined;
   const render = (ref: RefFn, handleRef?: RefFn) => (
     <Collapsible asChild open={open.has(t.id)} onOpenChange={() => toggle(t.id)}>
-      <li ref={ref} className="my-px" style={{ viewTransitionName: vtName("t", t.id) }}>
+      <li
+        ref={ref}
+        className={cn("my-px", project && "border-l-[3px] pl-1", corners)}
+        style={{ viewTransitionName: vtName("t", t.id), borderLeftColor: project && projectHex(project.label) }}
+      >
         <div
           className="thread-row group/row flex min-h-9 min-w-0 items-center gap-x-2 rounded-[8px] px-2 py-1 text-[13px] leading-5 max-[720px]:flex-wrap"
           data-status={t.status}
+          data-thread={t.id}
         >
           {!inStack && <DragHandle handleRef={handleRef} name={t.title || t.id} />}
           <StatusIcon t={t} now={now} />
+          <WaitText t={t} now={now} />
           {pulse > 0 && <span key={pulse} aria-hidden className={cn("row-pulse", STATUS[t.status].shape)} />}
           {project && <ProjectColumn b={project} />}
           {chip && (
@@ -1113,6 +1484,7 @@ function ThreadRow({
               "max-[720px]:basis-full max-[720px]:pl-5",
             )}
             href={t.href}
+            data-stop={t.id}
           >
             {(chip ? stripKey(t.title, chip) : t.title) || t.id}
           </a>
@@ -1144,6 +1516,7 @@ function ThreadRow({
                   <Layers role="img" aria-label={noPrLabel} />
                 </Badge>
               ))}
+            <LabelPill t={t} />
             {t.prs.slice(0, 2).map((p) => (
               <PrChip key={p.n} p={p} />
             ))}
@@ -1165,23 +1538,30 @@ function ThreadRow({
               </TooltipTrigger>
               <TooltipContent>Updated {new Date(t.updatedAt).toLocaleString()}</TooltipContent>
             </Tooltip>
+            <SettleButton key={String(t.settled)} t={t} />
             {sendTo && (
               <CliGate t3cli={sendTo.t3cli}>
-                <Button
-                  variant="ghost"
-                  size="icon"
-                  className={cn(ROW_BUTTON, SEND_REVEAL)}
-                  aria-label="Send message"
-                  disabled={sendTo.t3cli?.available === false}
-                  onClick={(e) => {
-                    e.stopPropagation();
-                    sendTo.open(t.id);
-                  }}
-                >
-                  <Send className="size-3.5" />
-                </Button>
+                <Tooltip>
+                  <TooltipTrigger asChild>
+                    <Button
+                      variant="ghost"
+                      size="icon"
+                      className={cn(ROW_BUTTON, SEND_REVEAL)}
+                      aria-label="Send message"
+                      disabled={sendTo.t3cli?.available === false}
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        sendTo.open(t.id);
+                      }}
+                    >
+                      <Send className="size-3.5" />
+                    </Button>
+                  </TooltipTrigger>
+                  <TooltipContent>Send message</TooltipContent>
+                </Tooltip>
               </CliGate>
             )}
+            <FocusMark t={t} />
             <CollapsibleTrigger asChild>
               <Button variant="ghost" size="icon" className={cn(ROW_BUTTON, "group")} aria-label="Details">
                 <ChevronDown className="size-3.5 transition-transform duration-200 group-data-[state=open]:rotate-180 motion-reduce:transition-none" />
@@ -1202,7 +1582,7 @@ function ThreadRow({
       </li>
     </Collapsible>
   );
-  return <Sortable sort={sort}>{render}</Sortable>;
+  return <Sortable sort={sort && { ...sort, thread: t.id }}>{render}</Sortable>;
 }
 
 /** The project icon and name of a flat row. Phone widths show the icon only. */
@@ -1230,6 +1610,36 @@ const Icons = ({ b }: { b: Branch }) => (
     ))}
   </span>
 );
+
+/** A status icon and a number for each status group of a closed branch. */
+function Counts({ groups }: { groups: ReturnType<typeof closedCounts> }) {
+  const tip = groups.map((g) => `${g.n} ${g.label}`).join(", ");
+  return (
+    <Tooltip>
+      <TooltipTrigger asChild>
+        <span
+          role="img"
+          aria-label={tip}
+          className="relative z-10 inline-flex items-center gap-2 text-[11px] text-muted-foreground tabular-nums"
+        >
+          {groups.map((g) => (
+            <span key={g.label} className="inline-flex items-center gap-0.5">
+              <LegendIcon status={g.status} phrase="" />
+              {g.n}
+            </span>
+          ))}
+        </span>
+      </TooltipTrigger>
+      <TooltipContent className="max-w-64">{tip}</TooltipContent>
+    </Tooltip>
+  );
+}
+
+/** Counts for large closed branches, or one icon per thread for smaller branches. */
+function ClosedSummary({ b }: { b: Branch }) {
+  const counts = closedCounts(allThreads(b));
+  return counts.length > 0 ? <Counts groups={counts} /> : <Icons b={b} />;
+}
 
 type Fold = { closed: Set<string>; toggle: (id: string) => void; fold: (ids: string[], shut: boolean) => void };
 
@@ -1281,7 +1691,10 @@ function GroupRow({ b, closed, toggle, fold, sort }: { b: Branch; sort?: Sort } 
           data-waiting={!open && waits(b) ? "" : undefined}
         >
           <DragHandle handleRef={handleRef} name={b.label} />
-          <CollapsibleTrigger className="flex min-w-0 cursor-pointer items-center gap-2 select-none after:absolute after:inset-0 max-[720px]:min-h-11">
+          <CollapsibleTrigger
+            data-stop={b.id}
+            className="flex min-w-0 cursor-pointer items-center gap-2 select-none after:absolute after:inset-0 max-[720px]:min-h-11"
+          >
             <Chevron open={open} />
             {b.label === REVIEWS && <Eye className="size-3.5 flex-none text-review" aria-hidden />}
             <span
@@ -1305,7 +1718,7 @@ function GroupRow({ b, closed, toggle, fold, sort }: { b: Branch; sort?: Sort } 
               <ExternalLink className="size-3" aria-hidden />
             </a>
           )}
-          {!open && <Icons b={b} />}
+          {!open && <ClosedSummary b={b} />}
           <FoldAll
             inner={b.branches.flatMap(groupIds)}
             self={b.id}
@@ -1385,16 +1798,22 @@ function StackRail({
 }: { run: Branch[]; sort?: Sort; flat?: boolean; project?: Branch } & Fold) {
   const { id, total, base } = run[0].stack!;
   const open = flat || !closed.has(`rail:${id}`);
-  const stops = run.map((g) => ({ g, p: ownPr(g) }));
-  const rows = stops.flatMap(({ g, p }, i) =>
-    g.threads.map((t, j) => ({ t, g, color: prTone(p), n: j ? undefined : i + 1 })),
-  );
+  const { stops, rows: allRows } = railRows(run);
+  const section = useContext(Section);
+  const [showOther, setShowOther] = useState(false);
+  const hidden = section ? allRows.filter((r) => folds(r.t, section)) : [];
+  const rows = showOther ? allRows : allRows.filter((r) => !hidden.includes(r));
+  const partial = stops.filter((s) => s.n).length < total;
   const render = (ref: RefFn, handleRef?: RefFn) => (
     <Collapsible asChild open={open} onOpenChange={() => toggle(`rail:${id}`)}>
       <li
         ref={ref}
-        className="relative my-1 ml-7 rounded-[10px] border border-dashed border-border"
-        style={{ viewTransitionName: vtName("s", run[0].id) }}
+        className={cn("relative my-1 rounded-[10px] border border-dashed border-border", project && "border-l-[3px]")}
+        style={{
+          viewTransitionName: vtName("s", run[0].id),
+          borderLeftColor: project && projectHex(project.label),
+          borderLeftStyle: project && "solid",
+        }}
       >
         <div
           className="group/row relative flex min-h-7 flex-wrap items-center gap-2 rounded-[10px] px-2 text-xs"
@@ -1407,6 +1826,7 @@ function StackRail({
             </span>
           ) : (
             <CollapsibleTrigger
+              data-stop={`rail:${id}`}
               className="flex cursor-pointer items-center gap-1 text-muted-foreground select-none after:absolute after:inset-0 max-[720px]:min-h-11"
               aria-label={`PR stack · ${total} PRs`}
               title={`PR stack · ${total} PRs`}
@@ -1422,14 +1842,14 @@ function StackRail({
                 {base}
               </code>
             )}
-            {stops.map(({ g, p }, i) => (
-              <span key={g.id} className="inline-flex items-center">
+            {stops.map(({ id: stopId, label, p, n }, i) => (
+              <span key={stopId} className="inline-flex items-center">
                 {(i > 0 || base) && <span className="h-0.5 w-4" style={{ background: prTone(p) }} />}
                 <a
                   href={p?.url}
                   target="_blank"
                   rel="noreferrer"
-                  title={g.label}
+                  title={label}
                   className={cn(
                     "relative z-10 inline-flex items-center gap-1 rounded-full border px-1.5 py-px font-mono text-[11px] hover:underline",
                     p?.draft && "border-dashed",
@@ -1437,21 +1857,38 @@ function StackRail({
                   style={{ borderColor: prTone(p) }}
                 >
                   <span className="size-1.5 rounded-full" style={{ background: prTone(p) }} />
-                  {i + 1}
+                  {stopLabel(n, total, partial)}
                   {p && ` · #${p.n}`}
                 </a>
               </span>
             ))}
           </span>
+          {hidden.length > 0 && (
+            <button
+              type="button"
+              className="relative z-10 ml-auto rounded-full border border-dashed px-2 py-px text-[11px] text-muted-foreground hover:text-foreground max-[720px]:min-h-11"
+              aria-expanded={showOther}
+              onClick={() => setShowOther(!showOther)}
+            >
+              {showOther ? "Hide " : "+"}
+              {hidden.length} other {hidden.length === 1 ? "thread" : "threads"}
+            </button>
+          )}
         </div>
         <CollapsibleContent asChild>
           <ul className="m-0 list-none p-0 pb-1 pl-1">
             <Presence items={rows} keyOf={(r) => r.t.id}>
               {(r) => (
                 <li className="relative pl-6">
-                  <RailNode y={18} color={r.color} above={r.t !== rows[0].t} below={r.t !== rows.at(-1)!.t} n={r.n} />
+                  <RailNode
+                    y={18}
+                    color={prTone(r.stop.p)}
+                    above={r.t !== rows[0].t}
+                    below={r.t !== rows.at(-1)!.t}
+                    n={r.n}
+                  />
                   <ul className="m-0 list-none p-0">
-                    <ThreadRow t={r.t} chip={r.g.label} inStack />
+                    <ThreadRow t={r.t} chip={r.chip} inStack />
                   </ul>
                 </li>
               )}
@@ -1464,43 +1901,69 @@ function StackRail({
   return <Sortable sort={sort}>{render}</Sortable>;
 }
 
+/** Rounds the ends of a flat thread row's project edge, except where the row next to it continues that edge. */
+const edgeCorners = (items: FlatItem[], i: FlatItem) => {
+  const at = items.findIndex((x) => x.id === i.id);
+  const joins = (o?: FlatItem) =>
+    at >= 0 && i.kind === "thread" && o?.kind === "thread" && o.project.id === i.project.id;
+  return cn(!joins(items[at - 1]) && "rounded-tl-[8px]", !joins(items[at + 1]) && "rounded-bl-[8px]");
+};
+
 /** A flat-list item: a status section header, a thread row or a PR stack. */
-function FlatRow({ i, closed, toggle, fold }: { i: FlatItem } & Fold) {
+function FlatRow({
+  i,
+  corners,
+  section,
+  closed,
+  toggle,
+  fold,
+  toggleSection,
+}: { i: FlatItem; corners: string; section: Status[] | null; toggleSection: (key: string) => void } & Fold) {
   const lists = useContext(Lists);
   /** The section list that holds the unit, or the whole flat list when ungrouped. */
   const list = [...lists.keys()].find((k) => k !== FLAT && lists.get(k)?.includes(i.id)) ?? FLAT;
   if (i.kind === "thread")
     return (
-      <ThreadRow
-        t={i.t}
-        chip={i.t.key ?? undefined}
-        project={i.project}
-        review={i.review}
-        sort={sortOf(lists, list, i.id, i.t.title || i.t.id)}
-      />
+      <Section value={section}>
+        <ThreadRow
+          t={i.t}
+          chip={i.t.key ?? undefined}
+          project={i.project}
+          corners={corners}
+          review={i.review}
+          sort={sortOf(lists, list, i.id, i.t.title || i.t.id)}
+        />
+      </Section>
     );
   if (i.kind === "stack")
     return (
-      <StackRail
-        run={i.run}
-        project={i.project}
-        flat
-        closed={closed}
-        toggle={toggle}
-        fold={fold}
-        sort={sortOf(lists, list, i.id, `PR stack of ${i.run[0].label}`)}
-      />
+      <Section value={section}>
+        <StackRail
+          run={i.run}
+          project={i.project}
+          flat
+          closed={closed}
+          toggle={toggle}
+          fold={fold}
+          sort={sortOf(lists, list, i.id, `PR stack of ${i.run[0].label}`)}
+        />
+      </Section>
     );
   return (
     <MotionHook>
       {(ref) => (
-        <li
-          ref={ref}
-          className="flex h-7 items-center gap-2 px-2 text-xs font-semibold text-muted-foreground"
-          style={{ viewTransitionName: vtName("sec", i.key) }}
-        >
-          {i.label}
-          <span className="font-normal tabular-nums">{i.count}</span>
+        <li ref={ref} style={{ viewTransitionName: vtName("sec", i.key) }}>
+          <button
+            type="button"
+            aria-expanded={i.open}
+            data-stop={`sec:${i.key}`}
+            onClick={() => toggleSection(i.key)}
+            className="flex h-7 w-full cursor-pointer items-center gap-2 rounded-[8px] px-2 text-xs font-semibold text-muted-foreground select-none hover:bg-accent max-[720px]:min-h-11"
+          >
+            <Chevron open={i.open} />
+            {i.label}
+            <span className="font-normal tabular-nums">{i.count}</span>
+          </button>
         </li>
       )}
     </MotionHook>
@@ -1521,14 +1984,17 @@ function ProjectBlock({ b, closed, toggle, fold }: { b: Branch } & Fold) {
             data-waiting={!open && waits(b) ? "" : undefined}
           >
             <DragHandle handleRef={handleRef} name={b.label} />
-            <CollapsibleTrigger className="flex min-w-0 cursor-pointer items-center gap-1.5 select-none after:absolute after:inset-0">
+            <CollapsibleTrigger
+              data-stop={b.id}
+              className="flex min-w-0 cursor-pointer items-center gap-1.5 select-none after:absolute after:inset-0"
+            >
               <Chevron open={open} />
               <ProjectIcon name={b.label} />
               <span className="min-w-0 truncate text-[13px] font-semibold" title={b.repo ?? b.label}>
                 {b.label}
               </span>
             </CollapsibleTrigger>
-            {!open && <Icons b={b} />}
+            {!open && <ClosedSummary b={b} />}
             <FoldAll inner={foldIds(b)} self={b.id} name={b.label} closed={closed} fold={fold} className={ROW_FOLD} />
           </div>
           <div className="min-w-0 px-1 pb-1">
@@ -1564,6 +2030,33 @@ function ProjectBlock({ b, closed, toggle, fold }: { b: Branch } & Fold) {
   return <Sortable sort={sortOf(lists, PROJECTS, b.id, b.label)}>{render}</Sortable>;
 }
 
+const KEYS: [keys: string, action: string][] = [
+  ["j k ↑ ↓", "Move"],
+  ["Enter", "Open"],
+  ["o", "Details or fold"],
+  ["l h", "Expand, collapse"],
+  ["s", "Send"],
+  ["n", "Open next"],
+  [FIND_KEY, "Find"],
+  ["1–3", "Open a Focus slot"],
+];
+
+/** The page keys. */
+const Keys = () => (
+  <dl className="m-0 grid grid-cols-[auto_minmax(0,1fr)] items-center gap-x-3 gap-y-1.5 text-xs">
+    {KEYS.map(([keys, action]) => (
+      <Fragment key={action}>
+        <dt>
+          <kbd className="rounded-[4px] border bg-muted px-1.5 py-0.5 font-mono text-[11px] text-foreground">
+            {keys}
+          </kbd>
+        </dt>
+        <dd className="m-0 text-muted-foreground">{action}</dd>
+      </Fragment>
+    ))}
+  </dl>
+);
+
 /** The meaning of each status icon. */
 const Legend = () => (
   <dl className="m-0 grid grid-cols-[auto_minmax(0,1fr)] items-center gap-x-2.5 gap-y-1.5 text-xs">
@@ -1594,7 +2087,16 @@ const transition = (change: () => void) => {
   else document.startViewTransition(() => flushSync(change));
 };
 
-type Cfg = { orders: Orders; needsOnly: boolean; sortBy: SortBy; layout: Layout; groupBy: GroupBy; freeze?: Freeze };
+type Cfg = {
+  orders: Orders;
+  needsOnly: boolean;
+  snoozed: boolean;
+  shutSections: ReadonlySet<string>;
+  sortBy: SortBy;
+  layout: Layout;
+  groupBy: GroupBy;
+  freeze?: Freeze;
+};
 
 /**
  * The user order on the whole tree, then the filter, then the drag freeze. In the tree, `view.projects` is also sorted.
@@ -1604,20 +2106,107 @@ const pipeline = (ps: Branch[], c: Cfg): { full: Arranged; view: Arranged & { fl
   const tree = arrange(ps, c.orders);
   const flatIds = applyOrder(flatten(tree.projects), (u) => u.id, c.orders[FLAT]).map((u) => u.id);
   const full = { ...tree, lists: new Map(tree.lists).set(FLAT, flatIds) };
-  const view = arrange(c.needsOnly ? onlyNeedsYou(full.projects) : full.projects, {}, c.freeze);
+  const shown = c.snoozed ? full.projects : withoutSnoozed(full.projects);
+  const view = arrange(c.needsOnly ? onlyNeedsYou(shown) : shown, {}, c.freeze);
   if (c.layout === "flat") {
     const own = c.freeze?.list === FLAT ? c.freeze.ids : c.orders[FLAT];
     const units =
       c.sortBy === "updated" ? sortFlat(flatten(view.projects)) : applyOrder(flatten(view.projects), (u) => u.id, own);
-    const flat = sequence(units, c.groupBy);
+    const flat = sequence(units, c.groupBy, c.shutSections, c.snoozed);
     return { full, view: { ...view, lists: flatLists(flat), flat } };
   }
   return { full, view: { ...view, projects: c.sortBy === "updated" ? sortTree(view.projects) : view.projects } };
 };
 
+type SettledItem = { project: Branch; t: ThreadNode };
+type SettledPage = { items: SettledItem[]; next: string | null; total: number };
+const SETTLED_PAGE = 50;
+
+/**
+ * The settled threads, newest settle first, loaded a page at a time as the sentinel nears the view.
+ * A new `signature` refetches the loaded rows in one request.
+ */
+function SettledList({ signature, scrollRoot }: { signature: string; scrollRoot: RefObject<HTMLDivElement | null> }) {
+  const [items, setItems] = useState<SettledItem[]>([]);
+  /** Undefined until the first page lands; null on the last page. */
+  const [next, setNext] = useState<string | null | undefined>(undefined);
+  const [total, setTotal] = useState(0);
+  const [loading, setLoading] = useState(false);
+  /** Tags each request; a response that is not the latest is dropped. */
+  const seq = useRef(0);
+  const loaded = useRef(0);
+  const sentinel = useRef<HTMLLIElement>(null);
+  const fetchInto = useCallback((url: string, mode: "append" | "replace") => {
+    const id = ++seq.current;
+    setLoading(true);
+    fetch(url)
+      .then((r) => r.json() as Promise<SettledPage>)
+      .then(
+        (p) => {
+          if (id !== seq.current) return;
+          setItems((cur) =>
+            mode === "replace" ? p.items : [...cur, ...p.items.filter((i) => !cur.some((c) => c.t.id === i.t.id))],
+          );
+          setNext(p.next);
+          setTotal(p.total);
+          setLoading(false);
+        },
+        () => {
+          if (id !== seq.current) return;
+          if (mode === "append") setNext(undefined);
+          setLoading(false);
+        },
+      );
+  }, []);
+  useEffect(() => {
+    loaded.current = items.length;
+  });
+  useEffect(() => {
+    fetchInto(`/settled?limit=${Math.max(SETTLED_PAGE, loaded.current)}`, "replace");
+    /* oxlint-disable-next-line react/exhaustive-effect-dependencies -- a new signature is the trigger, though the body does not read it */
+  }, [signature, fetchInto]);
+  /** Each change of `next` or `loading` makes a new observer, which reports at once, so a sentinel still in view loads the next page. */
+  useEffect(() => {
+    if (typeof next !== "string" || loading || !sentinel.current) return;
+    const io = new IntersectionObserver(
+      ([e]) => {
+        if (e.isIntersecting) fetchInto(`/settled?after=${encodeURIComponent(next)}&limit=${SETTLED_PAGE}`, "append");
+      },
+      { root: scrollRoot.current, rootMargin: "600px" },
+    );
+    io.observe(sentinel.current);
+    return () => io.disconnect();
+  }, [next, loading, fetchInto, scrollRoot]);
+  return (
+    <Card className="mt-3 gap-0 overflow-clip rounded-[12px] px-2 py-0 shadow-none">
+      <h2 className="flex h-7 items-center gap-2 px-2 text-xs font-semibold text-muted-foreground">
+        Settled
+        <span className="font-normal tabular-nums">{total}</span>
+      </h2>
+      {next !== undefined && total === 0 && (
+        <p className="px-2 pb-2 text-sm text-muted-foreground">No settled threads.</p>
+      )}
+      <ul aria-busy={loading} className="m-0 list-none p-1">
+        {items.map(({ project, t }) => (
+          <ThreadRow key={t.id} t={t} chip={t.key ?? undefined} project={project} />
+        ))}
+        {typeof next === "string" && <li ref={sentinel} aria-hidden className="h-px" />}
+        {loading &&
+          [0, 1, 2, 3, 4].map((i) => (
+            <li key={i} className="my-px">
+              <Skeleton className="h-9 rounded-[8px] motion-reduce:animate-none" />
+            </li>
+          ))}
+      </ul>
+    </Card>
+  );
+}
+
 function App() {
   const [tree, setTree] = useState<Tree | null>(null);
   const [settled, setSettled] = useState(load(SETTLED_KEY) === "1");
+  const [snoozed, setSnoozed] = useState(load(SNOOZED_KEY) !== "0");
+  const [nest, setNest] = useState(load(NEST_KEY) === "1");
   const [needsOnly, setNeedsOnly] = useState(load(FILTER_KEY) === "needs");
   const [theme, setTheme] = useState<Theme>(() => THEMES.find((t) => t === load(THEME_KEY)) ?? "system");
   const [sortBy, setSortBy] = useState<SortBy>(() => (load(SORT_KEY) === "updated" ? "updated" : "manual"));
@@ -1626,6 +2215,9 @@ function App() {
   const [now, setNow] = useState(Date.now);
   const [shown, setShown] = useState(() => new Set<string>());
   const [closed, setClosed] = useState(() => new Set<string>(JSON.parse(load(CLOSED_KEY) ?? "[]") as string[]));
+  const [shutSections, setShutSections] = useState(
+    () => new Set<string>(JSON.parse(load(SECTIONS_KEY) ?? '["idle","done"]') as string[]),
+  );
   const [brief, setBrief] = useState<BriefState>({ status: "idle" });
   const [clis, setClis] = useState<Offered | null>(null);
   const [cli, setCli] = useState(load(CLI_KEY) as Cli | null);
@@ -1635,6 +2227,13 @@ function App() {
   const [sendTo, setSendTo] = useState({ id: "", open: false });
   const briefStatus = useRef<BriefState["status"]>("idle");
   const [orders, setOrders] = useState(() => parseOrders(load(ORDER_KEY)));
+  const [focus, setFocus] = useState(() => parseFocus(load(FOCUS_KEY)));
+  const [focusShow, setFocusShow] = useState(load(FOCUS_SHOW_KEY) === "1");
+  const [briefFolded, setBriefFolded] = useState(load(BRIEF_FOLD_KEY) === "1");
+  const [pending, setPending] = useState<Pending | null>(null);
+  const [findOpen, setFindOpen] = useState(false);
+  /** A new key remounts the tree list, which drops the row moves that dnd-kit made during a drag onto the strip. */
+  const [listKey, setListKey] = useState(0);
   /** The page setting wins over the server's `.env` config. */
   const [linearSet, setLinearSet] = useState<Tree["linear"]>(() => {
     try {
@@ -1645,7 +2244,11 @@ function App() {
     }
   });
   const linear = linearSet ?? tree?.linear ?? null;
+  const [labels, setLabelsState] = useState(() => parseLabels(load(LABELS_KEY) ?? ""));
+  const labelsParam = labels.join(",");
   const [settingsOpen, setSettingsOpen] = useState(false);
+  const settingsButtonRef = useRef<HTMLButtonElement>(null);
+  const [seen, setSeen] = useState<ReadonlySet<string>>(new Set());
   const [tokenOpen, setTokenOpen] = useState(false);
   const update = useUpdate();
   const closeSettings = useCallback(() => setSettingsOpen(false), []);
@@ -1655,8 +2258,53 @@ function App() {
     if (next) save(LINEAR_KEY, JSON.stringify({ workspace: next.workspace, teams: next.teams.join(",") }));
     else forget(LINEAR_KEY);
   };
+  const setLabels = (s: string) => {
+    const next = parseLabels(s);
+    setLabelsState(next);
+    if (next.length) save(LABELS_KEY, next.join(","));
+    else forget(LABELS_KEY);
+  };
   const [freeze, setFreeze] = useState<Freeze>();
   const sentNeedsYou = useRef("");
+  const queue = openNextQueue(tree?.projects ?? []);
+  const target = nextTarget(queue, seen);
+  const openQueued = (t: ThreadNode) => {
+    setSeen(remember(queue, seen, t));
+    location.assign(t.href);
+  };
+  const openNext = () => target && openQueued(target);
+  const openNextRef = useRef(openNext);
+  const openThread = (id: string) => {
+    const t = queue.find((q) => q.id === id);
+    if (t) openQueued(t);
+  };
+  const openThreadRef = useRef(openThread);
+  const settingsOpenRef = useRef(settingsOpen);
+  useEffect(() => {
+    openNextRef.current = openNext;
+    openThreadRef.current = openThread;
+    settingsOpenRef.current = settingsOpen;
+  });
+
+  const sentOpenNext = useRef<string | null | undefined>(undefined);
+  const openNextTitle = target ? target.title || target.id : null;
+  useEffect(() => {
+    if (!window.desktopBridge || openNextTitle === sentOpenNext.current) return;
+    sentOpenNext.current = openNextTitle;
+    window.desktopBridge.setOpenNext(openNextTitle);
+  }, [openNextTitle]);
+  useEffect(() => window.desktopBridge?.onOpenNext(() => openNextRef.current()), []);
+  useEffect(() => window.desktopBridge?.onOpenThread((id) => openThreadRef.current(id)), []);
+
+  const sentUpNext = useRef("");
+  useEffect(() => {
+    if (!window.desktopBridge || !tree) return;
+    const list = upNextList(tree.projects, queue, target, linear);
+    const key = JSON.stringify(list);
+    if (key === sentUpNext.current) return;
+    sentUpNext.current = key;
+    window.desktopBridge.setUpNext(list);
+  });
 
   useEffect(() => {
     if (!window.desktopBridge || !tree) return;
@@ -1698,6 +2346,18 @@ function App() {
   useEffect(() => {
     save(FILTER_KEY, needsOnly ? "needs" : "all");
   }, [needsOnly]);
+  useEffect(() => {
+    save(SNOOZED_KEY, snoozed ? "1" : "0");
+  }, [snoozed]);
+  useEffect(() => {
+    save(FOCUS_KEY, JSON.stringify(focus));
+  }, [focus]);
+  useEffect(() => {
+    save(FOCUS_SHOW_KEY, focusShow ? "1" : "0");
+  }, [focusShow]);
+  useEffect(() => {
+    save(BRIEF_FOLD_KEY, briefFolded ? "1" : "0");
+  }, [briefFolded]);
 
   useEffect(() => {
     save(THEME_KEY, theme);
@@ -1710,14 +2370,45 @@ function App() {
     return () => mq.removeEventListener("change", apply);
   }, [theme]);
 
+  const listRef = useRef<HTMLDivElement>(null);
+  /** The thread or header stop that has focus, and its index in the stop list. */
+  const last = useRef<{ id: string; index: number } | null>(null);
+  /** Moves focus to the header of fold `id` when focus is inside the fold, before the fold closes. True when it moved. */
+  const holdFocus = (id: string) => {
+    const root = listRef.current;
+    const active = document.activeElement;
+    const header = root?.querySelector<HTMLElement>(`[data-stop="${CSS.escape(id)}"]`);
+    if (!root || !header || !active || active === header) return false;
+    let inside = !!header.closest("[data-slot=collapsible]")?.contains(active);
+    if (id.startsWith("sec:")) {
+      const next = [...root.querySelectorAll('[data-stop^="sec:"]')].find(
+        (h) => header.compareDocumentPosition(h) & Node.DOCUMENT_POSITION_FOLLOWING,
+      );
+      inside =
+        !!(header.compareDocumentPosition(active) & Node.DOCUMENT_POSITION_FOLLOWING) &&
+        !(next && next.compareDocumentPosition(active) & Node.DOCUMENT_POSITION_FOLLOWING);
+    }
+    if (inside) header.focus({ preventScroll: true });
+    return inside;
+  };
   const toggle = (id: string) => {
+    if (!closed.has(id)) holdFocus(id);
     const n = new Set(closed);
     if (n.has(id)) n.delete(id);
     else n.add(id);
     setClosed(n);
     save(CLOSED_KEY, JSON.stringify([...n]));
   };
+  const toggleSection = (key: string) => {
+    if (!shutSections.has(key)) holdFocus(`sec:${key}`);
+    const n = new Set(shutSections);
+    if (n.has(key)) n.delete(key);
+    else n.add(key);
+    setShutSections(n);
+    save(SECTIONS_KEY, JSON.stringify([...n]));
+  };
   const fold = (ids: string[], shut: boolean) => {
+    if (shut) for (const id of ids) if (holdFocus(id)) break;
     const n = new Set(closed);
     for (const id of ids) {
       if (shut) n.add(id);
@@ -1738,17 +2429,50 @@ function App() {
       }),
     show: (id: string) => setShown((s) => new Set(s).add(id)),
   };
+  const sendToApi = { t3cli, open: (id: string) => setSendTo({ id, open: true }) };
   const pick = clis?.find((c) => c.id === cli)?.id ?? clis?.[0]?.id;
   const runBrief = () => {
     if (!pick) return;
     setHideBrief(false);
-    void fetch(`/brief/run?settled=${settled ? 1 : 0}`, { method: "POST", body: JSON.stringify({ cli: pick }) });
+    setBriefFolded(false);
+    void fetch("/brief/run", { method: "POST", body: JSON.stringify({ cli: pick }) });
   };
   const live = new Map((tree?.projects ?? []).flatMap(allThreads).map((t) => [t.id, t]));
+  const kept = tree ? pruneFocus(focus, live, tree.conn) : focus;
+  if (kept !== focus) setFocus(kept);
+  const pend =
+    pending &&
+    focus[pending.slot] === pending.over &&
+    !focus.includes(pending.id) &&
+    live.get(pending.id)?.settled === false
+      ? pending
+      : null;
+  if (pending && !pend) setPending(null);
+  /** Opens the folds on the way to the row of thread `id`, stores them, then scrolls to the row and flashes it. */
+  const reveal = (id: string): Promise<boolean> => {
+    flushSync(() => {
+      if (layout === "tree") fold(pathFolds(full.projects, id), false);
+      else {
+        const key = groupBy === "status" ? sectionHolding(flatten(view.projects), snoozed, id) : null;
+        if (key && shutSections.has(key)) toggleSection(key);
+      }
+    });
+    return new Promise((done) => requestAnimationFrame(() => done(revealRow(id))));
+  };
+  const focusApi = {
+    reveal,
+    ids: focus,
+    full: focus.length >= FOCUS_MAX,
+    add: (id: string) => setFocus((ids) => addFocus(ids, id)),
+    remove: (id: string) => setFocus((ids) => removeFocus(ids, id)),
+  };
+  const cancelReplace = useCallback(() => setPending(null), []);
   const counts = countAttention(tree?.projects ?? []);
+  const needsTip = needsYouTip(counts);
   const connecting = !tree || tree.conn === "connecting";
-  const cfg: Cfg = { orders, needsOnly, sortBy, layout, groupBy, freeze };
+  const cfg: Cfg = { orders, needsOnly, snoozed, shutSections, sortBy, layout, groupBy, freeze };
   const { full, view } = pipeline(tree?.projects ?? [], cfg);
+  const inView = new Set(view.projects.flatMap(allThreads).map((t) => t.id));
   /** The ids of the rendered rows and section headers, in order, for a tree. */
   const rows = (ps: Branch[]) => {
     const v = pipeline(ps, cfg).view;
@@ -1756,13 +2480,112 @@ function App() {
       layout === "flat" ? (v.flat ?? []).flatMap(itemIds) : v.projects.flatMap(allThreads).map((t) => t.id)
     ).join();
   };
-  const latest = useRef({ full, view, rows, projects: tree?.projects ?? [], connecting });
+  const latest = useRef({ full, view, rows, projects: tree?.projects ?? [], connecting, focus, live });
   useEffect(() => {
-    latest.current = { full, view, rows, projects: tree?.projects ?? [], connecting };
+    latest.current = { full, view, rows, projects: tree?.projects ?? [], connecting, focus, live };
   });
   useEffect(() => {
-    save(SETTLED_KEY, settled ? "1" : "0");
-    const es = new EventSource(settled ? "/events?settled=1" : "/events");
+    const onKey = (e: KeyboardEvent) => {
+      const el = e.target instanceof HTMLElement ? e.target : null;
+      const active = document.activeElement;
+      const action = pageKey(e, {
+        stop: active?.matches("[data-stop]") ? (active.closest(".thread-row") ? "thread" : "header") : null,
+        mac: MAC,
+        field: !!el?.closest("input, textarea, [contenteditable]:not([contenteditable=false])"),
+        panel: settingsOpenRef.current,
+        overlay: document.querySelector("[data-find]")
+          ? "find"
+          : document.querySelector("[role=dialog], [role=alertdialog]")
+            ? "dialog"
+            : document.querySelector("[role=menu], [role=listbox]")
+              ? "menu"
+              : null,
+      });
+      if (action === null) return;
+      if (action === "find") {
+        e.preventDefault();
+        setFindOpen((o) => !o);
+      } else if (action === "next") openNextRef.current();
+      else if (action === "down" || action === "up") {
+        const root = listRef.current;
+        if (!root) return;
+        const stops = stopsIn(root);
+        const at = active instanceof HTMLElement ? stops.indexOf(active) : -1;
+        const box = root.getBoundingClientRect();
+        const to =
+          at < 0
+            ? stops.find((s) => {
+                const r = s.getBoundingClientRect();
+                return r.bottom > box.top && r.top < box.bottom;
+              })
+            : stops[nextStop(stops.length, at, action === "down" ? 1 : -1) ?? -1];
+        if (!to) return;
+        e.preventDefault();
+        to.focus({ preventScroll: true });
+        to.scrollIntoView({ block: "nearest" });
+      } else if (action === "toggle" || action === "expand" || action === "collapse") {
+        const row = active?.closest(".thread-row");
+        const btn = row ? row.querySelector<HTMLElement>("[aria-label=Details]") : active;
+        const expanded = btn?.getAttribute("aria-expanded") === "true";
+        if (btn instanceof HTMLElement && (action === "toggle" || expanded === (action === "collapse"))) btn.click();
+      } else if (action === "send") {
+        active
+          ?.closest(".thread-row")
+          ?.querySelector<HTMLElement>('[aria-label="Send message"]:not(:disabled)')
+          ?.click();
+      } else {
+        const { focus: ids, live: threads } = latest.current;
+        const t = threads.get(ids[action]);
+        if (t) location.assign(t.href);
+      }
+    };
+    addEventListener("keydown", onKey);
+    return () => removeEventListener("keydown", onKey);
+  }, [listRef]);
+  useEffect(() => {
+    const root = listRef.current;
+    if (!root) return;
+    const onIn = (e: FocusEvent) => {
+      const t = e.target;
+      last.current =
+        t instanceof HTMLElement && t.matches("[data-stop]")
+          ? { id: t.dataset.stop!, index: stopsIn(root).indexOf(t) }
+          : null;
+    };
+    const clear = () => (last.current = null);
+    /** Keeps focus on the same stop, or on the stop at its old index when it left, as the tree updates. */
+    const mo = new MutationObserver(() => {
+      const l = last.current;
+      if (!l) return;
+      const stops = stopsIn(root);
+      const active = document.activeElement;
+      if (active instanceof HTMLElement && active.matches("[data-stop]")) {
+        /** A leaving row is inert and out of the stops; it keeps its old index. */
+        const at = stops.indexOf(active);
+        if (at >= 0) l.index = at;
+      } else if (active === document.body) {
+        const i = refocusIndex(
+          stops.map((s) => s.dataset.stop!),
+          l,
+        );
+        if (i < 0) last.current = null;
+        else stops[i].focus({ preventScroll: true });
+      }
+    });
+    mo.observe(root, { childList: true, subtree: true, attributeFilter: ["inert"] });
+    document.addEventListener("focusin", onIn);
+    document.addEventListener("pointerdown", clear, true);
+    return () => {
+      mo.disconnect();
+      document.removeEventListener("focusin", onIn);
+      document.removeEventListener("pointerdown", clear, true);
+    };
+  }, [listRef, last]);
+  useEffect(() => {
+    save(NEST_KEY, nest ? "1" : "0");
+    const es = new EventSource(
+      `/events?nest=${nest ? 1 : 0}${labelsParam ? `&labels=${encodeURIComponent(labelsParam)}` : ""}`,
+    );
     es.onmessage = (e) => {
       const next = JSON.parse(e.data) as Tree;
       const cur = latest.current;
@@ -1777,7 +2600,8 @@ function App() {
       setBrief(b);
     });
     return () => es.close();
-  }, [settled]);
+  }, [nest, labelsParam]);
+  useEffect(() => save(SETTLED_KEY, settled ? "1" : "0"), [settled]);
 
   const projects = connecting ? undefined : view.projects;
 
@@ -1802,7 +2626,13 @@ function App() {
           },
           dragend: ({ operation, canceled }: DragEndEvent) => {
             const s = spot(operation.source);
-            return s && (canceled ? `Move canceled. ${s.name} is back at ${s.at}.` : `${s.name} dropped at ${s.at}.`);
+            if (!s || canceled) return s && `Move canceled. ${s.name} is back at ${s.at}.`;
+            const slot = slotOf(operation.target?.id);
+            if (slot === null) return `${s.name} dropped at ${s.at}.`;
+            const cur = latest.current;
+            const drop = focusDrop(cur.focus, cur.live, slot, operation.source?.data?.thread);
+            if (drop === "add") return `Added ${s.name} to Focus.`;
+            return drop === "ask" ? `Replace with ${s.name}?` : `${s.name} dropped. Focus is unchanged.`;
           },
         },
       }),
@@ -1818,10 +2648,20 @@ function App() {
       setFreeze({ list: FLAT, ids: latest.current.view.lists.get(FLAT) ?? [], units: new Map() });
     else if (ids && units) setFreeze({ list, ids, units });
   };
-  const dragEnd = ({ operation: { source }, canceled }: DragEndEvent) => {
+  const dragEnd = ({ operation: { source, target: drop }, canceled }: DragEndEvent) => {
     drag.on = false;
     setFreeze(undefined);
     if (canceled || !isSortable(source)) return;
+    const slot = slotOf(drop?.id);
+    if (slot !== null) {
+      const id = String(source.data.thread);
+      const ids = latest.current.focus;
+      const action = focusDrop(ids, latest.current.live, slot, id);
+      if (action === "ask") setPending({ slot, id, over: ids[slot] });
+      else if (action === "add") setFocus((xs) => addFocus(xs, id));
+      setListKey((k) => k + 1);
+      return;
+    }
     const list = String(source.sortable.group);
     const store = list.startsWith(FLAT) ? FLAT : list;
     const all = latest.current.full.lists.get(store);
@@ -1853,9 +2693,13 @@ function App() {
     transition(() => setGroupBy(g));
   };
   const inner = projects?.flatMap((p) => [p.id, ...foldIds(p)]) ?? [];
+  const tabCount = tree ? needsYouThreads(tree.projects).length : 0;
 
   return (
-    <TooltipProvider>
+    /** A tooltip covers the row above, so a hoverable one stays open while the pointer moves up. */
+    <TooltipProvider disableHoverableContent>
+      <title>{tabTitle(tabCount)}</title>
+      <link rel="icon" type="image/svg+xml" href={favicon(appIcon, tabCount)} />
       <header className="mb-3.5 flex flex-none flex-wrap items-center gap-x-4 gap-y-3 text-muted-foreground">
         <h1 className="m-0 text-[15px] font-semibold text-foreground">Thread tree</h1>
         <ToggleGroup
@@ -1869,15 +2713,42 @@ function App() {
           <ToggleGroupItem value="all" className={FILTER_ITEM}>
             All
           </ToggleGroupItem>
-          <ToggleGroupItem value="needs" className={cn(FILTER_ITEM, "gap-1.5 px-2.5")}>
-            Needs you
-            {counts.needYou > 0 && (
-              <span className="rounded-[4px] bg-status-needs-input px-1 text-[11px] text-white tabular-nums">
-                {counts.needYou}
-              </span>
-            )}
+          <ToggleGroupItem
+            value="needs"
+            aria-label={needsTip ? `Needs you, ${needsTip}` : "Needs you"}
+            className={cn(FILTER_ITEM, "gap-1.5 px-2.5")}
+          >
+            {/** One baseline for the label and the numbers: centered, the smaller numbers look raised. */}
+            <span className="flex items-baseline gap-1.5">
+              Needs you
+              {needsTip && (
+                /** The tooltip sits inside the item so that the item keeps `data-state`. */
+                <Tooltip>
+                  <TooltipTrigger asChild>
+                    <span className="flex items-baseline gap-1">
+                      {counts.needYou > 0 && (
+                        <span className="rounded-[4px] bg-status-needs-input px-1 text-[11px] text-white tabular-nums">
+                          {counts.needYou}
+                        </span>
+                      )}
+                      {counts.needYou > 0 && counts.yourTurn > 0 && (
+                        <span aria-hidden className="text-muted-foreground">
+                          ·
+                        </span>
+                      )}
+                      {counts.yourTurn > 0 && (
+                        <span className="text-[11px] text-muted-foreground tabular-nums">{counts.yourTurn}</span>
+                      )}
+                    </span>
+                  </TooltipTrigger>
+                  <TooltipContent>{needsTip}</TooltipContent>
+                </Tooltip>
+              )}
+            </span>
           </ToggleGroupItem>
         </ToggleGroup>
+        <OpenNextButton target={target} title={openNextTitle} now={now} open={openNext} />
+        <FocusButton count={focus.length} shown={focusShow} setShown={setFocusShow} />
         <BriefControls
           clis={clis}
           cli={pick}
@@ -1913,7 +2784,8 @@ function App() {
               />
             )}
           </div>
-          <ViewButton
+          <SettingsButton
+            buttonRef={settingsButtonRef}
             update={update}
             open={settingsOpen}
             toggle={() => {
@@ -1923,111 +2795,155 @@ function App() {
           />
         </div>
       </header>
-      <div className="min-h-0 flex-1 overflow-y-auto">
-        {tree?.conn === "down" && (
-          <Alert className="mb-3 border-l-[3px] border-l-status-needs-input">
-            <AlertDescription className="text-foreground">
-              T3 not running: last update {tree.lastUpdate ? hhmm(tree.lastUpdate) : "never"}
-            </AlertDescription>
-          </Alert>
-        )}
-        {(tree?.conn === "no-token" || tree?.conn === "unauthorized") && (
-          <Alert className="mb-3 border-l-[3px] border-l-status-needs-input">
-            <AlertDescription className="flex flex-wrap items-center gap-x-2 text-foreground">
-              {tree.conn === "no-token" ? "No T3 token is set." : "T3 rejected the token."}
-              <Button
-                variant="link"
-                size="sm"
-                className="h-auto p-0"
-                onClick={() => {
-                  setTokenOpen(true);
-                  setSettingsOpen(true);
+      <div ref={listRef} className="min-h-0 flex-1 overflow-y-auto">
+        <Focus value={focusApi}>
+          {tree?.conn === "down" && (
+            <Alert className="mb-3 border-l-[3px] border-l-status-needs-input">
+              <AlertDescription className="text-foreground">
+                T3 not running: last update {tree.lastUpdate ? hhmm(tree.lastUpdate) : "never"}
+              </AlertDescription>
+            </Alert>
+          )}
+          {(tree?.conn === "no-token" || tree?.conn === "unauthorized") && (
+            <Alert className="mb-3 border-l-[3px] border-l-status-needs-input">
+              <AlertDescription className="flex flex-wrap items-center gap-x-2 text-foreground">
+                {tree.conn === "no-token" ? "No T3 token is set." : "T3 rejected the token."}
+                <Button
+                  variant="link"
+                  size="sm"
+                  className="h-auto p-0"
+                  onClick={() => {
+                    setTokenOpen(true);
+                    setSettingsOpen(true);
+                  }}
+                >
+                  Set the token
+                </Button>
+              </AlertDescription>
+            </Alert>
+          )}
+          {!hideBrief && brief.status !== "idle" && (
+            <BriefPanel
+              state={brief}
+              clis={clis}
+              live={live}
+              now={now}
+              projects={tree?.projects ?? []}
+              t3cli={t3cli}
+              sent={sent}
+              onSent={(key, id) =>
+                setSent((m) => {
+                  const ids = m.get(key) ?? [];
+                  return ids.includes(id) ? m : new Map(m).set(key, [...ids, id]);
+                })
+              }
+              run={runBrief}
+              cancel={() => fetch("/brief/cancel", { method: "POST" })}
+              close={() => setHideBrief(true)}
+              folded={briefFolded}
+              fold={setBriefFolded}
+            />
+          )}
+          <DragDropProvider plugins={plugins} onDragStart={dragStart} onDragEnd={dragEnd}>
+            {focusShow && (
+              <FocusStrip
+                ids={focus}
+                live={live}
+                now={now}
+                remove={focusApi.remove}
+                pending={pend}
+                replace={() => {
+                  if (!pend) return;
+                  setFocus((ids) => replaceFocus(ids, pend.slot, pend.id));
+                  setPending(null);
                 }}
-              >
-                Set the token
-              </Button>
-            </AlertDescription>
-          </Alert>
-        )}
-        {!hideBrief && brief.status !== "idle" && (
-          <BriefPanel
-            state={brief}
-            clis={clis}
-            live={live}
-            projects={tree?.projects ?? []}
-            t3cli={t3cli}
-            sent={sent}
-            onSent={(key, id) =>
-              setSent((m) => {
-                const ids = m.get(key) ?? [];
-                return ids.includes(id) ? m : new Map(m).set(key, [...ids, id]);
-              })
-            }
-            run={runBrief}
-            cancel={() => fetch("/brief/cancel", { method: "POST" })}
-            close={() => setHideBrief(true)}
-          />
-        )}
-        <Details value={details}>
-          <NeedsOnly value={needsOnly}>
-            <Linear value={linear}>
-              <Lists value={sortBy === "updated" ? NO_LISTS : view.lists}>
-                <Now value={now}>
-                  <div
-                    className={!connecting && tree.conn !== "up" ? "grayscale" : ""}
-                    data-conn={!connecting && tree.conn !== "up" ? "down" : undefined}
-                  >
-                    {projects?.length === 0 && <p className="text-muted-foreground">No active threads.</p>}
-                    {projects ? (
-                      <DragDropProvider plugins={plugins} onDragStart={dragStart} onDragEnd={dragEnd}>
-                        <Card className="gap-0 overflow-clip rounded-[12px] px-2 py-0 shadow-none">
-                          <ul className={cn("m-0 list-none p-0", layout === "flat" && "p-1")}>
-                            <SendTo value={{ t3cli, open: (id) => setSendTo({ id, open: true }) }}>
-                              {layout === "flat" ? (
-                                <Presence key="flat" items={view.flat ?? []} keyOf={(i) => i.id}>
-                                  {(i) => <FlatRow i={i} closed={closed} toggle={toggle} fold={fold} />}
-                                </Presence>
-                              ) : (
-                                <Presence key="tree" items={projects} keyOf={(p) => p.id}>
-                                  {(p) => <ProjectBlock b={p} closed={closed} toggle={toggle} fold={fold} />}
-                                </Presence>
-                              )}
-                            </SendTo>
-                          </ul>
-                        </Card>
-                      </DragDropProvider>
-                    ) : (
-                      <>
-                        <p className="mb-2 text-sm text-muted-foreground" role="status">
-                          Connecting to T3…
-                        </p>
-                        <Card
-                          className="gap-0 rounded-[12px] py-0 shadow-none"
-                          aria-busy="true"
-                          aria-label="Loading threads"
+                cancel={cancelReplace}
+              />
+            )}
+            <Details value={details}>
+              <NeedsOnly value={needsOnly}>
+                <Linear value={linear}>
+                  <Watched value={labels}>
+                    <Lists value={sortBy === "updated" ? NO_LISTS : view.lists}>
+                      <Now value={now}>
+                        <div
+                          className={!connecting && tree.conn !== "up" ? "grayscale" : ""}
+                          data-conn={!connecting && tree.conn !== "up" ? "down" : undefined}
                         >
-                          <CardContent className="flex flex-col gap-0.5 p-1.5">
-                            {[0, 1, 2].map((i) => (
-                              <Skeleton key={i} className="h-9 rounded-[8px] motion-reduce:animate-none" />
-                            ))}
-                          </CardContent>
-                        </Card>
-                      </>
-                    )}
-                  </div>
-                </Now>
-              </Lists>
-            </Linear>
-          </NeedsOnly>
-        </Details>
+                          {projects?.length === 0 && <p className="text-muted-foreground">No active threads.</p>}
+                          {projects ? (
+                            <Card className="gap-0 overflow-clip rounded-[12px] px-2 py-0 shadow-none">
+                              <ul key={listKey} className={cn("m-0 list-none p-0", layout === "flat" && "p-1")}>
+                                <SendTo value={sendToApi}>
+                                  {layout === "flat" ? (
+                                    <Presence key="flat" items={view.flat ?? []} keyOf={(i) => i.id}>
+                                      {(i) => (
+                                        <FlatRow
+                                          i={i}
+                                          corners={edgeCorners(view.flat ?? [], i)}
+                                          section={sectionOf(view.flat ?? [], i)}
+                                          closed={closed}
+                                          toggle={toggle}
+                                          fold={fold}
+                                          toggleSection={toggleSection}
+                                        />
+                                      )}
+                                    </Presence>
+                                  ) : (
+                                    <Presence key="tree" items={projects} keyOf={(p) => p.id}>
+                                      {(p) => <ProjectBlock b={p} closed={closed} toggle={toggle} fold={fold} />}
+                                    </Presence>
+                                  )}
+                                </SendTo>
+                              </ul>
+                            </Card>
+                          ) : (
+                            <>
+                              <p className="mb-2 text-sm text-muted-foreground" role="status">
+                                Connecting to T3…
+                              </p>
+                              <Card
+                                className="gap-0 rounded-[12px] py-0 shadow-none"
+                                aria-busy="true"
+                                aria-label="Loading threads"
+                              >
+                                <CardContent className="flex flex-col gap-0.5 p-1.5">
+                                  {[0, 1, 2].map((i) => (
+                                    <Skeleton key={i} className="h-9 rounded-[8px] motion-reduce:animate-none" />
+                                  ))}
+                                </CardContent>
+                              </Card>
+                            </>
+                          )}
+                          {settled && projects && (
+                            <SendTo value={sendToApi}>
+                              <SettledList signature={tree?.settled ?? ""} scrollRoot={listRef} />
+                            </SendTo>
+                          )}
+                        </div>
+                      </Now>
+                    </Lists>
+                  </Watched>
+                </Linear>
+              </NeedsOnly>
+            </Details>
+          </DragDropProvider>
+        </Focus>
       </div>
       {settingsOpen && (
         <SettingsPanel
           close={closeSettings}
+          buttonRef={settingsButtonRef}
           linear={linear}
           setLinear={setLinear}
+          labels={labels}
+          setLabels={setLabels}
           settled={settled}
           setSettled={setSettled}
+          snoozed={snoozed}
+          setSnoozed={setSnoozed}
+          nest={nest}
+          setNest={setNest}
           canReset={Object.keys(orders).length > 0}
           resetOrder={resetOrder}
           theme={theme}
@@ -2037,6 +2953,15 @@ function App() {
           tokenOpen={tokenOpen}
         />
       )}
+      <FindDialog
+        open={findOpen}
+        setOpen={setFindOpen}
+        list={hits(full.projects)}
+        focus={focus}
+        canShow={(id) => inView.has(id)}
+        reveal={reveal}
+        now={now}
+      />
       <SendDialog
         fixed
         open={sendTo.open}

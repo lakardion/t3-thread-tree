@@ -12,6 +12,7 @@ import {
   app,
   BrowserWindow,
   dialog,
+  globalShortcut,
   ipcMain,
   Menu,
   type MenuItemConstructorOptions,
@@ -22,7 +23,7 @@ import {
   Tray,
 } from "electron";
 
-import type { NeedsYouThread, NotifyEvent, UpdateState } from "../shared/desktop.ts";
+import type { NeedsYouThread, NotifyEvent, UpdateState, UpNext } from "../shared/desktop.ts";
 import {
   afterCheck,
   fallbackPath,
@@ -42,7 +43,9 @@ import {
   parseBounds,
   parseNeedsYou,
   parseNotify,
+  parseOpenNext,
   parseSettings,
+  parseUpNext,
   parseUpdated,
   readJson,
   type Settings,
@@ -58,6 +61,14 @@ let quitting = false;
 let settings: Settings = parseSettings(undefined);
 /** The last Needs-you list, for the menu-bar entry. */
 let needsYou: NeedsYouThread[] = [];
+/** The title of the thread "Open next" opens, or `null` with none. */
+let openNext: string | null = null;
+/** The Up next window. It is created on the first show and then only hidden. */
+let upNextWin: BrowserWindow | undefined;
+/** The last Up next list, sent to the Up next window on load and on each change. */
+let upNextList: UpNext = { rows: [], targetId: null };
+/** The origin of the local server, set once it is ready. */
+let origin: string | undefined;
 /** Kept referenced so the menu-bar icon is not garbage-collected. */
 let tray: Tray | undefined;
 /** What the menus and the page show about updates. */
@@ -72,6 +83,7 @@ let updateState: UpdateState = {
 /** The newer release found on GitHub. `updateState.release` holds the part the page may see. */
 let release: ReturnType<typeof parseRelease> = null;
 
+const UP_NEXT_KEY = "Alt+CommandOrControl+U";
 const LATEST_RELEASE = "https://api.github.com/repos/lakardion/t3-thread-tree/releases/latest";
 
 const dataFile = (name: string) => join(app.getPath("userData"), name);
@@ -164,8 +176,20 @@ function showNotification(e: NotifyEvent) {
   n.show();
 }
 
-function openWindow(port: number) {
-  const origin = `http://127.0.0.1:${port}`;
+/** Opens every link that leaves `base` outside the window. */
+function keepLinksOutside(win: BrowserWindow, base: string) {
+  win.webContents.setWindowOpenHandler(({ url }) => {
+    openOutside(url);
+    return { action: "deny" };
+  });
+  win.webContents.on("will-navigate", (event, url) => {
+    if (url === base || url.startsWith(`${base}/`)) return;
+    event.preventDefault();
+    openOutside(url);
+  });
+}
+
+function openWindow(base: string) {
   const win = (window = new BrowserWindow({
     width: 1200,
     height: 900,
@@ -195,17 +219,73 @@ function openWindow(port: number) {
     } else win.hide();
   });
   win.on("closed", () => (window = undefined));
-  win.webContents.setWindowOpenHandler(({ url }) => {
-    openOutside(url);
-    return { action: "deny" };
-  });
-  win.webContents.on("will-navigate", (event, url) => {
-    if (url === origin || url.startsWith(`${origin}/`)) return;
-    event.preventDefault();
-    openOutside(url);
-  });
-  win.loadURL(origin).catch((e: unknown) => log(`load failed: ${String(e)}`));
+  keepLinksOutside(win, base);
+  win.loadURL(base).catch((e: unknown) => log(`load failed: ${String(e)}`));
 }
+
+/** Creates the Up next window on its first show: a floating panel on all Spaces that does not take focus. */
+function createUpNext(base: string) {
+  const width = 360;
+  const height = 360;
+  const screens = screen.getAllDisplays().map((d) => d.workArea);
+  const bounds = parseBounds(readJson(dataFile("up-next.json")), screens);
+  if (bounds.x === undefined) {
+    const wa = screen.getDisplayNearestPoint(screen.getCursorScreenPoint()).workArea;
+    Object.assign(bounds, { x: wa.x + wa.width - (bounds.width ?? width) - 16, y: wa.y + 16 });
+  }
+  const win = (upNextWin = new BrowserWindow({
+    width,
+    height,
+    minWidth: 280,
+    minHeight: 160,
+    ...bounds,
+    title: "Up next",
+    type: "panel",
+    alwaysOnTop: true,
+    fullscreenable: false,
+    minimizable: false,
+    maximizable: false,
+    show: false,
+    webPreferences: {
+      preload: join(app.getAppPath(), "dist", "desktop", "up-next-preload.cjs"),
+      contextIsolation: true,
+      nodeIntegration: false,
+      sandbox: true,
+    },
+  }));
+  win.setAlwaysOnTop(true, "floating");
+  /** Without `skipTransformProcessType`, Electron changes the process type and the Dock icon flickers. */
+  win.setVisibleOnAllWorkspaces(true, { visibleOnFullScreen: true, skipTransformProcessType: true });
+  win.once("ready-to-show", () => win.showInactive());
+  /** Close hides the window; Cmd-Q still quits. */
+  win.on("close", (e) => {
+    save("up-next.json", win.getNormalBounds());
+    if (quitting) return;
+    e.preventDefault();
+    win.hide();
+  });
+  win.on("show", setMenus);
+  win.on("hide", setMenus);
+  win.on("closed", () => (upNextWin = undefined));
+  keepLinksOutside(win, base);
+  win.loadURL(`${base}/up-next`).catch((e: unknown) => log(`up next load failed: ${String(e)}`));
+}
+
+/** Shows or hides the Up next window. Before the server is ready, it only resets the menu check. */
+function toggleUpNext() {
+  if (!origin) return setMenus();
+  if (!upNextWin) return createUpNext(origin);
+  if (upNextWin.isVisible()) upNextWin.hide();
+  else upNextWin.showInactive();
+}
+
+const upNextItem = (): MenuItemConstructorOptions => ({
+  label: "Up next",
+  type: "checkbox",
+  checked: !!upNextWin?.isVisible(),
+  accelerator: UP_NEXT_KEY,
+  click: toggleUpNext,
+});
 
 const toggles = (): MenuItemConstructorOptions[] => [
   {
@@ -405,7 +485,17 @@ function setMenu() {
       },
       { role: "editMenu" },
       { role: "viewMenu" },
-      { role: "windowMenu" },
+      {
+        role: "window",
+        submenu: [
+          { role: "minimize" },
+          { role: "zoom" },
+          { type: "separator" },
+          upNextItem(),
+          { type: "separator" },
+          { role: "front" },
+        ],
+      },
     ]),
   );
 }
@@ -415,12 +505,19 @@ function setTrayMenu() {
   tray.setTitle(needsYou.length ? String(needsYou.length) : "", { fontType: "monospacedDigit" });
   tray.setContextMenu(
     Menu.buildFromTemplate([
+      ...(openNext
+        ? [
+            { label: `Open next · ${openNext}`, click: () => window?.webContents.send("openNext") },
+            { type: "separator" } as const,
+          ]
+        : []),
       ...trayItems(needsYou).map((i) => ({
         label: i.label,
         click: () => (i.url ? openOutside(i.url) : showWindow()),
       })),
       ...(needsYou.length ? [{ type: "separator" } as const] : []),
       { label: "Open tree", click: showWindow },
+      upNextItem(),
       { type: "separator" },
       ...toggles(),
       ...updateItems(),
@@ -455,6 +552,40 @@ async function main() {
     app.setBadgeCount(list.length);
     setTrayMenu();
   });
+  ipcMain.on("setOpenNext", (event, raw: unknown) => {
+    if (event.sender !== window?.webContents) return;
+    const title = parseOpenNext(raw);
+    if (title === undefined) {
+      log("bad setOpenNext payload");
+      return;
+    }
+    openNext = title;
+    setTrayMenu();
+  });
+  ipcMain.on("setUpNext", (event, raw: unknown) => {
+    if (event.sender !== window?.webContents) return;
+    const list = parseUpNext(raw);
+    if (!list) {
+      log("bad setUpNext payload");
+      return;
+    }
+    upNextList = list;
+    upNextWin?.webContents.send("upNext", list);
+  });
+  ipcMain.handle("upNext", (event) => {
+    if (event.sender !== upNextWin?.webContents) throw new Error("untrusted sender");
+    return upNextList;
+  });
+  ipcMain.on("upNextOpenNext", (event) => {
+    if (event.sender === upNextWin?.webContents) window?.webContents.send("openNext");
+  });
+  ipcMain.on("upNextOpenThread", (event, id: unknown) => {
+    if (event.sender === upNextWin?.webContents && typeof id === "string") window?.webContents.send("openThread", id);
+  });
+  ipcMain.on("upNextOpenLinear", (event, url: unknown) => {
+    if (event.sender === upNextWin?.webContents && typeof url === "string" && url.startsWith("https://linear.app/"))
+      openOutside(url);
+  });
   ipcMain.on("notify", (event, raw: unknown) => {
     if (event.sender !== window?.webContents) return;
     const events = parseNotify(raw);
@@ -488,7 +619,9 @@ async function main() {
     app.quit();
     return;
   }
-  openWindow(port);
+  origin = `http://127.0.0.1:${port}`;
+  openWindow(origin);
+  if (!globalShortcut.register(UP_NEXT_KEY, toggleUpNext)) log("cannot register the Up next shortcut");
   void showUpdated();
 }
 
@@ -500,6 +633,7 @@ if (!app.requestSingleInstanceLock()) {
 } else {
   app.on("second-instance", showWindow);
   app.on("activate", showWindow);
+  app.on("will-quit", () => globalShortcut.unregisterAll());
   app.on("before-quit", (event) => {
     quitting = true;
     if (!child) return;

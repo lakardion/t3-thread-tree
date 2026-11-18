@@ -2,7 +2,15 @@ import { readFileSync, writeFileSync } from "node:fs";
 
 import * as v from "valibot";
 
-import { NeedsYouList, type NeedsYouThread, NotifyList, type NotifyEvent } from "../shared/desktop.ts";
+import {
+  NeedsYouList,
+  type NeedsYouThread,
+  NotifyList,
+  type NotifyEvent,
+  OpenNextTitle,
+  type UpNext,
+  UpNextList,
+} from "../shared/desktop.ts";
 
 const Size = v.object({
   width: v.pipe(v.number(), v.finite(), v.gtValue(0)),
@@ -38,6 +46,18 @@ export function parseNeedsYou(raw: unknown): NeedsYouThread[] | null {
 /** A clean copy of the notification events, or `null` when `raw` is not an array of at most 10 well-formed events. */
 export function parseNotify(raw: unknown): NotifyEvent[] | null {
   const result = v.safeParse(NotifyList, raw);
+  return result.success ? result.output : null;
+}
+
+/** The "Open next" title: a string, `null` for none, or `undefined` when `raw` is bad. */
+export function parseOpenNext(raw: unknown): string | null | undefined {
+  const result = v.safeParse(OpenNextTitle, raw);
+  return result.success ? result.output : undefined;
+}
+
+/** A clean copy of the Up next list, or `null` when `raw` is not at most 500 well-formed rows and a target id or `null`. */
+export function parseUpNext(raw: unknown): UpNext | null {
+  const result = v.safeParse(UpNextList, raw);
   return result.success ? result.output : null;
 }
 

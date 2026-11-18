@@ -5,13 +5,17 @@
 import { homedir } from "node:os";
 import { join } from "node:path";
 
-import type { Conn } from "../shared/tree.ts";
+import type { Conn, Label } from "../shared/tree.ts";
 
 export const USERDATA = join(homedir(), ".t3", "userdata");
 
 export type Pr = {
   n: number;
   url: string;
+  host: string;
+  repository: string;
+  /** Snapshot `updatedAt`; empty before the first sync. */
+  updatedAt: string;
   source: string;
   state: string;
   draft: boolean | null;
@@ -19,6 +23,8 @@ export type Pr = {
   review: string | null;
   mergeability: string | null;
   stackBase: string | null;
+  /** Open PR numbers of the stack, base first, as T3 reports them. */
+  stackLayers: number[] | null;
   title: string | null;
   additions: number | null;
   deletions: number | null;
@@ -143,6 +149,9 @@ export function decodeThread(raw: unknown): Thread | null {
         {
           n,
           url: str(o.url) ?? "",
+          host: str(o.host) ?? "",
+          repository: str(o.repository) ?? "",
+          updatedAt: str(snap.updatedAt) ?? "",
           source: str(o.source) ?? "",
           state,
           draft: bool(snap.isDraft),
@@ -150,6 +159,12 @@ export function decodeThread(raw: unknown): Thread | null {
           review: str(snap.reviewDecision),
           mergeability: str(snap.mergeability),
           stackBase: str(obj(o.stack).base),
+          stackLayers: Array.isArray(obj(o.stack).layers)
+            ? (obj(o.stack).layers as unknown[])
+                .map(obj)
+                .filter((l) => l.state === "open" && typeof l.number === "number")
+                .map((l) => l.number as number)
+            : null,
           title: str(snap.title),
           additions: num(snap.additions),
           deletions: num(snap.deletions),
@@ -228,6 +243,13 @@ const readOrigin = async (): Promise<string | null> => {
   }
 };
 
+/** A failure frame holds `exit.cause[0].error.message`. Else the frame as JSON. */
+function failureText(frame: Obj): string {
+  const cause = obj(frame.exit).cause;
+  const message = Array.isArray(cause) ? str(obj(obj(cause[0]).error).message) : null;
+  return message ?? JSON.stringify(frame).slice(0, 300);
+}
+
 /**
  * Holds the shell stream. Retries every 3 s while T3 is down or the token is rejected.
  * Each new connection starts with a fresh snapshot.
@@ -238,22 +260,39 @@ export function connectShell(opts: {
   onConn: (c: Conn) => void;
 }) {
   let ws: WebSocket | null = null;
+  let seq = 1;
+  const pending = new Map<string, { sock: WebSocket; resolve: (v: unknown) => void; reject: (e: Error) => void }>();
+  /** Counts `reconnect` calls. A report from an older generation describes an old token, so it is dropped. */
+  let gen = 0;
+  let waiters: ((c: Conn) => void)[] = [];
+  const report = (c: Conn, g: number) => {
+    if (g !== gen) return;
+    opts.onConn(c);
+    const done = waiters;
+    waiters = [];
+    for (const w of done) w(c);
+  };
 
   const attempt = async () => {
     if (ws) return;
+    const g = gen;
     const origin = await readOrigin();
-    if (!origin) return opts.onConn("down");
+    /** A `reconnect` during an await makes this attempt stale: it must not report or open a socket. */
+    if (g !== gen) return;
+    if (!origin) return report("down", g);
     const token = opts.token();
-    if (!token) return opts.onConn("no-token");
+    if (!token) return report("no-token", g);
     const url = `${origin}/ws?orchestrationProtocol=2`;
     const headers = { Authorization: `Bearer ${token}` };
     /** A WebSocket upgrade failure hides the HTTP status, so probe it with a plain GET first. */
     try {
       const probe = await fetch(url, { headers });
-      if (probe.status === 401 || probe.status === 403) return opts.onConn("unauthorized");
+      if (g !== gen) return;
+      if (probe.status === 401 || probe.status === 403) return report("unauthorized", g);
     } catch {
-      return opts.onConn("down");
+      return report("down", g);
     }
+    if (g !== gen) return;
     /** Bun accepts `{ headers }` here; the DOM lib type only knows protocols. */
     const sock = new WebSocket(url.replace(/^http/, "ws"), { headers } as unknown as string[]);
     ws = sock;
@@ -274,7 +313,7 @@ export function connectShell(opts: {
       const parsed: unknown = JSON.parse(String(ev.data));
       for (const m of (Array.isArray(parsed) ? parsed : [parsed]).map(obj)) {
         if (m._tag === "Chunk") {
-          opts.onConn("up");
+          report("up", g);
           for (const v of Array.isArray(m.values) ? m.values : []) {
             const e = decodeItem(v);
             if (e?.kind === "snapshot") {
@@ -285,7 +324,16 @@ export function connectShell(opts: {
           }
           /** The server sends the next chunk only after an Ack. */
           send({ _tag: "Ack", requestId: m.requestId });
-        } else if (m._tag === "Exit" || m._tag === "Defect" || m._tag === "ClientProtocolError") {
+        } else if (m._tag === "Exit" && typeof m.requestId === "string" && pending.has(m.requestId)) {
+          const call = pending.get(m.requestId)!;
+          pending.delete(m.requestId);
+          if (obj(m.exit)._tag === "Success") call.resolve(obj(m.exit).value);
+          else call.reject(new Error(failureText(m)));
+        } else if (
+          (m._tag === "Exit" && m.requestId === "1") ||
+          m._tag === "Defect" ||
+          m._tag === "ClientProtocolError"
+        ) {
           console.error("[t3] stream ended:", JSON.stringify(m).slice(0, 500));
           sock.close();
         }
@@ -293,23 +341,69 @@ export function connectShell(opts: {
     };
     sock.onclose = () => {
       clearInterval(ping);
+      for (const [id, call] of pending) {
+        if (call.sock !== sock) continue;
+        pending.delete(id);
+        call.reject(new Error("T3 is not connected"));
+      }
       /** A socket that `reconnect` dropped reports nothing. */
       if (ws !== sock) return;
       ws = null;
-      opts.onConn("down");
+      report("down", g);
     };
     sock.onerror = () => sock.close();
   };
 
   void attempt();
   setInterval(attempt, 3000);
+  /** One unary call on the open socket. Resolves with the `Exit` value. */
+  const request = (tag: string, payload: unknown): Promise<unknown> => {
+    if (ws?.readyState !== WebSocket.OPEN) return Promise.reject(new Error("T3 is not connected"));
+    const id = String(++seq);
+    return new Promise((resolve, reject) => {
+      const timer = setTimeout(() => {
+        pending.delete(id);
+        reject(new Error("timed out"));
+      }, 30_000);
+      pending.set(id, {
+        sock: ws!,
+        resolve: (v) => (clearTimeout(timer), resolve(v)),
+        reject: (e) => (clearTimeout(timer), reject(e)),
+      });
+      ws!.send(JSON.stringify({ _tag: "Request", id, tag, payload, headers: [] }));
+    });
+  };
+
   return {
-    /** Drops the open socket and connects again with the current token. */
-    reconnect() {
-      const old = ws;
-      ws = null;
-      old?.close();
-      void attempt();
+    /** Sends one orchestration command and resolves when T3 accepts it. */
+    dispatch: (command: Record<string, unknown>): Promise<void> =>
+      request("orchestration.dispatchCommand", { ...command, commandId: crypto.randomUUID() }).then(() => {}),
+    /** The labels and `updatedAt` of one PR, fresh from the host. */
+    async detail(ref: {
+      projectId: string;
+      host: string;
+      repository: string;
+      number: number;
+    }): Promise<{ labels: Label[]; updatedAt: string }> {
+      const v = obj(await request("pullRequests.detail", { ...ref, allowStale: false }));
+      return {
+        labels: (Array.isArray(v.labels) ? v.labels : []).flatMap((l) => {
+          const o = obj(l);
+          return typeof o.name === "string" ? [{ name: o.name, color: str(o.color) }] : [];
+        }),
+        updatedAt: str(v.updatedAt) ?? "",
+      };
+    },
+    /** Drops the open socket and connects again with the current token. Resolves with the first outcome. */
+    reconnect(): Promise<Conn> {
+      gen++;
+      return new Promise<Conn>((resolve) => {
+        waiters.push(resolve);
+        const old = ws;
+        ws = null;
+        old?.close();
+        void attempt();
+      });
     },
   };
 }

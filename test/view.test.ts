@@ -1,17 +1,23 @@
 import { describe, expect, test } from "bun:test";
 
+import { applyOrder } from "../src/page/order.ts";
 import {
+  closedCounts,
   flatLists,
   flatten,
+  folds,
   itemIds,
+  pathFolds,
   recency,
+  sectionHolding,
+  sectionOf,
   sections,
   sequence,
   sortFlat,
   sortTree,
   vtName,
 } from "../src/page/view.ts";
-import { NO_KEY, REVIEWS, type Branch, type Status, type ThreadNode } from "../src/shared/tree.ts";
+import { allThreads, NO_KEY, REVIEWS, type Branch, type Status, type ThreadNode } from "../src/shared/tree.ts";
 
 const T = (n: number) => `2026-11-12T12:00:${String(n).padStart(2, "0")}.000Z`;
 const thread = (
@@ -222,9 +228,35 @@ describe("sections", () => {
     ]);
     expect(sections([stack]).map((s) => s.key)).toEqual(["your-turn"]);
   });
-  test("does not move a parent by its subthread status", () => {
-    const [u] = flatten([project("p", [branch("g", [thread("a", 1, [thread("c", 1, [], "needs-input")], "done")])])]);
+  test("puts a unit in the section of its subthread when that is more urgent", () => {
+    const [u] = flatten([project("p", [branch("g", [thread("a", 1, [thread("c", 1, [], "your-turn")], "idle")])])]);
+    expect(sections([u]).map((s) => s.key)).toEqual(["your-turn"]);
+  });
+  test("places a unit by a subthread at any depth", () => {
+    const deep = flatten([
+      project("p", [branch("g", [thread("a", 1, [thread("b", 1, [thread("c", 1, [], "working")], "idle")], "idle")])]),
+    ])[0];
+    expect(sections([deep]).map((s) => s.key)).toEqual(["working"]);
+    expect(sections([unit("x", "idle"), deep]).map((s) => [s.key, ids(s.units)])).toEqual([
+      ["working", ["t:a"]],
+      ["idle", ["t:x"]],
+    ]);
+  });
+  test("does not place a unit by a settled subthread", () => {
+    const settled = { ...thread("c", 1, [], "needs-input"), settled: true };
+    const [u] = flatten([project("p", [branch("g", [thread("a", 1, [settled], "done")])])]);
     expect(sections([u]).map((s) => s.key)).toEqual(["done"]);
+  });
+  test("places a unit with only settled threads by all of them", () => {
+    const child = { ...thread("c", 1, [], "needs-input"), settled: true };
+    const [u] = flatten([project("p", [branch("g", [{ ...thread("a", 1, [child], "done"), settled: true }])])]);
+    expect(sections([u]).map((s) => s.key)).toEqual(["needs-input"]);
+  });
+  test("places a stack by a subthread of its thread", () => {
+    const [stack] = flatten([
+      project("p", [branch("s1", [thread("a", 1, [thread("c", 1, [], "needs-input")], "done")], [], "st")]),
+    ]);
+    expect(sections([stack]).map((s) => s.key)).toEqual(["needs-input"]);
   });
   test("sequence adds a header with a count before each section, or none without grouping", () => {
     const units = [unit("a", "done"), unit("b", "done")];
@@ -237,6 +269,113 @@ describe("sections", () => {
     const header = sequence(units, "status")[0];
     expect(header.kind === "section" && header.count).toBe(2);
   });
+  test("sequence counts the matching threads, subthreads included, without settled and context rows", () => {
+    const needs = (id: string, kids: ThreadNode[] = []) => thread(id, 1, kids, "needs-input");
+    const [a, stack] = flatten([
+      project("p", [
+        branch("g", [thread("a", 1, [needs("c", [needs("d")])], "idle")]),
+        branch("s1", [needs("s1")], [], "st"),
+        branch("s2", [thread("s2", 1, [], "done")], [], "st"),
+        branch("s3", [{ ...needs("s3"), settled: true }], [], "st"),
+      ]),
+    ]);
+    const header = sequence([a, stack], "status")[0];
+    expect(header.kind === "section" && header.count).toBe(3);
+  });
+  test("folds a stack row only when it and its subthreads are context rows", () => {
+    const needs = (kids: ThreadNode[] = []) => thread("n", 1, kids, "needs-input");
+    expect(folds(thread("a", 1, [], "done"), ["needs-input"])).toBe(true);
+    expect(folds(thread("a", 1, [needs()], "done"), ["needs-input"])).toBe(false);
+    expect(folds({ ...needs(), settled: true }, ["needs-input"])).toBe(true);
+    expect(folds(needs(), ["needs-input"])).toBe(false);
+  });
+  test("sectionOf gives the statuses of the header above a unit", () => {
+    const units = [unit("a", "done"), unit("b", "idle")];
+    const items = sequence(units, "status");
+    expect(sectionOf(items, items[1])).toEqual(["idle", "snoozed"]);
+    expect(sectionOf(items, items[0])).toBeNull();
+    expect(sectionOf(units, units[0])).toBeNull();
+  });
+  describe("waiting sections", () => {
+    const waiting = (
+      id: string,
+      since: number | null,
+      status: Status = "your-turn",
+      children: ThreadNode[] = [],
+      run = 1,
+    ) =>
+      flatten([
+        project("p", [
+          branch(`g${id}`, [{ ...thread(id, run, children, status), since: since === null ? null : T(since) }]),
+        ]),
+      ])[0];
+    const first = (units: ReturnType<typeof flatten>) => ids(sections(units)[0].units);
+    test("sorts Needs input, Plan ready and Your turn by the oldest since first", () => {
+      for (const status of ["needs-input", "plan-ready", "your-turn"] as const)
+        expect(first([waiting("a", 5, status), waiting("b", 2, status), waiting("c", 9, status)])).toEqual([
+          "t:b",
+          "t:a",
+          "t:c",
+        ]);
+    });
+    test("puts a unit with no since last and keeps ties in input order", () => {
+      expect(
+        first([waiting("a", null), waiting("b", 3), waiting("c", 3), waiting("d", null), waiting("e", 1)]),
+      ).toEqual(["t:e", "t:b", "t:c", "t:a", "t:d"]);
+    });
+    test("sorts a stack by the oldest since of its threads in the section statuses", () => {
+      const [stack] = flatten([
+        project("p", [
+          branch(
+            "s1",
+            [
+              { ...thread("x", 1, [], "your-turn"), since: T(7) },
+              { ...thread("z", 1, [], "your-turn"), since: T(3) },
+              { ...thread("y", 1, [], "done"), since: T(1) },
+            ],
+            [],
+            "st",
+          ),
+        ]),
+      ]);
+      expect(first([waiting("a", 5), stack, waiting("b", 9)])).toEqual(["stack:p:st", "t:a", "t:b"]);
+    });
+    test("sorts a unit by the since of its subthread", () => {
+      const sub = { ...thread("c", 1, [], "your-turn"), since: T(1) };
+      expect(first([waiting("a", 5, "your-turn", [sub]), waiting("b", 3)])).toEqual(["t:a", "t:b"]);
+    });
+    test("does not sort a unit by the since of a settled subthread", () => {
+      const sub = { ...thread("c", 1, [], "your-turn"), since: T(1), settled: true };
+      expect(first([waiting("a", 5, "your-turn", [sub]), waiting("b", 3)])).toEqual(["t:b", "t:a"]);
+    });
+    test("keeps the input order in other sections", () => {
+      const units = [waiting("a", 5, "working"), waiting("b", 2, "working")];
+      expect(first(units)).toEqual(["t:a", "t:b"]);
+    });
+    test("sorts by Wait for the manual and the last-updated order", () => {
+      const units = [waiting("a", 5), waiting("b", 2), waiting("c", 9)];
+      expect(first(units)).toEqual(["t:b", "t:a", "t:c"]);
+      expect(first(sortFlat(units))).toEqual(["t:b", "t:a", "t:c"]);
+      const tied = [waiting("d", 4), waiting("e", 4, "your-turn", [], 9)];
+      expect(first(tied)).toEqual(["t:d", "t:e"]);
+      expect(first(sortFlat(tied))).toEqual(["t:e", "t:d"]);
+    });
+    test("keeps the input order without grouping", () => {
+      const units = [waiting("a", 5), waiting("b", 2)];
+      expect(sequence(units, "none")).toEqual(units);
+    });
+    test("puts a row that stops waiting back at its stored place", () => {
+      const units = [waiting("a", 5), waiting("b", 2), waiting("c", 9, "working")];
+      const stored = ["t:c", "t:a", "t:b"];
+      const [, working] = sections(applyOrder(units, (u) => u.id, stored));
+      expect(ids(working.units)).toEqual(["t:c"]);
+      const stopped = [waiting("a", 5, "working"), units[1], units[2]];
+      expect(sections(applyOrder(stopped, (u) => u.id, stored)).map((s) => [s.key, ids(s.units)])).toEqual([
+        ["your-turn", ["t:b"]],
+        ["working", ["t:c", "t:a"]],
+      ]);
+    });
+  });
   test("itemIds lists a stack with its threads", () => {
     const [stack] = flatten([project("p", [branch("s1", [thread("a")], [], "st")])]);
     expect(itemIds(stack)).toEqual(["stack:p:st", "a"]);
@@ -248,6 +387,15 @@ describe("flatLists", () => {
   test("holds all unit ids under the flat key when ungrouped", () => {
     expect([...flatLists(sequence(units, "none"))]).toEqual([["flat", ["t:a", "t:b"]]]);
   });
+  test("gives a waiting section no list and keeps its ids out of the flat list", () => {
+    const mixed = flatten([
+      project("p", [branch("g", [thread("a", 1, [], "your-turn"), thread("b", 1, [], "working")])]),
+    ]);
+    expect([...flatLists(sequence(mixed, "status"))]).toEqual([
+      ["flat", ["t:b"]],
+      ["flat:working", ["t:b"]],
+    ]);
+  });
   test("adds the unit ids of each section when grouped", () => {
     expect([...flatLists(sequence(units, "status"))]).toEqual([
       ["flat", ["t:b", "t:a"]],
@@ -255,4 +403,85 @@ describe("flatLists", () => {
       ["flat:done", ["t:a"]],
     ]);
   });
+});
+
+describe("closed sections", () => {
+  const units = flatten([
+    project("p", [
+      branch("g", [thread("a", 1, [], "working"), thread("b", 1, [], "idle"), thread("c", 1, [], "done")]),
+    ]),
+  ]);
+  const shut = new Set(["idle"]);
+  test("keeps the header with the open count and drops the units", () => {
+    const items = sequence(units, "status", shut);
+    expect(items.map((i) => i.id)).toEqual(["sec:working", "t:a", "sec:idle", "sec:done", "t:c"]);
+    expect(items.find((i) => i.id === "sec:idle")).toMatchObject({ open: false, count: 1 });
+    expect(items.find((i) => i.id === "sec:done")).toMatchObject({ open: true, count: 1 });
+  });
+  test("gives its units no drag", () => {
+    const lists = flatLists(sequence(units, "status", shut));
+    expect([...lists.values()].flat()).not.toContain("t:b");
+    expect(lists.get("flat:idle")).toEqual([]);
+  });
+  test("does nothing with Group by None", () => {
+    expect(sequence(units, "none", shut)).toEqual(units);
+  });
+});
+
+describe("hidden snoozed threads", () => {
+  const units = flatten([project("p", [branch("g", [thread("s", 1, [thread("d", 1, [], "done")], "snoozed")])])]);
+  test("a snoozed parent with a done child lands in Done, as a context row", () => {
+    const items = sequence(units, "status", new Set(), false);
+    expect(items.map((i) => i.id)).toEqual(["sec:done", "t:s"]);
+    expect(items[0]).toMatchObject({ count: 1 });
+    expect(sectionOf(items, items[1])).toEqual(["done"]);
+  });
+  test("a snoozed thread still places in Idle and snoozed by default", () => {
+    expect(sequence(units, "status").map((i) => i.id)).toEqual(["sec:idle", "t:s"]);
+  });
+});
+
+describe("closedCounts", () => {
+  const some = (...st: Status[]) => st.map((s, i) => thread(`t${i}`, null, [], s));
+  test("is empty with 4 threads", () => {
+    expect(closedCounts(some("working", "working", "done", "done"))).toEqual([]);
+  });
+  test("counts a status group in section order, with the first status, a lower-case label, and no empty group", () => {
+    const ts = some("done", "interrupted", "needs-input", "failed", "your-turn", "needs-input");
+    expect(closedCounts(ts)).toEqual([
+      { status: "needs-input", label: "needs input", n: 2 },
+      { status: "your-turn", label: "your turn", n: 1 },
+      { status: "failed", label: "failed", n: 2 },
+      { status: "done", label: "done", n: 1 },
+    ]);
+  });
+  test("counts subthreads toward the threshold", () => {
+    const ts = [thread("a", null, some("working", "working", "working", "working"))];
+    expect(closedCounts(allThreads(branch("b", ts))).length).toBe(1);
+  });
+});
+
+describe("pathFolds", () => {
+  const tree = [
+    project("p1", [branch("g1", [thread("a")])]),
+    project("p2", [
+      branch(REVIEWS, [], [branch("r", [thread("x")])]),
+      branch("s1", [thread("b", null, [thread("c")])], [], "st"),
+    ]),
+  ];
+  test("lists the branches from the project down", () => expect(pathFolds(tree, "x")).toEqual(["p2", REVIEWS, "r"]));
+  test("adds the rail of a stack, and finds a subthread", () =>
+    expect(pathFolds(tree, "c")).toEqual(["p2", "s1", "rail:st"]));
+  test("is empty for an unknown thread", () => expect(pathFolds(tree, "zz")).toEqual([]));
+});
+
+describe("sectionHolding", () => {
+  const units = flatten([
+    project("p", [branch("g", [thread("a", null, [], "done")]), branch("h", [thread("b", null, [thread("c")])])]),
+  ]);
+  test("is the section of the unit that holds the thread", () => {
+    expect(sectionHolding(units, true, "a")).toBe("done");
+    expect(sectionHolding(units, true, "c")).toBe("working");
+  });
+  test("is null for an unknown thread", () => expect(sectionHolding(units, true, "zz")).toBeNull());
 });

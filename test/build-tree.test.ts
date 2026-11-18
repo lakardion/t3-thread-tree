@@ -72,6 +72,7 @@ function build(raws: object[], spawners: Record<string, string> = {}, over: Part
     spawnerOf: (id) => spawners[id],
     environmentId: "env-1",
     settled: false,
+    nest: true,
     now: NOW,
     ...over,
   });
@@ -195,6 +196,18 @@ describe("placement", () => {
     const [map] = child(tree, "frontend", "No issue key").threads;
     expect(map.title).toBe("Wayfinder map");
     expect(titles(map.children)).toEqual(["ticket 001"]);
+  });
+
+  test("with nesting off, a launched thread sits in No issue key and names its spawner", () => {
+    const tree = build(
+      [shell("map", "Wayfinder map"), shell("mcp:t1", "ticket 001")],
+      { "mcp:t1": "map" },
+      { nest: false },
+    );
+    const ts = child(tree, "frontend", "No issue key").threads;
+    expect(titles(ts)).toEqual(["Wayfinder map", "ticket 001"]);
+    expect(ts[0].children).toEqual([]);
+    expect(ts[1].detail.launchedBy).toEqual({ title: "Wayfinder map", href: "t3code://threads/env-1/map" });
   });
 
   test("keyed thread stays under its key even with a visible spawner", () => {
@@ -340,12 +353,67 @@ describe("PR stack", () => {
     expect(child(tree, "frontend", "WEB-20").stack).toEqual({ id: "s30", total: 2, base: null });
   });
 
-  test("a thread with no key gets no rail", () => {
+  test("a keyless stack mate joins a stack group with the rail, next to its keyed mates", () => {
     const tree = build([
       ...stacked(),
       shell("loose", "loose thread", { pullRequests: [pr(12, "stack"), pr(10, "stack")] }),
+      shell("plain", "plain thread"),
     ]);
+    expect(labels(tree[0].branches)).toEqual(["WEB-1", "WEB-2", "WEB-3", "PR stack #10", "WEB-9", "No issue key"]);
+    expect(child(tree, "frontend", "PR stack #10").stack).toEqual({ id: "s10", total: 3, base: "main" });
+    expect(titles(child(tree, "frontend", "No issue key").threads)).toEqual(["plain thread"]);
     expect("stack" in child(tree, "frontend", "No issue key")).toBe(false);
+  });
+
+  test("keyless launched stack threads share one stack group instead of nesting", () => {
+    const tree = build(
+      [
+        shell("lead", "dispatch"),
+        shell("a", "wait-time-04 one", { pullRequests: [pr(61, "created"), pr(65, "stack"), pr(67, "stack")] }),
+        shell("b", "wait-time-05 two", { pullRequests: [pr(65, "created"), pr(61, "stack"), pr(67, "stack")] }),
+        shell("c", "wait-time-06 three", { pullRequests: [pr(67, "created"), pr(61, "stack"), pr(65, "stack")] }),
+      ],
+      { a: "lead", b: "a", c: "b" },
+    );
+    expect(labels(tree[0].branches)).toEqual(["PR stack #61", "No issue key"]);
+    const g = child(tree, "frontend", "PR stack #61");
+    expect(g.stack).toEqual({ id: "s61", total: 3, base: null });
+    expect(g.threads.map((t) => [t.title, t.stack?.pos, t.children.length])).toEqual([
+      ["wait-time-04 one", 1, 0],
+      ["wait-time-05 two", 2, 0],
+      ["wait-time-06 three", 3, 0],
+    ]);
+    expect(child(tree, "frontend", "No issue key").threads[0].children).toEqual([]);
+  });
+
+  test("T3 stack layers set the order; an agent-linked PR is the thread's own", () => {
+    const stack = {
+      base: "main",
+      layers: [10, 11, 12, 13].map((number) => ({ number, state: "open" })),
+    };
+    const own = (n: number, source: string) =>
+      [10, 11, 12, 13].map((x) => pr(x, x === n ? source : "stack", "open", stack));
+    const tree = build([
+      shell("b", "WEB-1 B", { pullRequests: own(12, "agent"), createdAt: "2026-11-12T07:00:00.000Z" }),
+      shell("top", "WEB-2 top", { pullRequests: own(13, "created"), createdAt: "2026-11-12T06:00:00.000Z" }),
+      shell("a1", "WEB-1 A1", { pullRequests: own(10, "agent"), createdAt: "2026-11-12T07:01:00.000Z" }),
+      shell("a2", "WEB-1 A2", { pullRequests: own(11, "agent"), createdAt: "2026-11-12T07:02:00.000Z" }),
+    ]);
+    expect(labels(tree[0].branches)).toEqual(["WEB-1", "WEB-2"]);
+    expect(child(tree, "frontend", "WEB-1").threads.map((t) => [t.title, t.stack?.pos])).toEqual([
+      ["WEB-1 A1", 1],
+      ["WEB-1 A2", 2],
+      ["WEB-1 B", 3],
+    ]);
+    expect(child(tree, "frontend", "WEB-2").threads[0].stack).toEqual({ pos: 4, total: 4 });
+  });
+
+  test("a review thread with stack PRs stays in Reviews", () => {
+    const tree = build([
+      ...stacked(),
+      shell("r", "Review #10 notes", { pullRequests: [pr(10, "stack"), pr(11, "stack")] }),
+    ]);
+    expect(titles(child(tree, "frontend", "Reviews", "No issue key").threads)).toEqual(["Review #10 notes"]);
   });
 
   test("node PRs leave out stack links; closed PRs are not stack members", () => {
@@ -369,6 +437,7 @@ describe("PR stack", () => {
         additions: null,
         deletions: null,
         changedFiles: null,
+        labels: [],
       },
     ]);
   });
@@ -458,7 +527,11 @@ describe("status", () => {
     };
     expect(s(both).since).toBe("2026-11-12T08:00:00.000Z");
     expect(s({ ...both, activityRunStartedAt: null }).since).toBe("2026-11-12T07:00:00.000Z");
-    expect(s({ status: "completed", ...DONE_AT }).since).toBeNull();
+    expect(s({ status: "completed", ...DONE_AT }).since).toBe(DONE_AT.latestRunCompletedAt);
+    expect(s({ status: "completed", interactionMode: "plan", hasPlan: true, ...DONE_AT }).since).toBe(
+      DONE_AT.latestRunCompletedAt,
+    );
+    expect(s({ status: "completed", ...DONE_AT, lastVisitedAt: "2026-11-12T11:00:00.000Z" }).since).toBeNull();
   });
 
   test("Queued, Starting and Cancelled phrases", () => {
@@ -504,6 +577,7 @@ describe("status", () => {
         additions: null,
         deletions: null,
         changedFiles: null,
+        labels: [],
       },
       {
         n: 8,
@@ -517,6 +591,7 @@ describe("status", () => {
         additions: null,
         deletions: null,
         changedFiles: null,
+        labels: [],
       },
     ]);
   });
@@ -664,5 +739,48 @@ describe("lineage tool results", () => {
     ]);
     expect(launchedIds('[{"type":"text","text":"{\\"threadId\\":\\"mcp:2\\"}"}]')).toEqual(["mcp:2"]);
     expect(launchedIds("not json")).toEqual([]);
+  });
+});
+
+describe("labels", () => {
+  const linked = {
+    ...pr(7, "created"),
+    repository: "org/repo",
+    snapshot: { ...pr(7, "created").snapshot, updatedAt: "2026-11-12T10:00:00.000Z" },
+  };
+  const all = [
+    { name: "Ready-For-Review", color: "0e8a16" },
+    { name: "size:L", color: null },
+  ];
+  const prsOf = (over: Partial<BuildInput>, raw: Record<string, unknown> = {}, settled = false) =>
+    build(
+      [shell("a", "SHOP-1 x", { pullRequests: [linked], ...raw })],
+      {},
+      { labelsOf: () => all, settled, ...over },
+    )[0].branches[0].threads[0].prs;
+
+  test("decode keeps host, repository and the snapshot updatedAt", () => {
+    const [p] = decodeThread(shell("a", "x", { pullRequests: [linked] }))!.prs;
+    expect(p).toMatchObject({ host: "github.com", repository: "org/repo", updatedAt: "2026-11-12T10:00:00.000Z" });
+    const bare = decodeThread(shell("a", "x", { pullRequests: [{ number: 1 }] }))!.prs[0];
+    expect(bare).toMatchObject({ host: "", repository: "", updatedAt: "" });
+  });
+
+  test("a PR gets the watched labels, case-insensitive", () => {
+    expect(prsOf({ labels: ["ready-for-review"] })[0].labels).toEqual([all[0]]);
+  });
+
+  test("no list gives no labels", () => {
+    expect(prsOf({})[0].labels).toEqual([]);
+    expect(prsOf({ labels: [] })[0].labels).toEqual([]);
+  });
+
+  test("a settled thread gives no labels", () => {
+    const raw = { settledAt: "2026-11-12T09:00:00.000Z" };
+    expect(prsOf({ labels: ["size:L"] }, raw, true)[0].labels).toEqual([]);
+  });
+
+  test("labelsOf may have no answer yet", () => {
+    expect(prsOf({ labels: ["size:L"], labelsOf: () => undefined })[0].labels).toEqual([]);
   });
 });

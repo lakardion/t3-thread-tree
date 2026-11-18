@@ -5,6 +5,7 @@ import {
   REVIEWS,
   type Branch,
   type Detail,
+  type Label,
   type PrNode,
   type Status,
   type ThreadNode,
@@ -38,10 +39,10 @@ export function statusOf(t: Thread, now: number): { status: Status; phrase: stri
   if (run === "queued" || run === "preparing" || run === "starting")
     return verdict("starting", run === "queued" ? "Queued" : "Starting");
   if (run === "completed") {
-    if (t.interactionMode === "plan" && t.hasPlan) return verdict("plan-ready", "Plan ready");
+    if (t.interactionMode === "plan" && t.hasPlan) return verdict("plan-ready", "Plan ready", t.latestRunCompletedAt);
     const unseen =
       t.latestRunCompletedAt && (!t.lastVisitedAt || Date.parse(t.lastVisitedAt) < Date.parse(t.latestRunCompletedAt));
-    return unseen ? verdict("your-turn", "Your turn") : verdict("done", "Done");
+    return unseen ? verdict("your-turn", "Your turn", t.latestRunCompletedAt) : verdict("done", "Done");
   }
   if (run === "failed") return verdict("failed", "Failed");
   if (run === "interrupted" || run === "cancelled" || run === "rolled_back")
@@ -55,7 +56,12 @@ export type BuildInput = {
   spawnerOf: (id: string) => string | null | undefined;
   environmentId: string;
   settled: boolean;
+  /** Launch nesting: a keyless thread nests under its visible spawner. */
+  nest: boolean;
   now: number;
+  /** Watched label names. Empty: no PR gets labels. */
+  labels?: string[];
+  labelsOf?: (p: Thread["prs"][number]) => Label[] | undefined;
 };
 
 type Node = ThreadNode & { t: Thread; first: string };
@@ -66,7 +72,7 @@ const stackPrs = (t: Thread) => t.prs.filter((p) => STACK_SOURCES.has(p.source) 
 const CHECKS = ["passing", "failing", "pending"] as const;
 const REVIEWS_STATE = ["approved", "changes-requested", "review-required"] as const;
 const narrow = <T extends string>(v: string | null, set: readonly T[]): T | null => set.find((x) => x === v) ?? null;
-const prNode = (p: Thread["prs"][number]): PrNode => ({
+const prNode = (p: Thread["prs"][number], labels: Label[]): PrNode => ({
   n: p.n,
   url: p.url,
   state: p.state,
@@ -78,6 +84,7 @@ const prNode = (p: Thread["prs"][number]): PrNode => ({
   additions: p.additions,
   deletions: p.deletions,
   changedFiles: p.changedFiles,
+  labels,
 });
 const hrefOf = (environmentId: string, id: string) =>
   `t3code://threads/${encodeURIComponent(environmentId)}/${encodeURIComponent(id)}`;
@@ -120,9 +127,9 @@ const creationKey = (t: Thread) => `${String(Date.parse(t.createdAt ?? "") || 0)
 const byFirst = <T extends { first: string }>(a: T, b: T) => a.first.localeCompare(b.first);
 
 /**
- * Stacks are connected sets of open stack PRs across threads. The order comes from the thread with
- * the longest list: its stack/agent PRs in list order, with each of its own created PRs placed after
- * the last lower number.
+ * Stacks are connected sets of open stack PRs across threads. The order is the longest layer list
+ * T3 reports. Without one, it comes from the thread with the longest list: its stack/agent PRs in
+ * list order, with each of its own created PRs placed after the last lower number.
  */
 export function computeStacks(threads: Thread[]): Stack[] {
   const stacks: Stack[] = [];
@@ -139,6 +146,13 @@ export function computeStacks(threads: Thread[]): Stack[] {
     stacks.push(merged);
   }
   for (const st of stacks) {
+    const layers = st.threads
+      .flatMap((t) => t.prs.map((p) => p.stackLayers ?? []))
+      .reduce((a, b) => (b.length > a.length ? b : a), []);
+    if (layers.length) {
+      st.order = layers;
+      continue;
+    }
     const best = st.threads.reduce((a, b) => (stackPrs(b).length > stackPrs(a).length ? b : a));
     const order = best.prs
       .filter((p) => (p.source === "stack" || p.source === "agent") && p.state === "open")
@@ -158,7 +172,12 @@ const newest = (a: string | null, b: string | null): string | null =>
   a && b ? (Date.parse(a) >= Date.parse(b) ? a : b) : (a ?? b);
 
 export function buildTree(input: BuildInput): Branch[] {
-  const { projects, spawnerOf, environmentId, settled, now } = input;
+  const { projects, spawnerOf, environmentId, settled, nest, now } = input;
+  const watched = new Set((input.labels ?? []).map((l) => l.toLowerCase()));
+  const labelsFor = (t: Thread, p: Thread["prs"][number]): Label[] =>
+    t.settledAt || watched.size === 0
+      ? []
+      : (input.labelsOf?.(p) ?? []).filter((l) => watched.has(l.name.toLowerCase()));
   const visible = new Map<string, Thread>();
   const all = new Map<string, Thread>();
   for (const t of input.threads) {
@@ -173,7 +192,7 @@ export function buildTree(input: BuildInput): Branch[] {
   const nodes = new Map<string, Node>();
   for (const t of visible.values()) {
     const si = stackIdOf.get(t.id);
-    const created = t.prs.find((p) => p.source === "created")?.n;
+    const created = (t.prs.find((p) => p.source === "created") ?? t.prs.find((p) => p.source === "agent"))?.n;
     const st = si === undefined ? null : stacks[si];
     const pos = st && created !== undefined && st.order.includes(created) ? st.order.indexOf(created) + 1 : null;
     nodes.set(t.id, {
@@ -190,7 +209,9 @@ export function buildTree(input: BuildInput): Branch[] {
       input: t.pending?.blocking === false,
       snoozedUntil: t.snoozedUntil && Date.parse(t.snoozedUntil) > now ? t.snoozedUntil : null,
       stack: st ? { pos, total: st.order.length } : null,
-      prs: t.prs.filter((p) => p.source !== "stack" && p.source !== "stack-dismissed").map(prNode),
+      prs: t.prs
+        .filter((p) => p.source !== "stack" && p.source !== "stack-dismissed")
+        .map((p) => prNode(p, labelsFor(t, p))),
       detail: { ...detailOf(t, now, all), launchedBy: null },
       children: [],
       first: creationKey(t),
@@ -220,10 +241,14 @@ export function buildTree(input: BuildInput): Branch[] {
     const { t } = n;
     const sp = spawnerOf(t.id);
     const spawner = sp ? all.get(sp) : undefined;
+    /** A stack outranks lineage: keyless mates share one group, so the stack keeps its rail. */
+    const si = stackIdOf.get(t.id);
+    const stackKey = si === undefined ? null : `PR stack #${stacks[si].order[0]}`;
     if (t.title.startsWith("Review #")) addTo(t.projectId, REVIEWS, n);
     else if (n.key) addTo(t.projectId, n.key, n);
+    else if (stackKey) addTo(t.projectId, stackKey, n);
     else {
-      const vs = visibleSpawner(t.id);
+      const vs = nest ? visibleSpawner(t.id) : null;
       if (vs && visible.get(vs)!.projectId === t.projectId) nodes.get(vs)!.children.push(n);
       else addTo(t.projectId, NO_KEY, n);
     }
@@ -243,14 +268,15 @@ export function buildTree(input: BuildInput): Branch[] {
     const gs = [...gmap.values()];
     for (const g of gs) {
       g.nodes.forEach(settle);
-      g.nodes.sort(byFirst);
-      g.first = g.nodes[0].first;
+      /** Stack mates go in stack order; the group keeps the slot of its oldest thread. */
+      g.first = g.nodes.toSorted(byFirst)[0].first;
+      g.nodes.sort((a, b) => (a.stack?.pos ?? Infinity) - (b.stack?.pos ?? Infinity) || byFirst(a, b));
     }
     gs.sort(byFirst);
     /** Groups that share a stack sit together, in stack order, at the slot of the oldest member. */
     const stackOf = (g: Group) => g.nodes.map((n) => stackIdOf.get(n.id)).find((s) => s !== undefined);
     const minPos = (g: Group, si: number) =>
-      Math.min(...g.nodes.filter((n) => stackIdOf.get(n.id) === si).map((n) => n.stack?.pos ?? 0));
+      Math.min(...g.nodes.filter((n) => stackIdOf.get(n.id) === si).map((n) => n.stack?.pos ?? Infinity));
     const placed = new Set<Group>();
     const ordered: Group[] = [];
     for (const g of gs) {

@@ -2,13 +2,18 @@ import { homedir } from "node:os";
 import { join } from "node:path";
 
 import index from "./page/index.html";
-import { briefInput, briefService, detectClis } from "./server/brief.ts";
+import upNext from "./page/up-next.html";
+import { briefInput, briefService, detectClis, lastMessageRoutes } from "./server/brief.ts";
 import { buildTree } from "./server/build-tree.ts";
+import { findRoutes } from "./server/find.ts";
+import { labelStore } from "./server/labels.ts";
 import { mayBeLaunched, needsScan, openLineage } from "./server/lineage.ts";
 import { checkCli, cliPath, sendService } from "./server/send.ts";
+import { settleRoutes } from "./server/settle.ts";
+import { settledPage, settledRoutes, settledSignature } from "./server/settled.ts";
 import { connectShell, readEnvironmentId, type Project, type Thread } from "./server/t3.ts";
-import { parseToken, readToken, writeToken } from "./server/token.ts";
-import { parseLinear, type Conn, type Tree } from "./shared/tree.ts";
+import { parseToken, readToken, tokenResponse, writeToken } from "./server/token.ts";
+import { parseLabels, parseLinear, type Conn, type Tree } from "./shared/tree.ts";
 
 const threads = new Map<string, Thread>();
 const projects = new Map<string, Project>();
@@ -36,8 +41,7 @@ const unscanned = new Set<string>();
 
 let scanning = false;
 /** The full scan takes seconds on a cold disk, so it runs in a Worker, and only when a requested view needs it. The worker path resolves from cwd in dev and from the bundle root in the binary. */
-function scanIfNeeded() {
-  const settledView = [...clients].some((c) => c.settled);
+function scanIfNeeded(settledView = false) {
   if (scanning || !needsScan(unscanned, threads.values(), (id) => spawners.get(id), settledView)) return;
   scanning = true;
   const ids = [...unscanned];
@@ -82,33 +86,45 @@ function resolveSpawners() {
   }, 2000);
 }
 
-type Client = { settled: boolean; send: (data: string, event?: string) => void };
+type Client = { nest: boolean; labels: string[]; send: (data: string, event?: string) => void };
 const clients = new Set<Client>();
 
 const linear = parseLinear(process.env.LINEAR_WORKSPACE, process.env.LINEAR_TEAMS);
 
-const treeFor = (settled: boolean): Tree => ({
+const treeFor = (settled: boolean, nest = false, labels: string[] = []): Tree => ({
   conn: ready ? conn : "connecting",
   lastUpdate,
   linear,
+  settled: settledSignature(threads.values()),
   projects: buildTree({
     threads: threads.values(),
     projects,
     spawnerOf: (id) => spawners.get(id),
     environmentId,
     settled,
+    nest,
     now: Date.now(),
+    labels,
+    labelsOf: store.labelsOf,
   }),
+});
+
+const active = () => [...clients].some((c) => c.labels.length > 0);
+const store = labelStore({
+  detail: (r) =>
+    shell.detail(r).catch((e: Error) => (e.message === "T3 is not connected" ? "dropped" : Promise.reject(e))),
+  onChange: () => changed(),
 });
 
 let timer: ReturnType<typeof setTimeout> | undefined;
 function changed() {
   clearTimeout(timer);
   timer = setTimeout(() => {
-    const cache = new Map<boolean, string>();
+    const cache = new Map<string, string>();
     for (const c of clients) {
-      if (!cache.has(c.settled)) cache.set(c.settled, JSON.stringify(treeFor(c.settled)));
-      c.send(cache.get(c.settled)!);
+      const key = `${c.nest}|${c.labels.join(",")}`;
+      if (!cache.has(key)) cache.set(key, JSON.stringify(treeFor(false, c.nest, c.labels)));
+      c.send(cache.get(key)!);
     }
   }, 150);
 }
@@ -163,6 +179,7 @@ const shell = connectShell({
         break;
     }
     resolveSpawners();
+    store.sync(threads.values(), active());
     changed();
     checkReady();
   },
@@ -170,7 +187,7 @@ const shell = connectShell({
 
 const brief = briefService({
   clis: detectClis(),
-  input: (settled) => briefInput(treeFor(settled).projects, lineage.lastMessages, Date.now()),
+  input: () => briefInput(treeFor(false).projects, lineage.lastMessages, Date.now()),
   onChange: () => {
     const data = JSON.stringify(brief.state());
     for (const c of clients) c.send(data, "brief");
@@ -192,8 +209,18 @@ const server = Bun.serve({
   port: Number(process.env.PORT) || 4773,
   routes: {
     "/": index,
+    "/up-next": upNext,
     ...brief.routes,
     ...send.routes,
+    ...settleRoutes({ dispatch: (c) => shell.dispatch(c), hasThread: (id) => threads.get(id)?.gone === false }),
+    ...findRoutes(() => treeFor(true).projects),
+    ...settledRoutes({
+      page: (after, limit) => {
+        scanIfNeeded(true);
+        return settledPage(treeFor(true).projects, threads, after, limit);
+      },
+    }),
+    ...lastMessageRoutes({ read: (id) => lineage.lastMessages([id]).get(id) ?? null, has: (id) => threads.has(id) }),
     "/token": {
       /** JSON only: a cross-site form cannot send it without a CORS preflight, which this server does not answer. */
       POST: async (req) => {
@@ -204,29 +231,36 @@ const server = Bun.serve({
         if (!next) return new Response("Not a valid token", { status: 400 });
         writeToken(tokenFile, next);
         token = next;
-        shell.reconnect();
-        return new Response(null, { status: 204 });
+        let waitTimer: ReturnType<typeof setTimeout> | undefined;
+        const timeout = new Promise<"timeout">((r) => (waitTimer = setTimeout(() => r("timeout"), 15_000)));
+        const c = await Promise.race([shell.reconnect(), timeout]);
+        clearTimeout(waitTimer);
+        return tokenResponse(c);
       },
     },
     "/events": (req) => {
       server.timeout(req, 0);
-      const settled = new URL(req.url).searchParams.get("settled") === "1";
+      const params = new URL(req.url).searchParams;
+      const nest = params.get("nest") === "1";
+      const labels = parseLabels(params.get("labels") ?? "");
       const enc = new TextEncoder();
       let client: Client;
       return new Response(
         new ReadableStream({
           start(ctrl) {
             client = {
-              settled,
+              nest,
+              labels,
               send: (d, event) => ctrl.enqueue(enc.encode(`${event ? `event: ${event}\n` : ""}data: ${d}\n\n`)),
             };
             clients.add(client);
-            if (settled) scanIfNeeded();
-            client.send(JSON.stringify(treeFor(settled)));
+            if (labels.length) store.sync(threads.values(), true);
+            client.send(JSON.stringify(treeFor(false, nest, labels)));
             client.send(JSON.stringify(brief.state()), "brief");
           },
           cancel() {
             clients.delete(client);
+            store.sync(threads.values(), active());
           },
         }),
         { headers: { "Content-Type": "text/event-stream", "Cache-Control": "no-store" } },

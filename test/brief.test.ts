@@ -7,8 +7,11 @@ import {
   codeActions,
   digestOf,
   filterAnswer,
+  lastMessageRoutes,
   parseAnswer,
+  questionOf,
   stdinFor,
+  tailOf,
   type InputThread,
   type Outcome,
 } from "../src/server/brief.ts";
@@ -43,6 +46,14 @@ function node(id: string, over: Partial<ThreadNode> = {}): ThreadNode {
 const branch = (threads: ThreadNode[], branches: Branch[] = []): Branch => ({ id: "b", label: "b", branches, threads });
 
 describe("briefInput", () => {
+  test("an answer reason is the question of the last message; no message keeps the fixed reason", () => {
+    const tree = [branch([node("Q", { status: "needs-input" }), node("R", { status: "needs-input" })])];
+    let asked: string[] = [];
+    const { code } = briefInput(tree, (ids) => ((asked = ids), new Map([["Q", "Done. Which one?"]])), NOW);
+    expect(asked).toEqual(["Q", "R"]);
+    expect(code.actions.map((a) => a.reason)).toEqual(["Which one?", "The agent waits for your input."]);
+  });
+
   test("drops working, starting, waiting and snoozed threads before the message query; keeps launched children", () => {
     const tree = [
       branch([
@@ -64,11 +75,19 @@ describe("briefInput", () => {
     expect(input[1].digest).toBe("t2 · Your turn 3h · Thread L");
     expect(input[0].digest).toBe("t1 · Your turn 3h · Thread A\n  done");
   });
+  test("the snapshot holds the status of code and model threads, and the since of answer threads", () => {
+    const since = "2026-11-13T10:00:00.000Z";
+    const tree = [branch([node("Q", { status: "needs-input", since }), node("M"), node("W", { status: "working" })])];
+    const { code } = briefInput(tree, () => new Map(), NOW);
+    expect(code.statuses).toEqual({ Q: "needs-input", M: "your-turn" });
+    expect(code.since).toEqual({ Q: since });
+  });
+
   test("covered threads leave the model input; refs restart over the rest; code titles are set", () => {
     const tree = [branch([node("Q", { status: "needs-input" }), node("A"), node("B")])];
     let asked: string[] = [];
     const { code, threads } = briefInput(tree, (ids) => ((asked = ids), new Map()), NOW);
-    expect(asked).toEqual(["A", "B"]);
+    expect(asked).toEqual(["A", "B", "Q"]);
     expect(threads.map((t) => [t.id, t.ref])).toEqual([
       ["A", "t1"],
       ["B", "t2"],
@@ -91,6 +110,7 @@ const pr = (over: object) =>
     additions: 0,
     deletions: 0,
     changedFiles: 0,
+    labels: [],
     ...over,
   }) as ThreadNode["prs"][number];
 
@@ -110,6 +130,24 @@ describe("codeActions", () => {
     ]);
     expect(one({ status: "plan-ready" })[0]).toMatchObject({ kind: "answer", title: "Review the plan", prompt: null });
   });
+  test("an answer title is the verb of the request kind", () => {
+    const req = (request: string | null, phrase = "Approval") =>
+      one({ status: "needs-input", phrase, detail: { request } as ThreadNode["detail"] })[0].title;
+    expect(req("command · 3m")).toBe("Approve the command");
+    expect(req("user_input · 1m")).toBe("Answer the question");
+    expect(req("mystery · 1m")).toBe("Answer the agent");
+    expect(req(null)).toBe("Answer the agent");
+    expect(req("command · 3m", "Guest message")).toBe("Reply to the guest");
+  });
+  test("answers go oldest Wait first, no Wait last, then fix and merge", () => {
+    const { actions } = codeActions([
+      node("F", { prs: [pr({ conflicting: true })] }),
+      node("N", { status: "needs-input" }),
+      node("B", { status: "plan-ready", since: "2026-11-13T11:00:00.000Z" }),
+      node("A", { status: "needs-input", since: "2026-11-13T10:00:00.000Z" }),
+    ]);
+    expect(actions.map((a) => a.threadIds[0])).toEqual(["A", "B", "N", "F"]);
+  });
   test("a fix names one fact, or three joined, with the steps in fixed order", () => {
     expect(one({ prs: [pr({ checks: "failing" })] })).toEqual([
       {
@@ -118,6 +156,7 @@ describe("codeActions", () => {
         reason: "PR #12 has failing checks.",
         threadIds: ["A"],
         prompt: "fix the failing checks, and push.",
+        pr: 12,
       },
     ]);
     expect(
@@ -140,6 +179,7 @@ describe("codeActions", () => {
         reason: "PR #12 is approved, its checks pass, and it has no conflicts.",
         threadIds: ["A"],
         prompt: null,
+        pr: 12,
       },
     ]);
     expect(one({ prs: [pr({ ...ready, draft: true })] })).toEqual([]);
@@ -171,6 +211,32 @@ describe("codeActions", () => {
   });
 });
 
+describe("questionOf", () => {
+  test("the last question wins", () => {
+    expect(questionOf("Which one? Or this one? Fine.")).toBe("Or this one?");
+  });
+  test("a question may end in closing marks", () => {
+    expect(questionOf("Done.\n**Ready to merge?**\nNotes follow.")).toBe("**Ready to merge?**");
+  });
+  test("with no question, the last sentence; a trailing bullet counts", () => {
+    expect(questionOf("Done. All good.")).toBe("All good.");
+    expect(questionOf("Pick:\n- option a\n- option b")).toBe("- option b");
+  });
+  test("drops a leading ellipsis and splits on newlines", () => {
+    expect(questionOf("…tail of a sentence\nReady?")).toBe("Ready?");
+    expect(questionOf("…only")).toBe("only");
+  });
+  test("cuts at 140 characters with an ellipsis", () => {
+    const out = questionOf(`${"x".repeat(200)}?`)!;
+    expect(out).toBe(`${"x".repeat(139)}…`);
+    expect(out.length).toBe(140);
+  });
+  test("empty text gives null", () => {
+    expect(questionOf("")).toBeNull();
+    expect(questionOf(" \n ")).toBeNull();
+  });
+});
+
 describe("digestOf", () => {
   test("full line with key, PRs, stack, request and a cut message tail", () => {
     const n = node("A", {
@@ -196,12 +262,44 @@ describe("digestOf", () => {
   test("minimal line: no key, PRs, stack, request or message", () => {
     expect(digestOf(node("A"), "t1", null, NOW)).toBe("t1 · Your turn 3h · Thread A");
   });
+  test("plan ready and your turn with a since show the Wait, not the update age", () => {
+    const since = "2026-11-13T11:30:00.000Z";
+    expect(digestOf(node("A", { since }), "t1", null, NOW)).toBe("t1 · Your turn 30m · Thread A");
+    expect(digestOf(node("A", { since, status: "plan-ready", phrase: "Plan ready" }), "t1", null, NOW)).toBe(
+      "t1 · Plan ready 30m · Thread A",
+    );
+  });
   test("stack of N when pos is null; state shows when not open", () => {
     const n = node("A", { stack: { pos: null, total: 4 }, prs: [pr({ state: "merged" })] });
     expect(digestOf(n, "t1", null, NOW)).toBe("t1 · Your turn 3h · Thread A · PRs (#12 merged) · stack of 4");
   });
   test("a multi-line message tail is indented on every line", () => {
     expect(digestOf(node("A"), "t1", "a\nb", NOW)).toContain("\n  a\n  b");
+  });
+});
+
+describe("tailOf", () => {
+  test("a short message stays; a long one keeps its last 600 characters after a …", () => {
+    expect(tailOf("short")).toBe("short");
+    expect(tailOf("x".repeat(300) + "y".repeat(700))).toBe("…" + "y".repeat(600));
+  });
+});
+
+describe("lastMessageRoutes", () => {
+  const messages: Record<string, string | null> = { "env:thread%3A1": "z".repeat(700), quiet: null };
+  const get = lastMessageRoutes({ read: (id) => messages[id] ?? null, has: (id) => id in messages })["/t3/last-message"]
+    .GET;
+  const call = (query: string) => get(new Request(`http://x/t3/last-message${query}`));
+  test("400 without an id; 404 for an unknown thread", async () => {
+    expect(call("").status).toBe(400);
+    expect(call("?id=nope").status).toBe(404);
+  });
+  test("null text when the thread has no message", async () => {
+    expect(await call("?id=quiet").json()).toEqual({ text: null });
+  });
+  test("a long message comes back as its tail, for an id with : and %3A", async () => {
+    const res = call(`?id=${encodeURIComponent("env:thread%3A1")}`);
+    expect(await res.json()).toEqual({ text: "…" + "z".repeat(600) });
   });
 });
 
@@ -315,15 +413,16 @@ describe("briefService", () => {
     threadIds: [id],
     prompt: null,
   });
-  const CODE = { actions: [act("Q", "answer")], titles: { Q: "Thread Q" } };
+  const SNAP = { statuses: { Q: "needs-input" as const }, since: { Q: null } };
+  const CODE = { actions: [act("Q", "answer")], titles: { Q: "Thread Q" }, ...SNAP };
 
   /** A run that ends when the test calls `finish`, or with `null` on cancel. */
-  function setup(code = { actions: [], titles: {} } as BriefInput["code"]) {
+  function setup(code: BriefInput["code"] = { actions: [], titles: {}, statuses: {}, since: {} }) {
     let finish!: (o: Outcome | null) => void;
     const changes: string[] = [];
     const svc = briefService({
       clis: CLIS,
-      input: (settled) => ({ code, threads: [{ id: settled ? "s" : "o" } as InputThread] }),
+      input: () => ({ code, threads: [{ id: "o" } as InputThread] }),
       onChange: () => changes.push(svc.state().status),
       run: () => {
         const p = new Promise<Outcome | null>((r) => (finish = r));
@@ -336,7 +435,7 @@ describe("briefService", () => {
 
   test("runs, refuses a second run, then keeps the result", async () => {
     const { svc, changes, finish, flush } = setup();
-    expect((await svc.routes["/brief/run"].POST(post("/brief/run?settled=1", { cli: "claude" }))).status).toBe(202);
+    expect((await svc.routes["/brief/run"].POST(post("/brief/run", { cli: "claude" }))).status).toBe(202);
     expect(svc.state()).toMatchObject({ status: "running", cli: "claude", threadCount: 1 });
     expect((await svc.routes["/brief/run"].POST(post("/brief/run", { cli: "claude" }))).status).toBe(409);
     finish(done());
@@ -386,6 +485,7 @@ describe("briefService", () => {
       status: "done",
       actions: [act("Q", "answer"), act("A", "review")],
       titles: { Q: "Thread Q", A: "Thread A" },
+      ...SNAP,
     });
     expect(svc.state()).not.toHaveProperty("rulesOnly");
   });

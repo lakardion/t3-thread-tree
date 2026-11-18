@@ -38,8 +38,8 @@ Source: [How can a local process read T3 thread data live?](.wayfinder/tickets/0
 
 ### Token
 
-- The user issues the token once with `~/.t3/bin/t3 auth session issue --scope orchestration:read --label thread-tree --ttl 52w --token-only`.
-- The user pastes it in the "T3 token" password field of the "View" panel. The page sends `POST /token` with `{"token": "…"}` (JSON only, so a cross-site form cannot send it). The server checks it (one line, at most 4096 bytes), writes it to the token file (mode `0600`), drops the open socket and connects again. The user can replace it at any time.
+- The user issues the token once with `~/.t3/bin/t3 auth session issue --scope orchestration:read --scope orchestration:operate --label thread-tree --ttl 52w --token-only | pbcopy`. `pbcopy` puts the token on the macOS clipboard.
+- The user pastes it in the "T3 token" password field of the Settings panel. The page sends `POST /token` with `{"token": "…"}` (JSON only, so a cross-site form cannot send it). The server checks it (one line, at most 4096 bytes), writes it to the token file (mode `0600`), drops the open socket and connects again. The user can replace it at any time.
 - **Token file:** `T3_TOKEN_FILE`, else `~/.config/t3-thread-tree/token`. When the file holds no token, `T3_TOKEN` from the env is the fallback.
 - With no token, the tree `conn` is `no-token`. If T3 rejects the token (HTTP 401), it is `unauthorized`. Both banners link to the token field.
 
@@ -59,7 +59,7 @@ A thread that an agent starts with `t3_thread_launch`, `create_threads` or `dele
 1. **First:** `senderThreadId` on the thread's first user message in `orchestration_v2_projection_messages` (`message_id = thread_id` for a launch). This is a primary-key lookup. When both sources exist, they agree.
 2. **Full scan:** the caller's `dynamic_tool` row in `orchestration_v2_projection_turn_items` with `status = 'completed'`, where `toolName` ends in `t3_thread_launch`, `create_threads` or `delegate_task`. Parse `payload_json.output.content` as JSON. The new id is in `threadId`, `threads[].threadId` or `childThreadId`. The row's `thread_id` is the spawner. Do not match the child id as a substring.
 
-Run the lookup when the backend first sees a top-level thread whose id contains `mcp:` or `mcp%3A` (`t3_thread_launch` gives `mcp:…`, `create_threads` gives `thread:mcp:…`, `delegate_task` gives `thread:delegated-task:command%3Amcp%3A…`), in the snapshot or in `thread.updated`. Cache the result in memory. A thread that arrives before its first message is written gets a short retry. The full scan reads every launch tool call (seconds on a cold disk, no index), so it runs in a Worker, and only when a thread with no sender message is on a requested view: an active thread or its spawner chain, or any thread once a client asks for the settled view. Keep the SQLite code in one module.
+Run the lookup when the backend first sees a top-level thread whose id contains `mcp:` or `mcp%3A` (`t3_thread_launch` gives `mcp:…`, `create_threads` gives `thread:mcp:…`, `delegate_task` gives `thread:delegated-task:command%3Amcp%3A…`), in the snapshot or in `thread.updated`. Cache the result in memory. A thread that arrives before its first message is written gets a short retry. The full scan reads every launch tool call (seconds on a cold disk, no index), so it runs in a Worker, and only when a thread with no sender message is on a requested view: an active thread or its spawner chain, or any thread once the page asks for the settled list. Keep the SQLite code in one module.
 
 ## Tree rules
 
@@ -67,18 +67,19 @@ Source: [Tree model rules for the nested tree](.wayfinder/tickets/004-tree-model
 
 A **top-level thread** has no native `parentThreadId`. A **subagent** has `relationshipToParent: subagent`. The backend applies these rules and builds the whole tree.
 
-1. **Visible.** A top-level, non-archived thread is visible when `settledAt` is null, whatever its status. No recency window applies. With the settled toggle on, settled top-level threads are visible too.
+1. **Visible.** A top-level, non-archived thread is visible when `settledAt` is null, whatever its status. No recency window applies. Settled threads are never in the tree. The settled toggle shows them in the Settled list.
 2. **Subagents are not shown.** The tree holds top-level threads only. It shows no subagent rows, counts or signals.
-3. **Snoozed** threads stay visible. They are shown muted, with their wake time.
+3. **Snoozed** threads stay visible, unless "Show snoozed threads" is off. They are shown muted, with their wake time. When it is off, a page filter hides them. A snoozed thread with a visible subthread stays as a muted context row.
 4. **Issue key:** the first match of `/\b[A-Z][A-Z0-9]+-\d+\b/` in the title of a top-level thread. `Review #15708 JED-4319` gives `JED-4319`.
 5. **Visible spawner:** start at the thread's spawner and go up the spawner chain. Skip threads that are not visible, and stop at the first visible one. If no thread in the chain is visible, the thread has no visible spawner.
 6. **Placement.** A thread is always placed in its own `projectId`. Apply the first rule that matches:
    1. A title that starts with `Review #` goes under `Project › Reviews › <key>`, or `Project › Reviews › No issue key` if it has no key.
    2. A keyed thread goes under `Project › <key>`.
-   3. A keyless thread with a visible spawner in the same project nests under that spawner.
-   4. Any other keyless thread goes under `Project › No issue key`.
+   3. A keyless thread in a PR stack goes under `Project › PR stack #<n>`, where `<n>` is the bottom PR of the stack. All keyless threads of one stack share this group, and it gets the stack rail. A stack outranks the spawner.
+   4. With launch nesting on, a keyless thread with a visible spawner in the same project nests under that spawner. Launch nesting is a page setting, off by default; the page sends it as `nest=1` on `/events`.
+   5. Any other keyless thread goes under `Project › No issue key`.
 7. **Launcher threads** get no special rule.
-8. **PR stack:** it adds no level to the tree. Each thread in a stack shows a badge with its position, for example `⧉ 3/6`. Key groups in one project that share a stack sit next to each other, in stack order.
+8. **PR stack:** it adds no level to the tree. Each thread in a stack shows a badge with its position, for example `⧉ 3/6`. Key groups and the stack group in one project that share a stack sit next to each other, in stack order. A group with no PR of its own in the stack goes after the others.
    - Stack membership: the thread's open PRs with `source` `created`, `stack` or `agent`.
    - Stack order: as computed by `build.py` on branch `prototype/005-tree-ui`.
 9. **Order:**
@@ -87,20 +88,54 @@ A **top-level thread** has no native `parentThreadId`. A **subagent** has `relat
    - Threads and nested threads are sorted by `createdAt`, oldest first. A tie goes to the thread id.
    - A new item goes at the end of its list. A status change, a new PR or a new run does not move a row.
    - The user can reorder project cards, key groups (a stack run moves as one block), review groups and top-level threads by drag. The page stores the order of each list in `localStorage`. An id that is not in the stored list goes after the stored ones, in base order. Ids that no longer exist drop out. Reviews and No issue key stay last. Subthreads keep the base order. No drag crosses lists.
-   - A save keeps only the ids of the current view. With "show settled" off, settled items drop from the stored order and come back at the end, in base order.
+   - A save keeps only the ids of the current view. Settled threads are never in the view, so they are never in the stored order.
    - A live push during a drag does not change the dragged list until the drop.
 
 ## UI
 
-The page shows an outline tree: Project, group, thread. Each thread row has a status dot, a title link to `t3code://threads/<environmentId>/<threadId>`, a stack badge and PR links. Closed rows are saved in `localStorage`. A toggle shows settled threads. When a Linear workspace is set, an issue key links to its Linear issue. With team keys set, only a key of a listed team links. The "View" panel keeps the workspace and teams in `localStorage`; `LINEAR_WORKSPACE` and `LINEAR_TEAMS` give the default. A banner shows when T3 is down, when no token is set, or when T3 rejects the token. The token banners open the "View" panel.
+The page shows an outline tree: Project, group, thread. Each thread row has a status icon, a title link to `t3code://threads/<environmentId>/<threadId>`, a stack badge, PR links and, when a PR has a Watched label, a Label pill (see "Label pills"). A row that waits on the user (needs input, plan ready or your turn) shows its phrase and the Wait beside the icon, for example "Approval 12m". The Wait is the time since `since`. A guest message has no `since`, so it shows the phrase only. A failed row shows "Failed" with no time. Other rows show no text. This reverses `d602e6e` (#18) for these rows only. The row end keeps the age of `updatedAt`. Closed rows are saved in `localStorage`. A toggle shows the Settled list below the tree or the flat list. A toggle "Show snoozed threads" hides snoozed threads when it is off; it saves `"0"` under `thread-tree:snoozed`, and it is on by default. It changes the page only: the Needs-you count, the Dock badge, the brief and the notifications do not change, and the server gets no parameter. A second toggle turns on launch nesting. When a Linear workspace is set, an issue key links to its Linear issue. With team keys set, only a key of a listed team links. The Settings panel keeps the workspace and teams in `localStorage`; `LINEAR_WORKSPACE` and `LINEAR_TEAMS` give the default. A banner shows when T3 is down, when no token is set, or when T3 rejects the token. The token banners open the Settings panel.
 
-The header holds the title, the filter with the Needs-you count ("All", "Needs you N"), "What's next", a sort menu ("Manual", "Last updated"), a Tree / Flat switch, one button that is fold all in the tree and a "Group by" menu ("None", "Status") in the flat view, and a "View" button. "View" opens a panel on the right, beside the tree. Its header stays in view while the panel scrolls, and Escape closes it. The panel has three groups. "Updates" (desktop app only) has the version, the update state and its action. "View" has show settled, reset order and the theme as three icons (Light, System, Dark). "Setup" has three folds, closed at first: T3 token, Linear links and the status icon legend. A fold shows its state at the right: green text when set, yellow text with a warning sign when not set, a blue info icon for the legend. The token banners open the panel with the T3 token fold open. When the panel opens in the desktop app, it checks for updates, but not when the last good check is less than 60 s old.
+The header holds the title, the filter ("All", "Needs you"), "Open next", "Focus", "What's next", a sort menu ("Manual", "Last updated"), a Tree / Flat switch, one button that is fold all in the tree and a "Group by" menu ("None", "Status") in the flat view, and a Settings button (a cog). The "Needs you" chip shows the Needs-you count as a badge. Then it shows the your-turn count as a muted number. A "·" sits between them when both show. Each count shows only when above 0. The tooltip reads "N need you, M your turn". The cog opens the Settings panel on the right, beside the tree. Its header stays in view while the panel scrolls, and Escape closes it. The panel has three groups. "Updates" (desktop app only) has the version, the update state and its action. "View" has show settled, show snoozed, nest launched threads, reset order and the theme as three icons (Light, System, Dark). "Setup" has five folds, closed at first: T3 token, Linear links, Watched labels (see "Label pills"), the status icon legend and Keys. A fold shows its state at the right: green text when set, yellow text with a warning sign when not set (Watched labels shows a neutral "None" instead), a blue info icon for the legend and for Keys. The Keys fold lists `j k ↑ ↓` Move, Enter Open, `o` Details or fold, `l h` Expand, collapse, `s` Send, `n` Open next, ⌘K (Ctrl+K off macOS) Find, and `1`–`3` Open a Focus slot, each key as a `<kbd>` element. The token banners open the panel with the T3 token fold open. When the panel opens in the desktop app, it checks for updates, but not when the last good check is less than 60 s old.
 
 A pending request wins over snooze. A snoozed thread with a pending request shows as needs input.
 
 The sort menu keeps its choice in `localStorage` under `thread-tree:sort`. "Last updated" sorts by `lastRun` of the thread node: the later of `latestRunStartedAt` and `latestRunCompletedAt`. It is never `updatedAt`, which changes about once a second while a thread works. The page sorts the arranged tree. Projects keep their order; Reviews stays first and No issue key last; groups and threads sort newest first, and a group or PR stack sorts by its newest thread, subthreads included. A thread with no run sorts last. Ties keep the manual order. Drag is off in "Last updated".
 
-The flat view lists all threads of all projects in one list. The switch keeps its choice in `localStorage` under `thread-tree:layout`, and "Group by" under `thread-tree:group`. The flat list has no folds and no fold-all button. Drag works with "Manual" sort and is off in "Last updated". The flat list keeps its own order in the stored orders (`thread-tree:order`, list key `flat`), so "Reset order" clears it. It starts as the tree order, flattened, and a new thread goes last. A flat drag never changes the tree order, and the reverse. With "Group by Status", a row drags only inside its section; all sections share the one flat order. A stack run is one block, and subthreads stay under their parent. "Manual" keeps the tree order, flattened. "Last updated" sorts the whole list. "Group by Status" makes sections in this order: Needs input, Plan ready, Your turn, Failed (`failed`, `interrupted`), Working (`working`, `starting`, `waiting`), Idle and snoozed, Done. A section with no thread is hidden. A stack goes to the section of its most urgent thread. Saved tree folds stay unchanged.
+The flat view lists all threads of all projects in one list. The switch keeps its choice in `localStorage` under `thread-tree:layout`, and "Group by" under `thread-tree:group`. With "Group by Status", each section header is a fold button. A closed section keeps its header and its count, and shows no rows, so its rows have no drag. The closed sections are saved as a JSON list of section keys under `thread-tree:sections`. With no saved list, "Idle and snoozed" and "Done" are closed. A new thread does not open a closed section. The "Needs you" filter and the sort keep the folds. "Group by None" has no folds. The flat list has no fold-all button. Drag works with "Manual" sort and is off in "Last updated". The flat list keeps its own order in the stored orders (`thread-tree:order`, list key `flat`), so "Reset order" clears it. It starts as the tree order, flattened, and a new thread goes last. A flat drag never changes the tree order, and the reverse. With "Group by Status", a row drags only inside its section; all sections share the one flat order. A stack run is one block, and subthreads stay under their parent. "Manual" keeps the tree order, flattened. "Last updated" sorts the whole list. "Group by Status" makes sections in this order: Needs input, Plan ready, Your turn, Failed (`failed`, `interrupted`), Working (`working`, `starting`, `waiting`), Idle and snoozed, Done. A section with no thread is hidden. A unit (a thread or a stack) goes to the section of its most urgent thread, subthreads included. Settled threads do not pull; a unit with only settled threads goes by all of them. With "Group by Status", Needs input, Plan ready and Your turn sort by Wait, oldest first, with both sort choices. A row with no Wait goes last, and a unit sorts by the oldest Wait of its threads in the section, subthreads included, settled threads left out. Drag is off there. The stored flat order does not change, so a row that stops waiting goes back to its place. A **context row** is a thread row in a section whose status is not one of the section's statuses, or that is settled. A section header counts the threads that match the section, subthreads included, settled threads left out. A context row shows muted title text. In a PR stack, a row folds when it and all its subthreads are context rows. The rail header then shows a "+N other threads" button that shows and hides them. The open state is not saved. Saved tree folds stay unchanged.
+
+**Open next** opens in T3 the thread that has waited longest. The page owns the target and the skip memory; the button, the key `n` and the menu-bar item share them.
+
+- **Target.** The queue holds all threads of the server's tree, subthreads included, with status `needs-input`, `plan-ready` or `your-turn`, not settled. The filter, "Show settled", folds, layout and sort do not change it. The queue sorts by `since`, oldest first, no `since` last. Ties keep the server's tree order, not a saved manual order.
+- **Skip memory.** The page keeps, in memory, the threads it opened, keyed by thread id plus `since`. The target is the first thread of the queue that is not in the memory. A new Wait of a thread (a new `since`) makes it a target again. When all threads were opened, the target is the top thread, and the memory starts again with that thread only.
+- **Button.** It sits after the filter, with an icon and "Open next". At phone width it shows the icon only, with an `aria-label`. The tooltip is "<phrase> · <title> · <Wait>"; the Wait part is left out when `since` is null. With no target, the button is disabled and the tooltip is "Nothing waits".
+- **Key `n`.** It is a page key (see **Page keys**). It does nothing with no target.
+- **Opens.** It goes to `t3code://threads/<environmentId>/<threadId>`, the same URL as the row link. It writes nothing to T3.
+
+**Focus list.** A "Focus" button after "Open next" shows the count (`2/3`) and shows or hides the strip. The strip is hidden by default. The page keeps this choice under `thread-tree:focus-show` (`"1"` or `"0"`) and the entry ids under `thread-tree:focus` (a JSON list of at most three thread ids). The strip sits above the tree, under the brief panel. Its heading reads `Focus N of 3`, with `· full, remove one to add another` at 3 of 3. It has three fixed slots; the filled slots come first, and a remove closes the gap. At phone width (720px and less), the slots stack and the empty slots after the first one hide. A card shows the status icon, the phrase (with the Wait for a thread that needs the user), a remove button, the title, an **Open** link and **Show in tree**. A slot whose thread is not in the loaded tree shows "Not loaded" with a remove button; it counts toward the three.
+
+- **Prune.** An entry leaves the list when its thread is settled or no longer in the tree. Only a tree with connection `up` prunes, so a down or loading tree never clears the list.
+- **Add.** A crosshair button in each thread row (not in a settled row) adds the thread; it stays visible and pressed on a listed row and removes it. The brief adds a live linked thread of an Action: one thread adds it, more than one open a menu in which a listed thread is checked and disabled. At 3 of 3 the add buttons are disabled with the tooltip "Focus is full (3 of 3). Remove one first."
+- **Drag.** A thread row dragged by its handle onto the strip adds the thread on an empty slot. On a filled card, the card asks "Replace with <title>?" with Replace and Cancel; Escape and a click outside cancel. A thread that is in the list already changes nothing. A drop on the strip does not reorder the tree; the page remounts the tree list after such a drop. A row drags only where its handle shows: "Manual" sort, a list of two or more units, not on a PR stack rail, and not in the waiting sections of the grouped flat view. The crosshair button covers the other rows.
+- **Show in tree.** It first unfolds the path to the row and stores the folds: in the tree, the project, the groups and the PR stack on the path; in the flat view with "Group by Status", the shut section that holds the thread. It then scrolls to the row (instant with reduced motion), and the row flashes for about 1.5 s. When the row is still not visible (the "Needs you" filter, hidden snoozed threads, or a row behind the "+N other threads" button of a flat PR stack, whose open state is local and not saved), the button reads "Hidden in the tree" for a few seconds.
+- **Row buttons.** All row buttons show a pointer cursor; a disabled one keeps the default cursor.
+
+**Find.** The key Cmd+K (Ctrl+K off macOS) opens a dialog: a search input on top, the results below. It is full screen at phone width. It is a shadcn `Command` (`cmdk`) in the `Dialog`, with `shouldFilter={false}`: the match decides the results. Escape or a pick closes it, and the query clears.
+
+- **Set.** Every thread of the loaded tree, subthreads included. The filter, the folds and hidden snoozed threads do not limit it. Settled threads come in only through the settled search.
+- **Match.** `find` in `src/shared/find.ts`, shared by the page and the server. It is case-insensitive. The query splits on spaces, and every word must be a substring of one field: title, issue key, project label, `detail.branch`, or the PR numbers written as `#123 #456` (so `123`, `#123` and `12` match PR 123). A word scores 0 when it is in the issue key or starts the title or a title word, else 1. The order is the sum of the scores, then tree order. An empty query matches nothing. There is no fuzzy match.
+- **Row.** The status icon, the full title (it wraps), and at the right the Wait text as in the tree (`phrase · age` for a thread that needs the user, the phrase only with no `since` or for a failed thread), else the age of `updatedAt`. A muted second line shows project, issue key and branch, and "in <parent title>" for a subthread. There are no PR badges. A settled result has a muted title.
+- **Actions.** Enter or a click opens the thread in T3, like the row link, and closes the dialog. **Show in tree**, a row button and Shift+Enter, closes the dialog, then runs the Show in tree of the Focus list (unfold the path, store the folds, scroll, flash). A result that a view setting hides ("Needs you" filter, hidden snoozed) and a settled result have no Show in tree. Find never changes a view setting.
+- **Settled search.** With a query, the last row is "Search settled threads". A pick calls `GET /find?q=<query>`. The server runs `find` over the settled threads of the settled tree and returns `{ t, project, parent }` rows, with `t.children` empty. The rows show in a "Settled" group below the active ones. For the rest of the dialog session, a change of the query fetches the group again after 200 ms, and a newer query cancels the older request. On close, Find goes back to active threads only. A missing or blank `q` gives `[]`.
+- **Empty and no match.** An empty input lists the Focus threads, then the most recently updated threads, up to 8 in all ("Recent"). With none, an icon state reads "Find by title, issue key, project, branch or #PR". With no match, an icon state reads "No thread matches", plus the "Search settled threads" row when it applies.
+
+**Page keys.** One `keydown` handler holds all page keys (`pageKey` in `src/page/keys.ts` decides). A plain key does nothing with a modifier, on key repeat (except `j`, `k`, ↑ and ↓), when the event is handled, while focus is in an input, a textarea or a contenteditable element, while the Settings panel is open, and while Find, a dialog, an alert dialog, a menu or a listbox is open.
+
+**Row keys.** A stop is an element with `data-stop`: the title link of each visible thread row, and the fold button of each project, group, PR stack and flat section. Focus is real DOM focus, and the tab order does not change. The stop list is the stops in DOM order inside the list. It skips an inert row, a row in a closed fold and a hidden row. `j` and `k` focus the next or previous stop, and do nothing at the ends. With no stop focused, the first one focuses the first stop that lies inside the list view. ↑ and ↓ do the same only when a stop has focus, and call `preventDefault` only when they move, so the page scrolls otherwise. A move scrolls the stop into view only as needed. On a thread stop, Enter opens the thread (the link), and `s` clicks its Send button when the button shows and is not disabled. On a header, Enter folds or unfolds, and `s` does nothing. `o` toggles the details of a thread or the fold of a header, `l` opens them and `h` closes them, as in vim. `l` on an open fold and `h` on a closed fold do nothing. The drag handle is not a stop. While a stop has focus, the page keeps its id and index. When a render moves the row and focus is lost, focus returns to the row. When the row leaves, focus goes to the stop at the old index, or to the page when no stop is left. When a fold closes with focus inside it, focus goes to its header. The focus ring is an inset outline on the row or header, not only on the link or button.
+
+- **`n`.** Open next.
+- **`1` to `3`.** Open in T3, like its card, the thread of that Focus slot. An empty slot, or a thread that is not loaded, does nothing.
+- **Cmd+K (Ctrl+K off macOS).** Opens Find, also from a text field. It calls `preventDefault`. It does nothing while another dialog or a menu is open. In the open Find dialog it closes Find.
+- **`/`.** Not a page key.
 
 The header has a System / Light / Dark choice. The full design is in [DESIGN-SPEC.md](DESIGN-SPEC.md).
 
@@ -108,10 +143,56 @@ The header has a System / Light / Dark choice. The full design is in [DESIGN-SPE
 
 1. The backend keeps the thread map from the stream.
 2. On each change, it builds the whole tree again, after a short debounce.
-3. It pushes the tree as JSON on `GET /events`. The settled toggle is a query parameter on this request (`?settled=1`), so the backend builds the tree for that connection's setting.
+3. It pushes the tree as JSON on `GET /events`. The tree has no settled threads. It carries a `settled` signature: the count, the newest settle and the newest update of the settled threads. When the signature changes, the page fetches its loaded Settled rows again. `GET /settled?after=&limit=` returns `{ items, next, total }`: the settled threads, newest settle first, each with its project. `after` is the `next` of the previous page. `limit` defaults to 50 and clamps to 1..1000. `next` is null on the last page.
 4. The page renders each tree it gets. It does not apply diffs.
 5. `Bun.serve` closes a connection after 10 s with no bytes. Call `server.timeout(req, 0)` on the SSE request.
 6. Stop the push timer when the client disconnects.
+7. The page also sends `nest=1` (launch nesting) and `labels=<names>` (the Watched labels, see "Label pills"). The backend builds one tree for each set of parameters and sends it to all connections with that set.
+
+## Label pills
+
+Source: map [pr-label-pill](.wayfinder/pr-label-pill/map.md), tickets [Where do PR labels come from, and how fresh are they?](.wayfinder/pr-label-pill/tickets/001-label-data-source.md) (research on branch `research/pr-label-source`), [How does a Label pill read in the row?](.wayfinder/pr-label-pill/tickets/002-label-pill-look.md) (prototype on branch `prototype/label-pill-look`), [How does the Watched labels section in Settings work?](.wayfinder/pr-label-pill/tickets/003-watched-labels-setting.md).
+
+A Tree or Flat row shows a **Label pill** when one of its PRs has a **Watched label**. The user sets the Watched labels in Settings. The list is empty by default, so no pill shows until the user adds a name.
+
+### Watched labels setting
+
+- **Fold.** Settings › Setup, after "Linear links", before "Status icons". Label: "Watched labels". State text: the names joined by ", ", green. With an empty list: "None", neutral tone, not a warning.
+- **Form.** One text field, label "Label names", placeholder `ready-for-review`. Hint: "Separate names with commas. A row shows a pill when one of its PRs has one of these labels. Empty: no pills." A Save button and the "Saved." text, as in the Linear form.
+- **Parse.** Split on commas, trim the spaces at the two ends of each name, and drop empty names. Keep the order: it is the order of the pill.
+- **Storage.** Page storage, key `thread-tree:labels`, the names joined by ",". No server env value. One list for all repos.
+- **Stream.** The page sends the list on `/events` as `labels=<names>`, URL-encoded, only when the list is not empty. A change of the list opens the stream again, as a change of `settled` does.
+
+### Match
+
+A PR label matches a Watched label when the two names are equal, case-insensitive. No substring match.
+
+### Labels from T3
+
+The shell stream has no labels. The server reads them with the T3 RPC `pullRequests.detail` on the open shell socket. The `orchestration:read` token can call it.
+
+- **Decode.** Each PR link keeps `host` and `repository` from the stream (empty when the link has none), and the snapshot `updatedAt` (empty with no snapshot). A label with no string name is dropped from an answer.
+- **Call.** A unary Effect RPC `Request` on the shell socket, with its own request id, tag `pullRequests.detail`, and payload `{ projectId, repository, number, host, allowStale: false }`. `projectId` is the thread's. The answer is an `Exit` frame with that request id; its value holds `labels: { name, color, description? }[]` and `updatedAt`. An `Exit` for a detail request does not close the socket; only the `Exit` of the shell request does.
+- **Which PRs.** Open PR links with a source other than `stack` and `stack-dismissed`, on top-level threads that are not settled and not archived. These are the PRs that a row can count.
+- **When.** Only while at least one connection sends a non-empty `labels` list. The server keeps, per PR (`host`, `repository`, `number`), the snapshot `updatedAt` of its last call. It calls `detail` for a PR when that value differs from the snapshot `updatedAt` on the stream, or when it has no value. This covers the first snapshot, a new PR, a label change on GitHub (it moves `updatedAt`), the first client with a list, and a reconnect (a fresh snapshot with the same `updatedAt` makes no call). A link with no snapshot yet has the value "": it gets one call, then the next call comes when its snapshot arrives. The server saves the value when an answer comes, also a failed answer, and not when a call starts. A call dropped by a socket close saves nothing and is not queued again: the PR gets a call when the next stream snapshot arrives after the reconnect, so a down socket makes no call loop.
+- **Push.** An answer that changes the labels of a PR calls the debounced tree push, as a stream change does.
+- **Stale answer.** T3 caches a detail for 60 s. When the answer's `updatedAt` is older than the snapshot `updatedAt`, the server queues one more call after 60 s. It obeys the call limit and the eligibility rules, and it is not repeated.
+- **Rate.** At most 4 calls at a time; the others wait in a queue. With no connection that sends a list, queued calls wait and no new call starts. No polling: the server calls only on a stream change.
+- **Store.** The server keeps all labels of each PR in memory, for all connections. It does not keep them per connection, so a new name or a new tab makes no new call.
+- **Tree.** Each `PrNode` gets `labels: { name: string; color: string | null }[]`: only the labels that match the connection's list. A settled thread's PRs get `[]`. With no list, all PRs get `[]`.
+- **Failure.** When T3 is down, the socket closes, or the call fails, the server keeps the last labels. It calls again on the next `updatedAt` change. A call in flight when the socket closes is dropped.
+- **Freshness.** T3 syncs a PR every minute when it changed in the last 30 minutes, else every 5 minutes. So a label change shows in about 2 minutes, or up to about 6 minutes for a quiet PR. T3 does not sync settled threads.
+
+### Label pill
+
+- **Counts.** The open PRs of the row (`state` `open`), all of them, also past the first two chips. Merged and closed PRs do not count. Stack PRs are not row PRs, so they do not count. A settled row has no pill.
+- **Where.** One pill per row, in the right group, before the PR chips. Tree and Flat rows only: not in the details block, the PR stack rail or the Focus cards.
+- **Several matches.** The pill shows the first matching name in Watched-label order, then "+N" for the other matching names. One label on two PRs counts as one name.
+- **Name.** The lucide `Tag` icon, then the initials of the first three words of the label in upper case, mono font. Words split on any character that is not a letter or digit: `ready-for-review` gives "RFR", `do-not-merge` gives "DNM".
+- **Color.** The label color (six hex digits with no `#`, as T3 gives it) fills the pill. The text and icon are black when `0.299 r + 0.587 g + 0.114 b > 150`, else white. A label with no color (GitLab can give `null`) uses the `secondary` badge colors.
+- **Tooltip.** Each match as "<name>: #<PR>", joined with " · ". Example: "ready-for-review: #3004". The pill is focusable, so the tooltip opens from the keyboard.
+- **Phone width.** No change. The pill is at most three letters and "+N".
+- **Before the first answer.** No pill and no placeholder. The pill shows when the labels arrive.
 
 ## "What's next" and the Next-step brief
 
@@ -134,15 +215,17 @@ A click on "What's next" runs a local agent CLI on a cheap model. Code makes the
 
 ### Input
 
-- **Threads:** the visible top-level threads of the tree for the settled setting of the page that started the run (launched threads included). No subthreads. The code removes the threads that are `working`, `starting`, `waiting` or `snoozed`: they need no action.
-- **Code actions:** code makes the actions below, before the model runs. Each thread gets at most one action: the first rule that matches. The list is grouped by kind in rank order (`answer`, `fix`, `merge`), in tree order inside a kind. The title and reason text is fixed.
+- **Threads:** the visible top-level threads of the active tree (launched threads included). No subthreads. The code removes the threads that are `working`, `starting`, `waiting` or `snoozed`: they need no action.
+- **Code actions:** code makes the actions below, before the model runs. Each thread gets at most one action: the first rule that matches. The list is grouped by kind in rank order (`answer`, `fix`, `merge`). Inside `answer`, the oldest Wait (`since`) goes first and a thread with no Wait goes last. Inside the other kinds, the order is tree order. The `fix` and `merge` text is fixed. The `answer` title names the request kind, and its reason is the last question of the last message.
 
-  | Kind     | Rule                                                                             | Title              | Prompt                                          |
-  | -------- | -------------------------------------------------------------------------------- | ------------------ | ----------------------------------------------- |
-  | `answer` | status `needs-input`                                                             | "Answer the agent" | `null`                                          |
-  | `answer` | status `plan-ready`                                                              | "Review the plan"  | `null`                                          |
-  | `fix`    | an open PR has failing checks, conflicts, or changes requested                   | "Fix PR #N"        | The fixed steps for each fact, then "and push." |
-  | `merge`  | an open PR is not a draft, is approved, its checks pass, and it has no conflicts | "Merge PR #N"      | `null`                                          |
+  | Kind     | Rule                                                                             | Title                                | Prompt                                          |
+  | -------- | -------------------------------------------------------------------------------- | ------------------------------------ | ----------------------------------------------- |
+  | `answer` | status `needs-input`                                                             | The verb of the request kind (below) | `null`                                          |
+  | `answer` | status `plan-ready`                                                              | "Review the plan"                    | `null`                                          |
+  | `fix`    | an open PR has failing checks, conflicts, or changes requested                   | "Fix PR #N"                          | The fixed steps for each fact, then "and push." |
+  | `merge`  | an open PR is not a draft, is approved, its checks pass, and it has no conflicts | "Merge PR #N"                        | `null`                                          |
+
+  The `answer` verb comes from the request kind, the part of `detail.request` before `·`: `user_input` "Answer the question", `mcp-elicitation` "Fill in the form", `command` "Approve the command", `file-change` "Approve the file change", `file-read` "Approve the file read", `permission` "Grant the permission", `dynamic_tool_call` "Approve the tool call". A thread with the phrase "Guest message" gets "Reply to the guest". An unknown kind, or no request, gets "Answer the agent". The `answer` reason is the last question of the last message (the last sentence or line that ends in `?`). With no question, it is the last sentence or line. It is cut at 140 characters with `…`. With no message, the reason is the fixed text "The agent waits for your input." (or "The plan is ready and waits for your approval."). The last message of an `answer` thread is read in the same batched query.
 
   `N` is the first PR that matches. The `fix` reason names the facts: "PR #N has failing checks, conflicts and changes requested."
 
@@ -168,6 +251,7 @@ type Action = {
   reason: string /** one sentence */;
   threadIds: string[] /** ≥ 1 */;
   prompt: string | null /** paste-ready message for the first thread's agent */;
+  pr?: number /** the PR of a code "fix" or "merge" action; the model never sets it */;
 };
 type Answer = { actions: Action[] }; /** 0–7 from the model, in rank order */
 ```
@@ -191,6 +275,8 @@ type BriefState =
       startedAt: string;
       actions: BriefAction[];
       titles: Record<string, string>;
+      statuses: Record<string, Status>;
+      since: Record<string, string | null>;
     }
   | {
       status: "done";
@@ -199,6 +285,8 @@ type BriefState =
       rulesOnly?: true;
       actions: BriefAction[];
       titles: Record<string, string>;
+      statuses: Record<string, Status>;
+      since: Record<string, string | null>;
     }
   | {
       status: "failed";
@@ -207,13 +295,15 @@ type BriefState =
       stderrTail: string;
       actions: BriefAction[];
       titles: Record<string, string>;
+      statuses: Record<string, Status>;
+      since: Record<string, string | null>;
     };
 ```
 
-`BriefAction` is `Action` after the id filter. The state type lives in a shared module, like `Tree`. In `running` and `failed`, `actions` and `titles` hold the code actions only, so the page can show them at once and after a model failure. In `done`, `actions` holds the code actions first, then the model actions. `rulesOnly` is set when no thread went to the model, so the actions come from code alone. A new run replaces the last brief only when it ends; a cancel returns to the state before the run.
+`BriefAction` is `Action` after the id filter. The state type lives in a shared module, like `Tree`. In `running` and `failed`, `actions` and `titles` hold the code actions only, so the page can show them at once and after a model failure. In `done`, `actions` holds the code actions first, then the model actions. `rulesOnly` is set when no thread went to the model, so the actions come from code alone. `statuses` and `since` are the snapshot of the tree at brief time. The server takes it when the run starts, rules-only runs too. `statuses` holds the status of every thread that went into the brief, code threads and model threads. `since` holds the `since` of each `answer` thread. A new run replaces the last brief only when it ends; a cancel returns to the state before the run.
 
 - `GET /brief/clis`: the offered CLIs, as `{ id, label }[]`.
-- `POST /brief/run?settled=0|1` with `{ cli }`: starts a run. 409 when a run is active, 400 for a CLI that is not offered.
+- `POST /brief/run` with `{ cli }`: starts a run. 409 when a run is active, 400 for a CLI that is not offered.
 - `POST /brief/cancel`: sends SIGTERM to the active run.
 - `GET /events` also sends the brief state as a named SSE event `brief`: once when the connection opens, and again at each change. The page does not poll.
 - **Error text:** the CLI error message (Claude `result`, Codex `turn.failed` message), or "timed out" or the parse error. `stderrTail` is the last 2 KB of stderr.
@@ -224,12 +314,17 @@ type BriefState =
 
 The full look is in ticket 04. In short:
 
-- **Controls:** in the header, after the filter, a split control: a primary "What's next" button (Sparkles icon) joined to a model `Select`. The choice is saved in `localStorage`. With no CLI offered, the button is disabled with a tooltip. The button is disabled while a run is active.
+- **Controls:** in the header, after the filter, a split control: a primary "What's next" button (Sparkles icon) joined to a model `Select`. The choice is saved in `localStorage`. With no CLI offered, the button is disabled with a tooltip. The button is disabled while a run is active. At phone width the button shows its icon only, with an `aria-label`, and the model `Select` and the model name are hidden.
 - **Panel:** an inline card between the header and the tree. It shows only after the first click, or when the brief state is not `idle` at load. The head has "Next steps", a mono stamp "generated HH:MM · <label>" ("generated HH:MM · rules only" when the model did not run), and a close button that hides the panel.
 - **States:** loading ("Reading N threads…" with the letter wave, and "Cancel"); error (alert, "The brief failed.", "Retry", the stderr tail); empty ("Nothing needs you right now."); the ranked actions. In `running`, the code actions show at once as rows above the loading line. In `failed`, they show above the error. In `done`, all rows run in one rank order.
-- **Action row:** rank, kind chip, title with the reason, thread links, and a copy icon for `prompt` (none when `prompt` is `null`).
+- **Action row:** after the rank, line 1 has the thread headings (see "Thread headings"). Line 2 has the kind chip, the title, for an `answer` row the live Wait of its thread (the status phrase with its age, in mono; it updates each minute), and the mark badge. Line 3 has the reason. Then the icons, with a copy icon for `prompt` (none when `prompt` is `null`).
 - **Kind chips:** answer = `needs-input`, merge = `done`, unblock = `plan`, fix = `failed`, review = `working`, clean-up = `idle`.
-- **Thread links:** each link shows the live `StatusIcon` and title from the current tree, and opens the thread in T3. A thread that is not in the live tree shows its saved title struck through. The brief text does not change.
+- **Marks:** in `done`, each row has a mark or none (see "Marks"). Rows with no mark come first in rank order. Changed rows follow, then done rows, each group in rank order. Each row keeps its rank in the brief. A done row shows a check in place of the rank, its thread headings struck through, and a "Done" badge (Check icon) after the Wait. A changed row keeps its rank and shows a "Changed" badge (RefreshCw icon) after the Wait. Marked rows have 55 % opacity, and 100 % on hover. A done row hides Send and Start thread and keeps Copy. A changed row keeps both. "Sent to" shows together with the mark. In `running` and `failed`, no row has a mark.
+- **Mark bar:** under the panel head, only when a row has a mark. It shows "N done · M changed since HH:MM" on the left, with a zero count left out and the time of `generatedAt`. The counts are Actions, not threads. "Run again" (RotateCw icon, link button) on the right starts a run like "What's next".
+- **Three first:** the list shows the first 3 open rows. Marked rows always stay behind "Show all", also when fewer than 3 rows are open. The link button "Show all N" sits under the list and counts every Action. It shows when there are more than 3 Actions or at least one marked row. With all rows shown, it reads "Show less". When no row is open, the list shows "Nothing open · Show all N". "Show all" is not saved. A new run resets it.
+- **Fold:** a chevron in the panel head folds the panel. The panel is open by default. The page saves the state under `thread-tree:brief-fold` (`"1"` or `"0"`). Folded, the head shows "10 Actions · 3 done · 1 changed" in place of the stamp, with a zero part left out, and nothing shows below the head. "What's next" and "Run again" unfold the panel.
+- **Thread headings:** each thread of the Action has one heading, in bold. It shows the live `StatusIcon` and the full title from the current tree, and it opens the thread in T3. The title wraps and is not cut. A thread that is not in the live tree shows its saved title muted and struck through. The brief text does not change.
+- **Phone:** at 720 px and less, the buttons of a row move to their own line under the reason, in line with the headings, and show text labels: Send, New thread, Copy and Focus. The line is left out when the row has no button. On wider screens the row keeps the icons at the right, with tooltips. The `aria-label` of the start button is "Start new thread".
 
 ## Send message
 
@@ -239,7 +334,7 @@ The user can send a message to one thread, and start a thread in a project, from
 
 ### Transport
 
-The server runs the T3 CLI as a child process (`Bun.spawn`), like the brief runner. It uses T3's own login. The `orchestration:read` token and the read-only database do not change.
+The server runs the T3 CLI as a child process (`Bun.spawn`), like the brief runner. It uses T3's own login. The token needs the `orchestration:operate` scope for settle. The database stays read-only.
 
 - **Send:** `<bin> thread send --json <threadId> -`.
 - **Start:** `<bin> thread start --json --title=<title> <projectId> -`.
@@ -253,13 +348,14 @@ The server runs the T3 CLI as a child process (`Bun.spawn`), like the brief runn
 
 ### HTTP contract
 
-Ids go in the JSON body, not in the path, because ids hold `:` and `%`. The module `src/server/send.ts` exports a service with `routes`, as `briefService` does. The response types live in `src/shared/send.ts`.
+Ids go in the JSON body, not in the path, because ids hold `:` and `%`. The read-only `GET /t3/last-message` takes the id as a query value. The module `src/server/send.ts` exports a service with `routes`, as `briefService` does. The response types live in `src/shared/send.ts`.
 
-| Route            | Body                                                    | Success                                                               |
-| ---------------- | ------------------------------------------------------- | --------------------------------------------------------------------- |
-| `GET /t3/cli`    | none                                                    | `200 { available: boolean, path: string }`                            |
-| `POST /t3/send`  | `{ threadId: string, message: string }`                 | `200 { delivery: "started" \| "queued" \| "steered" \| "restarted" }` |
-| `POST /t3/start` | `{ projectId: string, title: string, message: string }` | `200 { threadId: string }`                                            |
+| Route                      | Body                                                    | Success                                                                          |
+| -------------------------- | ------------------------------------------------------- | -------------------------------------------------------------------------------- |
+| `GET /t3/cli`              | none                                                    | `200 { available: boolean, path: string }`                                       |
+| `POST /t3/send`            | `{ threadId: string, message: string }`                 | `200 { delivery: "started" \| "queued" \| "steered" \| "restarted" }`            |
+| `GET /t3/last-message?id=` | none                                                    | `200 { text: string \| null }`. `400` without `id`. `404` for an unknown thread. |
+| `POST /t3/start`           | `{ projectId: string, title: string, message: string }` | `200 { threadId: string }`                                                       |
 
 `delivery` comes from the `send --json` output. `threadId` comes from the `start --json` output.
 
@@ -279,17 +375,44 @@ The wrapper exit code 127 ("T3 Code has moved…") is a `502`, so the user sees 
 
 The page reads `GET /t3/cli` once at load. When `available` is false, every send and start control shows disabled, with the tooltip "No t3 CLI at <path>. Set T3_BIN in .env." This is the same disabled-with-tooltip pattern as the "What's next" button.
 
+### Settle icon
+
+A thread row, top-level or subthread, in the tree and in the flat list, has a settle icon at its end, just before the send icon. It does not depend on the `t3` CLI.
+
+- **Icon:** `CircleCheckBig` with the label "Settle thread". On a settled row (in the Settled list): `Undo2` with the label "Unsettle thread". The tooltip shows the label.
+- **Reveal:** like the send icon. It shows on hover and on keyboard focus within the row, and always on `(hover: none)`.
+- **Click:** one click, with no dialog. The icon stops propagation, so it does not open the thread and does not start a drag. It is disabled while the request runs.
+- **Request:** `POST /t3/settle` with `{ threadId, settled }` and a JSON content type. The server sends `thread.settle` or `thread.unsettle` to T3 over the stream socket. This needs the `orchestration:operate` scope.
+- **Result:** the row changes through the stream: it leaves the live list. With "Show settled threads" on, it shows in the Settled list with the "Settled" chip after the next fetch.
+- **Failure:** the icon turns red and stays visible. The tooltip shows the error until the next click. A token without the `orchestration:operate` scope gives the error "The T3 token cannot settle. Issue a new token with the command in Settings."
+
+### Marks
+
+The page computes the mark of each Action from the live tree and the snapshot. It makes no model call. "Run again" is the only refresh. The rules, in order:
+
+- **Done, all kinds:** every linked thread is settled or out of the tree. With only some gone, the rules below apply to the live threads.
+- **Done, `answer`:** no linked thread is `needs-input` or `plan-ready`.
+- **Done, `fix`:** the PR in `pr` has no failing checks, no conflict and no requested changes, or it is merged or closed, or it is no longer on the thread.
+- **Done, `merge`:** the PR in `pr` is merged or closed, or it is no longer on the thread.
+- **Changed, `review`, `clean-up` and `unblock`:** any linked thread has a status that differs from `statuses`.
+- **Changed, `answer`:** any linked thread has a status that differs from `statuses`, or a `since` that differs from `since`, while it still waits.
+- `fix` and `merge` are never changed.
+- Done wins over changed. Any other Action is open.
+
 ### Send dialog
 
 One reusable component on the shadcn Dialog (Radix).
 
 - **Opens from:**
   - A "What's next" step that has a `prompt`: a send icon next to the copy icon. The copy icon stays.
-  - A thread row, top-level or subthread: a send icon at the row end, next to the details chevron. It shows on hover and on keyboard focus within the row. On touch devices (`(hover: none)`), at every width, it always shows. The icon stops propagation, so it does not open the thread and does not start a drag.
+  - A thread row, top-level or subthread: a send icon at the row end, next to the details chevron, after the settle icon (see "Settle icon"). Its tooltip says "Send message". It shows on hover and on keyboard focus within the row. On touch devices (`(hover: none)`), at every width, it always shows. The icon stops propagation, so it does not open the thread and does not start a drag.
 - **Target, from a step:** a picker (shadcn Select) with the threads of the step. Each option shows the live `StatusIcon` and the title. A thread that is not in the current tree shows its saved title struck through and is disabled. The first enabled thread is selected at open. With no enabled thread, Confirm send is disabled.
 - **Target, from a row:** fixed. The dialog shows the icon and title of the row, with no picker.
+- **Changed lines:** for a changed step, one muted line per linked thread whose status differs from the snapshot, above the message: "Changed since HH:MM: <title> was <old>, now <new>". The time is the brief time.
 - **Message:** a textarea, editable. From a step, it starts with the step prompt. From a row, it is empty. Confirm send is disabled while the message is empty after trim.
 - **Busy note:** when the target status is `working`, `starting` or `waiting`, a muted line under the target says "This thread is working. The message waits for its next turn." Other statuses show no note.
+- **Last message:** a muted box above the textarea, with the label "Last message". It shows the end of the last message of the target thread, in a box of at most 10 rem with scroll. It loads when the dialog opens and again when the target changes. It shows nothing while it loads or when the thread has no message.
+- **Approval note:** when the target status is `needs-input` and its phrase is "Approval", a muted line says "This thread waits for an approval. A message does not approve the request. Approve it in T3."
 - **Buttons:** Cancel and Confirm send.
 - **Keys:** Cmd/Ctrl+Enter sends, Escape cancels, and Enter makes a new line.
 - **In flight:** Confirm send shows a spinner. Until the request ends, the fields, Cancel, Escape and the outside click do nothing. Thus a cancel never hides a message that was sent.
@@ -369,12 +492,12 @@ An app started from the Dock or Spotlight does not get the shell PATH, so the br
 
 ### Window
 
-- One window. It loads `http://127.0.0.1:<port>`. No custom scheme. When the port is not 4773, that run has its own `localStorage`, so the theme and fold state are the defaults. This is a known cost.
+- One main window, and the Up next window (see "Up next window"). The main window loads `http://127.0.0.1:<port>`. No custom scheme. When the port is not 4773, that run has its own `localStorage`, so the theme and fold state are the defaults. This is a known cost.
 - `show: false`, then show on `ready-to-show`. `contextIsolation: true`, `nodeIntegration: false`, `sandbox: true`, `backgroundThrottling: false`. The standard macOS title bar.
 - The app saves the window size and place in `window.json` in the app data folder, and restores them at start. A saved place that is off all screens is dropped.
 - **Close:** the close button hides the window. The page keeps running and drives the badge, the menu-bar entry and the notifications. A Dock click or "Open tree" shows the window again.
 - **Quit:** Cmd-Q, or "Quit" in the menu-bar menu. Launch at login is not offered.
-- **App menu:** the role menus (app, edit, view, window). The app menu also holds "Mute Notifications" and, when one exists, "Update available: vX.Y.Z…".
+- **App menu:** the role menus (app, edit, view, window). The Window menu keeps Minimize, Zoom and Bring All to Front, and adds the "Up next" check item. The app menu also holds "Mute Notifications" and, when one exists, "Update available: vX.Y.Z…".
 - External links (`t3code://`, PRs, Linear) open with `shell.openExternal`, not in the app window.
 
 ### Preload bridge
@@ -402,15 +525,35 @@ type NotifyEvent =
 type DesktopBridge = {
   setNeedsYou(threads: NeedsYouThread[]): void /** badge and menu-bar entry */;
   notify(events: NotifyEvent[]): void;
+  setOpenNext(title: string | null): void /** menu-bar "Open next" item */;
+  onOpenNext(cb: () => void): () => void /** a click on that item */;
   openExternal(url: string): void;
+  setUpNext(list: UpNext): void /** the Up next window */;
+  onOpenThread(cb: (id: string) => void): () => void /** a row click in the Up next window */;
 };
 ```
 
-Main checks each payload by hand (types, sizes, a `t3code:`, `https:` or `http:` URL) before it acts. It accepts IPC only from the main window.
+Main checks each payload by hand (types, sizes, a `t3code:`, `https:` or `http:` URL) before it acts. It accepts IPC only from the main window, except the calls of the Up next window (see "Up next window").
 
 ### Needs you
 
-The **Needs you** set is the visible top-level threads with status `needs-input` or `plan-ready`. Settled threads do not count. The page computes it from each tree it gets (the same count as the header chip) and calls `setNeedsYou`. `since` is the start of that status, for the menu order.
+The **Needs you** set is the visible top-level threads with status `needs-input` or `plan-ready`. Settled threads do not count. The page computes it from each tree it gets (the same count as the Needs-you badge in the header) and calls `setNeedsYou`. `since` is the start of the wait, for the menu order: the request time for `needs-input`, and `latestRunCompletedAt` for `plan-ready`.
+
+### Up next window
+
+The **Up next window** is a small always-on-top window with the **Open next queue**: one row for each thread, with its Wait, and an "Open next" button. Its title, its top bar and both menu items say "Up next".
+
+- **Page:** `/up-next` on the same server, with its own preload (`up-next-preload.ts`, `window.upNextBridge`). It has no SSE stream, no tree logic and no skip memory.
+- **Data path:** the main page owns the queue, the target and the skip memory. It sends them to main with `setUpNext({ rows, targetId })`. A row holds the id, title, status, phrase, raw status, `since`, project label, issue key and Linear URL. Main checks the payload by hand, stores the last one and sends it to the Up next window. When the window loads, it asks main for the stored list, so it never opens empty while threads wait.
+- **IPC:** main takes `setUpNext` from the main window only. It takes `upNext`, `upNextOpenNext`, `upNextOpenThread` and `upNextOpenLinear` from the Up next window only.
+- **Open next:** the button sends `openNext` to the main page, as the menu-bar item does.
+- **Row click:** main sends `openThread(id)` to the main page. The page adds the thread to the skip memory and opens it, so Open next then goes to the next row. The main window does not come forward. Tree rows and menu-bar rows do not change.
+- **Key click:** a linked issue key opens Linear with `shell.openExternal`, only for an `https://linear.app/` URL. It does not touch the skip memory.
+- **Toggle:** the check item "Up next" in the Window menu and after "Open tree" in the menu-bar menu, and the shortcut ⌥⌘U. The shortcut uses `globalShortcut`, so it works in any app. When it cannot register, main logs it and the menu items still work. The window is created at its first show, hidden at start and not restored at restart.
+- **On top:** `type: "panel"`, the floating level, on all Spaces and over full-screen apps. It has no Dock or Cmd-Tab entry, and it does not take focus when it shows.
+- **Size and place:** 360×360 at first, resizable, at least 280×160. Main saves them in `up-next.json` and restores them with the same off-screen check as `window.json`. With no saved place, the window sits at the top right of the work area of the screen that holds the cursor.
+- **Close:** the close button hides the window and clears the check in both menus. Cmd-Q quits the app.
+- **Look:** a top bar with "Up next", the count and an "Open next" button (disabled with no target), then one 28 px row for each thread: status icon, project icon, issue key, title and Wait. The target row has an amber left mark and a tint. With no thread, the list shows "Nothing waits" and "Threads that need you show here." The theme follows the app theme.
 
 ### Dock badge
 
@@ -434,10 +577,11 @@ The page owns the rules. Main shows them, so the mute switch stays in main.
 
 - A `Tray` with a template icon and the Needs-you count as its title. No title when the count is 0.
 - A click opens a native menu:
-  1. Up to 10 Needs-you threads, the longest wait first (oldest `since`; `null` last). Each item shows the status and the title. A click opens the thread in T3 Code.
-  2. "+N more… (open tree)" when more than 10, which shows the window.
-  3. "Open tree", "Mute Notifications", "Update available: vX.Y.Z…" when one exists, "Quit".
-- Main builds the menu again on each `setNeedsYou`.
+  1. "Open next · <title>" and a separator, only when the page has an Open next target. A click asks the page to open that target, so the item and the page button open the same thread. The page sends the title with `setOpenNext`; `null` hides the item.
+  2. Up to 10 Needs-you threads, the longest wait first (oldest `since`; `null` last). Each item shows the status and the title. A click opens the thread in T3 Code.
+  3. "+N more… (open tree)" when more than 10, which shows the window.
+  4. "Open tree", "Up next" (a check item), "Mute Notifications", "Update available: vX.Y.Z…" when one exists, "Quit".
+- Main builds the menu again on each `setNeedsYou` and each `setOpenNext`.
 
 ### Token
 
@@ -465,10 +609,10 @@ The page owns the rules. Main shows them, so the mute switch stays in main.
 ### Release and updates
 
 - A push of a `v*` tag runs `.github/workflows/release.yml` on `macos-14`. It builds the ad-hoc signed `.dmg` and attaches it to the GitHub Release of that tag. `package.json` holds the version.
-- The main process keeps one update state (`UpdateState` in `src/shared/desktop.ts`). The app menu, the menu-bar menu and the "View" panel read it. The page gets it through `updateState` and `onUpdateState` on the bridge, and sends no URL or path.
+- The main process keeps one update state (`UpdateState` in `src/shared/desktop.ts`). The app menu, the menu-bar menu and the Settings panel read it. The page gets it through `updateState` and `onUpdateState` on the bridge, and sends no URL or path.
 - The packaged app reads the GitHub latest-release API at start and every 6 h. The panel also checks when it opens. A check never runs during another check or an install, and a check that is not forced is skipped within 60 s of the last good reply. A reply that does not parse counts as a failed check. A failed check keeps a known release.
-- When the latest tag is newer than `app.getVersion()`, the menus show "Update available: vX.Y.Z…" and the "View" button shows a dot. No notification.
-- "Update and Restart" (menu) and "Update and restart" (panel) download the release zip to disk, unpack it with `ditto`, start the swap script and quit. The state has the stages `downloading` (with a percent when `content-length` is known), `unpacking` and `restarting`. The menus, the panel, the "View" button ring and the Dock progress bar (download only) show them. A failed install sets the stage `failed` with the message. A run from source, or a release with no zip, can only open the release page.
+- When the latest tag is newer than `app.getVersion()`, the menus show "Update available: vX.Y.Z…" and the Settings cog shows a dot. No notification.
+- "Update and Restart" (menu) and "Update and restart" (panel) download the release zip to disk, unpack it with `ditto`, start the swap script and quit. The state has the stages `downloading` (with a percent when `content-length` is known), `unpacking` and `restarting`. The menus, the panel, the Settings cog ring and the Dock progress bar (download only) show them. A failed install sets the stage `failed` with the message. A run from source, or a release with no zip, can only open the release page.
 
 ### CI
 
@@ -489,3 +633,6 @@ These facts are not confirmed against a real stream. The research used the MCP t
 - `toolName` for callers that are not Claude (for example Codex) in the lineage lookup.
 - Whether `codex exec --ignore-user-config` skips a global `~/.codex/AGENTS.md`. If not, the brief run sees it.
 - Whether a `bun-darwin-arm64` cross-compile on ubuntu runs on a Mac, and whether Bun's compiled binary loads `.env` from its working folder.
+- Label pills: that the token scope `orchestration:read` covers `pullRequests.detail`. The research saw `Success` but read the scope from T3 source only.
+- Label pills: whether a GitLab label change moves the merge request `updated_at`. If not, a GitLab pill changes only on the next other change.
+- Label pills: the label-change-to-pill time was taken from T3 sync code, not timed live.

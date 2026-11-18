@@ -83,7 +83,13 @@ export const LegendIcon = ({ status, phrase }: { status: Status; phrase: string 
 };
 
 /** `now` adds the time in the status to the tooltip. */
-export const StatusIcon = ({ t, now }: { t: ThreadNode; now?: number }) => {
+export const StatusIcon = ({
+  t,
+  now,
+}: {
+  t: Pick<ThreadNode, "status" | "phrase" | "raw" | "since">;
+  now?: number;
+}) => {
   const icon = iconOf(t.status, t.phrase);
   const { shape } = STATUS[t.status];
   return (

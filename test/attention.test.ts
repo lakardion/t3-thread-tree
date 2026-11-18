@@ -4,12 +4,18 @@ import {
   countAttention,
   favicon,
   needsYou,
+  needsYouTip,
   needsYouThreads,
+  nextTarget,
   notifyEvents,
   onlyNeedsYou,
+  openNextQueue,
+  remember,
   tabTitle,
   type Statuses,
+  upNextList,
   waits,
+  withoutSnoozed,
 } from "../src/page/attention.ts";
 import type { Branch, Conn, Status, ThreadNode, Tree } from "../src/shared/tree.ts";
 
@@ -116,6 +122,30 @@ describe("onlyNeedsYou", () => {
   });
 });
 
+describe("withoutSnoozed", () => {
+  test("drops a snoozed thread and keeps the others", () => {
+    const out = withoutSnoozed([branch("p", [thread("a", "snoozed"), thread("b", "idle")])]);
+    expect(ids(out[0].threads)).toEqual(["b"]);
+  });
+
+  test("keeps a snoozed parent with a kept child, and trims the other children", () => {
+    const parent = thread("s", "snoozed", [thread("m", "working"), thread("z", "snoozed")]);
+    const out = withoutSnoozed([branch("p", [parent])]);
+    expect(ids(out[0].threads)).toEqual(["s"]);
+    expect(ids(out[0].threads[0].children)).toEqual(["m"]);
+  });
+
+  test("drops a group and a project that hold only snoozed threads", () => {
+    const tree = [branch("p1", [], [branch("g1", [thread("a", "snoozed")])]), branch("p2", [thread("b", "snoozed")])];
+    expect(withoutSnoozed(tree)).toEqual([]);
+  });
+
+  test("keeps a thread with a pending request, which has status needs-input", () => {
+    const out = withoutSnoozed([branch("p", [thread("a", "needs-input")])]);
+    expect(ids(out[0].threads)).toEqual(["a"]);
+  });
+});
+
 describe("needsYouThreads", () => {
   test("keeps needs-input and plan-ready, nested included, and drops the rest", () => {
     const tree = [
@@ -156,6 +186,7 @@ describe("notifyEvents", () => {
     conn,
     lastUpdate: null,
     linear: null,
+    settled: "",
     projects: [branch("p", threads)],
   });
   const base = (...pairs: [string, Status][]): Statuses => new Map(pairs);
@@ -244,6 +275,61 @@ describe("waits", () => {
   });
 });
 
+describe("openNextQueue", () => {
+  const w = (id: string, status: Status, since: string | null, extra: Partial<ThreadNode> = {}): ThreadNode => ({
+    ...thread(id, status),
+    since,
+    ...extra,
+  });
+  test("orders by oldest since, no since last, ties in tree order", () => {
+    const projects = [
+      branch("p", [
+        w("a", "your-turn", "2026-11-12T10:00:00.000Z"),
+        w("b", "needs-input", null),
+        w("c", "plan-ready", "2026-11-12T09:00:00.000Z"),
+        w("d", "needs-input", "2026-11-12T10:00:00.000Z"),
+      ]),
+    ];
+    expect(ids(openNextQueue(projects))).toEqual(["c", "a", "d", "b"]);
+  });
+  test("includes subthreads and leaves out settled and other statuses", () => {
+    const projects = [
+      branch("p", [
+        w("a", "working", null, { children: [w("n", "needs-input", "2026-11-12T10:00:00.000Z")] }),
+        w("s", "needs-input", "2026-11-12T09:00:00.000Z", { settled: true }),
+        w("f", "failed", "2026-11-12T08:00:00.000Z"),
+      ]),
+    ];
+    expect(ids(openNextQueue(projects))).toEqual(["n"]);
+  });
+  test("is empty for an empty tree", () => {
+    expect(openNextQueue([])).toEqual([]);
+  });
+});
+
+describe("nextTarget and remember", () => {
+  const q = ["a", "b", "c"].map((id, i) => ({ ...thread(id, "needs-input"), since: `2026-11-12T0${i}:00:00.000Z` }));
+  test("walks the queue, then starts again at the top", () => {
+    let seen = new Set<string>();
+    const order: string[] = [];
+    for (let i = 0; i < 4; i++) {
+      const t = nextTarget(q, seen)!;
+      order.push(t.id);
+      seen = remember(q, seen, t);
+    }
+    expect(order).toEqual(["a", "b", "c", "a"]);
+    expect(seen.size).toBe(1);
+  });
+  test("a new since makes an opened thread a target again", () => {
+    const seen = remember(q, new Set(), q[0]);
+    expect(nextTarget(q, seen)?.id).toBe("b");
+    expect(nextTarget([{ ...q[0], since: "2026-11-13T00:00:00.000Z" }, ...q.slice(1)], seen)?.id).toBe("a");
+  });
+  test("is null for an empty queue", () => {
+    expect(nextTarget([], new Set())).toBeNull();
+  });
+});
+
 describe("tabTitle", () => {
   test("plain for 0, counted otherwise", () => {
     expect(tabTitle(0)).toBe("Thread tree");
@@ -264,5 +350,49 @@ describe("favicon", () => {
     const dotted = decode(favicon(svg, 3));
     expect(dotted.split("<circle").length - 1).toBe(1);
     expect(dotted.startsWith("<svg><path")).toBe(true);
+  });
+});
+
+describe("needsYouTip", () => {
+  const tip = (needYou: number, yourTurn: number) => needsYouTip({ needYou, working: 0, yourTurn, stopped: 0 });
+  test("joins the non-zero parts", () => {
+    expect(tip(6, 5)).toBe("6 need you, 5 your turn");
+    expect(tip(0, 3)).toBe("3 your turn");
+    expect(tip(5, 0)).toBe("5 need you");
+    expect(tip(0, 0)).toBe("");
+  });
+});
+
+describe("upNextList", () => {
+  const w = (id: string, status: Status, since: string, extra: Partial<ThreadNode> = {}): ThreadNode => ({
+    ...thread(id, status),
+    since,
+    ...extra,
+  });
+  const linear = { workspace: "acme", teams: [] };
+  const projects = [
+    branch("one", [w("a", "needs-input", "2026-11-12T09:00:00.000Z", { key: "ONE-1" })]),
+    branch("two", [
+      w("p", "working", "2026-11-12T08:00:00.000Z", { children: [w("n", "your-turn", "2026-11-12T10:00:00.000Z")] }),
+    ]),
+  ];
+  const queue = openNextQueue(projects);
+  test("lists the queue in order with the project label of each thread, subthreads included", () => {
+    const { rows } = upNextList(projects, queue, null, null);
+    expect(rows.map((r) => [r.id, r.project, r.status])).toEqual([
+      ["a", "one", "needs-input"],
+      ["n", "two", "your-turn"],
+    ]);
+  });
+  test("sets the Linear URL only with Linear and a key", () => {
+    expect(upNextList(projects, queue, null, linear).rows.map((r) => [r.key, r.linearUrl])).toEqual([
+      ["ONE-1", "https://linear.app/acme/issue/ONE-1"],
+      [null, null],
+    ]);
+    expect(upNextList(projects, queue, null, null).rows[0].linearUrl).toBeNull();
+  });
+  test("gives the id of the target, or null with none", () => {
+    expect(upNextList(projects, queue, queue[1], null).targetId).toBe("n");
+    expect(upNextList(projects, queue, null, null).targetId).toBeNull();
   });
 });

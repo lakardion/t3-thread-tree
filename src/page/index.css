@@ -120,6 +120,16 @@
     outline: 2px solid var(--ring);
     outline-offset: 2px;
   }
+  :has(> [data-stop]:focus-visible) {
+    outline: 2px solid var(--ring);
+    outline-offset: -2px;
+  }
+  [data-stop]:focus-visible {
+    outline: none;
+  }
+  [data-stop] {
+    scroll-margin-top: 2rem;
+  }
   /** The padding sits here, not on body: the dialog scroll lock resets the body padding. */
   #root {
     @apply mx-auto flex h-dvh max-w-[1232px] flex-col p-4;
@@ -218,7 +228,6 @@
     isolation: isolate;
   }
   .thread-row[data-status="needs-input"]::before,
-  .thread-row[data-status="working"]::before,
   [data-waiting]::before {
     content: "";
     position: absolute;
@@ -246,16 +255,6 @@
       color-mix(in oklch, var(--status-needs-input) var(--wash), transparent),
       transparent 45%
     );
-  }
-  .thread-row[data-status="working"] {
-    background: linear-gradient(
-      90deg,
-      color-mix(in oklch, var(--status-working) calc(var(--wash) * 0.6), transparent),
-      transparent 35%
-    );
-  }
-  .thread-row[data-status="working"]::before {
-    background: var(--status-working);
   }
   .thread-row:hover {
     background: var(--accent);
