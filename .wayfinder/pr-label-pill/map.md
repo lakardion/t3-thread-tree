@@ -1,6 +1,6 @@
 ---
 label: wayfinder:map
-status: open
+status: closed
 created: 2026-11-18
 ---
 
@@ -57,6 +57,8 @@ Closed tickets:
 - [How does the Watched labels section in Settings work?](tickets/003-watched-labels-setting.md): one global comma field in a "Watched labels" fold; case-insensitive exact match; page storage sent on `/events`; server fetches only for a non-empty list and keeps all labels server-wide.
 - [How does a Label pill read in the row?](tickets/002-label-pill-look.md): one summary pill per row before the PR chips: Tag icon and label initials ("RFR"), filled with the GitHub color; first watched match plus "+N"; own open PRs only, not stack, merged or closed; no pill before the first answer.
 - [Write the Label pill spec section and cut the build tickets](tickets/004-spec-and-build-tickets.md): `SPEC.md` › Label pills written; settled rows get no pill; two stacked build tickets, server data path then page setting and pill.
+- [Build the label data path on the server](tickets/005-label-data-build.md): merged as #99.
+- [Build the Watched labels setting and the Label pill](tickets/006-label-pill-build.md): merged as #101. The route is done and the map is closed.
 
 ## Not yet specified
 
