@@ -5,7 +5,7 @@ import { join } from "node:path";
 
 import { ago, phraseWith, stripKey } from "../page/format.ts";
 import type { BriefAction, BriefState, Cli } from "../shared/brief.ts";
-import { allThreads, type Branch, type ThreadNode } from "../shared/tree.ts";
+import { allThreads, bySince, type Branch, type ThreadNode } from "../shared/tree.ts";
 import guideText from "./next-step-prompt.md" with { type: "text" };
 
 export const CLIS: Record<Cli, { label: string; status: string[] }> = {
@@ -77,6 +77,31 @@ const MODEL_KINDS: BriefAction["kind"][] = ["review", "clean-up", "unblock"];
 const listOf = (items: string[]) =>
   items.length > 1 ? `${items.slice(0, -1).join(", ")} and ${items.at(-1)}` : (items[0] ?? "");
 
+/** Answer title per request kind, the part of `detail.request` before ` · `. */
+const VERB: Record<string, string> = {
+  user_input: "Answer the question",
+  "mcp-elicitation": "Fill in the form",
+  command: "Approve the command",
+  "file-change": "Approve the file change",
+  "file-read": "Approve the file read",
+  permission: "Grant the permission",
+  dynamic_tool_call: "Approve the tool call",
+};
+
+const QUESTION_MAX = 140;
+
+/** The last question of a message, else its last sentence or line, cut at `QUESTION_MAX`. `null` when the message has no text. */
+export function questionOf(message: string): string | null {
+  const parts = message
+    .replace(/^…/, "")
+    .split(/(?<=[.?!])\s+|\n+/)
+    .map((x) => x.trim())
+    .filter(Boolean);
+  const hit = parts.findLast((x) => /\?[*_"'`)\]]*$/.test(x)) ?? parts.at(-1);
+  if (!hit) return null;
+  return hit.length > QUESTION_MAX ? `${hit.slice(0, QUESTION_MAX - 1).trimEnd()}…` : hit;
+}
+
 /** The first rule that matches the thread, or `null`. */
 function codeAction(n: ThreadNode): BriefAction | null {
   const make = (kind: BriefAction["kind"], title: string, reason: string, prompt: string | null) => ({
@@ -86,7 +111,13 @@ function codeAction(n: ThreadNode): BriefAction | null {
     threadIds: [n.id],
     prompt,
   });
-  if (n.status === "needs-input") return make("answer", "Answer the agent", "The agent waits for your input.", null);
+  if (n.status === "needs-input") {
+    const title =
+      n.phrase === "Guest message"
+        ? "Reply to the guest"
+        : (VERB[n.detail.request?.split(" · ")[0] ?? ""] ?? "Answer the agent");
+    return make("answer", title, "The agent waits for your input.", null);
+  }
   if (n.status === "plan-ready")
     return make("answer", "Review the plan", "The plan is ready and waits for your approval.", null);
   const broken = n.prs.find(
@@ -119,12 +150,18 @@ function codeAction(n: ThreadNode): BriefAction | null {
   return null;
 }
 
-/** At most one action per thread. Grouped by kind in rank order, tree order inside a kind. */
+/** At most one action per thread. Grouped by kind in rank order. Answers go oldest Wait first, the other kinds keep tree order. */
 export function codeActions(nodes: ThreadNode[]): { actions: BriefAction[]; covered: Set<string> } {
-  const found = nodes.flatMap((n) => codeAction(n) ?? []);
+  const found = nodes.flatMap((n) => {
+    const a = codeAction(n);
+    return a ? [[n, a] as const] : [];
+  });
   return {
-    actions: KIND_RANK.flatMap((kind) => found.filter((a) => a.kind === kind)),
-    covered: new Set(found.flatMap((a) => a.threadIds)),
+    actions: KIND_RANK.flatMap((kind) => {
+      const pairs = found.filter(([, a]) => a.kind === kind);
+      return (kind === "answer" ? pairs.toSorted(([a], [b]) => bySince(a.since, b.since)) : pairs).map(([, a]) => a);
+    }),
+    covered: new Set(found.flatMap(([, a]) => a.threadIds)),
   };
 }
 
@@ -142,9 +179,17 @@ export function briefInput(
   const nodes = projects.flatMap(allThreads).filter((n) => !NO_ACTION.has(n.status));
   const { actions, covered } = codeActions(nodes);
   const rest = nodes.filter((n) => !covered.has(n.id));
-  const msgs = lastMessages(rest.map((n) => n.id));
+  const answerIds = actions.flatMap((a) => (a.kind === "answer" ? a.threadIds : []));
+  const msgs = lastMessages([...rest.map((n) => n.id), ...answerIds]);
+  const withReasons = actions.map((a) => {
+    const msg = a.kind === "answer" ? msgs.get(a.threadIds[0]) : null;
+    return msg ? { ...a, reason: questionOf(tailOf(msg)) ?? a.reason } : a;
+  });
   return {
-    code: { actions, titles: Object.fromEntries(nodes.filter((n) => covered.has(n.id)).map((n) => [n.id, n.title])) },
+    code: {
+      actions: withReasons,
+      titles: Object.fromEntries(nodes.filter((n) => covered.has(n.id)).map((n) => [n.id, n.title])),
+    },
     threads: rest.map((n, i) => ({
       id: n.id,
       ref: `t${i + 1}`,

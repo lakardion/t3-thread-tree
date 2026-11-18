@@ -216,14 +216,16 @@ A click on "What's next" runs a local agent CLI on a cheap model. Code makes the
 ### Input
 
 - **Threads:** the visible top-level threads of the active tree (launched threads included). No subthreads. The code removes the threads that are `working`, `starting`, `waiting` or `snoozed`: they need no action.
-- **Code actions:** code makes the actions below, before the model runs. Each thread gets at most one action: the first rule that matches. The list is grouped by kind in rank order (`answer`, `fix`, `merge`), in tree order inside a kind. The title and reason text is fixed.
+- **Code actions:** code makes the actions below, before the model runs. Each thread gets at most one action: the first rule that matches. The list is grouped by kind in rank order (`answer`, `fix`, `merge`). Inside `answer`, the oldest Wait (`since`) goes first and a thread with no Wait goes last. Inside the other kinds, the order is tree order. The `fix` and `merge` text is fixed. The `answer` title names the request kind, and its reason is the last question of the last message.
 
-  | Kind     | Rule                                                                             | Title              | Prompt                                          |
-  | -------- | -------------------------------------------------------------------------------- | ------------------ | ----------------------------------------------- |
-  | `answer` | status `needs-input`                                                             | "Answer the agent" | `null`                                          |
-  | `answer` | status `plan-ready`                                                              | "Review the plan"  | `null`                                          |
-  | `fix`    | an open PR has failing checks, conflicts, or changes requested                   | "Fix PR #N"        | The fixed steps for each fact, then "and push." |
-  | `merge`  | an open PR is not a draft, is approved, its checks pass, and it has no conflicts | "Merge PR #N"      | `null`                                          |
+  | Kind     | Rule                                                                             | Title                                | Prompt                                          |
+  | -------- | -------------------------------------------------------------------------------- | ------------------------------------ | ----------------------------------------------- |
+  | `answer` | status `needs-input`                                                             | The verb of the request kind (below) | `null`                                          |
+  | `answer` | status `plan-ready`                                                              | "Review the plan"                    | `null`                                          |
+  | `fix`    | an open PR has failing checks, conflicts, or changes requested                   | "Fix PR #N"                          | The fixed steps for each fact, then "and push." |
+  | `merge`  | an open PR is not a draft, is approved, its checks pass, and it has no conflicts | "Merge PR #N"                        | `null`                                          |
+
+  The `answer` verb comes from the request kind, the part of `detail.request` before `·`: `user_input` "Answer the question", `mcp-elicitation` "Fill in the form", `command` "Approve the command", `file-change` "Approve the file change", `file-read` "Approve the file read", `permission` "Grant the permission", `dynamic_tool_call` "Approve the tool call". A thread with the phrase "Guest message" gets "Reply to the guest". An unknown kind, or no request, gets "Answer the agent". The `answer` reason is the last question of the last message (the last sentence or line that ends in `?`). With no question, it is the last sentence or line. It is cut at 140 characters with `…`. With no message, the reason is the fixed text "The agent waits for your input." (or "The plan is ready and waits for your approval."). The last message of an `answer` thread is read in the same batched query.
 
   `N` is the first PR that matches. The `fix` reason names the facts: "PR #N has failing checks, conflicts and changes requested."
 
@@ -308,7 +310,7 @@ The full look is in ticket 04. In short:
 - **Controls:** in the header, after the filter, a split control: a primary "What's next" button (Sparkles icon) joined to a model `Select`. The choice is saved in `localStorage`. With no CLI offered, the button is disabled with a tooltip. The button is disabled while a run is active. At phone width the button shows its icon only, with an `aria-label`, and the model `Select` and the model name are hidden.
 - **Panel:** an inline card between the header and the tree. It shows only after the first click, or when the brief state is not `idle` at load. The head has "Next steps", a mono stamp "generated HH:MM · <label>" ("generated HH:MM · rules only" when the model did not run), and a close button that hides the panel.
 - **States:** loading ("Reading N threads…" with the letter wave, and "Cancel"); error (alert, "The brief failed.", "Retry", the stderr tail); empty ("Nothing needs you right now."); the ranked actions. In `running`, the code actions show at once as rows above the loading line. In `failed`, they show above the error. In `done`, all rows run in one rank order.
-- **Action row:** rank, kind chip, title with the reason, thread links, and a copy icon for `prompt` (none when `prompt` is `null`).
+- **Action row:** rank, kind chip, title, and for an `answer` row the live Wait of its thread (the status phrase with its age, in mono; it updates each minute). The reason is on its own line below. Then the thread links, and a copy icon for `prompt` (none when `prompt` is `null`).
 - **Kind chips:** answer = `needs-input`, merge = `done`, unblock = `plan`, fix = `failed`, review = `working`, clean-up = `idle`.
 - **Thread links:** each link shows the live `StatusIcon` and title from the current tree, and opens the thread in T3. A thread that is not in the live tree shows its saved title struck through. The brief text does not change.
 
