@@ -54,6 +54,7 @@ import { createRoot } from "react-dom/client";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
+import { ButtonGroup } from "@/components/ui/button-group";
 import { Card, CardContent } from "@/components/ui/card";
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
 import {
@@ -201,15 +202,17 @@ function TokenForm() {
   const [message, setMessage] = useState<{ text: string; error: boolean }>();
   const submit = async () => {
     setSaving(true);
+    setMessage(undefined);
     try {
       const res = await fetch("/token", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ token: value }),
       });
+      /** Any answer but 400 means the server saved the token. */
+      if (res.status !== 400) setValue("");
       if (!res.ok) throw new Error((await res.text()) || `Save failed (${res.status})`);
-      setValue("");
-      setMessage({ text: "Saved. Reconnecting to T3…", error: false });
+      setMessage({ text: "Connected to T3.", error: false });
     } catch (e) {
       setMessage({ text: e instanceof Error ? e.message : String(e), error: true });
     }
@@ -222,7 +225,7 @@ function TokenForm() {
         void submit();
       }}
     >
-      <div className="flex gap-2">
+      <ButtonGroup className="mt-1.5 w-full">
         <Input
           type="password"
           aria-label="T3 token"
@@ -231,11 +234,20 @@ function TokenForm() {
           value={value}
           onChange={(e) => setValue(e.target.value)}
         />
-        <Button type="submit" size="sm" disabled={!value || saving}>
+        <Button type="submit" disabled={!value || saving}>
           Save
         </Button>
-      </div>
-      {message && <p className={cn("mt-1 text-xs", message.error && "text-destructive")}>{message.text}</p>}
+      </ButtonGroup>
+      <p aria-live="polite" className={cn("mt-2 text-xs", message?.error && "text-destructive")}>
+        {saving ? (
+          <span className="inline-flex items-center gap-1.5">
+            <LoaderCircle className="size-3 animate-spin motion-reduce:animate-none" /> Saving and connecting to T3…
+          </span>
+        ) : (
+          message?.text
+        )}
+      </p>
+      <ProgressReveal show={saving} value={null} label="Connection progress" className="pt-1.5" />
     </form>
   );
 }
@@ -644,6 +656,35 @@ function SettingsButton({
   );
 }
 
+/** A bar that collapses away when `show` is false. A `value` of null is indeterminate. */
+function ProgressReveal({
+  show,
+  value,
+  label,
+  className,
+}: {
+  show: boolean;
+  value: number | null;
+  label: string;
+  className?: string;
+}) {
+  return (
+    <div
+      aria-hidden={!show}
+      className={cn(
+        "grid transition-[grid-template-rows,opacity] duration-250 ease-in-out motion-reduce:transition-none",
+        show ? "grid-rows-[1fr] opacity-100" : "grid-rows-[0fr] opacity-0",
+      )}
+    >
+      <div className="min-h-0 overflow-hidden">
+        <div className={className}>
+          <Progress value={value} aria-label={label} />
+        </div>
+      </div>
+    </div>
+  );
+}
+
 /** The version row, with the update state as its hint, and a bar while an install runs. */
 function UpdateRow({ update }: { update: UpdateState }) {
   const { release, install, checking, checkedAt, checkFailed } = update;
@@ -718,19 +759,12 @@ function UpdateRow({ update }: { update: UpdateState }) {
       >
         {action}
       </Row>
-      <div
-        aria-hidden={!showProgress}
-        className={cn(
-          "grid transition-[grid-template-rows,opacity] duration-250 ease-in-out motion-reduce:transition-none",
-          showProgress ? "grid-rows-[1fr] opacity-100" : "grid-rows-[0fr] opacity-0",
-        )}
-      >
-        <div className="min-h-0 overflow-hidden">
-          <div className="px-3 pb-3">
-            <Progress value={bar === undefined ? 100 : bar} aria-label="Update progress" />
-          </div>
-        </div>
-      </div>
+      <ProgressReveal
+        show={showProgress}
+        value={bar === undefined ? 100 : bar}
+        label="Update progress"
+        className="px-3 pb-3"
+      />
     </div>
   );
 }

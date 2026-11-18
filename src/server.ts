@@ -9,7 +9,7 @@ import { mayBeLaunched, needsScan, openLineage } from "./server/lineage.ts";
 import { checkCli, cliPath, sendService } from "./server/send.ts";
 import { settleRoutes } from "./server/settle.ts";
 import { connectShell, readEnvironmentId, type Project, type Thread } from "./server/t3.ts";
-import { parseToken, readToken, writeToken } from "./server/token.ts";
+import { parseToken, readToken, tokenResponse, writeToken } from "./server/token.ts";
 import { parseLinear, type Conn, type Tree } from "./shared/tree.ts";
 
 const threads = new Map<string, Thread>();
@@ -211,8 +211,11 @@ const server = Bun.serve({
         if (!next) return new Response("Not a valid token", { status: 400 });
         writeToken(tokenFile, next);
         token = next;
-        shell.reconnect();
-        return new Response(null, { status: 204 });
+        let waitTimer: ReturnType<typeof setTimeout> | undefined;
+        const timeout = new Promise<"timeout">((r) => (waitTimer = setTimeout(() => r("timeout"), 15_000)));
+        const c = await Promise.race([shell.reconnect(), timeout]);
+        clearTimeout(waitTimer);
+        return tokenResponse(c);
       },
     },
     "/events": (req) => {
