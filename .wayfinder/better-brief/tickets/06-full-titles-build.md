@@ -2,7 +2,7 @@
 title: Show full thread titles in the brief
 type: wayfinder:task
 status: open
-assignee: 
+assignee: claude (better-brief-06)
 blocked-by: [01-brief-row-look, 05-short-brief-build]
 ---
 
