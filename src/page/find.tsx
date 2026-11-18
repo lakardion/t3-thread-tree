@@ -163,9 +163,9 @@ function FindBody({ list, focus, settledOn, canShow, now, open, show }: BodyProp
       value={sel}
       onValueChange={setSel}
       onKeyDown={onKeyDown}
-      className="min-h-0 rounded-[inherit] [&_[data-slot=command-input-wrapper]]:pr-11"
+      className="min-h-0 rounded-[inherit] [&_[data-slot=command-input-wrapper]]:h-12 [&_[data-slot=command-input-wrapper]]:pr-11"
     >
-      <CommandInput value={q} onValueChange={setQ} placeholder="Find a thread" />
+      <CommandInput value={q} onValueChange={setQ} placeholder="Find a thread" className="h-12 text-[15px]" />
       <CommandList className="max-h-[min(60vh,480px)] max-[720px]:max-h-none max-[720px]:flex-1">
         {active.length === 0 &&
           settled.length === 0 &&
