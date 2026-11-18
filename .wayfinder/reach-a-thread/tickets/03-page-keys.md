@@ -2,7 +2,7 @@
 title: Which keys does the page own, and when are they off?
 type: grilling
 status: open
-assignee:
+assignee: damian.lucero
 blocked-by: [02-find-rules]
 ---
 
