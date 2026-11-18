@@ -16,7 +16,7 @@ Starts on `main`: 04-focus-list-build (M20) is merged in #88. It adds the shared
 
 ## Spec
 
-Decided in [the Find rules](02-find-rules.md). The key part (Cmd/Ctrl+K guards, the shared handler, the legend) comes from [the page keys](03-page-keys.md) when it closes.
+Decided in [the Find rules](02-find-rules.md) and, for the keys, [the page keys](03-page-keys.md).
 
 **Form.**
 
@@ -55,6 +55,14 @@ Decided in [the Find rules](02-find-rules.md). The key part (Cmd/Ctrl+K guards, 
 - Empty input: the Focus list threads, then the most recently updated threads, up to 8 in all. If there are none, an icon state with the hint "Find by title, issue key, project, branch or #PR".
 - No match: an icon state (search-x icon, "No thread matches"), plus the Search settled threads row when it applies.
 
+**Keys.**
+
+- **One page key handler.** Move M19's `n` handler into one shared `keydown` handler with one guard for plain keys: no modifier, no key repeat, focus not in an input, a textarea or a contenteditable element, no dialog, alert dialog, menu or listbox open, View panel closed. [The row keys build](06-row-keys-build.md) adds its keys to this handler.
+- **Cmd/Ctrl+K** opens Find, also from a text field. It does nothing while another dialog is open. In the open Find dialog it closes Find. Call `preventDefault`.
+- **`1` to `3`** open the thread of that Focus slot in T3, like its card. An empty slot does nothing. They use the plain-key guard.
+- **`/`** is not a page key. Leave it free.
+- **Keys fold.** A "Keys" fold in the View panel, beside "Status icons": `n` Open next, Cmd/Ctrl+K Find (⌘K on macOS, Ctrl+K elsewhere), `1`–`3` open a Focus slot. The Find button tooltip names its key.
+
 **Docs.** `SPEC.md` and `README.md` describe Find. `CONTEXT.md` has the term **Find**.
 
 ## Done when
@@ -66,5 +74,7 @@ Decided in [the Find rules](02-find-rules.md). The key part (Cmd/Ctrl+K guards, 
 - Search settled threads lists matching settled threads in a Settled group, from `GET /find`.
 - The empty input lists Focus and recent threads; the empty and no-match icon states show.
 - Unit tests cover the match function (fields, every word, order, PR number) and the `/find` handler.
-- The key part of [the page keys](03-page-keys.md) is in.
+- One shared key handler holds `n`, Cmd/Ctrl+K and `1` to `3`. A test covers the guard: plain keys do nothing in a field, in an open dialog or menu, with the View panel open, or with a modifier; Cmd/Ctrl+K works in a field and not in the Send dialog.
+- `1` to `3` open the Focus slot thread; an empty slot does nothing.
+- The View panel shows the Keys fold.
 - `bun run check` passes. `SPEC.md`, `README.md` and `CONTEXT.md` are updated. One draft PR.

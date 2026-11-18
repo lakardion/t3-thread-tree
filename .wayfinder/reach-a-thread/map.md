@@ -60,11 +60,13 @@ Decided at charting (by the user):
 
 - [How does the Focus list look and work?](tickets/01-focus-list-look.md): prototype D, a strip of 3 slot cards above the tree, hidden by default behind a Focus header button; add from the row (⌖) and from brief Actions; drag a row onto the strip (a drop on a card replaces it after a confirmation); buttons refuse at 3 of 3; settled or deleted threads leave; `localStorage`; UI label "Focus"; keys 1 to 3 go to the page keys.
 - [What does Find match, and how does the user pick a result?](tickets/02-find-rules.md): a Cmd/Ctrl+K dialog on shadcn `Command`; substring match on title, key, project, branch and PR over loaded threads, best match first; Enter opens, Show in tree unfolds and stores folds; a "Search settled threads" row asks the server; Find never turns off a view setting.
+- [Which keys does the page own, and when are they off?](tickets/03-page-keys.md): one handler with M19's guard; Cmd/Ctrl+K also in fields; `1`–`3` open Focus slots; `j`/`k` (↑/↓ on a row) move real focus over visible rows and fold headers; `o` details, `s` send; no `/`, `f` or `?`; a Keys fold in the View panel.
 
 ## Not yet specified
 
-- How `j`/`k` (row keys) act on folded projects, a closed stack and the flat view. It hangs on the page keys. (Show in tree: decided in the Find rules.)
+Nothing. Every decision ticket is closed; only the route keys remain.
 
 ## Out of scope
 
 - Writes to T3 (pin, snooze, settle). The Focus list is local.
+- A find-in-page bar for the desktop app (`/` or Cmd/Ctrl+F with `findInPage`). Find covers getting to a thread; `/` stays free for it. Ruled out in [the page keys](tickets/03-page-keys.md).
