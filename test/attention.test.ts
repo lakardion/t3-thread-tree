@@ -185,6 +185,7 @@ describe("notifyEvents", () => {
     conn,
     lastUpdate: null,
     linear: null,
+    settled: "",
     projects: [branch("p", threads)],
   });
   const base = (...pairs: [string, Status][]): Statuses => new Map(pairs);

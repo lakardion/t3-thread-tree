@@ -357,7 +357,7 @@ describe("briefService", () => {
     const changes: string[] = [];
     const svc = briefService({
       clis: CLIS,
-      input: (settled) => ({ code, threads: [{ id: settled ? "s" : "o" } as InputThread] }),
+      input: () => ({ code, threads: [{ id: "o" } as InputThread] }),
       onChange: () => changes.push(svc.state().status),
       run: () => {
         const p = new Promise<Outcome | null>((r) => (finish = r));
@@ -370,7 +370,7 @@ describe("briefService", () => {
 
   test("runs, refuses a second run, then keeps the result", async () => {
     const { svc, changes, finish, flush } = setup();
-    expect((await svc.routes["/brief/run"].POST(post("/brief/run?settled=1", { cli: "claude" }))).status).toBe(202);
+    expect((await svc.routes["/brief/run"].POST(post("/brief/run", { cli: "claude" }))).status).toBe(202);
     expect(svc.state()).toMatchObject({ status: "running", cli: "claude", threadCount: 1 });
     expect((await svc.routes["/brief/run"].POST(post("/brief/run", { cli: "claude" }))).status).toBe(409);
     finish(done());

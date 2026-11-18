@@ -1912,6 +1912,90 @@ const pipeline = (ps: Branch[], c: Cfg): { full: Arranged; view: Arranged & { fl
   return { full, view: { ...view, projects: c.sortBy === "updated" ? sortTree(view.projects) : view.projects } };
 };
 
+type SettledItem = { project: Branch; t: ThreadNode };
+type SettledPage = { items: SettledItem[]; next: string | null; total: number };
+const SETTLED_PAGE = 50;
+
+/**
+ * The settled threads, newest settle first, loaded a page at a time as the sentinel nears the view.
+ * A new `signature` refetches the loaded rows in one request.
+ */
+function SettledList({ signature, scrollRoot }: { signature: string; scrollRoot: RefObject<HTMLDivElement | null> }) {
+  const [items, setItems] = useState<SettledItem[]>([]);
+  /** Undefined until the first page lands; null on the last page. */
+  const [next, setNext] = useState<string | null | undefined>(undefined);
+  const [total, setTotal] = useState(0);
+  const [loading, setLoading] = useState(false);
+  /** Tags each request; a response that is not the latest is dropped. */
+  const seq = useRef(0);
+  const loaded = useRef(0);
+  const sentinel = useRef<HTMLLIElement>(null);
+  const fetchInto = useCallback((url: string, mode: "append" | "replace") => {
+    const id = ++seq.current;
+    setLoading(true);
+    fetch(url)
+      .then((r) => r.json() as Promise<SettledPage>)
+      .then(
+        (p) => {
+          if (id !== seq.current) return;
+          setItems((cur) =>
+            mode === "replace" ? p.items : [...cur, ...p.items.filter((i) => !cur.some((c) => c.t.id === i.t.id))],
+          );
+          setNext(p.next);
+          setTotal(p.total);
+          setLoading(false);
+        },
+        () => {
+          if (id !== seq.current) return;
+          if (mode === "append") setNext(undefined);
+          setLoading(false);
+        },
+      );
+  }, []);
+  useEffect(() => {
+    loaded.current = items.length;
+  });
+  useEffect(() => {
+    fetchInto(`/settled?limit=${Math.max(SETTLED_PAGE, loaded.current)}`, "replace");
+    /* oxlint-disable-next-line react/exhaustive-effect-dependencies -- a new signature is the trigger, though the body does not read it */
+  }, [signature, fetchInto]);
+  /** Each change of `next` or `loading` makes a new observer, which reports at once, so a sentinel still in view loads the next page. */
+  useEffect(() => {
+    if (typeof next !== "string" || loading || !sentinel.current) return;
+    const io = new IntersectionObserver(
+      ([e]) => {
+        if (e.isIntersecting) fetchInto(`/settled?after=${encodeURIComponent(next)}&limit=${SETTLED_PAGE}`, "append");
+      },
+      { root: scrollRoot.current, rootMargin: "600px" },
+    );
+    io.observe(sentinel.current);
+    return () => io.disconnect();
+  }, [next, loading, fetchInto, scrollRoot]);
+  return (
+    <Card className="mt-3 gap-0 overflow-clip rounded-[12px] px-2 py-0 shadow-none">
+      <h2 className="flex h-7 items-center gap-2 px-2 text-xs font-semibold text-muted-foreground">
+        Settled
+        <span className="font-normal tabular-nums">{total}</span>
+      </h2>
+      {next !== undefined && total === 0 && (
+        <p className="px-2 pb-2 text-sm text-muted-foreground">No settled threads.</p>
+      )}
+      <ul aria-busy={loading} className="m-0 list-none p-1">
+        {items.map(({ project, t }) => (
+          <ThreadRow key={t.id} t={t} chip={t.key ?? undefined} project={project} />
+        ))}
+        {typeof next === "string" && <li ref={sentinel} aria-hidden className="h-px" />}
+        {loading &&
+          [0, 1, 2, 3, 4].map((i) => (
+            <li key={i} className="my-px">
+              <Skeleton className="h-9 rounded-[8px] motion-reduce:animate-none" />
+            </li>
+          ))}
+      </ul>
+    </Card>
+  );
+}
+
 function App() {
   const [tree, setTree] = useState<Tree | null>(null);
   const [settled, setSettled] = useState(load(SETTLED_KEY) === "1");
@@ -2104,11 +2188,12 @@ function App() {
       }),
     show: (id: string) => setShown((s) => new Set(s).add(id)),
   };
+  const sendToApi = { t3cli, open: (id: string) => setSendTo({ id, open: true }) };
   const pick = clis?.find((c) => c.id === cli)?.id ?? clis?.[0]?.id;
   const runBrief = () => {
     if (!pick) return;
     setHideBrief(false);
-    void fetch(`/brief/run?settled=${settled ? 1 : 0}`, { method: "POST", body: JSON.stringify({ cli: pick }) });
+    void fetch("/brief/run", { method: "POST", body: JSON.stringify({ cli: pick }) });
   };
   const live = new Map((tree?.projects ?? []).flatMap(allThreads).map((t) => [t.id, t]));
   const kept = tree ? pruneFocus(focus, live, tree.conn) : focus;
@@ -2255,9 +2340,8 @@ function App() {
     };
   }, [listRef, last]);
   useEffect(() => {
-    save(SETTLED_KEY, settled ? "1" : "0");
     save(NEST_KEY, nest ? "1" : "0");
-    const es = new EventSource(`/events?settled=${settled ? 1 : 0}&nest=${nest ? 1 : 0}`);
+    const es = new EventSource(`/events?nest=${nest ? 1 : 0}`);
     es.onmessage = (e) => {
       const next = JSON.parse(e.data) as Tree;
       const cur = latest.current;
@@ -2272,7 +2356,8 @@ function App() {
       setBrief(b);
     });
     return () => es.close();
-  }, [settled, nest]);
+  }, [nest]);
+  useEffect(() => save(SETTLED_KEY, settled ? "1" : "0"), [settled]);
 
   const projects = connecting ? undefined : view.projects;
 
@@ -2528,7 +2613,7 @@ function App() {
                         {projects ? (
                           <Card className="gap-0 overflow-clip rounded-[12px] px-2 py-0 shadow-none">
                             <ul key={listKey} className={cn("m-0 list-none p-0", layout === "flat" && "p-1")}>
-                              <SendTo value={{ t3cli, open: (id) => setSendTo({ id, open: true }) }}>
+                              <SendTo value={sendToApi}>
                                 {layout === "flat" ? (
                                   <Presence key="flat" items={view.flat ?? []} keyOf={(i) => i.id}>
                                     {(i) => (
@@ -2569,6 +2654,11 @@ function App() {
                             </Card>
                           </>
                         )}
+                        {settled && projects && (
+                          <SendTo value={sendToApi}>
+                            <SettledList signature={tree?.settled ?? ""} scrollRoot={listRef} />
+                          </SendTo>
+                        )}
                       </div>
                     </Now>
                   </Lists>
@@ -2604,7 +2694,6 @@ function App() {
         setOpen={setFindOpen}
         list={hits(full.projects)}
         focus={focus}
-        settledOn={settled}
         canShow={(id) => inView.has(id)}
         reveal={reveal}
         now={now}

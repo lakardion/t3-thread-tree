@@ -4,6 +4,7 @@ import { briefInput, briefService, lastMessageRoutes, type Outcome } from "../sr
 import { buildTree } from "../src/server/build-tree.ts";
 import { findRoutes } from "../src/server/find.ts";
 import { cliPath, type CliRun, sendService } from "../src/server/send.ts";
+import { settledPage, settledRoutes, settledSignature } from "../src/server/settled.ts";
 import type { Pr, Project, Thread } from "../src/server/t3.ts";
 import type { BriefAction, Cli } from "../src/shared/brief.ts";
 
@@ -231,12 +232,13 @@ const projects = new Map<string, Project>([
 
 const projectsFor = (settled: boolean, nest = false) =>
   buildTree({ threads, projects, spawnerOf: (id) => spawners[id], environmentId: "demo", settled, nest, now });
-const treeFor = (settled: boolean, nest: boolean) =>
+const treeFor = (nest: boolean) =>
   JSON.stringify({
     conn: process.env.CONN ?? "up",
     lastUpdate: new Date(now).toISOString(),
     linear: { workspace: "acme", teams: ["SHOP"] },
-    projects: projectsFor(settled, nest),
+    settled: settledSignature(threads),
+    projects: projectsFor(false, nest),
   });
 
 /** The model part of the sample brief. Code makes the `answer`, `fix` and `merge` actions from the tree, so these threads have none of them. `demo-27` is settled, so its link shows struck through. */
@@ -302,8 +304,8 @@ const brief = briefService({
           { id: "codex", label: "Codex Luna" },
         ],
   ),
-  input: (settled) => {
-    const i = briefInput(projectsFor(settled), () => new Map(), now);
+  input: () => {
+    const i = briefInput(projectsFor(false), () => new Map(), now);
     return process.env.BRIEF === "rules" ? { ...i, threads: [] } : i;
   },
   onChange: () => listeners.forEach((l) => l("brief", JSON.stringify(brief.state()))),
@@ -390,15 +392,17 @@ const server = Bun.serve({
     ...sender.routes,
     ...lastMessageRoutes({ read: lastMessage, has: (id) => threads.some((th) => th.id === id) }),
     ...findRoutes(() => projectsFor(true, false)),
+    ...settledRoutes({
+      page: (after, limit) => settledPage(projectsFor(true), new Map(threads.map((th) => [th.id, th])), after, limit),
+    }),
     "/events": async (req) => {
       server.timeout(req, 0);
       await Bun.sleep(Number(process.env.DELAY ?? 0));
       const params = new URL(req.url).searchParams;
-      const settled = params.get("settled") === "1";
       const nest = params.get("nest") === "1";
       const enc = new TextEncoder();
       let send: (event: string, data: string) => void;
-      const push = () => send("", treeFor(settled, nest));
+      const push = () => send("", treeFor(nest));
       return new Response(
         new ReadableStream({
           start(ctrl) {

@@ -94,6 +94,8 @@ export type Tree = {
   lastUpdate: string | null;
   /** Set when the server knows the Linear workspace. No teams: every issue key links. */
   linear: Linear | null;
+  /** Changes when the settled threads change, so the page refetches its Settled list. Empty with none. */
+  settled: string;
   projects: Branch[];
 };
 

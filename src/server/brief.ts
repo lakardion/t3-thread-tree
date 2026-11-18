@@ -386,7 +386,7 @@ type Offered = { id: Cli; label: string }[];
 /** The one in-memory brief state, its routes, and one run at a time. */
 export function briefService(o: {
   clis: Promise<Offered>;
-  input: (settled: boolean) => BriefInput;
+  input: () => BriefInput;
   onChange: () => void;
   run?: (cli: Cli, threads: InputThread[]) => Run;
 }) {
@@ -404,7 +404,7 @@ export function briefService(o: {
           if (!(await o.clis).some((c) => c.id === cli))
             return new Response("This CLI is not offered.", { status: 400 });
           if (active) return new Response("A run is active.", { status: 409 });
-          const { code, threads } = o.input(new URL(req.url).searchParams.get("settled") === "1");
+          const { code, threads } = o.input();
           const cliId = cli!;
           if (threads.length === 0) {
             set({ status: "done", cli: cliId, generatedAt: new Date().toISOString(), rulesOnly: true, ...code });
