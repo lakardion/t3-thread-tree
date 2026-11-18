@@ -38,7 +38,7 @@ Source: [How can a local process read T3 thread data live?](.wayfinder/tickets/0
 
 ### Token
 
-- The user issues the token once with `~/.t3/bin/t3 auth session issue --scope orchestration:read --scope orchestration:operate --label thread-tree --ttl 52w --token-only`.
+- The user issues the token once with `~/.t3/bin/t3 auth session issue --scope orchestration:read --scope orchestration:operate --label thread-tree --ttl 52w --token-only | pbcopy`. `pbcopy` puts the token on the macOS clipboard.
 - The user pastes it in the "T3 token" password field of the Settings panel. The page sends `POST /token` with `{"token": "…"}` (JSON only, so a cross-site form cannot send it). The server checks it (one line, at most 4096 bytes), writes it to the token file (mode `0600`), drops the open socket and connects again. The user can replace it at any time.
 - **Token file:** `T3_TOKEN_FILE`, else `~/.config/t3-thread-tree/token`. When the file holds no token, `T3_TOKEN` from the env is the fallback.
 - With no token, the tree `conn` is `no-token`. If T3 rejects the token (HTTP 401), it is `unauthorized`. Both banners link to the token field.

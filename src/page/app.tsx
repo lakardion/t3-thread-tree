@@ -103,7 +103,7 @@ import {
   waits,
   withoutSnoozed,
 } from "./attention.ts";
-import { BriefControls, BriefPanel, type Offered } from "./brief.tsx";
+import { BriefControls, BriefPanel, CopyPrompt, type Offered } from "./brief.tsx";
 import { FindDialog, FIND_KEY, MAC } from "./find.tsx";
 import {
   addFocus,
@@ -177,7 +177,7 @@ import {
 } from "./view.ts";
 
 const TOKEN_CMD =
-  "~/.t3/bin/t3 auth session issue --scope orchestration:read --scope orchestration:operate --label thread-tree --ttl 52w --token-only";
+  "~/.t3/bin/t3 auth session issue --scope orchestration:read --scope orchestration:operate --label thread-tree --ttl 52w --token-only | pbcopy";
 const CLOSED_KEY = "thread-tree:closed";
 const SETTLED_KEY = "thread-tree:settled";
 const SNOOZED_KEY = "thread-tree:snoozed";
@@ -821,10 +821,13 @@ function SettingsPanel(p: PanelProps) {
           <Fold label="T3 token" value={token} tone={token === "Connected" ? "ok" : "warn"} defaultOpen={p.tokenOpen}>
             <div className="grid gap-2">
               <p className={cn(HINT, "m-0")}>
-                The app reads your threads from T3 with this token. Run this command in a terminal to issue one, then
-                paste it below. Paste a new one at any time to replace it.
+                The app reads your threads from T3 with this token. Run this command in a terminal. It issues a token
+                and copies it to the clipboard. Then paste it below. Paste a new one at any time to replace it.
               </p>
-              <code className="rounded-[6px] bg-muted p-2 text-xs break-all select-all">{TOKEN_CMD}</code>
+              <div className="flex items-start gap-1">
+                <code className="flex-1 rounded-[6px] bg-muted p-2 text-xs break-all select-all">{TOKEN_CMD}</code>
+                <CopyPrompt prompt={TOKEN_CMD} label="Copy command" />
+              </div>
               <TokenForm />
             </div>
           </Fold>

@@ -144,7 +144,7 @@ function ThreadLink({ id, live, saved }: { id: string; live: Map<string, ThreadN
   );
 }
 
-function CopyPrompt({ prompt }: { prompt: string }) {
+export function CopyPrompt({ prompt, label = "Copy prompt" }: { prompt: string; label?: string }) {
   const [done, setDone] = useState(false);
   useEffect(() => {
     if (!done) return;
@@ -158,7 +158,7 @@ function CopyPrompt({ prompt }: { prompt: string }) {
           variant="ghost"
           size="icon-xs"
           className="flex-none text-muted-foreground"
-          aria-label="Copy prompt"
+          aria-label={label}
           onClick={() => navigator.clipboard?.writeText(prompt).then(() => setDone(true))}
         >
           {done ? <Check /> : <Copy />}
