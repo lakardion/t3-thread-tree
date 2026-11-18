@@ -2349,7 +2349,8 @@ function App() {
   const tabCount = tree ? needsYouThreads(tree.projects).length : 0;
 
   return (
-    <TooltipProvider>
+    /** A tooltip covers the row above, so a hoverable one stays open while the pointer moves up. */
+    <TooltipProvider disableHoverableContent>
       <title>{tabTitle(tabCount)}</title>
       <link rel="icon" type="image/svg+xml" href={favicon(appIcon, tabCount)} />
       <header className="mb-3.5 flex flex-none flex-wrap items-center gap-x-4 gap-y-3 text-muted-foreground">
