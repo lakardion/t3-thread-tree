@@ -2,7 +2,7 @@
 title: Fit the brief row to a phone
 type: wayfinder:task
 status: open
-assignee: 
+assignee: claude (better-brief-07)
 blocked-by: [01-brief-row-look, 06-full-titles-build]
 ---
 
