@@ -1093,8 +1093,9 @@ function LabelPill({ t }: { t: ThreadNode }) {
 const CHIP = "gap-1 rounded-[6px] px-1.5 py-0 text-[11px] font-normal text-muted-foreground";
 const ROW_BUTTON =
   "size-5 cursor-pointer rounded-[6px] text-muted-foreground disabled:cursor-default motion-reduce:transition-none pointer-coarse:min-h-11 pointer-coarse:min-w-11 focus-visible:border-transparent focus-visible:ring-0 focus-visible:outline-2 focus-visible:outline-solid focus-visible:outline-offset-2 focus-visible:outline-ring";
-const SEND_REVEAL =
-  "opacity-0 group-hover/row:opacity-100 group-focus-within/row:opacity-100 [@media(hover:none)]:opacity-100";
+/** Opens on hover or focus, always on touch, and stays open while it holds a settle error. Shut, it takes no width. */
+const DRAWER =
+  "grid grid-cols-[0fr] transition-[grid-template-columns] duration-150 motion-reduce:transition-none group-hover/row:grid-cols-[1fr] group-focus-within/row:grid-cols-[1fr] has-data-err:grid-cols-[1fr] [@media(hover:none)]:grid-cols-[1fr]";
 const FILTER_ITEM =
   "pointer-coarse:min-h-11 pointer-coarse:min-w-11 focus-visible:ring-0 focus-visible:outline-solid focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring";
 
@@ -1347,17 +1348,20 @@ function WaitText({ t, now }: { t: ThreadNode; now: number }) {
   );
 }
 
-/** Adds the thread to the Focus list, or removes it. Settled threads leave the list, so they get no button. */
-function FocusMark({ t }: { t: ThreadNode }) {
+/**
+ * Adds the thread to the Focus list, or removes it. Settled threads leave the list, so they get no button.
+ * `pressed`: render only when the thread is (true) or is not (false) in the list, so a pressed mark can sit outside the drawer.
+ */
+function FocusMark({ t, pressed }: { t: ThreadNode; pressed: boolean }) {
   const { ids, add, remove, full } = useContext(Focus);
-  if (t.settled) return null;
   const on = ids.includes(t.id);
+  if (t.settled || on !== pressed) return null;
   const label = on ? "Remove from Focus" : "Add to Focus";
   return (
     <Tooltip>
       <TooltipTrigger asChild>
         {/** A disabled button gets no hover, so the wrapper keeps the tooltip. */}
-        <span className={cn("inline-flex", !on && SEND_REVEAL)}>
+        <span className="inline-flex">
           <Button
             variant="ghost"
             size="icon"
@@ -1388,7 +1392,7 @@ function SettleButton({ t }: { t: ThreadNode }) {
     <Tooltip>
       <TooltipTrigger asChild>
         {/** A disabled button gets no hover, so the wrapper keeps the tooltip. */}
-        <span className={cn("inline-flex", !err && SEND_REVEAL)}>
+        <span className="inline-flex" data-err={err ? "" : undefined}>
           <Button
             variant="ghost"
             size="icon"
@@ -1478,7 +1482,7 @@ function ThreadRow({
           {review && <Eye className="size-3.5 flex-none text-review" aria-label="Review" />}
           <a
             className={cn(
-              "min-w-0 flex-1 break-words hover:underline",
+              "min-w-0 flex-1 break-words group-focus-within/row:truncate group-hover/row:truncate hover:underline",
               t.status === "your-turn" ? "font-[650]" : "font-medium",
               (t.status === "snoozed" || t.settled || dim) && "text-muted-foreground",
               "max-[720px]:basis-full max-[720px]:pl-5",
@@ -1538,30 +1542,35 @@ function ThreadRow({
               </TooltipTrigger>
               <TooltipContent>Updated {new Date(t.updatedAt).toLocaleString()}</TooltipContent>
             </Tooltip>
-            <SettleButton key={String(t.settled)} t={t} />
-            {sendTo && (
-              <CliGate t3cli={sendTo.t3cli}>
-                <Tooltip>
-                  <TooltipTrigger asChild>
-                    <Button
-                      variant="ghost"
-                      size="icon"
-                      className={cn(ROW_BUTTON, SEND_REVEAL)}
-                      aria-label="Send message"
-                      disabled={sendTo.t3cli?.available === false}
-                      onClick={(e) => {
-                        e.stopPropagation();
-                        sendTo.open(t.id);
-                      }}
-                    >
-                      <Send className="size-3.5" />
-                    </Button>
-                  </TooltipTrigger>
-                  <TooltipContent>Send message</TooltipContent>
-                </Tooltip>
-              </CliGate>
-            )}
-            <FocusMark t={t} />
+            <FocusMark t={t} pressed />
+            <span className={DRAWER}>
+              <span className="flex min-w-0 items-center gap-1.5 overflow-hidden focus-within:overflow-visible">
+                <SettleButton key={String(t.settled)} t={t} />
+                {sendTo && (
+                  <CliGate t3cli={sendTo.t3cli}>
+                    <Tooltip>
+                      <TooltipTrigger asChild>
+                        <Button
+                          variant="ghost"
+                          size="icon"
+                          className={ROW_BUTTON}
+                          aria-label="Send message"
+                          disabled={sendTo.t3cli?.available === false}
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            sendTo.open(t.id);
+                          }}
+                        >
+                          <Send className="size-3.5" />
+                        </Button>
+                      </TooltipTrigger>
+                      <TooltipContent>Send message</TooltipContent>
+                    </Tooltip>
+                  </CliGate>
+                )}
+                <FocusMark t={t} pressed={false} />
+              </span>
+            </span>
             <CollapsibleTrigger asChild>
               <Button variant="ghost" size="icon" className={cn(ROW_BUTTON, "group")} aria-label="Details">
                 <ChevronDown className="size-3.5 transition-transform duration-200 group-data-[state=open]:rotate-180 motion-reduce:transition-none" />
