@@ -1,7 +1,7 @@
 ---
 title: Make the answer Actions specific
 type: wayfinder:task
-status: in-review
+status: closed
 assignee: claude (better-brief-03)
 blocked-by: [01-brief-row-look]
 ---
