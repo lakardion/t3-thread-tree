@@ -188,7 +188,7 @@ import {
 
 /** The tab icon; its href follows the needs-you count. */
 const iconLink = document.head.appendChild(
-  Object.assign(document.createElement("link"), { rel: "icon", type: "image/svg+xml" }),
+  Object.assign(document.createElement("link"), { rel: "icon", type: "image/svg+xml", href: "data:," }),
 );
 
 const TOKEN_CMD =
