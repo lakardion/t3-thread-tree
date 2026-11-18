@@ -1,6 +1,17 @@
 import { describe, expect, test } from "bun:test";
 
-import { changedLines, hhmm, markOf, markRows, type BriefAction, type Snapshot } from "../src/shared/brief.ts";
+import {
+  changedLines,
+  foldHead,
+  hasMore,
+  hhmm,
+  markOf,
+  markRows,
+  shortRows,
+  type BriefAction,
+  type Mark,
+  type Snapshot,
+} from "../src/shared/brief.ts";
 import type { PrNode, ThreadNode } from "../src/shared/tree.ts";
 
 const AT = "2026-11-13T12:00:00.000Z";
@@ -87,6 +98,41 @@ describe("markRows", () => {
       [0, "done"],
       [3, "done"],
     ]);
+  });
+});
+
+const rowsOf = (...marks: (Mark | null)[]) => marks.map((mark, i) => ({ a: act("review", [`T${i}`]), i, mark }));
+
+describe("shortRows", () => {
+  test("the first 3 open rows", () => {
+    expect(shortRows(rowsOf(null, null, null, null, null), false).map((r) => r.i)).toEqual([0, 1, 2]);
+  });
+  test("marked rows stay behind", () => {
+    expect(shortRows(rowsOf(null, null, "changed", "done"), false).map((r) => r.i)).toEqual([0, 1]);
+    expect(shortRows(rowsOf("changed", "done"), false)).toEqual([]);
+  });
+  test("all shows every row in order", () => {
+    expect(shortRows(rowsOf(null, "changed", "done", null), true).map((r) => r.i)).toEqual([0, 1, 2, 3]);
+  });
+});
+
+describe("hasMore", () => {
+  test("more than 3 rows or any marked row", () => {
+    expect(hasMore(rowsOf(null, null, null))).toBe(false);
+    expect(hasMore(rowsOf(null, null, null, null))).toBe(true);
+    expect(hasMore(rowsOf(null, null, "done"))).toBe(true);
+    expect(hasMore(rowsOf(null, null, "changed"))).toBe(true);
+  });
+});
+
+describe("foldHead", () => {
+  test("counts Actions, then done and changed", () => {
+    const marks: (Mark | null)[] = [...Array(6).fill(null), "done", "done", "done", "changed"];
+    expect(foldHead(rowsOf(...marks))).toBe("10 Actions · 3 done · 1 changed");
+  });
+  test("leaves out zero parts and uses the singular", () => {
+    expect(foldHead(rowsOf(null, null, null, null))).toBe("4 Actions");
+    expect(foldHead(rowsOf("done"))).toBe("1 Action · 1 done");
   });
 });
 

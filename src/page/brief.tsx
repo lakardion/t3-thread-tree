@@ -1,6 +1,7 @@
 import {
   Check,
   ChevronDown,
+  ChevronRight,
   Copy,
   Crosshair,
   List,
@@ -31,8 +32,11 @@ import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip
 
 import {
   changedLines,
+  foldHead,
+  hasMore,
   hhmm,
   markRows,
+  shortRows,
   type ActionKind,
   type BriefAction,
   type BriefState,
@@ -411,8 +415,18 @@ export function BriefPanel(p: {
   run: () => void;
   cancel: () => void;
   close: () => void;
+  folded: boolean;
+  fold: (f: boolean) => void;
 }) {
   const s = p.state;
+  /** A run starts in `running`, or goes straight to a rules-only `done` when no thread needs the model. */
+  const runId = s.status === "running" ? s.startedAt : s.status === "done" && s.rulesOnly ? s.generatedAt : null;
+  const [all, setAll] = useState(false);
+  const [lastRun, setLastRun] = useState(runId);
+  if (runId && runId !== lastRun) {
+    setLastRun(runId);
+    setAll(false);
+  }
   const label = s.status !== "idle" ? (p.clis?.find((c) => c.id === s.cli)?.label ?? s.cli) : "";
   const marked = s.status === "done" ? markRows(s.actions, p.live, s) : null;
   const placed = s.status === "idle" ? [] : (marked ?? s.actions.map((a, i) => ({ a, i, mark: null })));
@@ -420,9 +434,10 @@ export function BriefPanel(p: {
   const bar = [count("done") && `${count("done")} done`, count("changed") && `${count("changed")} changed`]
     .filter(Boolean)
     .join(" · ");
-  const rows = s.status !== "idle" && placed.length > 0 && (
+  const shown = shortRows(placed, all);
+  const rows = s.status !== "idle" && shown.length > 0 && (
     <ol className="m-0 list-none p-1.5">
-      {placed.map(({ a, i, mark }) => (
+      {shown.map(({ a, i, mark }) => (
         <Row
           key={i}
           a={a}
@@ -446,60 +461,82 @@ export function BriefPanel(p: {
       <div className="project-head flex min-h-10 items-center gap-2 px-3">
         <Sparkles className="size-3.5 text-primary" aria-hidden />
         <h2 className="m-0 text-sm font-semibold whitespace-nowrap">Next steps</h2>
-        {s.status === "done" && (
-          <span className="font-mono text-[11px] text-muted-foreground">
-            generated {hhmm(s.generatedAt)} · {s.rulesOnly ? "rules only" : label}
-          </span>
+        {p.folded ? (
+          <span className="font-mono text-[11px] text-muted-foreground">{foldHead(placed)}</span>
+        ) : (
+          s.status === "done" && (
+            <span className="font-mono text-[11px] text-muted-foreground">
+              generated {hhmm(s.generatedAt)} · {s.rulesOnly ? "rules only" : label}
+            </span>
+          )
         )}
         <Button
           variant="ghost"
           size="icon-xs"
           className="ml-auto text-muted-foreground"
-          aria-label="Hide"
-          onClick={p.close}
+          aria-label={p.folded ? "Unfold" : "Fold"}
+          aria-expanded={!p.folded}
+          onClick={() => p.fold(!p.folded)}
         >
+          <ChevronRight
+            className={`size-3.5 flex-none text-muted-foreground transition-transform duration-200 motion-reduce:transition-none ${p.folded ? "" : "rotate-90"}`}
+          />
+        </Button>
+        <Button variant="ghost" size="icon-xs" className="text-muted-foreground" aria-label="Hide" onClick={p.close}>
           <X />
         </Button>
       </div>
-      {s.status === "done" && bar && (
-        <div className="flex items-center border-b bg-muted/50 px-3 py-1 text-xs text-muted-foreground">
-          {bar} since {hhmm(s.generatedAt)}
-          <Button variant="link" size="xs" className="ml-auto" onClick={p.run}>
-            <RotateCw /> Run again
-          </Button>
-        </div>
-      )}
-      {rows}
-      {s.status === "running" && (
-        <div className={`flex items-center gap-3 px-3 py-3 ${s.actions.length > 0 ? "border-t" : ""}`}>
-          <LoadingText text={`Reading ${s.threadCount} threads…`} />
-          <Button variant="ghost" size="xs" className="ml-auto text-muted-foreground" onClick={p.cancel}>
-            Cancel
-          </Button>
-        </div>
-      )}
-      {s.status === "failed" && (
-        <div className="p-1.5">
-          <Alert className="border-l-[3px] border-l-status-failed">
-            <AlertDescription className="block text-foreground">
-              <div className="flex items-center gap-2">
-                The brief failed.
-                <span className="truncate text-muted-foreground">{s.error}</span>
-                <Button variant="ghost" size="xs" className="ml-auto" onClick={p.run}>
-                  <RotateCw /> Retry
-                </Button>
-              </div>
-              {s.stderrTail && (
-                <pre className="mt-1.5 max-h-24 overflow-auto rounded-[6px] bg-muted p-2 font-mono text-[11px] leading-4 whitespace-pre-wrap text-muted-foreground">
-                  {s.stderrTail}
-                </pre>
-              )}
-            </AlertDescription>
-          </Alert>
-        </div>
-      )}
-      {s.status === "done" && s.actions.length === 0 && (
-        <p className="m-0 px-3 py-3 text-muted-foreground">Nothing needs you right now.</p>
+      {!p.folded && (
+        <>
+          {s.status === "done" && bar && (
+            <div className="flex items-center border-b bg-muted/50 px-3 py-1 text-xs text-muted-foreground">
+              {bar} since {hhmm(s.generatedAt)}
+              <Button variant="link" size="xs" className="ml-auto" onClick={p.run}>
+                <RotateCw /> Run again
+              </Button>
+            </div>
+          )}
+          {rows}
+          {hasMore(placed) && (
+            <div className="flex items-center px-3 pb-1.5 text-xs text-muted-foreground">
+              {shown.length === 0 && !all && "Nothing open ·"}
+              <Button variant="link" size="xs" onClick={() => setAll(!all)}>
+                {all ? "Show less" : `Show all ${placed.length}`}
+              </Button>
+            </div>
+          )}
+          {s.status === "running" && (
+            <div className={`flex items-center gap-3 px-3 py-3 ${s.actions.length > 0 ? "border-t" : ""}`}>
+              <LoadingText text={`Reading ${s.threadCount} threads…`} />
+              <Button variant="ghost" size="xs" className="ml-auto text-muted-foreground" onClick={p.cancel}>
+                Cancel
+              </Button>
+            </div>
+          )}
+          {s.status === "failed" && (
+            <div className="p-1.5">
+              <Alert className="border-l-[3px] border-l-status-failed">
+                <AlertDescription className="block text-foreground">
+                  <div className="flex items-center gap-2">
+                    The brief failed.
+                    <span className="truncate text-muted-foreground">{s.error}</span>
+                    <Button variant="ghost" size="xs" className="ml-auto" onClick={p.run}>
+                      <RotateCw /> Retry
+                    </Button>
+                  </div>
+                  {s.stderrTail && (
+                    <pre className="mt-1.5 max-h-24 overflow-auto rounded-[6px] bg-muted p-2 font-mono text-[11px] leading-4 whitespace-pre-wrap text-muted-foreground">
+                      {s.stderrTail}
+                    </pre>
+                  )}
+                </AlertDescription>
+              </Alert>
+            </div>
+          )}
+          {s.status === "done" && s.actions.length === 0 && (
+            <p className="m-0 px-3 py-3 text-muted-foreground">Nothing needs you right now.</p>
+          )}
+        </>
       )}
     </Card>
   );
