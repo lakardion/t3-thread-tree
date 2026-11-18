@@ -2,7 +2,7 @@
 title: What does Find match, and how does the user pick a result?
 type: grilling
 status: open
-assignee:
+assignee: damian.lucero
 blocked-by: []
 ---
 
