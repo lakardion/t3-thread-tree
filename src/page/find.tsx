@@ -92,7 +92,6 @@ const IconState = ({ icon, children }: { icon: ReactNode; children: ReactNode })
 type BodyProps = {
   list: Hit[];
   focus: string[];
-  settledOn: boolean;
   canShow: (id: string) => boolean;
   now: number;
   open: (h: Hit) => void;
@@ -100,7 +99,7 @@ type BodyProps = {
 };
 
 /** The search and the results. It mounts with the dialog, so the query and the settled search reset on close. */
-function FindBody({ list, focus, settledOn, canShow, now, open, show }: BodyProps) {
+function FindBody({ list, focus, canShow, now, open, show }: BodyProps) {
   const [q, setQ] = useState("");
   const [sel, setSel] = useState("");
   const [settledMode, setSettledMode] = useState(false);
@@ -126,7 +125,7 @@ function FindBody({ list, focus, settledOn, canShow, now, open, show }: BodyProp
 
   const active = query ? find(list, query) : recent(list, focus);
   const settled = settledMode && query && settledHits.q === query ? settledHits.hits : [];
-  const offerSettled = query !== "" && !settledOn && !settledMode;
+  const offerSettled = query !== "" && !settledMode;
   const byValue = new Map([...active, ...settled].map((h) => [h.t.id, h]));
   const row = (h: Hit) => <Row key={h.t.id} h={h} now={now} canShow={canShow(h.t.id)} open={open} show={show} />;
   const onKeyDown = (e: KeyboardEvent) => {
@@ -185,7 +184,6 @@ export function FindDialog({
   setOpen,
   list,
   focus,
-  settledOn,
   canShow,
   reveal,
   now,
@@ -194,7 +192,6 @@ export function FindDialog({
   setOpen: (o: boolean) => void;
   list: Hit[];
   focus: string[];
-  settledOn: boolean;
   canShow: (id: string) => boolean;
   reveal: (id: string) => Promise<boolean>;
   now: number;
@@ -218,7 +215,6 @@ export function FindDialog({
         <FindBody
           list={list}
           focus={focus}
-          settledOn={settledOn}
           canShow={canShow}
           now={now}
           open={(h) => {

@@ -8,6 +8,7 @@ import { findRoutes } from "./server/find.ts";
 import { mayBeLaunched, needsScan, openLineage } from "./server/lineage.ts";
 import { checkCli, cliPath, sendService } from "./server/send.ts";
 import { settleRoutes } from "./server/settle.ts";
+import { settledPage, settledRoutes, settledSignature } from "./server/settled.ts";
 import { connectShell, readEnvironmentId, type Project, type Thread } from "./server/t3.ts";
 import { parseToken, readToken, tokenResponse, writeToken } from "./server/token.ts";
 import { parseLinear, type Conn, type Tree } from "./shared/tree.ts";
@@ -38,8 +39,7 @@ const unscanned = new Set<string>();
 
 let scanning = false;
 /** The full scan takes seconds on a cold disk, so it runs in a Worker, and only when a requested view needs it. The worker path resolves from cwd in dev and from the bundle root in the binary. */
-function scanIfNeeded() {
-  const settledView = [...clients].some((c) => c.settled);
+function scanIfNeeded(settledView = false) {
   if (scanning || !needsScan(unscanned, threads.values(), (id) => spawners.get(id), settledView)) return;
   scanning = true;
   const ids = [...unscanned];
@@ -84,7 +84,7 @@ function resolveSpawners() {
   }, 2000);
 }
 
-type Client = { settled: boolean; nest: boolean; send: (data: string, event?: string) => void };
+type Client = { nest: boolean; send: (data: string, event?: string) => void };
 const clients = new Set<Client>();
 
 const linear = parseLinear(process.env.LINEAR_WORKSPACE, process.env.LINEAR_TEAMS);
@@ -93,6 +93,7 @@ const treeFor = (settled: boolean, nest = false): Tree => ({
   conn: ready ? conn : "connecting",
   lastUpdate,
   linear,
+  settled: settledSignature(threads.values()),
   projects: buildTree({
     threads: threads.values(),
     projects,
@@ -110,8 +111,8 @@ function changed() {
   timer = setTimeout(() => {
     const cache = new Map<string, string>();
     for (const c of clients) {
-      const key = `${c.settled}:${c.nest}`;
-      if (!cache.has(key)) cache.set(key, JSON.stringify(treeFor(c.settled, c.nest)));
+      const key = String(c.nest);
+      if (!cache.has(key)) cache.set(key, JSON.stringify(treeFor(false, c.nest)));
       c.send(cache.get(key)!);
     }
   }, 150);
@@ -174,7 +175,7 @@ const shell = connectShell({
 
 const brief = briefService({
   clis: detectClis(),
-  input: (settled) => briefInput(treeFor(settled).projects, lineage.lastMessages, Date.now()),
+  input: () => briefInput(treeFor(false).projects, lineage.lastMessages, Date.now()),
   onChange: () => {
     const data = JSON.stringify(brief.state());
     for (const c of clients) c.send(data, "brief");
@@ -200,6 +201,12 @@ const server = Bun.serve({
     ...send.routes,
     ...settleRoutes({ dispatch: (c) => shell.dispatch(c), hasThread: (id) => threads.get(id)?.gone === false }),
     ...findRoutes(() => treeFor(true).projects),
+    ...settledRoutes({
+      page: (after, limit) => {
+        scanIfNeeded(true);
+        return settledPage(treeFor(true).projects, threads, after, limit);
+      },
+    }),
     ...lastMessageRoutes({ read: (id) => lineage.lastMessages([id]).get(id) ?? null, has: (id) => threads.has(id) }),
     "/token": {
       /** JSON only: a cross-site form cannot send it without a CORS preflight, which this server does not answer. */
@@ -221,7 +228,6 @@ const server = Bun.serve({
     "/events": (req) => {
       server.timeout(req, 0);
       const params = new URL(req.url).searchParams;
-      const settled = params.get("settled") === "1";
       const nest = params.get("nest") === "1";
       const enc = new TextEncoder();
       let client: Client;
@@ -229,13 +235,11 @@ const server = Bun.serve({
         new ReadableStream({
           start(ctrl) {
             client = {
-              settled,
               nest,
               send: (d, event) => ctrl.enqueue(enc.encode(`${event ? `event: ${event}\n` : ""}data: ${d}\n\n`)),
             };
             clients.add(client);
-            if (settled) scanIfNeeded();
-            client.send(JSON.stringify(treeFor(settled, nest)));
+            client.send(JSON.stringify(treeFor(false, nest)));
             client.send(JSON.stringify(brief.state()), "brief");
           },
           cancel() {
