@@ -1,7 +1,7 @@
 import { CollisionPriority } from "@dnd-kit/abstract";
 import { useDroppable } from "@dnd-kit/react";
 import { Crosshair, X } from "lucide-react";
-import { createContext, useEffect, useRef, useState, type ReactNode } from "react";
+import { createContext, useContext, useEffect, useRef, useState, type ReactNode } from "react";
 
 import { Button } from "@/components/ui/button";
 import { Toggle } from "@/components/ui/toggle";
@@ -19,7 +19,9 @@ export const Focus = createContext<{
   add: (id: string) => void;
   remove: (id: string) => void;
   full: boolean;
-}>({ ids: [], add: () => {}, remove: () => {}, full: false });
+  /** Unfolds the path to the row of a thread and scrolls to it. False when the row stays hidden. */
+  reveal: (id: string) => Promise<boolean>;
+}>({ ids: [], add: () => {}, remove: () => {}, full: false, reveal: async () => false });
 
 /** A drop of thread `id` on slot `slot`, which holds `over`, that waits for the user to confirm the replace. */
 export type Pending = { slot: number; id: string; over: string };
@@ -31,7 +33,7 @@ export const slotOf = (id: unknown): number | null =>
 
 /**
  * Scrolls the tree to the row of thread `id`, then flashes it. False when the row is not visible
- * (folded project, closed stack, filter).
+ * (filter, hidden snoozed threads, or a flat stack that hides the row).
  */
 export function revealRow(id: string): boolean {
   const row = document.querySelector<HTMLElement>(`.thread-row[data-thread="${CSS.escape(id)}"]`);
@@ -150,6 +152,7 @@ function FocusCard({
   remove: () => void;
   confirm?: { title: string; replace: () => void; cancel: () => void };
 }) {
+  const { reveal } = useContext(Focus);
   const [hidden, setHidden] = useState(false);
   useEffect(() => {
     if (!hidden) return;
@@ -187,7 +190,7 @@ function FocusCard({
             size="sm"
             variant="ghost"
             className="h-7 text-muted-foreground"
-            onClick={() => setHidden(!revealRow(t.id))}
+            onClick={() => void reveal(t.id).then((shown) => setHidden(!shown))}
           >
             {hidden ? "Hidden in the tree" : "Show in tree"}
           </Button>

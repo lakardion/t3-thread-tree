@@ -251,3 +251,27 @@ export function flatLists(items: FlatItem[]): Map<string, string[]> {
   }
   return lists;
 }
+
+/**
+ * The fold ids to open so that the row of thread `id` shows in the tree: every branch on the path to it, from the
+ * project down, and the rail of each PR stack on the path. Empty when the thread is not in `projects`.
+ */
+export function pathFolds(projects: Branch[], id: string): string[] {
+  const walk = (b: Branch): Branch[] | null => {
+    if (b.threads.some((t) => flat(t).some((x) => x.id === id))) return [b];
+    for (const c of b.branches) {
+      const path = walk(c);
+      if (path) return [b, ...path];
+    }
+    return null;
+  };
+  for (const p of projects) {
+    const path = walk(p);
+    if (path) return path.flatMap((b) => (b.stack ? [b.id, `rail:${b.stack.id}`] : [b.id]));
+  }
+  return [];
+}
+
+/** The key of the status section whose unit holds thread `id`, subthreads at any depth. Null when no section does. */
+export const sectionHolding = (units: FlatUnit[], snoozed: boolean, id: string): string | null =>
+  sections(units, snoozed).find((s) => s.units.some((u) => everyThread(u).some((t) => t.id === id)))?.key ?? null;

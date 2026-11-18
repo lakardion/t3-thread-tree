@@ -2,6 +2,7 @@
 import index from "../src/page/index.html";
 import { briefInput, briefService, lastMessageRoutes, type Outcome } from "../src/server/brief.ts";
 import { buildTree } from "../src/server/build-tree.ts";
+import { findRoutes } from "../src/server/find.ts";
 import { cliPath, type CliRun, sendService } from "../src/server/send.ts";
 import type { Pr, Project, Thread } from "../src/server/t3.ts";
 import type { BriefAction, Cli } from "../src/shared/brief.ts";
@@ -388,6 +389,7 @@ const server = Bun.serve({
     ...brief.routes,
     ...sender.routes,
     ...lastMessageRoutes({ read: lastMessage, has: (id) => threads.some((th) => th.id === id) }),
+    ...findRoutes(() => projectsFor(true, false)),
     "/events": async (req) => {
       server.timeout(req, 0);
       await Bun.sleep(Number(process.env.DELAY ?? 0));
