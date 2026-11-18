@@ -46,7 +46,7 @@ The destination is reached when every route key is done and no map ticket is ope
 
 ## Stacks
 
-- Lane 3: `main ← improvements-program-11-phone-view-menu (#68)`. #63 is merged; #68 waits for the user.
+<!-- none open -->
 
 ## Notes
 

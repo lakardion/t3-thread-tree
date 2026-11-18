@@ -1,7 +1,7 @@
 ---
 title: One menu for Sort, Layout and Group by on a phone
 type: wayfinder:task
-status: in-review
+status: closed
 assignee: damian.lucero
 blocked-by: [08-key-m18-tab-count]
 ---
