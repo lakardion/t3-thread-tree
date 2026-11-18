@@ -543,6 +543,8 @@ export type Status =
   | "snoozed"
   | "idle";
 
+export type Label = { name: string; color: string | null };
+
 export type PrNode = {
   n: number;
   url: string;
@@ -555,6 +557,8 @@ export type PrNode = {
   additions: number | null;
   deletions: number | null;
   changedFiles: number | null;
+  /** Only the labels the connection watches. */
+  labels: Label[];
 };
 
 export type Detail = {

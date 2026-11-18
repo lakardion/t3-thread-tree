@@ -93,6 +93,7 @@ const pr = (over: object) =>
     additions: 0,
     deletions: 0,
     changedFiles: 0,
+    labels: [],
     ...over,
   }) as ThreadNode["prs"][number];
 

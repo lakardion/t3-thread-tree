@@ -12,6 +12,8 @@ export type Status =
   | "snoozed"
   | "idle";
 
+export type Label = { name: string; color: string | null };
+
 export type PrNode = {
   n: number;
   url: string;
@@ -24,6 +26,8 @@ export type PrNode = {
   additions: number | null;
   deletions: number | null;
   changedFiles: number | null;
+  /** Only the labels the connection watches. */
+  labels: Label[];
 };
 
 export type Detail = {
@@ -113,6 +117,13 @@ export function parseLinear(workspace = "", teams = ""): Linear | null {
       .filter(Boolean),
   };
 }
+
+/** Label names from a comma list: trimmed, empty names dropped. */
+export const parseLabels = (s = ""): string[] =>
+  s
+    .split(",")
+    .map((x) => x.trim())
+    .filter(Boolean);
 
 export const flat = (t: ThreadNode): ThreadNode[] => [t, ...t.children.flatMap(flat)];
 export const allThreads = (b: Branch): ThreadNode[] => [...b.branches.flatMap(allThreads), ...b.threads.flatMap(flat)];

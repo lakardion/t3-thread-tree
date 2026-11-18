@@ -5,13 +5,17 @@
 import { homedir } from "node:os";
 import { join } from "node:path";
 
-import type { Conn } from "../shared/tree.ts";
+import type { Conn, Label } from "../shared/tree.ts";
 
 export const USERDATA = join(homedir(), ".t3", "userdata");
 
 export type Pr = {
   n: number;
   url: string;
+  host: string;
+  repository: string;
+  /** Snapshot `updatedAt`; empty before the first sync. */
+  updatedAt: string;
   source: string;
   state: string;
   draft: boolean | null;
@@ -145,6 +149,9 @@ export function decodeThread(raw: unknown): Thread | null {
         {
           n,
           url: str(o.url) ?? "",
+          host: str(o.host) ?? "",
+          repository: str(o.repository) ?? "",
+          updatedAt: str(snap.updatedAt) ?? "",
           source: str(o.source) ?? "",
           state,
           draft: bool(snap.isDraft),
@@ -254,7 +261,7 @@ export function connectShell(opts: {
 }) {
   let ws: WebSocket | null = null;
   let seq = 1;
-  const pending = new Map<string, { sock: WebSocket; resolve: () => void; reject: (e: Error) => void }>();
+  const pending = new Map<string, { sock: WebSocket; resolve: (v: unknown) => void; reject: (e: Error) => void }>();
   /** Counts `reconnect` calls. A report from an older generation describes an old token, so it is dropped. */
   let gen = 0;
   let waiters: ((c: Conn) => void)[] = [];
@@ -320,9 +327,13 @@ export function connectShell(opts: {
         } else if (m._tag === "Exit" && typeof m.requestId === "string" && pending.has(m.requestId)) {
           const call = pending.get(m.requestId)!;
           pending.delete(m.requestId);
-          if (obj(m.exit)._tag === "Success") call.resolve();
+          if (obj(m.exit)._tag === "Success") call.resolve(obj(m.exit).value);
           else call.reject(new Error(failureText(m)));
-        } else if (m._tag === "Exit" || m._tag === "Defect" || m._tag === "ClientProtocolError") {
+        } else if (
+          (m._tag === "Exit" && m.requestId === "1") ||
+          m._tag === "Defect" ||
+          m._tag === "ClientProtocolError"
+        ) {
           console.error("[t3] stream ended:", JSON.stringify(m).slice(0, 500));
           sock.close();
         }
@@ -345,31 +356,43 @@ export function connectShell(opts: {
 
   void attempt();
   setInterval(attempt, 3000);
+  /** One unary call on the open socket. Resolves with the `Exit` value. */
+  const request = (tag: string, payload: unknown): Promise<unknown> => {
+    if (ws?.readyState !== WebSocket.OPEN) return Promise.reject(new Error("T3 is not connected"));
+    const id = String(++seq);
+    return new Promise((resolve, reject) => {
+      const timer = setTimeout(() => {
+        pending.delete(id);
+        reject(new Error("timed out"));
+      }, 30_000);
+      pending.set(id, {
+        sock: ws!,
+        resolve: (v) => (clearTimeout(timer), resolve(v)),
+        reject: (e) => (clearTimeout(timer), reject(e)),
+      });
+      ws!.send(JSON.stringify({ _tag: "Request", id, tag, payload, headers: [] }));
+    });
+  };
+
   return {
     /** Sends one orchestration command and resolves when T3 accepts it. */
-    dispatch(command: Record<string, unknown>): Promise<void> {
-      if (ws?.readyState !== WebSocket.OPEN) return Promise.reject(new Error("T3 is not connected"));
-      const id = String(++seq);
-      return new Promise<void>((resolve, reject) => {
-        const timer = setTimeout(() => {
-          pending.delete(id);
-          reject(new Error("timed out"));
-        }, 30_000);
-        pending.set(id, {
-          sock: ws!,
-          resolve: () => (clearTimeout(timer), resolve()),
-          reject: (e) => (clearTimeout(timer), reject(e)),
-        });
-        ws!.send(
-          JSON.stringify({
-            _tag: "Request",
-            id,
-            tag: "orchestration.dispatchCommand",
-            payload: { ...command, commandId: crypto.randomUUID() },
-            headers: [],
-          }),
-        );
-      });
+    dispatch: (command: Record<string, unknown>): Promise<void> =>
+      request("orchestration.dispatchCommand", { ...command, commandId: crypto.randomUUID() }).then(() => {}),
+    /** The labels and `updatedAt` of one PR, fresh from the host. */
+    async detail(ref: {
+      projectId: string;
+      host: string;
+      repository: string;
+      number: number;
+    }): Promise<{ labels: Label[]; updatedAt: string }> {
+      const v = obj(await request("pullRequests.detail", { ...ref, allowStale: false }));
+      return {
+        labels: (Array.isArray(v.labels) ? v.labels : []).flatMap((l) => {
+          const o = obj(l);
+          return typeof o.name === "string" ? [{ name: o.name, color: str(o.color) }] : [];
+        }),
+        updatedAt: str(v.updatedAt) ?? "",
+      };
     },
     /** Drops the open socket and connects again with the current token. Resolves with the first outcome. */
     reconnect(): Promise<Conn> {

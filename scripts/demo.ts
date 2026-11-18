@@ -7,6 +7,7 @@ import { cliPath, type CliRun, sendService } from "../src/server/send.ts";
 import { settledPage, settledRoutes, settledSignature } from "../src/server/settled.ts";
 import type { Pr, Project, Thread } from "../src/server/t3.ts";
 import type { BriefAction, Cli } from "../src/shared/brief.ts";
+import { parseLabels } from "../src/shared/tree.ts";
 
 const now = Date.now();
 const ago = (min: number) => new Date(now - min * 60_000).toISOString();
@@ -60,11 +61,32 @@ function t(title: string, over: Partial<Thread> = {}): Thread {
   };
 }
 
+/** GitHub labels per PR. One very light and one very dark color, plus a label nobody watches. */
+const RFR = { name: "ready-for-review", color: "0e8a16" };
+const QA = { name: "needs-qa-on-staging-before-merge", color: "fef2c0" };
+const DNM = { name: "do-not-merge", color: "1d1d1f" };
+const SIZE = { name: "size:L", color: "ededed" };
+const LABELS: Record<number, { name: string; color: string }[]> = {
+  2102: [RFR, SIZE],
+  2107: [RFR, QA],
+  2104: [DNM],
+  2088: [RFR],
+  2095: [RFR],
+  3002: [RFR],
+  3003: [QA],
+  3004: [RFR],
+  3010: [RFR],
+  4202: [RFR],
+};
+
 /** A four-PR stack spread over four issue keys. */
 const STACK = [2101, 2102, 2104, 2107];
 const pr = (n: number, source: string, state = "open", over: Partial<Pr> = {}): Pr => ({
   n,
   url: gh(n),
+  host: "github.com",
+  repository: "",
+  updatedAt: "",
   source,
   state,
   draft: null,
@@ -191,7 +213,7 @@ const threads: Thread[] = [
     snoozedUntil: later(30),
   }),
   t("Rewrite the install page", { id: "launched", projectId: "docs" }),
-  t("DOC-16 · Archive the old tutorial", { projectId: "docs", settledAt: ago(60) }),
+  t("DOC-16 · Archive the old tutorial", { projectId: "docs", settledAt: ago(60), prs: [pr(3010, "linked")] }),
   t("Cache rollout dispatch", { id: "dispatch", projectId: "api", ...completed }),
   t("Search revamp map", { id: "search", projectId: "api", status: "idle" }),
   t("Search: plan the new index", { id: "search-plan", projectId: "api", ...completed }),
@@ -230,15 +252,25 @@ const projects = new Map<string, Project>([
   ["docs", { title: "docs-site", repo: null }],
 ]);
 
-const projectsFor = (settled: boolean, nest = false) =>
-  buildTree({ threads, projects, spawnerOf: (id) => spawners[id], environmentId: "demo", settled, nest, now });
-const treeFor = (nest: boolean) =>
+const projectsFor = (settled: boolean, nest = false, labels: string[] = []) =>
+  buildTree({
+    threads,
+    projects,
+    spawnerOf: (id) => spawners[id],
+    environmentId: "demo",
+    settled,
+    nest,
+    now,
+    labels,
+    labelsOf: (p) => LABELS[p.n],
+  });
+const treeFor = (nest: boolean, labels: string[]) =>
   JSON.stringify({
     conn: process.env.CONN ?? "up",
     lastUpdate: new Date(now).toISOString(),
     linear: { workspace: "acme", teams: ["SHOP"] },
     settled: settledSignature(threads),
-    projects: projectsFor(false, nest),
+    projects: projectsFor(false, nest, labels),
   });
 
 /** The model part of the sample brief. Code makes the `answer`, `fix` and `merge` actions from the tree, so these threads have none of them. `demo-27` is settled, so its link shows struck through. */
@@ -400,9 +432,10 @@ const server = Bun.serve({
       await Bun.sleep(Number(process.env.DELAY ?? 0));
       const params = new URL(req.url).searchParams;
       const nest = params.get("nest") === "1";
+      const labels = parseLabels(params.get("labels") ?? "");
       const enc = new TextEncoder();
       let send: (event: string, data: string) => void;
-      const push = () => send("", treeFor(nest));
+      const push = () => send("", treeFor(nest, labels));
       return new Response(
         new ReadableStream({
           start(ctrl) {

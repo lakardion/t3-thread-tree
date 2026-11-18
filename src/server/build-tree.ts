@@ -5,6 +5,7 @@ import {
   REVIEWS,
   type Branch,
   type Detail,
+  type Label,
   type PrNode,
   type Status,
   type ThreadNode,
@@ -58,6 +59,9 @@ export type BuildInput = {
   /** Launch nesting: a keyless thread nests under its visible spawner. */
   nest: boolean;
   now: number;
+  /** Watched label names. Empty: no PR gets labels. */
+  labels?: string[];
+  labelsOf?: (p: Thread["prs"][number]) => Label[] | undefined;
 };
 
 type Node = ThreadNode & { t: Thread; first: string };
@@ -68,7 +72,7 @@ const stackPrs = (t: Thread) => t.prs.filter((p) => STACK_SOURCES.has(p.source) 
 const CHECKS = ["passing", "failing", "pending"] as const;
 const REVIEWS_STATE = ["approved", "changes-requested", "review-required"] as const;
 const narrow = <T extends string>(v: string | null, set: readonly T[]): T | null => set.find((x) => x === v) ?? null;
-const prNode = (p: Thread["prs"][number]): PrNode => ({
+const prNode = (p: Thread["prs"][number], labels: Label[]): PrNode => ({
   n: p.n,
   url: p.url,
   state: p.state,
@@ -80,6 +84,7 @@ const prNode = (p: Thread["prs"][number]): PrNode => ({
   additions: p.additions,
   deletions: p.deletions,
   changedFiles: p.changedFiles,
+  labels,
 });
 const hrefOf = (environmentId: string, id: string) =>
   `t3code://threads/${encodeURIComponent(environmentId)}/${encodeURIComponent(id)}`;
@@ -168,6 +173,11 @@ const newest = (a: string | null, b: string | null): string | null =>
 
 export function buildTree(input: BuildInput): Branch[] {
   const { projects, spawnerOf, environmentId, settled, nest, now } = input;
+  const watched = new Set((input.labels ?? []).map((l) => l.toLowerCase()));
+  const labelsFor = (t: Thread, p: Thread["prs"][number]): Label[] =>
+    t.settledAt || watched.size === 0
+      ? []
+      : (input.labelsOf?.(p) ?? []).filter((l) => watched.has(l.name.toLowerCase()));
   const visible = new Map<string, Thread>();
   const all = new Map<string, Thread>();
   for (const t of input.threads) {
@@ -199,7 +209,9 @@ export function buildTree(input: BuildInput): Branch[] {
       input: t.pending?.blocking === false,
       snoozedUntil: t.snoozedUntil && Date.parse(t.snoozedUntil) > now ? t.snoozedUntil : null,
       stack: st ? { pos, total: st.order.length } : null,
-      prs: t.prs.filter((p) => p.source !== "stack" && p.source !== "stack-dismissed").map(prNode),
+      prs: t.prs
+        .filter((p) => p.source !== "stack" && p.source !== "stack-dismissed")
+        .map((p) => prNode(p, labelsFor(t, p))),
       detail: { ...detailOf(t, now, all), launchedBy: null },
       children: [],
       first: creationKey(t),

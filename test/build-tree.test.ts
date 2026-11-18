@@ -437,6 +437,7 @@ describe("PR stack", () => {
         additions: null,
         deletions: null,
         changedFiles: null,
+        labels: [],
       },
     ]);
   });
@@ -576,6 +577,7 @@ describe("status", () => {
         additions: null,
         deletions: null,
         changedFiles: null,
+        labels: [],
       },
       {
         n: 8,
@@ -589,6 +591,7 @@ describe("status", () => {
         additions: null,
         deletions: null,
         changedFiles: null,
+        labels: [],
       },
     ]);
   });
@@ -736,5 +739,48 @@ describe("lineage tool results", () => {
     ]);
     expect(launchedIds('[{"type":"text","text":"{\\"threadId\\":\\"mcp:2\\"}"}]')).toEqual(["mcp:2"]);
     expect(launchedIds("not json")).toEqual([]);
+  });
+});
+
+describe("labels", () => {
+  const linked = {
+    ...pr(7, "created"),
+    repository: "org/repo",
+    snapshot: { ...pr(7, "created").snapshot, updatedAt: "2026-11-12T10:00:00.000Z" },
+  };
+  const all = [
+    { name: "Ready-For-Review", color: "0e8a16" },
+    { name: "size:L", color: null },
+  ];
+  const prsOf = (over: Partial<BuildInput>, raw: Record<string, unknown> = {}, settled = false) =>
+    build(
+      [shell("a", "SHOP-1 x", { pullRequests: [linked], ...raw })],
+      {},
+      { labelsOf: () => all, settled, ...over },
+    )[0].branches[0].threads[0].prs;
+
+  test("decode keeps host, repository and the snapshot updatedAt", () => {
+    const [p] = decodeThread(shell("a", "x", { pullRequests: [linked] }))!.prs;
+    expect(p).toMatchObject({ host: "github.com", repository: "org/repo", updatedAt: "2026-11-12T10:00:00.000Z" });
+    const bare = decodeThread(shell("a", "x", { pullRequests: [{ number: 1 }] }))!.prs[0];
+    expect(bare).toMatchObject({ host: "", repository: "", updatedAt: "" });
+  });
+
+  test("a PR gets the watched labels, case-insensitive", () => {
+    expect(prsOf({ labels: ["ready-for-review"] })[0].labels).toEqual([all[0]]);
+  });
+
+  test("no list gives no labels", () => {
+    expect(prsOf({})[0].labels).toEqual([]);
+    expect(prsOf({ labels: [] })[0].labels).toEqual([]);
+  });
+
+  test("a settled thread gives no labels", () => {
+    const raw = { settledAt: "2026-11-12T09:00:00.000Z" };
+    expect(prsOf({ labels: ["size:L"] }, raw, true)[0].labels).toEqual([]);
+  });
+
+  test("labelsOf may have no answer yet", () => {
+    expect(prsOf({ labels: ["size:L"], labelsOf: () => undefined })[0].labels).toEqual([]);
   });
 });

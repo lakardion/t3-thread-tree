@@ -219,6 +219,7 @@ describe("prTone", () => {
     additions: null,
     deletions: null,
     changedFiles: null,
+    labels: [],
     ...over,
   });
   test.each([
