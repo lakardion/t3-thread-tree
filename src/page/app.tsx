@@ -1782,7 +1782,8 @@ function ProjectBlock({ b, closed, toggle, fold }: { b: Branch } & Fold) {
 const KEYS: [keys: string, action: string][] = [
   ["j k ↑ ↓", "Move"],
   ["Enter", "Open"],
-  ["o", "Details"],
+  ["o", "Details or fold"],
+  ["l h", "Expand, collapse"],
   ["s", "Send"],
   ["n", "Open next"],
   [FIND_KEY, "Find"],
@@ -2150,8 +2151,11 @@ function App() {
         e.preventDefault();
         to.focus({ preventScroll: true });
         to.scrollIntoView({ block: "nearest" });
-      } else if (action === "details") {
-        active?.closest(".thread-row")?.querySelector<HTMLElement>("[aria-label=Details]")?.click();
+      } else if (action === "toggle" || action === "expand" || action === "collapse") {
+        const row = active?.closest(".thread-row");
+        const btn = row ? row.querySelector<HTMLElement>("[aria-label=Details]") : active;
+        const expanded = btn?.getAttribute("aria-expanded") === "true";
+        if (btn instanceof HTMLElement && (action === "toggle" || expanded === (action === "collapse"))) btn.click();
       } else if (action === "send") {
         active
           ?.closest(".thread-row")

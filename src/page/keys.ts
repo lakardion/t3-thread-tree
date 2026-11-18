@@ -21,7 +21,7 @@ export type KeyContext = {
 export function pageKey(
   e: KeyEvent,
   ctx: KeyContext,
-): "next" | "find" | "down" | "up" | "details" | "send" | 0 | 1 | 2 | null {
+): "next" | "find" | "down" | "up" | "toggle" | "expand" | "collapse" | "send" | 0 | 1 | 2 | null {
   if (
     e.key.toLowerCase() === "k" &&
     !e.altKey &&
@@ -35,7 +35,10 @@ export function pageKey(
   if (e.key === "j" || (ctx.stop && e.key === "ArrowDown")) return "down";
   if (e.key === "k" || (ctx.stop && e.key === "ArrowUp")) return "up";
   if (e.repeat) return null;
-  if (ctx.stop === "thread" && e.key === "o") return "details";
+  /** On a thread these act on its details, on a header on its fold. */
+  if (ctx.stop && e.key === "o") return "toggle";
+  if (ctx.stop && e.key === "l") return "expand";
+  if (ctx.stop && e.key === "h") return "collapse";
   if (ctx.stop === "thread" && e.key === "s") return "send";
   if (e.key === "n") return "next";
   return e.key === "1" ? 0 : e.key === "2" ? 1 : e.key === "3" ? 2 : null;

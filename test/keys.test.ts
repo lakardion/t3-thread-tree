@@ -89,13 +89,18 @@ describe("row keys", () => {
     expect(pageKey(ev("ArrowDown"), ctx({ stop: "header" }))).toBe("down");
     expect(pageKey(ev("ArrowUp", { repeat: true }), ctx({ stop: "thread" }))).toBe("up");
   });
-  test("o and s act only on a thread stop", () => {
-    expect(pageKey(ev("o"), ctx({ stop: "thread" }))).toBe("details");
-    expect(pageKey(ev("s"), ctx({ stop: "thread" }))).toBe("send");
-    for (const stop of [null, "header"] as const) {
-      expect(pageKey(ev("o"), ctx({ stop }))).toBeNull();
-      expect(pageKey(ev("s"), ctx({ stop }))).toBeNull();
+  test("o, l and h act on any stop", () => {
+    for (const stop of ["thread", "header"] as const) {
+      expect(pageKey(ev("o"), ctx({ stop }))).toBe("toggle");
+      expect(pageKey(ev("l"), ctx({ stop }))).toBe("expand");
+      expect(pageKey(ev("h"), ctx({ stop }))).toBe("collapse");
     }
+    for (const k of ["o", "l", "h"]) expect(pageKey(ev(k), ctx())).toBeNull();
+  });
+  test("s acts only on a thread stop", () => {
+    expect(pageKey(ev("s"), ctx({ stop: "thread" }))).toBe("send");
+    expect(pageKey(ev("s"), ctx({ stop: "header" }))).toBeNull();
+    expect(pageKey(ev("s"), ctx())).toBeNull();
   });
   test("do nothing in a field, with the panel or an overlay, or with a modifier", () => {
     for (const c of [
@@ -105,7 +110,7 @@ describe("row keys", () => {
       ctx({ stop: "thread", overlay: "menu" }),
       ctx({ stop: "thread", overlay: "find" }),
     ]) {
-      for (const k of ["j", "k", "ArrowDown", "ArrowUp", "o", "s"]) expect(pageKey(ev(k), c)).toBeNull();
+      for (const k of ["j", "k", "ArrowDown", "ArrowUp", "o", "l", "h", "s"]) expect(pageKey(ev(k), c)).toBeNull();
     }
     for (const k of ["j", "ArrowDown", "o", "s"]) {
       for (const m of [{ metaKey: true }, { ctrlKey: true }, { altKey: true }, { shiftKey: true }]) {
