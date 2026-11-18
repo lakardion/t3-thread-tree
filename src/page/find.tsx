@@ -182,7 +182,11 @@ function FindBody({ list, focus, settledOn, canShow, now, open, show }: BodyProp
         {settled.length > 0 && <CommandGroup heading="Settled">{settled.map((h) => row(h))}</CommandGroup>}
         {offerSettled && (
           <CommandGroup>
-            <CommandItem value={SETTLED_ROW} onSelect={() => setSettledMode(true)}>
+            <CommandItem
+              value={SETTLED_ROW}
+              onSelect={() => setSettledMode(true)}
+              className="cursor-pointer hover:bg-foreground/10 data-[selected=true]:hover:bg-foreground/10"
+            >
               <Archive />
               Search settled threads
             </CommandItem>
