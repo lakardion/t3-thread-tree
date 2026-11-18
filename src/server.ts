@@ -4,7 +4,7 @@ import { join } from "node:path";
 import index from "./page/index.html";
 import upNext from "./page/up-next.html";
 import { briefInput, briefService, detectClis, lastMessageRoutes } from "./server/brief.ts";
-import { buildTree, issueKey } from "./server/build-tree.ts";
+import { buildLinearTree, buildTree, issueKey } from "./server/build-tree.ts";
 import { findRoutes } from "./server/find.ts";
 import { labelStore } from "./server/labels.ts";
 import { mayBeLaunched, needsScan, openLineage } from "./server/lineage.ts";
@@ -99,7 +99,7 @@ const treeFor = (settled: boolean, nest = false, labels: string[] = [], wantsLin
   linear,
   linearKey: linearSource.state(),
   settled: settledSignature(threads.values()),
-  projects: buildTree({
+  projects: (wantsLinear ? buildLinearTree : buildTree)({
     threads: threads.values(),
     projects,
     spawnerOf: (id) => spawners.get(id),

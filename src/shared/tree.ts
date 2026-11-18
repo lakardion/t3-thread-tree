@@ -75,6 +75,8 @@ export type ThreadNode = {
   prs: PrNode[];
   detail: Detail;
   children: ThreadNode[];
+  /** The T3 project. Set only in the Linear tree. */
+  t3Project?: { id: string; label: string };
 };
 
 export type Branch = {
@@ -84,6 +86,8 @@ export type Branch = {
   repo?: string;
   /** Key groups in a PR stack. Adjacent groups with the same `id` share one rail. */
   stack?: { id: string; total: number; base: string | null };
+  /** Top-level and milestone branches of the Linear tree. `url`: project link. `date`: milestone target date. */
+  linear?: { url?: string; date?: string | null };
   branches: Branch[];
   threads: ThreadNode[];
 };
@@ -91,6 +95,12 @@ export type Branch = {
 /** Labels of the two project groups that stay after the key groups. */
 export const REVIEWS = "Reviews";
 export const NO_KEY = "No issue key";
+/** Labels of the Linear tree: the fallback project and the fallback milestone. */
+export const NO_PROJECT = "No project";
+export const NO_MILESTONE = "No milestone";
+
+/** Fallback groups of the Linear tree have ids with the `lf:` prefix. */
+export const isFallback = (b: Branch): boolean => b.id.startsWith("lf:");
 
 /** `connecting`: the server is up but has no tree yet. */
 export type Conn = "connecting" | "up" | "down" | "no-token" | "unauthorized";
