@@ -32,6 +32,7 @@ import {
   Settings,
   SkipForward,
   Sun,
+  Tag,
   TriangleAlert,
   Undo2,
   X,
@@ -80,6 +81,7 @@ import { hits } from "../shared/find.ts";
 import type { CliStatus } from "../shared/send.ts";
 import {
   allThreads,
+  parseLabels,
   parseLinear,
   REVIEWS,
   type Branch,
@@ -124,7 +126,10 @@ import {
   folded,
   foldIds,
   groupIds,
+  initials,
+  ink,
   isKeyGroup,
+  labelPill,
   linearHref,
   prTone,
   railRows,
@@ -189,6 +194,7 @@ const THEME_KEY = "thread-tree:theme";
 const CLI_KEY = "thread-tree:cli";
 const ORDER_KEY = "thread-tree:order";
 const LINEAR_KEY = "thread-tree:linear";
+const LABELS_KEY = "thread-tree:labels";
 const SORT_KEY = "thread-tree:sort";
 const LAYOUT_KEY = "thread-tree:layout";
 const GROUP_KEY = "thread-tree:group";
@@ -300,6 +306,43 @@ function LinearForm({ linear, setLinear }: LinearProps) {
   );
 }
 
+type LabelsProps = { labels: string[]; setLabels: (s: string) => void };
+
+/** Mounts with the panel, so the field starts from the current setting each time it opens. */
+function LabelsForm({ labels, setLabels }: LabelsProps) {
+  const [value, setValue] = useState(labels.join(", "));
+  const [saved, setSaved] = useState(false);
+  return (
+    <form
+      className="grid gap-3"
+      onSubmit={(e) => {
+        e.preventDefault();
+        setLabels(value);
+        setSaved(true);
+      }}
+    >
+      <div className="grid gap-1.5">
+        <Label htmlFor="watched-labels">Label names</Label>
+        <Input
+          id="watched-labels"
+          placeholder="ready-for-review"
+          value={value}
+          onChange={(e) => setValue(e.target.value)}
+        />
+        <p className={HINT}>
+          Separate names with commas. A row shows a pill when one of its PRs has one of these labels. Empty: no pills.
+        </p>
+      </div>
+      <div className="flex items-center justify-end gap-2">
+        {saved && <span className={HINT}>Saved.</span>}
+        <Button type="submit" size="sm">
+          Save
+        </Button>
+      </div>
+    </form>
+  );
+}
+
 /** One labelled group: a title outside a card of rows. */
 const Group = ({ title, children, accent }: { title: string; children: ReactNode; accent?: boolean }) => (
   <section className="grid gap-1.5">
@@ -333,11 +376,12 @@ const Row = ({
   </div>
 );
 
-type Tone = "ok" | "warn" | "info";
+type Tone = "ok" | "warn" | "info" | "none";
 const TONE: Record<Tone, { cls: string; Icon: typeof Info | null }> = {
   ok: { cls: "text-status-done-fg", Icon: null },
   warn: { cls: "text-status-needs-input-fg", Icon: TriangleAlert },
   info: { cls: "text-status-working-fg", Icon: Info },
+  none: { cls: "text-muted-foreground", Icon: null },
 };
 
 /** A row that folds open, with its current value at the right. */
@@ -774,24 +818,25 @@ const tokenSummary = (conn: Tree["conn"] | undefined) =>
 const linearSummary = (l: Tree["linear"]) =>
   l ? [l.workspace, l.teams.join(", ")].filter(Boolean).join(" · ") : "Not set";
 
-type PanelProps = LinearProps & {
-  close: () => void;
-  buttonRef: RefObject<HTMLButtonElement | null>;
-  settled: boolean;
-  setSettled: (v: boolean) => void;
-  snoozed: boolean;
-  setSnoozed: (v: boolean) => void;
-  nest: boolean;
-  setNest: (v: boolean) => void;
-  canReset: boolean;
-  resetOrder: () => void;
-  theme: Theme;
-  setTheme: (t: Theme) => void;
-  update: UpdateState | undefined;
-  conn: Tree["conn"] | undefined;
-  /** Opens the T3 token fold. */
-  tokenOpen: boolean;
-};
+type PanelProps = LinearProps &
+  LabelsProps & {
+    close: () => void;
+    buttonRef: RefObject<HTMLButtonElement | null>;
+    settled: boolean;
+    setSettled: (v: boolean) => void;
+    snoozed: boolean;
+    setSnoozed: (v: boolean) => void;
+    nest: boolean;
+    setNest: (v: boolean) => void;
+    canReset: boolean;
+    resetOrder: () => void;
+    theme: Theme;
+    setTheme: (t: Theme) => void;
+    update: UpdateState | undefined;
+    conn: Tree["conn"] | undefined;
+    /** Opens the T3 token fold. */
+    tokenOpen: boolean;
+  };
 
 /** View options and settings, beside the list so a change shows at once. */
 function SettingsPanel(p: PanelProps) {
@@ -868,6 +913,13 @@ function SettingsPanel(p: PanelProps) {
           <Fold label="Linear links" value={linearSummary(p.linear)} tone={p.linear ? "ok" : "warn"}>
             <LinearForm linear={p.linear} setLinear={p.setLinear} />
           </Fold>
+          <Fold
+            label="Watched labels"
+            value={p.labels.length ? p.labels.join(", ") : "None"}
+            tone={p.labels.length ? "ok" : "none"}
+          >
+            <LabelsForm labels={p.labels} setLabels={p.setLabels} />
+          </Fold>
           <Fold label="Status icons" value={<span className="sr-only">Legend</span>} tone="info">
             <Legend />
           </Fold>
@@ -914,10 +966,41 @@ const NeedsOnly = createContext(false);
 /** The statuses of the status section that holds the row. Null outside one. */
 const Section = createContext<Status[] | null>(null);
 const Linear = createContext<Tree["linear"]>(null);
+/** The label names that rows show as pills, in pill order. */
+const Watched = createContext<string[]>([]);
 /** The rendered ids of each list, by list key. */
 const Lists = createContext(new Map<string, string[]>());
 /** No list, so no row is sortable. */
 const NO_LISTS = new Map<string, string[]>();
+
+/** One pill for the row's Watched labels: the first name's initials on its color, "+N" for the other names. */
+function LabelPill({ t }: { t: ThreadNode }) {
+  const pill = labelPill(t, useContext(Watched));
+  if (!pill) return null;
+  const { label, more, tip } = pill;
+  return (
+    <Tooltip>
+      <TooltipTrigger asChild>
+        <Badge
+          variant={label.color ? "outline" : "secondary"}
+          className={cn(
+            "min-w-0 gap-0.5 rounded-full px-1 py-0 font-mono text-[11px] font-medium",
+            label.color && "border-transparent",
+          )}
+          style={label.color ? { background: `#${label.color}`, color: ink(label.color) } : undefined}
+          tabIndex={0}
+          role="img"
+          aria-label={tip}
+        >
+          <Tag className="size-3" />
+          <span className="truncate">{initials(label.name)}</span>
+          {more > 0 && <span className="flex-none opacity-70">{`+${more}`}</span>}
+        </Badge>
+      </TooltipTrigger>
+      <TooltipContent>{tip}</TooltipContent>
+    </Tooltip>
+  );
+}
 
 const CHIP = "gap-1 rounded-[6px] px-1.5 py-0 text-[11px] font-normal text-muted-foreground";
 const ROW_BUTTON =
@@ -1345,6 +1428,7 @@ function ThreadRow({
                   <Layers role="img" aria-label={noPrLabel} />
                 </Badge>
               ))}
+            <LabelPill t={t} />
             {t.prs.slice(0, 2).map((p) => (
               <PrChip key={p.n} p={p} />
             ))}
@@ -2071,6 +2155,8 @@ function App() {
     }
   });
   const linear = linearSet ?? tree?.linear ?? null;
+  const [labels, setLabelsState] = useState(() => parseLabels(load(LABELS_KEY) ?? ""));
+  const labelsParam = labels.join(",");
   const [settingsOpen, setSettingsOpen] = useState(false);
   const settingsButtonRef = useRef<HTMLButtonElement>(null);
   const [seen, setSeen] = useState<ReadonlySet<string>>(new Set());
@@ -2082,6 +2168,12 @@ function App() {
     setLinearSet(next);
     if (next) save(LINEAR_KEY, JSON.stringify({ workspace: next.workspace, teams: next.teams.join(",") }));
     else forget(LINEAR_KEY);
+  };
+  const setLabels = (s: string) => {
+    const next = parseLabels(s);
+    setLabelsState(next);
+    if (next.length) save(LABELS_KEY, next.join(","));
+    else forget(LABELS_KEY);
   };
   const [freeze, setFreeze] = useState<Freeze>();
   const sentNeedsYou = useRef("");
@@ -2375,7 +2467,9 @@ function App() {
   }, [listRef, last]);
   useEffect(() => {
     save(NEST_KEY, nest ? "1" : "0");
-    const es = new EventSource(`/events?nest=${nest ? 1 : 0}`);
+    const es = new EventSource(
+      `/events?nest=${nest ? 1 : 0}${labelsParam ? `&labels=${encodeURIComponent(labelsParam)}` : ""}`,
+    );
     es.onmessage = (e) => {
       const next = JSON.parse(e.data) as Tree;
       const cur = latest.current;
@@ -2390,7 +2484,7 @@ function App() {
       setBrief(b);
     });
     return () => es.close();
-  }, [nest]);
+  }, [nest, labelsParam]);
   useEffect(() => save(SETTLED_KEY, settled ? "1" : "0"), [settled]);
 
   const projects = connecting ? undefined : view.projects;
@@ -2637,65 +2731,67 @@ function App() {
             <Details value={details}>
               <NeedsOnly value={needsOnly}>
                 <Linear value={linear}>
-                  <Lists value={sortBy === "updated" ? NO_LISTS : view.lists}>
-                    <Now value={now}>
-                      <div
-                        className={!connecting && tree.conn !== "up" ? "grayscale" : ""}
-                        data-conn={!connecting && tree.conn !== "up" ? "down" : undefined}
-                      >
-                        {projects?.length === 0 && <p className="text-muted-foreground">No active threads.</p>}
-                        {projects ? (
-                          <Card className="gap-0 overflow-clip rounded-[12px] px-2 py-0 shadow-none">
-                            <ul key={listKey} className={cn("m-0 list-none p-0", layout === "flat" && "p-1")}>
-                              <SendTo value={sendToApi}>
-                                {layout === "flat" ? (
-                                  <Presence key="flat" items={view.flat ?? []} keyOf={(i) => i.id}>
-                                    {(i) => (
-                                      <FlatRow
-                                        i={i}
-                                        corners={edgeCorners(view.flat ?? [], i)}
-                                        section={sectionOf(view.flat ?? [], i)}
-                                        closed={closed}
-                                        toggle={toggle}
-                                        fold={fold}
-                                        toggleSection={toggleSection}
-                                      />
-                                    )}
-                                  </Presence>
-                                ) : (
-                                  <Presence key="tree" items={projects} keyOf={(p) => p.id}>
-                                    {(p) => <ProjectBlock b={p} closed={closed} toggle={toggle} fold={fold} />}
-                                  </Presence>
-                                )}
-                              </SendTo>
-                            </ul>
-                          </Card>
-                        ) : (
-                          <>
-                            <p className="mb-2 text-sm text-muted-foreground" role="status">
-                              Connecting to T3…
-                            </p>
-                            <Card
-                              className="gap-0 rounded-[12px] py-0 shadow-none"
-                              aria-busy="true"
-                              aria-label="Loading threads"
-                            >
-                              <CardContent className="flex flex-col gap-0.5 p-1.5">
-                                {[0, 1, 2].map((i) => (
-                                  <Skeleton key={i} className="h-9 rounded-[8px] motion-reduce:animate-none" />
-                                ))}
-                              </CardContent>
+                  <Watched value={labels}>
+                    <Lists value={sortBy === "updated" ? NO_LISTS : view.lists}>
+                      <Now value={now}>
+                        <div
+                          className={!connecting && tree.conn !== "up" ? "grayscale" : ""}
+                          data-conn={!connecting && tree.conn !== "up" ? "down" : undefined}
+                        >
+                          {projects?.length === 0 && <p className="text-muted-foreground">No active threads.</p>}
+                          {projects ? (
+                            <Card className="gap-0 overflow-clip rounded-[12px] px-2 py-0 shadow-none">
+                              <ul key={listKey} className={cn("m-0 list-none p-0", layout === "flat" && "p-1")}>
+                                <SendTo value={sendToApi}>
+                                  {layout === "flat" ? (
+                                    <Presence key="flat" items={view.flat ?? []} keyOf={(i) => i.id}>
+                                      {(i) => (
+                                        <FlatRow
+                                          i={i}
+                                          corners={edgeCorners(view.flat ?? [], i)}
+                                          section={sectionOf(view.flat ?? [], i)}
+                                          closed={closed}
+                                          toggle={toggle}
+                                          fold={fold}
+                                          toggleSection={toggleSection}
+                                        />
+                                      )}
+                                    </Presence>
+                                  ) : (
+                                    <Presence key="tree" items={projects} keyOf={(p) => p.id}>
+                                      {(p) => <ProjectBlock b={p} closed={closed} toggle={toggle} fold={fold} />}
+                                    </Presence>
+                                  )}
+                                </SendTo>
+                              </ul>
                             </Card>
-                          </>
-                        )}
-                        {settled && projects && (
-                          <SendTo value={sendToApi}>
-                            <SettledList signature={tree?.settled ?? ""} scrollRoot={listRef} />
-                          </SendTo>
-                        )}
-                      </div>
-                    </Now>
-                  </Lists>
+                          ) : (
+                            <>
+                              <p className="mb-2 text-sm text-muted-foreground" role="status">
+                                Connecting to T3…
+                              </p>
+                              <Card
+                                className="gap-0 rounded-[12px] py-0 shadow-none"
+                                aria-busy="true"
+                                aria-label="Loading threads"
+                              >
+                                <CardContent className="flex flex-col gap-0.5 p-1.5">
+                                  {[0, 1, 2].map((i) => (
+                                    <Skeleton key={i} className="h-9 rounded-[8px] motion-reduce:animate-none" />
+                                  ))}
+                                </CardContent>
+                              </Card>
+                            </>
+                          )}
+                          {settled && projects && (
+                            <SendTo value={sendToApi}>
+                              <SettledList signature={tree?.settled ?? ""} scrollRoot={listRef} />
+                            </SendTo>
+                          )}
+                        </div>
+                      </Now>
+                    </Lists>
+                  </Watched>
                 </Linear>
               </NeedsOnly>
             </Details>
@@ -2708,6 +2804,8 @@ function App() {
           buttonRef={settingsButtonRef}
           linear={linear}
           setLinear={setLinear}
+          labels={labels}
+          setLabels={setLabels}
           settled={settled}
           setSettled={setSettled}
           snoozed={snoozed}

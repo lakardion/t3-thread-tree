@@ -5,6 +5,9 @@ import {
   folded,
   foldIds,
   groupIds,
+  initials,
+  ink,
+  labelPill,
   linearHref,
   ownPos,
   phraseWith,
@@ -258,5 +261,70 @@ describe("stopLabel", () => {
     [2, 4, true, "2 of 4"],
   ])("%p of %i, partial %p is %p", (n, total, partial, out) => {
     expect(stopLabel(n, total, partial)).toBe(out);
+  });
+});
+
+describe("initials", () => {
+  test.each([
+    ["ready-for-review", "RFR"],
+    ["needs-qa-on-staging-before-merge", "NQO"],
+    ["do-not-merge", "DNM"],
+    ["size:L", "SL"],
+  ])("%s is %s", (name, out) => {
+    expect(initials(name)).toBe(out);
+  });
+});
+
+describe("ink", () => {
+  test("white on a dark color, black on a light one", () => {
+    expect(ink("1d1d1f")).toBe("#fff");
+    expect(ink("ffffff")).toBe("#000");
+  });
+});
+
+describe("labelPill", () => {
+  const W = ["ready-for-review", "needs-qa", "do-not-merge"];
+  const pr = (n: number, names: string[], state = "open", color: string | null = "0e8a16") =>
+    ({ n, state, labels: names.map((name) => ({ name, color })) }) as PrNode;
+  const row = (prs: PrNode[], settled = false) => ({ prs, settled }) as ThreadNode;
+
+  test("one match", () => {
+    const p = labelPill(row([pr(1, ["ready-for-review", "size:L"])]), W);
+    expect(p?.label.name).toBe("ready-for-review");
+    expect(p?.more).toBe(0);
+    expect(p?.tip).toBe("ready-for-review: #1");
+  });
+  test("two labels on one PR: +1 and tip in watched order", () => {
+    const p = labelPill(row([pr(7, ["needs-qa", "ready-for-review"])]), W);
+    expect(p?.label.name).toBe("ready-for-review");
+    expect(p?.more).toBe(1);
+    expect(p?.tip).toBe("ready-for-review: #7 · needs-qa: #7");
+  });
+  test("merged and closed PRs do not count, a fourth open PR does", () => {
+    const prs = [
+      pr(1, ["ready-for-review"], "merged"),
+      pr(2, ["ready-for-review"], "closed"),
+      pr(3, []),
+      pr(4, ["ready-for-review"]),
+    ];
+    expect(labelPill(row(prs), W)?.tip).toBe("ready-for-review: #4");
+    expect(labelPill(row(prs.slice(0, 2)), W)).toBeNull();
+  });
+  test("one label on two PRs is one name", () => {
+    const p = labelPill(row([pr(1, ["do-not-merge"]), pr(2, ["do-not-merge"])]), W);
+    expect(p?.more).toBe(0);
+    expect(p?.tip).toBe("do-not-merge: #1 · do-not-merge: #2");
+  });
+  test("settled row and empty list give null", () => {
+    expect(labelPill(row([pr(1, ["ready-for-review"])], true), W)).toBeNull();
+    expect(labelPill(row([pr(1, ["ready-for-review"])]), [])).toBeNull();
+  });
+  test("match ignores case", () => {
+    const p = labelPill(row([pr(1, ["Ready-For-Review", "NEEDS-QA"])]), W);
+    expect(p?.label.name).toBe("Ready-For-Review");
+    expect(p?.more).toBe(1);
+  });
+  test("a null color passes through", () => {
+    expect(labelPill(row([pr(1, ["do-not-merge"], "open", null)]), W)?.label.color).toBeNull();
   });
 });
