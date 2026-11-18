@@ -386,6 +386,28 @@ describe("PR stack", () => {
     expect(child(tree, "frontend", "No issue key").threads[0].children).toEqual([]);
   });
 
+  test("T3 stack layers set the order; an agent-linked PR is the thread's own", () => {
+    const stack = {
+      base: "main",
+      layers: [10, 11, 12, 13].map((number) => ({ number, state: "open" })),
+    };
+    const own = (n: number, source: string) =>
+      [10, 11, 12, 13].map((x) => pr(x, x === n ? source : "stack", "open", stack));
+    const tree = build([
+      shell("b", "WEB-1 B", { pullRequests: own(12, "agent"), createdAt: "2026-11-12T07:00:00.000Z" }),
+      shell("top", "WEB-2 top", { pullRequests: own(13, "created"), createdAt: "2026-11-12T06:00:00.000Z" }),
+      shell("a1", "WEB-1 A1", { pullRequests: own(10, "agent"), createdAt: "2026-11-12T07:01:00.000Z" }),
+      shell("a2", "WEB-1 A2", { pullRequests: own(11, "agent"), createdAt: "2026-11-12T07:02:00.000Z" }),
+    ]);
+    expect(labels(tree[0].branches)).toEqual(["WEB-1", "WEB-2"]);
+    expect(child(tree, "frontend", "WEB-1").threads.map((t) => [t.title, t.stack?.pos])).toEqual([
+      ["WEB-1 A1", 1],
+      ["WEB-1 A2", 2],
+      ["WEB-1 B", 3],
+    ]);
+    expect(child(tree, "frontend", "WEB-2").threads[0].stack).toEqual({ pos: 4, total: 4 });
+  });
+
   test("a review thread with stack PRs stays in Reviews", () => {
     const tree = build([
       ...stacked(),

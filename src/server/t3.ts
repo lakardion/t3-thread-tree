@@ -19,6 +19,8 @@ export type Pr = {
   review: string | null;
   mergeability: string | null;
   stackBase: string | null;
+  /** Open PR numbers of the stack, base first, as T3 reports them. */
+  stackLayers: number[] | null;
   title: string | null;
   additions: number | null;
   deletions: number | null;
@@ -150,6 +152,12 @@ export function decodeThread(raw: unknown): Thread | null {
           review: str(snap.reviewDecision),
           mergeability: str(snap.mergeability),
           stackBase: str(obj(o.stack).base),
+          stackLayers: Array.isArray(obj(o.stack).layers)
+            ? (obj(o.stack).layers as unknown[])
+                .map(obj)
+                .filter((l) => l.state === "open" && typeof l.number === "number")
+                .map((l) => l.number as number)
+            : null,
           title: str(snap.title),
           additions: num(snap.additions),
           deletions: num(snap.deletions),
