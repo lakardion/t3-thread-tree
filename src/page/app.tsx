@@ -199,6 +199,7 @@ const LABELS_KEY = "thread-tree:labels";
 const SORT_KEY = "thread-tree:sort";
 const LAYOUT_KEY = "thread-tree:layout";
 const GROUP_KEY = "thread-tree:group";
+const BRIEF_FOLD_KEY = "thread-tree:brief-fold";
 const THEMES = ["system", "light", "dark"] as const;
 type Theme = (typeof THEMES)[number];
 
@@ -2142,6 +2143,7 @@ function App() {
   const [orders, setOrders] = useState(() => parseOrders(load(ORDER_KEY)));
   const [focus, setFocus] = useState(() => parseFocus(load(FOCUS_KEY)));
   const [focusShow, setFocusShow] = useState(load(FOCUS_SHOW_KEY) === "1");
+  const [briefFolded, setBriefFolded] = useState(load(BRIEF_FOLD_KEY) === "1");
   const [pending, setPending] = useState<Pending | null>(null);
   const [findOpen, setFindOpen] = useState(false);
   /** A new key remounts the tree list, which drops the row moves that dnd-kit made during a drag onto the strip. */
@@ -2261,6 +2263,9 @@ function App() {
   useEffect(() => {
     save(FOCUS_SHOW_KEY, focusShow ? "1" : "0");
   }, [focusShow]);
+  useEffect(() => {
+    save(BRIEF_FOLD_KEY, briefFolded ? "1" : "0");
+  }, [briefFolded]);
 
   useEffect(() => {
     save(THEME_KEY, theme);
@@ -2337,6 +2342,7 @@ function App() {
   const runBrief = () => {
     if (!pick) return;
     setHideBrief(false);
+    setBriefFolded(false);
     void fetch("/brief/run", { method: "POST", body: JSON.stringify({ cli: pick }) });
   };
   const live = new Map((tree?.projects ?? []).flatMap(allThreads).map((t) => [t.id, t]));
@@ -2729,6 +2735,8 @@ function App() {
               run={runBrief}
               cancel={() => fetch("/brief/cancel", { method: "POST" })}
               close={() => setHideBrief(true)}
+              folded={briefFolded}
+              fold={setBriefFolded}
             />
           )}
           <DragDropProvider plugins={plugins} onDragStart={dragStart} onDragEnd={dragEnd}>

@@ -91,3 +91,23 @@ export function changedLines(a: BriefAction, live: Map<string, ThreadNode>, snap
     statusMoved(n, snap) ? [`Changed since ${hhmm(at)}: ${n.title} was ${snap.statuses[n.id]}, now ${n.status}`] : [],
   );
 }
+
+type Row = { a: BriefAction; i: number; mark: Mark | null };
+
+/** The first 3 open rows, or every row with `all`. */
+export const shortRows = (rows: Row[], all: boolean) => (all ? rows : rows.filter((r) => !r.mark).slice(0, 3));
+
+/** Some row stays behind "Show all". */
+export const hasMore = (rows: Row[]) => rows.length > 3 || rows.some((r) => r.mark);
+
+/** The folded head, for example "10 Actions · 3 done · 1 changed". A zero count is left out. */
+export function foldHead(rows: Row[]) {
+  const count = (m: Mark) => rows.filter((r) => r.mark === m).length;
+  return [
+    `${rows.length} Action${rows.length === 1 ? "" : "s"}`,
+    count("done") && `${count("done")} done`,
+    count("changed") && `${count("changed")} changed`,
+  ]
+    .filter(Boolean)
+    .join(" · ");
+}
