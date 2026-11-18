@@ -2,7 +2,7 @@
 title: How does a brief row look, on desktop and phone?
 type: prototype
 status: open
-assignee: 
+assignee: claude (better-brief-01)
 blocked-by: []
 ---
 
