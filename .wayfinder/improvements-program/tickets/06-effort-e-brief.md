@@ -2,7 +2,7 @@
 title: Effort E: a brief that helps you choose
 type: task
 status: open
-assignee: 
+assignee: damian.lucero
 blocked-by: [05-key-m08-last-message]
 ---
 
