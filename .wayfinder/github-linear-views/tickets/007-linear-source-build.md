@@ -3,7 +3,7 @@ id: "007"
 title: Build the Linear project and milestone source on the server
 type: wayfinder:task
 status: open
-assignee:
+assignee: claude (github-linear-views-007)
 blocked-by: []
 ---
 
