@@ -29,7 +29,7 @@ The destination is reached when every route key is done and no map ticket is ope
 ## Stacks
 
 - 03-answer-actions-build ← 04-action-marks-build ← 05-short-brief-build ← 06-full-titles-build ← 07-phone-row-build. Each key branches from the branch of the key before it. The stack starts on `main`.
-- main ← better-brief-03-specific-answer-actions (#103) ← better-brief-04-mark-done-changed-actions (#104) ← better-brief-05-show-three-fold-brief (#106). GitHub stack #105.
+- main ← better-brief-03-specific-answer-actions (#103) ← better-brief-04-mark-done-changed-actions (#104) ← better-brief-05-show-three-fold-brief (#106) ← better-brief-06-show-full-titles (#107). GitHub stack #105.
 
 ## Notes
 
