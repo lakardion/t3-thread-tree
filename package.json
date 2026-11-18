@@ -14,7 +14,7 @@
     "desktop:demo": "DESKTOP_DEMO=1 bun run desktop",
     "build:sidecar": "bun run scripts/build-sidecar.ts",
     "demo": "bun run scripts/demo.ts",
-    "lint": "oxlint --deny-warnings",
+    "lint": "oxlint --deny-warnings --disable-nested-config",
     "fmt": "oxfmt",
     "fmt:check": "oxfmt --check",
     "check": "bun run fmt:check && bun run lint && bun run typecheck && bun test",
