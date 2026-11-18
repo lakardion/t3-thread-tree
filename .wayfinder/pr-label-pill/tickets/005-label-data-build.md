@@ -2,7 +2,7 @@
 id: "005"
 title: Build the label data path on the server
 type: wayfinder:task
-status: in-review
+status: closed
 assignee: claude (pr-label-pill-05)
 blocked-by: [004-spec-and-build-tickets]
 ---

@@ -2,7 +2,7 @@
 id: "006"
 title: Build the Watched labels setting and the Label pill
 type: wayfinder:task
-status: in-review
+status: closed
 assignee: claude (pr-label-pill-06)
 blocked-by: [005-label-data-build]
 ---
