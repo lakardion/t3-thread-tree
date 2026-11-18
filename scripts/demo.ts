@@ -1,5 +1,6 @@
 /** Serves the page with made-up threads, run through the real tree rules. No T3 needed. */
 import index from "../src/page/index.html";
+import upNext from "../src/page/up-next.html";
 import { briefInput, briefService, lastMessageRoutes, type Outcome } from "../src/server/brief.ts";
 import { buildTree } from "../src/server/build-tree.ts";
 import { findRoutes } from "../src/server/find.ts";
@@ -388,6 +389,7 @@ const server = Bun.serve({
   port: Number(process.env.PORT ?? 4774),
   routes: {
     "/": index,
+    "/up-next": upNext,
     ...brief.routes,
     ...sender.routes,
     ...lastMessageRoutes({ read: lastMessage, has: (id) => threads.some((th) => th.id === id) }),

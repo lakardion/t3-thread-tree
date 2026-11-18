@@ -101,6 +101,7 @@ import {
   remember,
   tabTitle,
   type Statuses,
+  upNextList,
   waits,
   withoutSnoozed,
 } from "./attention.ts";
@@ -2087,15 +2088,21 @@ function App() {
   const sentNeedsYou = useRef("");
   const queue = openNextQueue(tree?.projects ?? []);
   const target = nextTarget(queue, seen);
-  const openNext = () => {
-    if (!target) return;
-    setSeen(remember(queue, seen, target));
-    location.assign(target.href);
+  const openQueued = (t: ThreadNode) => {
+    setSeen(remember(queue, seen, t));
+    location.assign(t.href);
   };
+  const openNext = () => target && openQueued(target);
   const openNextRef = useRef(openNext);
+  const openThread = (id: string) => {
+    const t = queue.find((q) => q.id === id);
+    if (t) openQueued(t);
+  };
+  const openThreadRef = useRef(openThread);
   const settingsOpenRef = useRef(settingsOpen);
   useEffect(() => {
     openNextRef.current = openNext;
+    openThreadRef.current = openThread;
     settingsOpenRef.current = settingsOpen;
   });
 
@@ -2107,6 +2114,17 @@ function App() {
     window.desktopBridge.setOpenNext(openNextTitle);
   }, [openNextTitle]);
   useEffect(() => window.desktopBridge?.onOpenNext(() => openNextRef.current()), []);
+  useEffect(() => window.desktopBridge?.onOpenThread((id) => openThreadRef.current(id)), []);
+
+  const sentUpNext = useRef("");
+  useEffect(() => {
+    if (!window.desktopBridge || !tree) return;
+    const list = upNextList(tree.projects, queue, target, linear);
+    const key = JSON.stringify(list);
+    if (key === sentUpNext.current) return;
+    sentUpNext.current = key;
+    window.desktopBridge.setUpNext(list);
+  });
 
   useEffect(() => {
     if (!window.desktopBridge || !tree) return;

@@ -7,7 +7,7 @@
   "scripts": {
     "start": "bun run src/server.ts",
     "typecheck": "tsc --noEmit",
-    "desktop:bundle": "bun build src/desktop/main.ts src/desktop/preload.ts --target node --format cjs --external electron --outdir dist/desktop --entry-naming '[name].cjs'",
+    "desktop:bundle": "bun build src/desktop/main.ts src/desktop/preload.ts src/desktop/up-next-preload.ts --target node --format cjs --external electron --outdir dist/desktop --entry-naming '[name].cjs'",
     "desktop": "bun run desktop:bundle && electron .",
     "desktop:install": "bun run build:sidecar && bun run desktop:bundle && electron-builder --dir && rm -rf '/Applications/T3 Thread Tree.app' && ditto 'release/mac-arm64/T3 Thread Tree.app' '/Applications/T3 Thread Tree.app'",
     "desktop:dmg": "bun run build:sidecar && bun run desktop:bundle && electron-builder",

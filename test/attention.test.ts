@@ -13,6 +13,7 @@ import {
   remember,
   tabTitle,
   type Statuses,
+  upNextList,
   waits,
   withoutSnoozed,
 } from "../src/page/attention.ts";
@@ -359,5 +360,39 @@ describe("needsYouTip", () => {
     expect(tip(0, 3)).toBe("3 your turn");
     expect(tip(5, 0)).toBe("5 need you");
     expect(tip(0, 0)).toBe("");
+  });
+});
+
+describe("upNextList", () => {
+  const w = (id: string, status: Status, since: string, extra: Partial<ThreadNode> = {}): ThreadNode => ({
+    ...thread(id, status),
+    since,
+    ...extra,
+  });
+  const linear = { workspace: "acme", teams: [] };
+  const projects = [
+    branch("one", [w("a", "needs-input", "2026-11-12T09:00:00.000Z", { key: "ONE-1" })]),
+    branch("two", [
+      w("p", "working", "2026-11-12T08:00:00.000Z", { children: [w("n", "your-turn", "2026-11-12T10:00:00.000Z")] }),
+    ]),
+  ];
+  const queue = openNextQueue(projects);
+  test("lists the queue in order with the project label of each thread, subthreads included", () => {
+    const { rows } = upNextList(projects, queue, null, null);
+    expect(rows.map((r) => [r.id, r.project, r.status])).toEqual([
+      ["a", "one", "needs-input"],
+      ["n", "two", "your-turn"],
+    ]);
+  });
+  test("sets the Linear URL only with Linear and a key", () => {
+    expect(upNextList(projects, queue, null, linear).rows.map((r) => [r.key, r.linearUrl])).toEqual([
+      ["ONE-1", "https://linear.app/acme/issue/ONE-1"],
+      [null, null],
+    ]);
+    expect(upNextList(projects, queue, null, null).rows[0].linearUrl).toBeNull();
+  });
+  test("gives the id of the target, or null with none", () => {
+    expect(upNextList(projects, queue, queue[1], null).targetId).toBe("n");
+    expect(upNextList(projects, queue, null, null).targetId).toBeNull();
   });
 });

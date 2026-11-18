@@ -2,6 +2,7 @@ import { homedir } from "node:os";
 import { join } from "node:path";
 
 import index from "./page/index.html";
+import upNext from "./page/up-next.html";
 import { briefInput, briefService, detectClis, lastMessageRoutes } from "./server/brief.ts";
 import { buildTree } from "./server/build-tree.ts";
 import { findRoutes } from "./server/find.ts";
@@ -197,6 +198,7 @@ const server = Bun.serve({
   port: Number(process.env.PORT) || 4773,
   routes: {
     "/": index,
+    "/up-next": upNext,
     ...brief.routes,
     ...send.routes,
     ...settleRoutes({ dispatch: (c) => shell.dispatch(c), hasThread: (id) => threads.get(id)?.gone === false }),

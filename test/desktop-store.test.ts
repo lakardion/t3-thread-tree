@@ -9,6 +9,7 @@ import {
   parseNotify,
   parseOpenNext,
   parseSettings,
+  parseUpNext,
   readJson,
   writeJson,
 } from "../src/desktop/store.ts";
@@ -130,5 +131,32 @@ describe("parseNeedsYou", () => {
   test("rejects a missing or other status", () => {
     expect(parseNeedsYou([{ ...item, status: undefined }])).toBeNull();
     expect(parseNeedsYou([{ ...item, status: "failed" }])).toBeNull();
+  });
+});
+
+describe("parseUpNext", () => {
+  const row = {
+    id: "t1",
+    title: "SHOP-1 Fix it",
+    status: "needs-input" as const,
+    phrase: "Approval",
+    raw: "pending approval",
+    since: "2026-11-12T10:00:00.000Z",
+    project: "shop",
+    key: "SHOP-1",
+    linearUrl: "https://linear.app/acme/issue/SHOP-1",
+  };
+  test("round-trips a list and drops extra keys", () => {
+    const list = { rows: [row], targetId: "t1" };
+    expect(parseUpNext(list)).toEqual(list);
+    expect(parseUpNext({ rows: [{ ...row, extra: 1 }], targetId: null, more: 1 })).toEqual({
+      rows: [row],
+      targetId: null,
+    });
+  });
+  test("rejects a bad status, a missing targetId and more than 500 rows", () => {
+    expect(parseUpNext({ rows: [{ ...row, status: "working" }], targetId: null })).toBeNull();
+    expect(parseUpNext({ rows: [row] })).toBeNull();
+    expect(parseUpNext({ rows: Array.from({ length: 501 }, () => row), targetId: null })).toBeNull();
   });
 });

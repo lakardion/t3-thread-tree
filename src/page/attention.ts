@@ -1,10 +1,12 @@
-import type { NeedsYouThread, NotifyEvent, NotifyStatus } from "../shared/desktop.ts";
+import type { NeedsYouThread, NotifyEvent, NotifyStatus, UpNext } from "../shared/desktop.ts";
 import { allThreads, bySince, type Branch, type Status, type ThreadNode, type Tree } from "../shared/tree.ts";
+import { linearHref } from "./format.ts";
 
 export type Counts = { needYou: number; working: number; yourTurn: number; stopped: number };
 
 /** The statuses that the "Needs you" filter keeps. */
-export const needsYou = (s: Status): boolean => s === "needs-input" || s === "plan-ready" || s === "your-turn";
+export const needsYou = (s: Status): s is "needs-input" | "plan-ready" | "your-turn" =>
+  s === "needs-input" || s === "plan-ready" || s === "your-turn";
 
 /** The tooltip of the "Needs you" chip numbers: the Needs-you count, then the your-turn count; "" when both are 0. */
 export const needsYouTip = (c: Counts): string =>
@@ -64,6 +66,36 @@ export const openNextQueue = (projects: Branch[]): ThreadNode[] =>
     .flatMap(allThreads)
     .filter((t) => !t.settled && needsYou(t.status))
     .toSorted((a, b) => bySince(a.since, b.since));
+
+/** The Up next window payload: the queue in order, each row with its project label and Linear URL. */
+export const upNextList = (
+  projects: Branch[],
+  queue: ThreadNode[],
+  target: ThreadNode | null,
+  linear: Tree["linear"],
+): UpNext => {
+  const projectOf = new Map(projects.flatMap((p) => allThreads(p).map((t) => [t.id, p.label] as const)));
+  return {
+    rows: queue.flatMap((t) =>
+      needsYou(t.status)
+        ? [
+            {
+              id: t.id,
+              title: t.title,
+              status: t.status,
+              phrase: t.phrase,
+              raw: t.raw,
+              since: t.since,
+              project: projectOf.get(t.id) ?? "",
+              key: t.key,
+              linearUrl: t.key ? linearHref(t.key, linear) : null,
+            },
+          ]
+        : [],
+    ),
+    targetId: target?.id ?? null,
+  };
+};
 
 /** A thread stays skipped until its Wait starts again. */
 const seenKey = (t: ThreadNode) => `${t.id} ${t.since}`;
