@@ -1,5 +1,16 @@
-import { Check, ChevronDown, Copy, List, MessageSquarePlus, RotateCw, Send, Sparkles, X } from "lucide-react";
-import { useEffect, useState } from "react";
+import {
+  Check,
+  ChevronDown,
+  Copy,
+  Crosshair,
+  List,
+  MessageSquarePlus,
+  RotateCw,
+  Send,
+  Sparkles,
+  X,
+} from "lucide-react";
+import { useContext, useEffect, useState } from "react";
 
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { Badge } from "@/components/ui/badge";
@@ -8,6 +19,7 @@ import { ButtonGroup, ButtonGroupSeparator } from "@/components/ui/button-group"
 import { Card } from "@/components/ui/card";
 import {
   DropdownMenu,
+  DropdownMenuCheckboxItem,
   DropdownMenuContent,
   DropdownMenuLabel,
   DropdownMenuRadioGroup,
@@ -19,6 +31,8 @@ import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip
 import type { ActionKind, BriefAction, BriefState, Cli } from "../shared/brief.ts";
 import type { CliStatus } from "../shared/send.ts";
 import type { Branch, ThreadNode } from "../shared/tree.ts";
+import { FOCUS_FULL } from "./focus.ts";
+import { Focus } from "./focus.tsx";
 import { MorphProviderIcon, ProviderIcon } from "./provider-icon.tsx";
 import { CliGate, SendDialog } from "./send-dialog.tsx";
 import { markKey } from "./send.ts";
@@ -155,6 +169,61 @@ function CopyPrompt({ prompt }: { prompt: string }) {
   );
 }
 
+/** Adds a live thread of the Action to the Focus list. With more than one, a menu offers them. */
+function FocusAdd({ ids, live }: { ids: string[]; live: Map<string, ThreadNode> }) {
+  const { ids: listed, add, full } = useContext(Focus);
+  const threads = ids.flatMap((id) => {
+    const t = live.get(id);
+    return t && !t.settled ? [t] : [];
+  });
+  if (threads.length === 0) return null;
+  const open = threads.filter((t) => !listed.includes(t.id));
+  const off = full || open.length === 0;
+  const button = (
+    <Button
+      variant="ghost"
+      size="icon-xs"
+      className="flex-none text-muted-foreground"
+      aria-label="Add to Focus"
+      disabled={off}
+      onClick={threads.length === 1 ? () => add(threads[0].id) : undefined}
+    >
+      <Crosshair />
+    </Button>
+  );
+  return (
+    <Tooltip>
+      <TooltipTrigger asChild>
+        {/** A disabled button gets no hover, so the wrapper keeps the tooltip. */}
+        <span className="inline-flex flex-none">
+          {threads.length === 1 ? (
+            button
+          ) : (
+            <DropdownMenu modal={false}>
+              <DropdownMenuTrigger asChild>{button}</DropdownMenuTrigger>
+              <DropdownMenuContent align="end" className="max-w-80">
+                <DropdownMenuLabel className="text-xs text-muted-foreground">Add to Focus</DropdownMenuLabel>
+                {threads.map((t) => (
+                  <DropdownMenuCheckboxItem
+                    key={t.id}
+                    checked={listed.includes(t.id)}
+                    disabled={listed.includes(t.id)}
+                    onSelect={() => add(t.id)}
+                  >
+                    <StatusIcon t={t} />
+                    <span className="truncate">{t.title || t.id}</span>
+                  </DropdownMenuCheckboxItem>
+                ))}
+              </DropdownMenuContent>
+            </DropdownMenu>
+          )}
+        </span>
+      </TooltipTrigger>
+      <TooltipContent>{full ? FOCUS_FULL : off ? "In Focus" : "Add to Focus"}</TooltipContent>
+    </Tooltip>
+  );
+}
+
 function SendPrompt(p: {
   a: BriefAction;
   prompt: string;
@@ -283,6 +352,7 @@ function Row({
           <CopyPrompt prompt={a.prompt} />
         </>
       )}
+      <FocusAdd ids={a.threadIds} live={live} />
     </li>
   );
 }
