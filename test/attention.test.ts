@@ -24,6 +24,7 @@ const thread = (id: string, status: Status, children: ThreadNode[] = []): Thread
   href: `/${id}`,
   title: id,
   key: null,
+  linear: null,
   status,
   phrase: status,
   since: null,
@@ -185,6 +186,7 @@ describe("notifyEvents", () => {
   const tree = (conn: Conn, threads: ThreadNode[]): Tree => ({
     conn,
     lastUpdate: null,
+    linearKey: "ok",
     linear: null,
     settled: "",
     projects: [branch("p", threads)],

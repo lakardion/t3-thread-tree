@@ -55,6 +55,8 @@ export type ThreadNode = {
   title: string;
   /** The issue key of the title, for the fold. */
   key: string | null;
+  /** Linear data of `key`. Null with no key, no answer yet, or no `linear=1`. */
+  linear: LinearIssue | null;
   status: Status;
   phrase: string;
   /** Start of the elapsed time in the phrase. */
@@ -98,6 +100,8 @@ export type Tree = {
   lastUpdate: string | null;
   /** Set when the server knows the Linear workspace. No teams: every issue key links. */
   linear: Linear | null;
+  /** State of the Linear API key. */
+  linearKey: LinearKeyState;
   /** Changes when the settled threads change, so the page refetches its Settled list. Empty with none. */
   settled: string;
   projects: Branch[];

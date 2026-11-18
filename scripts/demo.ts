@@ -8,7 +8,7 @@ import { cliPath, type CliRun, sendService } from "../src/server/send.ts";
 import { settledPage, settledRoutes, settledSignature } from "../src/server/settled.ts";
 import type { Pr, Project, Thread } from "../src/server/t3.ts";
 import type { BriefAction, Cli } from "../src/shared/brief.ts";
-import { parseLabels } from "../src/shared/tree.ts";
+import { parseLabels, type LinearIssue } from "../src/shared/tree.ts";
 
 const now = Date.now();
 const ago = (min: number) => new Date(now - min * 60_000).toISOString();
@@ -253,7 +253,24 @@ const projects = new Map<string, Project>([
   ["docs", { title: "docs-site", repo: null }],
 ]);
 
-const projectsFor = (settled: boolean, nest = false, labels: string[] = []) =>
+const CHECKOUT = {
+  id: "demo-checkout",
+  name: "Checkout redesign",
+  url: "https://linear.app/acme/project/checkout-redesign",
+};
+const PAYMENTS = { id: "demo-payments", name: "Payments", url: "https://linear.app/acme/project/payments" };
+const BETA = { id: "demo-beta", name: "Beta", targetDate: "2026-12-01" };
+/** Linear data by issue key. Beta holds two issues. Threads with no key stay without Linear data. */
+const LINEAR: Record<string, LinearIssue> = {
+  "SHOP-412": { project: CHECKOUT, milestone: BETA },
+  "SHOP-401": { project: CHECKOUT, milestone: BETA },
+  "SHOP-413": { project: CHECKOUT, milestone: { id: "demo-polish", name: "Polish", targetDate: null } },
+  "SHOP-415": { project: PAYMENTS, milestone: null },
+  "SHOP-418": { project: null, milestone: null },
+  "SHOP-398": { project: PAYMENTS, milestone: { id: "demo-launch", name: "Launch", targetDate: "2026-12-15" } },
+};
+
+const projectsFor = (settled: boolean, nest = false, labels: string[] = [], wantsLinear = false) =>
   buildTree({
     threads,
     projects,
@@ -264,14 +281,16 @@ const projectsFor = (settled: boolean, nest = false, labels: string[] = []) =>
     now,
     labels,
     labelsOf: (p) => LABELS[p.n],
+    linearOf: wantsLinear ? (key) => LINEAR[key] : undefined,
   });
-const treeFor = (nest: boolean, labels: string[]) =>
+const treeFor = (nest: boolean, labels: string[], wantsLinear: boolean) =>
   JSON.stringify({
     conn: process.env.CONN ?? "up",
     lastUpdate: new Date(now).toISOString(),
     linear: { workspace: "acme", teams: ["SHOP"] },
+    linearKey: "ok",
     settled: settledSignature(threads),
-    projects: projectsFor(false, nest, labels),
+    projects: projectsFor(false, nest, labels, wantsLinear),
   });
 
 /** The model part of the sample brief. Code makes the `answer`, `fix` and `merge` actions from the tree, so these threads have none of them. `demo-27` is settled, so its heading shows struck through. */
@@ -435,9 +454,10 @@ const server = Bun.serve({
       const params = new URL(req.url).searchParams;
       const nest = params.get("nest") === "1";
       const labels = parseLabels(params.get("labels") ?? "");
+      const wantsLinear = params.get("linear") === "1";
       const enc = new TextEncoder();
       let send: (event: string, data: string) => void;
-      const push = () => send("", treeFor(nest, labels));
+      const push = () => send("", treeFor(nest, labels, wantsLinear));
       return new Response(
         new ReadableStream({
           start(ctrl) {

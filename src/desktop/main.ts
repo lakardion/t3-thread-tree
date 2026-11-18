@@ -104,7 +104,13 @@ const loginPath = () =>
 
 function startServer(port: number, PATH: string, attempt: number) {
   const started = Date.now();
-  const env = { ...process.env, PATH, PORT: String(port), T3_TOKEN_FILE: dataFile("token") };
+  const env = {
+    ...process.env,
+    PATH,
+    PORT: String(port),
+    T3_TOKEN_FILE: dataFile("token"),
+    LINEAR_KEY_FILE: dataFile("linear-key"),
+  };
   child = app.isPackaged
     ? spawn(join(process.resourcesPath, "server"), { cwd: app.getPath("userData"), env, stdio: "inherit" })
     : spawn("bun", [process.env.DESKTOP_DEMO ? "scripts/demo.ts" : "src/server.ts"], {
