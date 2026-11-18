@@ -59,10 +59,11 @@ Decided at charting (by the user):
 - **Keys:** one decision ticket for all page keys and their guards. M21's rules are part of it.
 
 - [How does the Focus list look and work?](tickets/01-focus-list-look.md): prototype D, a strip of 3 slot cards above the tree, hidden by default behind a Focus header button; add from the row (⌖) and from brief Actions; drag a row onto the strip (a drop on a card replaces it after a confirmation); buttons refuse at 3 of 3; settled or deleted threads leave; `localStorage`; UI label "Focus"; keys 1 to 3 go to the page keys.
+- [What does Find match, and how does the user pick a result?](tickets/02-find-rules.md): a Cmd/Ctrl+K dialog on shadcn `Command`; substring match on title, key, project, branch and PR over loaded threads, best match first; Enter opens, Show in tree unfolds and stores folds; a "Search settled threads" row asks the server; Find never turns off a view setting.
 
 ## Not yet specified
 
-- How "Show in tree" (Find) and `j`/`k` (row keys) act on folded projects, a closed stack and the flat view. The Focus list shipped without an unfold: its Show in tree scrolls to the row and flashes it, or says "Hidden in the tree". Find can reuse `revealRow` in `src/page/focus.tsx` and the `data-thread` attribute on `.thread-row`. It hangs on the Find rules and the page keys. It may become part of their build specs, or a ticket of its own.
+- How `j`/`k` (row keys) act on folded projects, a closed stack and the flat view. It hangs on the page keys. (Show in tree: decided in the Find rules.)
 
 ## Out of scope
 

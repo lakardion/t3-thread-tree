@@ -63,6 +63,10 @@ _Avoid_: web app, web version
 Up to three threads that the user chose to continue, shown above the tree. It is opt-in: the strip is hidden until the user turns it on. The UI calls it Focus. The user adds a thread from a row, from the brief, or by drag. A settled or deleted thread leaves the list. It is local to this page: it changes no T3 state and does not reorder the tree.
 _Avoid_: Now and Next, pins, favorites, working set
 
+**Find**:
+The control that finds any thread by title, issue key, project, branch or PR number, and opens it or shows it in the tree. It searches the active threads, and the settled threads on request.
+_Avoid_: search, quick open, command palette
+
 **Next-step brief**:
 A model-written, ranked list of recommended actions over the active threads. Each action links to one or more threads. The user asks for it with the "What's next" button.
 _Avoid_: suggestion, summary, advice
