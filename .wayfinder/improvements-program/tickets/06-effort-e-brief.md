@@ -1,7 +1,7 @@
 ---
 title: Effort E: a brief that helps you choose
 type: task
-status: open
+status: closed
 assignee: damian.lucero
 blocked-by: [05-key-m08-last-message]
 ---
@@ -17,3 +17,7 @@ Chart the map at `.wayfinder/better-brief/map.md` with `/wayfinder`, as the `wai
 When the map is charted, put its link here and set `assignee`. Close this ticket when that map is closed, with a one-line `## Resolution`.
 
 Child map: [better-brief map](../../better-brief/map.md), charted 2026-11-18.
+
+## Resolution
+
+The [better-brief map](../../better-brief/map.md) is closed: M11, M10, M12, M14 and M15 merged (#103, #104, #106, #107, #108).

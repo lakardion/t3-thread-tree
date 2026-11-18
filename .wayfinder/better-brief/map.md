@@ -1,6 +1,6 @@
 ---
 label: wayfinder:map
-status: open
+status: closed
 created: 2026-11-18
 ---
 
@@ -62,6 +62,7 @@ Decided at charting (by the user):
 
 - [How does a brief row look, on desktop and phone?](tickets/01-brief-row-look.md): the thread title is the heading; kind, verb and Wait below; the reason is the last question of the last message (not the first sentence); marked rows go to the end under a "N done · N changed since HH:MM · Run again" bar; phone moves labelled buttons below.
 - [When is an Action done or changed, and what does the short brief show?](tickets/02-done-and-short-rules.md): live rules per code kind; all linked threads gone = done for every kind; changed = any status change (model kinds) or a moved Wait (answer); done rows hide Send; first 3 open rows, marked rows always behind "Show all N"; fold open by default and saved; terms **Open**, **Done**, **Changed**.
+- **Route keys:** M11 #103, M10 #104, M12 #106, M14 #107, M15 #108 merged as GitHub stack #105. Destination reached.
 
 ## Not yet specified
 
