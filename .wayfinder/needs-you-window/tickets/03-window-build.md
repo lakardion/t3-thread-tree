@@ -2,7 +2,7 @@
 title: Add the small window to the desktop app
 type: wayfinder:task
 status: open
-assignee: 
+assignee: claude (needs-you-window-03)
 blocked-by: [01-window-look, 02-window-rules]
 ---
 
