@@ -141,19 +141,31 @@ function KindChip({ kind }: { kind: ActionKind }) {
   );
 }
 
-/** The thread with its live status, or its saved title struck through when it left the tree. */
-function ThreadLink({ id, live, saved }: { id: string; live: Map<string, ThreadNode>; saved: string | undefined }) {
+/** The thread title in full as a heading, or its saved title struck through when it left the tree. */
+function ThreadHeading({
+  id,
+  live,
+  saved,
+  done,
+}: {
+  id: string;
+  live: Map<string, ThreadNode>;
+  saved: string | undefined;
+  done: boolean;
+}) {
   const t = live.get(id);
   if (!t)
     return (
-      <span className="max-w-[260px] truncate text-xs text-muted-foreground line-through" title="No longer active">
+      <span className="block text-muted-foreground line-through" title="No longer active">
         {saved ?? id}
       </span>
     );
   return (
-    <a href={t.href} className="inline-flex max-w-[260px] min-w-0 items-center gap-1 text-xs hover:underline">
-      <StatusIcon t={t} />
-      <span className="truncate">{t.title || t.id}</span>
+    <a href={t.href} className="flex items-start gap-1.5 font-[650] hover:underline">
+      <span className="pt-[3px]">
+        <StatusIcon t={t} />
+      </span>
+      <span className={done ? "line-through" : ""}>{t.title || t.id}</span>
     </a>
   );
 }
@@ -361,25 +373,23 @@ function Row({
       <span className="w-4 flex-none pt-px text-right font-mono text-[11px] text-muted-foreground tabular-nums">
         {done ? <Check className="ml-auto size-3.5 text-status-done-fg" aria-label="Done" /> : rank}
       </span>
-      <KindChip kind={a.kind} />
       <div className="min-w-0 flex-1">
-        <div className="flex flex-wrap items-baseline gap-x-2">
-          <span className={`font-[650] ${done ? "line-through" : ""}`}>{a.title}</span>
+        {a.threadIds.map((id) => (
+          <ThreadHeading key={id} id={id} live={live} saved={titles[id]} done={done} />
+        ))}
+        <div className="mt-0.5 flex flex-wrap items-center gap-x-2 gap-y-0.5">
+          <KindChip kind={a.kind} />
+          <span className="text-[13px]">{a.title}</span>
           {waiting && <span className="font-mono text-[11px] text-muted-foreground">{phraseWith(waiting, now)}</span>}
           {badge}
         </div>
-        <div className="text-xs text-muted-foreground">{a.reason}</div>
+        <div className="mt-0.5 text-xs text-muted-foreground">{a.reason}</div>
         {sent && (
           <div className="mt-0.5 flex items-center gap-1 text-xs text-muted-foreground">
             <Check className="size-3" aria-hidden />
             Sent to {sent.map((id) => live.get(id)?.title || titles[id] || id).join(", ")}
           </div>
         )}
-        <div className="mt-0.5 flex flex-wrap gap-x-3 gap-y-0.5">
-          {a.threadIds.map((id) => (
-            <ThreadLink key={id} id={id} live={live} saved={titles[id]} />
-          ))}
-        </div>
       </div>
       {a.prompt && (
         <>
