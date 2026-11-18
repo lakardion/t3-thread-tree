@@ -111,6 +111,14 @@ The flat view lists all threads of all projects in one list. The switch keeps it
 - **Key `n`.** It works with no modifier. It does nothing while focus is in an input, a textarea or a contenteditable element, while the "View" panel is open, and while a dialog, an alert dialog, a menu or a listbox is open. It does nothing with no target.
 - **Opens.** It goes to `t3code://threads/<environmentId>/<threadId>`, the same URL as the row link. It writes nothing to T3.
 
+**Focus list.** A "Focus" button after "Open next" shows the count (`2/3`) and shows or hides the strip. The strip is hidden by default. The page keeps this choice under `thread-tree:focus-show` (`"1"` or `"0"`) and the entry ids under `thread-tree:focus` (a JSON list of at most three thread ids). The strip sits above the tree, under the brief panel. Its heading reads `Focus N of 3`, with `· full, remove one to add another` at 3 of 3. It has three fixed slots; the filled slots come first, and a remove closes the gap. At phone width (720px and less), the slots stack and the empty slots after the first one hide. A card shows the status icon, the phrase (with the Wait for a thread that needs the user), a remove button, the title, an **Open** link and **Show in tree**. A slot whose thread is not in the loaded tree shows "Not loaded" with a remove button; it counts toward the three.
+
+- **Prune.** An entry leaves the list when its thread is settled or no longer in the tree. Only a tree with connection `up` prunes, so a down or loading tree never clears the list.
+- **Add.** A crosshair button in each thread row (not in a settled row) adds the thread; it stays visible and pressed on a listed row and removes it. The brief adds a live linked thread of an Action: one thread adds it, more than one open a menu in which a listed thread is checked and disabled. At 3 of 3 the add buttons are disabled with the tooltip "Focus is full (3 of 3). Remove one first."
+- **Drag.** A thread row dragged by its handle onto the strip adds the thread on an empty slot. On a filled card, the card asks "Replace with <title>?" with Replace and Cancel; Escape and a click outside cancel. A thread that is in the list already changes nothing. A drop on the strip does not reorder the tree; the page remounts the tree list after such a drop. A row drags only where its handle shows: "Manual" sort, a list of two or more units, not on a PR stack rail, and not in the waiting sections of the grouped flat view. The crosshair button covers the other rows.
+- **Show in tree.** It scrolls to the row (instant with reduced motion), then the row flashes for about 1.5 s. When the row is not visible (folded project, closed stack, filter), the button reads "Hidden in the tree" for a few seconds.
+- **Row buttons.** All row buttons show a pointer cursor; a disabled one keeps the default cursor.
+
 The header has a System / Light / Dark choice. The full design is in [DESIGN-SPEC.md](DESIGN-SPEC.md).
 
 ## Live updates

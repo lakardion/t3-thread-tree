@@ -17,6 +17,7 @@ import {
   ChevronRight,
   CircleArrowUp,
   Contrast,
+  Crosshair,
   ExternalLink,
   Eye,
   GripVertical,
@@ -100,6 +101,19 @@ import {
   withoutSnoozed,
 } from "./attention.ts";
 import { BriefControls, BriefPanel, type Offered } from "./brief.tsx";
+import {
+  addFocus,
+  FOCUS_FULL,
+  FOCUS_KEY,
+  FOCUS_MAX,
+  FOCUS_SHOW_KEY,
+  focusDrop,
+  parseFocus,
+  pruneFocus,
+  removeFocus,
+  replaceFocus,
+} from "./focus.ts";
+import { Focus, FocusButton, FocusStrip, slotOf, type Pending } from "./focus.tsx";
 import {
   ago,
   folded,
@@ -858,7 +872,7 @@ const NO_LISTS = new Map<string, string[]>();
 
 const CHIP = "gap-1 rounded-[6px] px-1.5 py-0 text-[11px] font-normal text-muted-foreground";
 const ROW_BUTTON =
-  "size-5 rounded-[6px] text-muted-foreground motion-reduce:transition-none pointer-coarse:min-h-11 pointer-coarse:min-w-11 focus-visible:border-transparent focus-visible:ring-0 focus-visible:outline-2 focus-visible:outline-solid focus-visible:outline-offset-2 focus-visible:outline-ring";
+  "size-5 cursor-pointer rounded-[6px] text-muted-foreground disabled:cursor-default motion-reduce:transition-none pointer-coarse:min-h-11 pointer-coarse:min-w-11 focus-visible:border-transparent focus-visible:ring-0 focus-visible:outline-2 focus-visible:outline-solid focus-visible:outline-offset-2 focus-visible:outline-ring";
 const SEND_REVEAL =
   "opacity-0 group-hover/row:opacity-100 group-focus-within/row:opacity-100 [@media(hover:none)]:opacity-100";
 const FILTER_ITEM =
@@ -871,7 +885,8 @@ const Mark = ({ title, children }: { title: string; children: ReactNode }) => (
 );
 
 type RefFn = (el: Element | null) => void;
-type Sort = { id: string; list: string; index: number; name: string };
+/** `thread`: the id of the thread that the unit shows, which a drop on the Focus strip adds. */
+type Sort = { id: string; list: string; index: number; name: string; thread?: string };
 
 /** A unit gets sort props only when its list has two or more units and it is in the list. */
 const sortOf = (lists: Map<string, string[]>, list: string, id: string, name: string): Sort | undefined => {
@@ -915,7 +930,7 @@ function SortHook({ sort, children }: { sort: Sort; children: (ref: RefFn, handl
     group: sort.list,
     type: sort.list,
     accept: sort.list,
-    data: { name: sort.name },
+    data: { name: sort.name, thread: sort.thread },
     collisionDetector: leadingEdge,
   });
   const both = useCallback<RefFn>(
@@ -1112,6 +1127,39 @@ function WaitText({ t, now }: { t: ThreadNode; now: number }) {
   );
 }
 
+/** Adds the thread to the Focus list, or removes it. Settled threads leave the list, so they get no button. */
+function FocusMark({ t }: { t: ThreadNode }) {
+  const { ids, add, remove, full } = useContext(Focus);
+  if (t.settled) return null;
+  const on = ids.includes(t.id);
+  const label = on ? "Remove from Focus" : "Add to Focus";
+  return (
+    <Tooltip>
+      <TooltipTrigger asChild>
+        {/** A disabled button gets no hover, so the wrapper keeps the tooltip. */}
+        <span className={cn("inline-flex", !on && SEND_REVEAL)}>
+          <Button
+            variant="ghost"
+            size="icon"
+            className={cn(ROW_BUTTON, on && "text-foreground")}
+            aria-label={label}
+            aria-pressed={on}
+            disabled={!on && full}
+            onClick={(e) => {
+              e.stopPropagation();
+              if (on) remove(t.id);
+              else add(t.id);
+            }}
+          >
+            <Crosshair className={cn("size-3.5", on && "stroke-[2.5]")} />
+          </Button>
+        </span>
+      </TooltipTrigger>
+      <TooltipContent>{!on && full ? FOCUS_FULL : label}</TooltipContent>
+    </Tooltip>
+  );
+}
+
 /**
  * `inStack`: the row sits on a stack rail, which holds no drag handles and shows the stack itself.
  * `project` adds the Project column and project edge of the flat list, `corners` rounds that edge, `review` the eye.
@@ -1152,6 +1200,7 @@ function ThreadRow({
         <div
           className="thread-row group/row flex min-h-9 min-w-0 items-center gap-x-2 rounded-[8px] px-2 py-1 text-[13px] leading-5 max-[720px]:flex-wrap"
           data-status={t.status}
+          data-thread={t.id}
         >
           {!inStack && <DragHandle handleRef={handleRef} name={t.title || t.id} />}
           <StatusIcon t={t} now={now} />
@@ -1251,6 +1300,7 @@ function ThreadRow({
                 </Button>
               </CliGate>
             )}
+            <FocusMark t={t} />
             <CollapsibleTrigger asChild>
               <Button variant="ghost" size="icon" className={cn(ROW_BUTTON, "group")} aria-label="Details">
                 <ChevronDown className="size-3.5 transition-transform duration-200 group-data-[state=open]:rotate-180 motion-reduce:transition-none" />
@@ -1271,7 +1321,7 @@ function ThreadRow({
       </li>
     </Collapsible>
   );
-  return <Sortable sort={sort}>{render}</Sortable>;
+  return <Sortable sort={sort && { ...sort, thread: t.id }}>{render}</Sortable>;
 }
 
 /** The project icon and name of a flat row. Phone widths show the icon only. */
@@ -1797,6 +1847,11 @@ function App() {
   const [sendTo, setSendTo] = useState({ id: "", open: false });
   const briefStatus = useRef<BriefState["status"]>("idle");
   const [orders, setOrders] = useState(() => parseOrders(load(ORDER_KEY)));
+  const [focus, setFocus] = useState(() => parseFocus(load(FOCUS_KEY)));
+  const [focusShow, setFocusShow] = useState(load(FOCUS_SHOW_KEY) === "1");
+  const [pending, setPending] = useState<Pending | null>(null);
+  /** A new key remounts the tree list, which drops the row moves that dnd-kit made during a drag onto the strip. */
+  const [listKey, setListKey] = useState(0);
   /** The page setting wins over the server's `.env` config. */
   const [linearSet, setLinearSet] = useState<Tree["linear"]>(() => {
     try {
@@ -1893,6 +1948,12 @@ function App() {
   useEffect(() => {
     save(SNOOZED_KEY, snoozed ? "1" : "0");
   }, [snoozed]);
+  useEffect(() => {
+    save(FOCUS_KEY, JSON.stringify(focus));
+  }, [focus]);
+  useEffect(() => {
+    save(FOCUS_SHOW_KEY, focusShow ? "1" : "0");
+  }, [focusShow]);
 
   useEffect(() => {
     save(THEME_KEY, theme);
@@ -1947,6 +2008,23 @@ function App() {
     void fetch(`/brief/run?settled=${settled ? 1 : 0}`, { method: "POST", body: JSON.stringify({ cli: pick }) });
   };
   const live = new Map((tree?.projects ?? []).flatMap(allThreads).map((t) => [t.id, t]));
+  const kept = tree ? pruneFocus(focus, live, tree.conn) : focus;
+  if (kept !== focus) setFocus(kept);
+  const pend =
+    pending &&
+    focus[pending.slot] === pending.over &&
+    !focus.includes(pending.id) &&
+    live.get(pending.id)?.settled === false
+      ? pending
+      : null;
+  if (pending && !pend) setPending(null);
+  const focusApi = {
+    ids: focus,
+    full: focus.length >= FOCUS_MAX,
+    add: (id: string) => setFocus((ids) => addFocus(ids, id)),
+    remove: (id: string) => setFocus((ids) => removeFocus(ids, id)),
+  };
+  const cancelReplace = useCallback(() => setPending(null), []);
   const counts = countAttention(tree?.projects ?? []);
   const needsTip = needsYouTip(counts);
   const connecting = !tree || tree.conn === "connecting";
@@ -1959,9 +2037,9 @@ function App() {
       layout === "flat" ? (v.flat ?? []).flatMap(itemIds) : v.projects.flatMap(allThreads).map((t) => t.id)
     ).join();
   };
-  const latest = useRef({ full, view, rows, projects: tree?.projects ?? [], connecting });
+  const latest = useRef({ full, view, rows, projects: tree?.projects ?? [], connecting, focus, live });
   useEffect(() => {
-    latest.current = { full, view, rows, projects: tree?.projects ?? [], connecting };
+    latest.current = { full, view, rows, projects: tree?.projects ?? [], connecting, focus, live };
   });
   useEffect(() => {
     save(SETTLED_KEY, settled ? "1" : "0");
@@ -2006,7 +2084,13 @@ function App() {
           },
           dragend: ({ operation, canceled }: DragEndEvent) => {
             const s = spot(operation.source);
-            return s && (canceled ? `Move canceled. ${s.name} is back at ${s.at}.` : `${s.name} dropped at ${s.at}.`);
+            if (!s || canceled) return s && `Move canceled. ${s.name} is back at ${s.at}.`;
+            const slot = slotOf(operation.target?.id);
+            if (slot === null) return `${s.name} dropped at ${s.at}.`;
+            const cur = latest.current;
+            const drop = focusDrop(cur.focus, cur.live, slot, operation.source?.data?.thread);
+            if (drop === "add") return `Added ${s.name} to Focus.`;
+            return drop === "ask" ? `Replace with ${s.name}?` : `${s.name} dropped. Focus is unchanged.`;
           },
         },
       }),
@@ -2022,10 +2106,20 @@ function App() {
       setFreeze({ list: FLAT, ids: latest.current.view.lists.get(FLAT) ?? [], units: new Map() });
     else if (ids && units) setFreeze({ list, ids, units });
   };
-  const dragEnd = ({ operation: { source }, canceled }: DragEndEvent) => {
+  const dragEnd = ({ operation: { source, target: drop }, canceled }: DragEndEvent) => {
     drag.on = false;
     setFreeze(undefined);
     if (canceled || !isSortable(source)) return;
+    const slot = slotOf(drop?.id);
+    if (slot !== null) {
+      const id = String(source.data.thread);
+      const ids = latest.current.focus;
+      const action = focusDrop(ids, latest.current.live, slot, id);
+      if (action === "ask") setPending({ slot, id, over: ids[slot] });
+      else if (action === "add") setFocus((xs) => addFocus(xs, id));
+      setListKey((k) => k + 1);
+      return;
+    }
     const list = String(source.sortable.group);
     const store = list.startsWith(FLAT) ? FLAT : list;
     const all = latest.current.full.lists.get(store);
@@ -2098,6 +2192,7 @@ function App() {
           </ToggleGroupItem>
         </ToggleGroup>
         <OpenNextButton target={target} title={openNextTitle} now={now} open={openNext} />
+        <FocusButton count={focus.length} shown={focusShow} setShown={setFocusShow} />
         <BriefControls
           clis={clis}
           cli={pick}
@@ -2145,112 +2240,129 @@ function App() {
         </div>
       </header>
       <div className="min-h-0 flex-1 overflow-y-auto">
-        {tree?.conn === "down" && (
-          <Alert className="mb-3 border-l-[3px] border-l-status-needs-input">
-            <AlertDescription className="text-foreground">
-              T3 not running: last update {tree.lastUpdate ? hhmm(tree.lastUpdate) : "never"}
-            </AlertDescription>
-          </Alert>
-        )}
-        {(tree?.conn === "no-token" || tree?.conn === "unauthorized") && (
-          <Alert className="mb-3 border-l-[3px] border-l-status-needs-input">
-            <AlertDescription className="flex flex-wrap items-center gap-x-2 text-foreground">
-              {tree.conn === "no-token" ? "No T3 token is set." : "T3 rejected the token."}
-              <Button
-                variant="link"
-                size="sm"
-                className="h-auto p-0"
-                onClick={() => {
-                  setTokenOpen(true);
-                  setSettingsOpen(true);
+        <Focus value={focusApi}>
+          {tree?.conn === "down" && (
+            <Alert className="mb-3 border-l-[3px] border-l-status-needs-input">
+              <AlertDescription className="text-foreground">
+                T3 not running: last update {tree.lastUpdate ? hhmm(tree.lastUpdate) : "never"}
+              </AlertDescription>
+            </Alert>
+          )}
+          {(tree?.conn === "no-token" || tree?.conn === "unauthorized") && (
+            <Alert className="mb-3 border-l-[3px] border-l-status-needs-input">
+              <AlertDescription className="flex flex-wrap items-center gap-x-2 text-foreground">
+                {tree.conn === "no-token" ? "No T3 token is set." : "T3 rejected the token."}
+                <Button
+                  variant="link"
+                  size="sm"
+                  className="h-auto p-0"
+                  onClick={() => {
+                    setTokenOpen(true);
+                    setSettingsOpen(true);
+                  }}
+                >
+                  Set the token
+                </Button>
+              </AlertDescription>
+            </Alert>
+          )}
+          {!hideBrief && brief.status !== "idle" && (
+            <BriefPanel
+              state={brief}
+              clis={clis}
+              live={live}
+              projects={tree?.projects ?? []}
+              t3cli={t3cli}
+              sent={sent}
+              onSent={(key, id) =>
+                setSent((m) => {
+                  const ids = m.get(key) ?? [];
+                  return ids.includes(id) ? m : new Map(m).set(key, [...ids, id]);
+                })
+              }
+              run={runBrief}
+              cancel={() => fetch("/brief/cancel", { method: "POST" })}
+              close={() => setHideBrief(true)}
+            />
+          )}
+          <DragDropProvider plugins={plugins} onDragStart={dragStart} onDragEnd={dragEnd}>
+            {focusShow && (
+              <FocusStrip
+                ids={focus}
+                live={live}
+                now={now}
+                remove={focusApi.remove}
+                pending={pend}
+                replace={() => {
+                  if (!pend) return;
+                  setFocus((ids) => replaceFocus(ids, pend.slot, pend.id));
+                  setPending(null);
                 }}
-              >
-                Set the token
-              </Button>
-            </AlertDescription>
-          </Alert>
-        )}
-        {!hideBrief && brief.status !== "idle" && (
-          <BriefPanel
-            state={brief}
-            clis={clis}
-            live={live}
-            projects={tree?.projects ?? []}
-            t3cli={t3cli}
-            sent={sent}
-            onSent={(key, id) =>
-              setSent((m) => {
-                const ids = m.get(key) ?? [];
-                return ids.includes(id) ? m : new Map(m).set(key, [...ids, id]);
-              })
-            }
-            run={runBrief}
-            cancel={() => fetch("/brief/cancel", { method: "POST" })}
-            close={() => setHideBrief(true)}
-          />
-        )}
-        <Details value={details}>
-          <NeedsOnly value={needsOnly}>
-            <Linear value={linear}>
-              <Lists value={sortBy === "updated" ? NO_LISTS : view.lists}>
-                <Now value={now}>
-                  <div
-                    className={!connecting && tree.conn !== "up" ? "grayscale" : ""}
-                    data-conn={!connecting && tree.conn !== "up" ? "down" : undefined}
-                  >
-                    {projects?.length === 0 && <p className="text-muted-foreground">No active threads.</p>}
-                    {projects ? (
-                      <DragDropProvider plugins={plugins} onDragStart={dragStart} onDragEnd={dragEnd}>
-                        <Card className="gap-0 overflow-clip rounded-[12px] px-2 py-0 shadow-none">
-                          <ul className={cn("m-0 list-none p-0", layout === "flat" && "p-1")}>
-                            <SendTo value={{ t3cli, open: (id) => setSendTo({ id, open: true }) }}>
-                              {layout === "flat" ? (
-                                <Presence key="flat" items={view.flat ?? []} keyOf={(i) => i.id}>
-                                  {(i) => (
-                                    <FlatRow
-                                      i={i}
-                                      corners={edgeCorners(view.flat ?? [], i)}
-                                      section={sectionOf(view.flat ?? [], i)}
-                                      closed={closed}
-                                      toggle={toggle}
-                                      fold={fold}
-                                      toggleSection={toggleSection}
-                                    />
-                                  )}
-                                </Presence>
-                              ) : (
-                                <Presence key="tree" items={projects} keyOf={(p) => p.id}>
-                                  {(p) => <ProjectBlock b={p} closed={closed} toggle={toggle} fold={fold} />}
-                                </Presence>
-                              )}
-                            </SendTo>
-                          </ul>
-                        </Card>
-                      </DragDropProvider>
-                    ) : (
-                      <>
-                        <p className="mb-2 text-sm text-muted-foreground" role="status">
-                          Connecting to T3…
-                        </p>
-                        <Card
-                          className="gap-0 rounded-[12px] py-0 shadow-none"
-                          aria-busy="true"
-                          aria-label="Loading threads"
-                        >
-                          <CardContent className="flex flex-col gap-0.5 p-1.5">
-                            {[0, 1, 2].map((i) => (
-                              <Skeleton key={i} className="h-9 rounded-[8px] motion-reduce:animate-none" />
-                            ))}
-                          </CardContent>
-                        </Card>
-                      </>
-                    )}
-                  </div>
-                </Now>
-              </Lists>
-            </Linear>
-          </NeedsOnly>
-        </Details>
+                cancel={cancelReplace}
+              />
+            )}
+            <Details value={details}>
+              <NeedsOnly value={needsOnly}>
+                <Linear value={linear}>
+                  <Lists value={sortBy === "updated" ? NO_LISTS : view.lists}>
+                    <Now value={now}>
+                      <div
+                        className={!connecting && tree.conn !== "up" ? "grayscale" : ""}
+                        data-conn={!connecting && tree.conn !== "up" ? "down" : undefined}
+                      >
+                        {projects?.length === 0 && <p className="text-muted-foreground">No active threads.</p>}
+                        {projects ? (
+                          <Card className="gap-0 overflow-clip rounded-[12px] px-2 py-0 shadow-none">
+                            <ul key={listKey} className={cn("m-0 list-none p-0", layout === "flat" && "p-1")}>
+                              <SendTo value={{ t3cli, open: (id) => setSendTo({ id, open: true }) }}>
+                                {layout === "flat" ? (
+                                  <Presence key="flat" items={view.flat ?? []} keyOf={(i) => i.id}>
+                                    {(i) => (
+                                      <FlatRow
+                                        i={i}
+                                        corners={edgeCorners(view.flat ?? [], i)}
+                                        section={sectionOf(view.flat ?? [], i)}
+                                        closed={closed}
+                                        toggle={toggle}
+                                        fold={fold}
+                                        toggleSection={toggleSection}
+                                      />
+                                    )}
+                                  </Presence>
+                                ) : (
+                                  <Presence key="tree" items={projects} keyOf={(p) => p.id}>
+                                    {(p) => <ProjectBlock b={p} closed={closed} toggle={toggle} fold={fold} />}
+                                  </Presence>
+                                )}
+                              </SendTo>
+                            </ul>
+                          </Card>
+                        ) : (
+                          <>
+                            <p className="mb-2 text-sm text-muted-foreground" role="status">
+                              Connecting to T3…
+                            </p>
+                            <Card
+                              className="gap-0 rounded-[12px] py-0 shadow-none"
+                              aria-busy="true"
+                              aria-label="Loading threads"
+                            >
+                              <CardContent className="flex flex-col gap-0.5 p-1.5">
+                                {[0, 1, 2].map((i) => (
+                                  <Skeleton key={i} className="h-9 rounded-[8px] motion-reduce:animate-none" />
+                                ))}
+                              </CardContent>
+                            </Card>
+                          </>
+                        )}
+                      </div>
+                    </Now>
+                  </Lists>
+                </Linear>
+              </NeedsOnly>
+            </Details>
+          </DragDropProvider>
+        </Focus>
       </div>
       {settingsOpen && (
         <SettingsPanel
