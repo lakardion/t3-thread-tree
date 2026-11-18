@@ -1,4 +1,4 @@
-import { allThreads, type Branch, type PrNode, type ThreadNode, type Tree } from "../shared/tree.ts";
+import { allThreads, type Branch, type Label, type PrNode, type ThreadNode, type Tree } from "../shared/tree.ts";
 
 /** Adjacent branches with the same stack id form one run. A branch with no stack is a run of one. */
 export function stackRuns(bs: Branch[]): Branch[][] {
@@ -98,3 +98,38 @@ export const groupIds = (g: Branch): string[] => (folded(g) ? [] : [g.id, ...g.b
 /** The fold ids of the rows in a project: its groups and its PR stacks. */
 export const foldIds = (project: Branch): string[] =>
   stackRuns(project.branches).flatMap((run) => (run[0].stack ? [`rail:${run[0].stack.id}`] : groupIds(run[0])));
+
+/** Initials of the first three words of a label name: "ready-for-review" gives "RFR". */
+export const initials = (name: string): string =>
+  name
+    .split(/[^\p{L}\p{N}]+/u)
+    .filter(Boolean)
+    .slice(0, 3)
+    .map((w) => w[0].toUpperCase())
+    .join("");
+
+/** Black or white text for a label color of six hex digits. */
+export const ink = (hex: string): string => {
+  const [r, g, b] = [0, 2, 4].map((i) => parseInt(hex.slice(i, i + 2), 16));
+  return 0.299 * r + 0.587 * g + 0.114 * b > 150 ? "#000" : "#fff";
+};
+
+/**
+ * The Label pill of a row: its first watched label in list order, the count of the other names, and the tooltip.
+ * Only the open PRs of the row count. Null for a settled row or with no match.
+ */
+export function labelPill(t: ThreadNode, watched: string[]): { label: Label; more: number; tip: string } | null {
+  if (t.settled || !watched.length) return null;
+  const order = watched.map((w) => w.toLowerCase());
+  const hits = t.prs
+    .filter((p) => p.state === "open")
+    .flatMap((p) => p.labels.filter((l) => order.includes(l.name.toLowerCase())).map((l) => ({ l, n: p.n })))
+    .toSorted((a, b) => order.indexOf(a.l.name.toLowerCase()) - order.indexOf(b.l.name.toLowerCase()));
+  if (!hits.length) return null;
+  const names = new Set(hits.map((h) => h.l.name.toLowerCase()));
+  return {
+    label: hits[0].l,
+    more: names.size - 1,
+    tip: hits.map((h) => `${h.l.name}: #${h.n}`).join(" · "),
+  };
+}
