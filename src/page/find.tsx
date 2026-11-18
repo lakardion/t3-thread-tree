@@ -226,7 +226,7 @@ export function FindDialog({
     <Dialog open={open} onOpenChange={setOpen}>
       <DialogContent
         data-find=""
-        className="top-[20%] translate-y-0 gap-0 overflow-hidden p-0 max-[720px]:top-0 max-[720px]:left-0 max-[720px]:h-dvh max-[720px]:max-w-none! max-[720px]:translate-x-0 max-[720px]:rounded-none max-[720px]:border-0 sm:max-w-xl"
+        className="top-[20%] translate-y-0 gap-0 overflow-hidden p-0 max-[720px]:top-0 max-[720px]:left-0 max-[720px]:h-dvh max-[720px]:max-w-none! max-[720px]:translate-x-0 max-[720px]:rounded-none max-[720px]:border-0 sm:max-w-xl [&_[data-slot=dialog-close]]:cursor-pointer"
         onCloseAutoFocus={(e) => {
           if (revealing.current) e.preventDefault();
           revealing.current = false;
