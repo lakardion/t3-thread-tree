@@ -274,7 +274,7 @@ const treeFor = (nest: boolean, labels: string[]) =>
     projects: projectsFor(false, nest, labels),
   });
 
-/** The model part of the sample brief. Code makes the `answer`, `fix` and `merge` actions from the tree, so these threads have none of them. `demo-27` is settled, so its link shows struck through. */
+/** The model part of the sample brief. Code makes the `answer`, `fix` and `merge` actions from the tree, so these threads have none of them. `demo-27` is settled, so its heading shows struck through. */
 const SAMPLE: BriefAction[] = [
   {
     kind: "unblock",

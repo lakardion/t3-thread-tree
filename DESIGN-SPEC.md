@@ -337,6 +337,7 @@ The hover background of a row is `--accent`. It replaces the wash while the poin
 - Header, one line that wraps: the title "Thread tree" (15 px, semibold), the attention summary, the "All / Needs you" filter, then at the right the "Reset order" button, the "show settled" switch and the theme choice. "Reset order" is a ghost `sm` button. It shows only when the user has a stored order. A click clears the stored order.
 - The banner is below the header, as now.
 - The brief panel head has a disclosure chevron, like the tree folds. Folded, the head shows the count line and nothing shows below it. The list shows three open rows and a "Show all N" link button.
+- A brief row has the full thread title as its heading (bold, wraps). Line 2 has the kind chip, the Action title, the Wait and the mark badge. Line 3 has the reason.
 - One card with all projects follows.
 
 **Attention summary.** Four count chips over the visible threads, nested threads included:
