@@ -41,7 +41,7 @@ Decided in [the Find rules](02-find-rules.md) and, for the keys, [the page keys]
 **Actions.**
 
 - **Enter** (or a click) opens the thread in T3, like the row link, and closes the dialog.
-- **Show in tree**, a row button and Shift+Enter: closes the dialog, unfolds every fold on the path to the row (project, key group, PR stack; in the flat view, the status section) and stores the folds, then scrolls to the row and flashes it for about 1.5 s. Use the Show in tree of [the Focus list build](04-focus-list-build.md), and replace its "row is hidden" note for folded rows with this unfold, so the Focus strip unfolds too.
+- **Show in tree**, a row button and Shift+Enter: closes the dialog, unfolds every fold on the path to the row (project, key group, PR stack; in the flat view, the status section) and stores the folds, then scrolls to the row and flashes it for about 1.5 s. Use the Show in tree of [the Focus list build](04-focus-list-build.md) (`revealRow` in `src/page/focus.tsx`, which finds `.thread-row[data-thread]`), and replace its "row is hidden" note for folded rows with this unfold, so the Focus strip unfolds too.
 - A result that a view setting hides (the "Needs you" filter is on and it does not match, or it is snoozed and snoozed threads are hidden) and a settled result while the switch is off get no Show in tree. Enter still works. Find never turns off a view setting.
 
 **Settled search.**
