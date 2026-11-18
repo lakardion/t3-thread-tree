@@ -122,9 +122,9 @@ const creationKey = (t: Thread) => `${String(Date.parse(t.createdAt ?? "") || 0)
 const byFirst = <T extends { first: string }>(a: T, b: T) => a.first.localeCompare(b.first);
 
 /**
- * Stacks are connected sets of open stack PRs across threads. The order comes from the thread with
- * the longest list: its stack/agent PRs in list order, with each of its own created PRs placed after
- * the last lower number.
+ * Stacks are connected sets of open stack PRs across threads. The order is the longest layer list
+ * T3 reports. Without one, it comes from the thread with the longest list: its stack/agent PRs in
+ * list order, with each of its own created PRs placed after the last lower number.
  */
 export function computeStacks(threads: Thread[]): Stack[] {
   const stacks: Stack[] = [];
@@ -141,6 +141,13 @@ export function computeStacks(threads: Thread[]): Stack[] {
     stacks.push(merged);
   }
   for (const st of stacks) {
+    const layers = st.threads
+      .flatMap((t) => t.prs.map((p) => p.stackLayers ?? []))
+      .reduce((a, b) => (b.length > a.length ? b : a), []);
+    if (layers.length) {
+      st.order = layers;
+      continue;
+    }
     const best = st.threads.reduce((a, b) => (stackPrs(b).length > stackPrs(a).length ? b : a));
     const order = best.prs
       .filter((p) => (p.source === "stack" || p.source === "agent") && p.state === "open")
@@ -175,7 +182,7 @@ export function buildTree(input: BuildInput): Branch[] {
   const nodes = new Map<string, Node>();
   for (const t of visible.values()) {
     const si = stackIdOf.get(t.id);
-    const created = t.prs.find((p) => p.source === "created")?.n;
+    const created = (t.prs.find((p) => p.source === "created") ?? t.prs.find((p) => p.source === "agent"))?.n;
     const st = si === undefined ? null : stacks[si];
     const pos = st && created !== undefined && st.order.includes(created) ? st.order.indexOf(created) + 1 : null;
     nodes.set(t.id, {
@@ -249,8 +256,9 @@ export function buildTree(input: BuildInput): Branch[] {
     const gs = [...gmap.values()];
     for (const g of gs) {
       g.nodes.forEach(settle);
-      g.nodes.sort(byFirst);
-      g.first = g.nodes[0].first;
+      /** Stack mates go in stack order; the group keeps the slot of its oldest thread. */
+      g.first = g.nodes.toSorted(byFirst)[0].first;
+      g.nodes.sort((a, b) => (a.stack?.pos ?? Infinity) - (b.stack?.pos ?? Infinity) || byFirst(a, b));
     }
     gs.sort(byFirst);
     /** Groups that share a stack sit together, in stack order, at the slot of the oldest member. */

@@ -70,6 +70,7 @@ const pr = (n: number, source: string, state = "open", over: Partial<Pr> = {}): 
   review: null,
   mergeability: null,
   stackBase: null,
+  stackLayers: null,
   title: null,
   additions: null,
   deletions: null,
