@@ -2,7 +2,7 @@
 id: "008"
 title: Build Group by Linear project in Tree
 type: wayfinder:task
-status: open
+status: in-review
 assignee: claude (github-linear-views-008)
 blocked-by: [007-linear-source-build]
 ---
