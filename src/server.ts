@@ -3,13 +3,14 @@ import { join } from "node:path";
 
 import index from "./page/index.html";
 import upNext from "./page/up-next.html";
-import { briefInput, briefService, detectClis, lastMessageRoutes } from "./server/brief.ts";
+import { briefInput, briefService, lastMessageRoutes, runBrief } from "./server/brief.ts";
 import { buildLinearTree, buildTree, issueKey } from "./server/build-tree.ts";
 import { findRoutes } from "./server/find.ts";
 import { labelStore } from "./server/labels.ts";
 import { mayBeLaunched, needsScan, openLineage } from "./server/lineage.ts";
 import { fetchLinear } from "./server/linear-api.ts";
 import { linearStore } from "./server/linear.ts";
+import { createModels } from "./server/model.ts";
 import { checkCli, cliPath, sendService } from "./server/send.ts";
 import { settleRoutes } from "./server/settle.ts";
 import { settledPage, settledRoutes, settledSignature } from "./server/settled.ts";
@@ -209,8 +210,10 @@ const shell = connectShell({
   },
 });
 
+const models = createModels({ localConfig: () => null });
 const brief = briefService({
-  clis: detectClis(),
+  offered: () => models.offered(),
+  run: (p, t) => runBrief((pick, job) => models.run(pick, job), p, t),
   input: () => briefInput(treeFor(false).projects, lineage.lastMessages, Date.now()),
   onChange: () => {
     const data = JSON.stringify(brief.state());

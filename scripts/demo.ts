@@ -7,7 +7,7 @@ import { findRoutes } from "../src/server/find.ts";
 import { cliPath, type CliRun, sendService } from "../src/server/send.ts";
 import { settledPage, settledRoutes, settledSignature } from "../src/server/settled.ts";
 import type { Pr, Project, Thread } from "../src/server/t3.ts";
-import type { BriefAction, Cli } from "../src/shared/brief.ts";
+import type { BriefAction, ModelPick } from "../src/shared/brief.ts";
 import { parseLabels, type LinearIssue } from "../src/shared/tree.ts";
 
 const now = Date.now();
@@ -331,7 +331,7 @@ const SAMPLE: BriefAction[] = [
 const titles = Object.fromEntries(threads.map((th) => [th.id, th.title]));
 
 /** Stub runner: `BRIEF=failed|empty|rules` picks the outcome, `CLIS=0` offers no CLI. */
-function stubRun(cli: Cli): { done: Promise<Outcome | null>; cancel: () => void } {
+function stubRun(cli: ModelPick): { done: Promise<Outcome | null>; cancel: () => void } {
   const outcome = (): Outcome =>
     process.env.BRIEF === "failed"
       ? {
@@ -359,14 +359,15 @@ function stubRun(cli: Cli): { done: Promise<Outcome | null>; cancel: () => void 
 
 const listeners = new Set<(event: string, data: string) => void>();
 const brief = briefService({
-  clis: Promise.resolve(
-    process.env.CLIS === "0"
-      ? []
-      : [
-          { id: "claude", label: "Claude Haiku" },
-          { id: "codex", label: "Codex Luna" },
-        ],
-  ),
+  offered: () =>
+    Promise.resolve(
+      process.env.CLIS === "0"
+        ? []
+        : [
+            { id: "claude" as const, label: "Claude Haiku" },
+            { id: "codex" as const, label: "Codex Luna" },
+          ],
+    ),
   input: () => {
     const i = briefInput(projectsFor(false), () => new Map(), now);
     return process.env.BRIEF === "rules" ? { ...i, threads: [] } : i;

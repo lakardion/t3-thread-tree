@@ -1,7 +1,7 @@
 /** The Next-step brief that the backend keeps in memory and the page renders. */
 import type { Status, ThreadNode } from "./tree.ts";
 
-export type Cli = "claude" | "codex";
+export type ModelPick = "claude" | "codex";
 
 export type ActionKind = "answer" | "merge" | "fix" | "review" | "clean-up" | "unblock";
 
@@ -18,7 +18,7 @@ export type BriefAction = {
 export type BriefRun =
   | {
       status: "running";
-      cli: Cli;
+      cli: ModelPick;
       threadCount: number;
       startedAt: string;
       actions: BriefAction[];
@@ -26,7 +26,7 @@ export type BriefRun =
     }
   | {
       status: "done";
-      cli: Cli;
+      cli: ModelPick;
       generatedAt: string;
       rulesOnly?: true;
       actions: BriefAction[];
@@ -34,7 +34,7 @@ export type BriefRun =
     }
   | {
       status: "failed";
-      cli: Cli;
+      cli: ModelPick;
       error: string;
       stderrTail: string;
       actions: BriefAction[];

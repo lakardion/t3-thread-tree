@@ -79,7 +79,7 @@ import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/comp
 import { cn } from "@/lib/utils";
 
 import appIcon from "../../assets/icon.svg" with { type: "text" };
-import type { BriefState, Cli } from "../shared/brief.ts";
+import type { BriefState, ModelPick } from "../shared/brief.ts";
 import type { UpdateState } from "../shared/desktop.ts";
 import { hits } from "../shared/find.ts";
 import type { CliStatus } from "../shared/send.ts";
@@ -2441,7 +2441,7 @@ function App() {
   );
   const [brief, setBrief] = useState<BriefState>({ status: "idle" });
   const [clis, setClis] = useState<Offered | null>(null);
-  const [cli, setCli] = useState(load(CLI_KEY) as Cli | null);
+  const [cli, setCli] = useState(load(CLI_KEY) as ModelPick | null);
   const [hideBrief, setHideBrief] = useState(false);
   const [t3cli, setT3cli] = useState<CliStatus | null>(null);
   const [sent, setSent] = useState(() => new Map<string, string[]>());
@@ -2561,7 +2561,7 @@ function App() {
   }, [tree]);
 
   useEffect(() => {
-    fetch("/brief/clis")
+    fetch("/models")
       .then((r) => r.json() as Promise<Offered>)
       .then(setClis, () => setClis([]));
     fetch("/t3/cli")
