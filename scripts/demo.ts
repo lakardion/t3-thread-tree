@@ -214,6 +214,7 @@ const threads: Thread[] = [
     snoozedUntil: later(30),
   }),
   t("Rewrite the install page", { id: "launched", projectId: "docs" }),
+  t("Compare two date libraries", { projectId: "scratch", status: "idle" }),
   t("DOC-16 · Archive the old tutorial", { projectId: "docs", settledAt: ago(60), prs: [pr(3010, "linked")] }),
   t("Cache rollout dispatch", { id: "dispatch", projectId: "api", ...completed }),
   t("Search revamp map", { id: "search", projectId: "api", status: "idle" }),
@@ -251,6 +252,7 @@ const projects = new Map<string, Project>([
   ["storefront", { title: "storefront", repo: "acme/storefront" }],
   ["api", { title: "api-gateway", repo: "acme/api-gateway" }],
   ["docs", { title: "docs-site", repo: null }],
+  ["scratch", { title: "No project", repo: null }],
 ]);
 
 const CHECKOUT = {
