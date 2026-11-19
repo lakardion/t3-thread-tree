@@ -1,6 +1,7 @@
 import { ago } from "../page/format.ts";
 /** The tree rules: visibility, placement, stack order and status. Pure, so `bun test` covers it. */
 import {
+  LINEAR_LOOSE,
   LINEAR_REVIEWS,
   NO_KEY,
   NO_MILESTONE,
@@ -470,7 +471,7 @@ export function buildLinearTree(input: BuildInput): Branch[] {
         },
       ]
     : [];
-  return [...top, ...reviewBranch, ...fallback("lf:none", NO_PROJECT, noProject), ...fallback("lf:loose", "", loose)];
+  return [...top, ...reviewBranch, ...fallback("lf:none", NO_PROJECT, noProject), ...fallback(LINEAR_LOOSE, "", loose)];
 }
 
 /** Review threads in one subgroup per issue key, in first-seen order. */

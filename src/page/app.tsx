@@ -86,6 +86,7 @@ import type { CliStatus } from "../shared/send.ts";
 import {
   allThreads,
   isFallback,
+  LINEAR_LOOSE,
   isLinearReviews,
   parseLabels,
   parseLinear,
@@ -2083,6 +2084,23 @@ function ProjectBlock({ b, closed, toggle, fold }: { b: Branch } & Fold) {
   const lists = useContext(Lists);
   const fallback = isFallback(b);
   const color = fallback ? "var(--border)" : projectHex(b.label);
+  const threads = (
+    <Presence items={b.threads} keyOf={(t) => t.id}>
+      {(t) => (
+        <ThreadRow
+          t={t}
+          chip={t.key ?? undefined}
+          sort={sortOf(lists, threadsKey(b.id), threadUnitId(t), t.title || t.id)}
+        />
+      )}
+    </Presence>
+  );
+  if (b.id === LINEAR_LOOSE)
+    return (
+      <li className="border-l-[3px] px-1 py-1" style={{ borderLeftColor: color }}>
+        <ul className="m-0 list-none p-0">{threads}</ul>
+      </li>
+    );
   const render = (ref: RefFn, handleRef?: RefFn) => (
     <li ref={ref} className="border-l-[3px] not-last:border-b" style={{ borderLeftColor: color }}>
       <Collapsible asChild open={open} onOpenChange={() => toggle(b.id)}>
@@ -2146,15 +2164,7 @@ function ProjectBlock({ b, closed, toggle, fold }: { b: Branch } & Fold) {
                     );
                   }}
                 </Presence>
-                <Presence items={b.threads} keyOf={(t) => t.id}>
-                  {(t) => (
-                    <ThreadRow
-                      t={t}
-                      chip={t.key ?? undefined}
-                      sort={sortOf(lists, threadsKey(b.id), threadUnitId(t), t.title || t.id)}
-                    />
-                  )}
-                </Presence>
+                {threads}
               </ul>
             </CollapsibleContent>
           </div>
