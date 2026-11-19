@@ -1,6 +1,7 @@
 import { describe, expect, test } from "bun:test";
 import { homedir } from "node:os";
 
+import { flatten, sortFlat } from "../src/page/view.ts";
 import { buildLinearTree, buildTree, issueKey, statusOf, type BuildInput } from "../src/server/build-tree.ts";
 import { launchedIds } from "../src/server/lineage.ts";
 import { decodeItem, decodeThread, type Thread } from "../src/server/t3.ts";
@@ -283,6 +284,19 @@ describe("order", () => {
     expect(run({ activityRunStartedAt: late, latestRunStartedAt: early, latestRunCompletedAt: early })).toBe(late);
     expect(run({ activityRunStartedAt: early, latestRunCompletedAt: late })).toBe(late);
     expect(run({})).toBeNull();
+  });
+
+  test("Last updated puts a working thread with a queued follow-up run first", () => {
+    const tree = build([
+      shell("old", "SHOP-1 old", { status: "completed", latestRunCompletedAt: "2026-11-10T08:00:00.000Z" }),
+      shell("busy", "SHOP-2 busy", {
+        status: "queued",
+        activityRunStatus: "running",
+        activityRunStartedAt: "2026-11-12T11:59:00.000Z",
+      }),
+      shell("mid", "SHOP-3 mid", { status: "completed", latestRunCompletedAt: "2026-11-12T11:00:00.000Z" }),
+    ]);
+    expect(sortFlat(flatten(tree)).map((u) => u.id)).toEqual(["t:busy", "t:mid", "t:old"]);
   });
 
   test("an updatedAt or run change does not move a row", () => {
