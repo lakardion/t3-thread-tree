@@ -1695,10 +1695,7 @@ function ThreadRow({
 const ProjectColumn = ({ b }: { b: Branch }) => {
   const names = useContext(ProjectNames);
   return (
-    <span
-      className={cn("flex flex-none items-center gap-1.5", names ? "w-32 max-[720px]:w-auto" : "w-auto")}
-      title={b.repo ?? b.label}
-    >
+    <span className={cn("flex min-w-0 flex-none items-center gap-1.5", names && "max-w-32")} title={b.repo ?? b.label}>
       <ProjectIcon name={b.label} />
       {names && <span className="truncate text-xs text-muted-foreground max-[720px]:hidden">{b.label}</span>}
     </span>
