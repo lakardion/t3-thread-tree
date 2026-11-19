@@ -206,6 +206,7 @@ const SNOOZED_KEY = "thread-tree:snoozed";
 const SECTIONS_KEY = "thread-tree:sections";
 const NEST_KEY = "thread-tree:nest";
 const PROJECT_NAMES_KEY = "thread-tree:project-names";
+const STATUS_TEXT_KEY = "thread-tree:status-text";
 const FILTER_KEY = "thread-tree:filter";
 const THEME_KEY = "thread-tree:theme";
 const CLI_KEY = "thread-tree:cli";
@@ -988,6 +989,8 @@ type PanelProps = LinearProps &
     setSnoozed: (v: boolean) => void;
     nest: boolean;
     setNest: (v: boolean) => void;
+    statusText: boolean;
+    setStatusText: (v: boolean) => void;
     projectNames: boolean;
     setProjectNames: (v: boolean) => void;
     canReset: boolean;
@@ -1051,6 +1054,9 @@ function SettingsPanel(p: PanelProps) {
           </Row>
           <Row label="Nest launched threads" htmlFor="nest">
             <Switch id="nest" checked={p.nest} onCheckedChange={p.setNest} />
+          </Row>
+          <Row label="Show status text in rows" htmlFor="status-text">
+            <Switch id="status-text" checked={p.statusText} onCheckedChange={p.setStatusText} />
           </Row>
           <Row label="Show project names in rows" htmlFor="project-names">
             <Switch id="project-names" checked={p.projectNames} onCheckedChange={p.setProjectNames} />
@@ -1432,8 +1438,8 @@ function WaitText({ t, now }: { t: ThreadNode; now: number }) {
   if (!needsYou(t.status) && t.status !== "failed") return null;
   return (
     <span className={cn(STATUS[t.status].shape, "flex-none text-[12px] font-medium whitespace-nowrap")}>
-      {t.phrase}
-      {needsYou(t.status) && t.since && <span className="font-mono tabular-nums"> {ago(t.since, now)}</span>}
+      <span className="in-data-[status-text=off]:hidden">{t.phrase} </span>
+      {needsYou(t.status) && t.since && <span className="font-mono tabular-nums">{ago(t.since, now)}</span>}
     </span>
   );
 }
@@ -2392,6 +2398,7 @@ function App() {
   const [snoozed, setSnoozed] = useState(load(SNOOZED_KEY) !== "0");
   const [nest, setNest] = useState(load(NEST_KEY) === "1");
   const [projectNames, setProjectNames] = useState(load(PROJECT_NAMES_KEY) !== "0");
+  const [statusText, setStatusText] = useState(load(STATUS_TEXT_KEY) !== "0");
   const [needsOnly, setNeedsOnly] = useState(load(FILTER_KEY) === "needs");
   const [theme, setTheme] = useState<Theme>(() => THEMES.find((t) => t === load(THEME_KEY)) ?? "system");
   const [sortBy, setSortBy] = useState<SortBy>(() => (load(SORT_KEY) === "updated" ? "updated" : "manual"));
@@ -2548,6 +2555,9 @@ function App() {
   useEffect(() => {
     save(PROJECT_NAMES_KEY, projectNames ? "1" : "0");
   }, [projectNames]);
+  useEffect(() => {
+    save(STATUS_TEXT_KEY, statusText ? "1" : "0");
+  }, [statusText]);
   useEffect(() => {
     save(SNOOZED_KEY, snoozed ? "1" : "0");
   }, [snoozed]);
@@ -3109,6 +3119,7 @@ function App() {
                           <div
                             className={!connecting && tree.conn !== "up" ? "grayscale" : ""}
                             data-conn={!connecting && tree.conn !== "up" ? "down" : undefined}
+                            data-status-text={statusText ? undefined : "off"}
                           >
                             {projects?.length === 0 && <p className="text-muted-foreground">No active threads.</p>}
                             {projects ? (
@@ -3185,6 +3196,8 @@ function App() {
           setSnoozed={setSnoozed}
           nest={nest}
           setNest={setNest}
+          statusText={statusText}
+          setStatusText={setStatusText}
           projectNames={projectNames}
           setProjectNames={setProjectNames}
           canReset={Object.keys(orders).length + Object.keys(linearOrders).length > 0}
