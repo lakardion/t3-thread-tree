@@ -105,6 +105,15 @@ export type Tree = {
 
 export type Linear = { workspace: string; teams: string[] };
 
+/** The Linear project and milestone of one issue. Null means the issue has none. */
+export type LinearIssue = {
+  project: { id: string; name: string; url: string } | null;
+  milestone: { id: string; name: string; targetDate: string | null } | null;
+};
+
+/** `"no-key"`: no API key saved. `"rejected"`: Linear refused the key. */
+export type LinearKeyState = "ok" | "no-key" | "rejected";
+
 /** The Linear config from a workspace slug or any linear.app URL, and a comma list of team keys. Null with no workspace. */
 export function parseLinear(workspace = "", teams = ""): Linear | null {
   const ws = workspace.trim().match(/linear\.app\/([^/?#\s]+)/)?.[1] ?? workspace.trim();
