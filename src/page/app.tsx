@@ -117,6 +117,7 @@ import {
 } from "./attention.ts";
 import { BriefControls, BriefPanel, CopyPrompt, type Offered } from "./brief.tsx";
 import { FindDialog, FIND_KEY, MAC } from "./find.tsx";
+import { TriageBar, TriageButton, TriageFloat, TriageInline, triageOpen, useTriage } from "./triage-prototype.tsx";
 import {
   addFocus,
   FOCUS_FULL,
@@ -2778,6 +2779,7 @@ function App() {
     void fetch("/brief/run", { method: "POST", body: JSON.stringify({ cli: pick }) });
   };
   const live = new Map((tree?.projects ?? []).flatMap(allThreads).map((t) => [t.id, t]));
+  const tri = useTriage(queue, live);
   const kept = tree ? pruneFocus(focus, live, tree.conn) : focus;
   if (kept !== focus) setFocus(kept);
   const pend =
@@ -2838,6 +2840,7 @@ function App() {
     const onKey = (e: KeyboardEvent) => {
       const el = e.target instanceof HTMLElement ? e.target : null;
       const active = document.activeElement;
+      if (triageOpen()) return;
       const action = pageKey(e, {
         stop: active?.matches("[data-stop]") ? (active.closest(".thread-row") ? "thread" : "header") : null,
         mac: MAC,
@@ -3110,13 +3113,7 @@ function App() {
         </ToggleGroup>
         <OpenNextButton target={target} title={openNextTitle} now={now} open={openNext} />
         <FocusButton count={focus.length} shown={focusShow} setShown={setFocusShow} />
-        <BriefControls
-          clis={clis}
-          cli={pick}
-          setCli={(c) => (setCli(c), save(CLI_KEY, c))}
-          running={brief.status === "running"}
-          run={runBrief}
-        />
+        <TriageButton count={queue.length} />
         <div className="ml-auto flex items-center gap-1">
           <div className="min-[720px]:hidden">
             <ViewMenu
@@ -3199,7 +3196,8 @@ function App() {
               </AlertDescription>
             </Alert>
           )}
-          {!hideBrief && brief.status !== "idle" && (
+          <TriageInline tri={tri} />
+          {false && !hideBrief && brief.status !== "idle" && (
             <BriefPanel
               state={brief}
               clis={clis}
@@ -3357,6 +3355,8 @@ function App() {
         message=""
         onOpenChange={(open) => setSendTo((s) => ({ ...s, open }))}
       />
+      <TriageFloat tri={tri} />
+      <TriageBar tri={tri} />
     </TooltipProvider>
   );
 }
