@@ -58,25 +58,36 @@ export function needsScan(
 }
 
 const LAST_MESSAGES = `
-  SELECT ids.value AS id,
-    (SELECT json_extract(m.payload_json, '$.text')
-     FROM orchestration_v2_projection_messages m
-     WHERE m.thread_id = ids.value AND m.role = 'assistant' AND m.streaming = 0
-     ORDER BY m.created_at DESC, m.message_id DESC
-     LIMIT 1) AS text
-  FROM json_each(?1) AS ids`;
+  SELECT ids.value AS id, m.message_id AS messageId, json_extract(m.payload_json, '$.text') AS text
+  FROM json_each(?1) AS ids
+  LEFT JOIN orchestration_v2_projection_messages m
+    ON m.thread_id = ids.value
+    AND m.message_id = (
+      SELECT l.message_id
+      FROM orchestration_v2_projection_messages l
+      WHERE l.thread_id = ids.value AND l.role = 'assistant' AND l.streaming = 0
+      ORDER BY l.created_at DESC, l.message_id DESC
+      LIMIT 1)`;
 
 export function openLineage(path = join(USERDATA, "statev2.sqlite")) {
   const db = new Database(path, { readonly: true });
   const calls = db.query<{ caller: string; result: string | null }, []>(CALLS);
   const sender = db.query<{ sender: string | null }, [string]>(SENDER);
-  const last = db.query<{ id: string; text: string | null }, [string]>(LAST_MESSAGES);
+  const last = db.query<{ id: string; messageId: string | null; text: string | null }, [string]>(LAST_MESSAGES);
+  const lastEntries = (ids: string[]): Map<string, { id: string; text: string } | null> =>
+    new Map(
+      last
+        .all(JSON.stringify(ids))
+        .map((r) => [r.id, r.messageId && r.text ? { id: r.messageId, text: r.text } : null]),
+    );
   let callers = new Map<string, string>();
 
   return {
     /** The newest complete assistant text per thread; `null` when it has none. */
     lastMessages: (ids: string[]): Map<string, string | null> =>
-      new Map(last.all(JSON.stringify(ids)).map((r) => [r.id, r.text])),
+      new Map([...lastEntries(ids)].map(([id, e]) => [id, e?.text ?? null])),
+    /** The newest complete assistant message per thread, with its id; `null` when it has no text. */
+    lastEntries,
     /** Re-reads every launch tool call. One full scan, so run it only in a Worker. */
     reload() {
       const next = new Map<string, string>();

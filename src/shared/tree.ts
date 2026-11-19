@@ -1,4 +1,6 @@
 /** The placed tree that the backend pushes and the page renders. */
+import type { ModelPick } from "./brief.ts";
+
 export type Status =
   | "needs-input"
   | "working"
@@ -49,6 +51,16 @@ export type Detail = {
   pinned: boolean;
 };
 
+/** The one-line read of a waiting thread. `did`, `ask`, `options` and `doneLike` are set when `state` is `done`. */
+export type CatchUp = {
+  state: "queued" | "running" | "done" | "failed";
+  did?: string;
+  ask?: string | null;
+  options?: string[];
+  doneLike?: boolean;
+  pick: ModelPick;
+};
+
 export type ThreadNode = {
   id: string;
   href: string;
@@ -75,6 +87,8 @@ export type ThreadNode = {
   prs: PrNode[];
   detail: Detail;
   children: ThreadNode[];
+  /** Set while the server holds a Catch-up for the thread's newest message and request. */
+  catchUp?: CatchUp;
   /** The T3 project. Set only in the Linear tree. */
   t3Project?: { id: string; label: string };
 };

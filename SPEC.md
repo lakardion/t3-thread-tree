@@ -390,7 +390,7 @@ type BriefState =
 
 The full look is in ticket 04. In short:
 
-- **Controls:** in the header, after the filter, a split control: a primary "What's next" button (Sparkles icon) joined to a model `Select`. The choice is saved in `localStorage`. With no CLI offered, the button is disabled with a tooltip. The button is disabled while a run is active. At phone width the button shows its icon only, with an `aria-label`, and the model `Select` and the model name are hidden. When a Local model config is saved, the menu shows "Local · <model>" last. After "Save" in the Local model fold, the page loads `/models` again. The page never selects it on its own.
+- **Controls:** in the header, after the filter, a split control: a primary "What's next" button (Sparkles icon) joined to a model `Select`. The choice is saved in the server pick file (see "Catch-up"), not in `localStorage`. The page moves a pick that an older page saved in `localStorage` to the file one time, and then reads the pick from the server. A run saves its pick only when the file holds none. A saved pick that is not offered stays as it is. The page removes the old `localStorage` value only after the server holds the pick. With no CLI offered, the button is disabled with a tooltip. The button is disabled while a run is active. At phone width the button shows its icon only, with an `aria-label`, and the model `Select` and the model name are hidden. When a Local model config is saved, the menu shows "Local · <model>" last. After "Save" in the Local model fold, the page loads `/models` again. The page never selects it on its own.
 - **Panel:** an inline card between the header and the tree. It shows only after the first click, or when the brief state is not `idle` at load. The head has "Next steps", a mono stamp "generated HH:MM · <label>" ("generated HH:MM · rules only" when the model did not run), and a close button that hides the panel.
 - **States:** loading ("Reading N threads…" with the letter wave, and "Cancel"); error (alert, "The brief failed.", "Retry", the stderr tail); empty ("Nothing needs you right now."); the ranked actions. In `running`, the code actions show at once as rows above the loading line. In `failed`, they show above the error. In `done`, all rows run in one rank order.
 - **Action row:** after the rank, line 1 has the thread headings (see "Thread headings"). Line 2 has the kind chip, the title, for an `answer` row the live Wait of its thread (the status phrase with its age, in mono; it updates each minute), and the mark badge. Line 3 has the reason. Then the icons, with a copy icon for `prompt` (none when `prompt` is `null`).
@@ -401,6 +401,38 @@ The full look is in ticket 04. In short:
 - **Fold:** a chevron in the panel head folds the panel. The panel is open by default. The page saves the state under `thread-tree:brief-fold` (`"1"` or `"0"`). Folded, the head shows "10 Actions · 3 done · 1 changed" in place of the stamp, with a zero part left out, and nothing shows below the head. "What's next" and "Run again" unfold the panel.
 - **Thread headings:** each thread of the Action has one heading, in bold. It shows the live `StatusIcon` and the full title from the current tree, and it opens the thread in T3. The title wraps and is not cut. A thread that is not in the live tree shows its saved title muted and struck through. The brief text does not change.
 - **Phone:** at 720 px and less, the buttons of a row move to their own line under the reason, in line with the headings, and show text labels: Send, New thread, Copy and Focus. The line is left out when the row has no button. On wider screens the row keeps the icons at the right, with tooltips. The `aria-label` of the start button is "Start new thread".
+
+## Catch-up
+
+A **Catch-up** is one line from the Model pick about a waiting thread: what the thread did, and what it asks of the user. The server makes and caches it. This section covers the server only.
+
+### Pick file
+
+- **File:** `{ pick, catchUp }` as JSON in `~/.config/t3-thread-tree/model-pick`, beside the Local model config (`MODEL_PICK_FILE` sets another path). The server reads it on each call. A missing or invalid file means no pick.
+- **Switch default:** when the file holds no `catchUp`, the switch is on for `claude` and `codex`, and off for `local`. A saved `catchUp` applies to every pick. With no pick the switch is off. A `PUT` of `pick: "local"` with no saved `catchUp` therefore turns the switch off and clears the cache.
+- **`GET /model-pick`:** answers `{ pick, catchUp }` with the switch resolved.
+- **`PUT /model-pick`:** takes JSON `{ pick?, catchUp? }` (415 for other content, 400 for a bad body). It merges the fields into the saved file, writes it with mode `0600`, and answers like `GET`. A resolved switch that is off cancels the running calls and clears the cache.
+- **No saved pick:** no Catch-up runs. The page saves the pick of a "What's next" run and of its model `Select`, so the first use sets it.
+
+### Trigger
+
+The server runs the check in the debounced tree push, so the 30 s tick also drives it. A thread waits when its status is needs input, plan ready, your turn or failed, and it is not snoozed and not settled.
+
+- **Key:** thread id, the id of the newest complete assistant message, and for a needs-input thread its `since`, which is the request id.
+- **Debounce:** a key with no cache entry and no timer gets a timer of 5 s. When the timer ends, the call starts only if the thread still has this key and the switch is on.
+- **Stop:** a thread that stops waiting, or gets a new key, loses its entry. The server cancels its run, removes it from the queue and the cache, and clears its timer.
+
+### Queue and call
+
+- **Queue:** at most 2 calls run at the same time. The other entries are `queued`, and the one with the oldest **Wait** starts first. A thread with no Wait, such as a failed or guest-message thread, counts from its `updatedAt`. The timers start in the same order.
+- **Input:** the `digestOf` text of the thread, with a 4000-character tail of the last message. The guide is `src/server/catch-up-prompt.md`.
+- **Call:** `run(pick, { guide, input, schema })` with the pick that was set when the entry was queued. The schema is `{ did: string, ask: string | null, options: string[], doneLike: boolean }`, all required, no extra properties.
+- **Answer:** the server validates it. It cuts `did` at 140 and `ask` at 120 characters with "…", keeps at most 4 options, and cuts each at 60 characters. An invalid answer is a failure.
+
+### Cache and delivery
+
+- **Cache:** a `Map` in memory by key. Each key gets one try and no retry: a model error, a timeout or an invalid answer stays `failed` until the key changes. A server restart runs the calls again. A new pick does not change the cached entries.
+- **Delivery:** each thread node holds `catchUp?: { state: "queued" | "running" | "done" | "failed", did?, ask?, options?, doneLike?, pick }` while an entry of its current key exists. The fields after `state` are set in `done`. Each state change sends the tree again.
 
 ## Send message
 

@@ -3,7 +3,15 @@ import { mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 
-import { createModels, localModelRoutes, parseOutput, readLocalConfig, stdinFor } from "../src/server/model.ts";
+import {
+  createModels,
+  localModelRoutes,
+  parseOutput,
+  pickRoutes,
+  readLocalConfig,
+  readPickFile,
+  stdinFor,
+} from "../src/server/model.ts";
 import { writeToken } from "../src/server/token.ts";
 
 describe("stdinFor", () => {
@@ -52,6 +60,64 @@ describe("parseOutput", () => {
   test("no answer at all gives null", () => {
     expect(parseOutput("claude", "")).toBeNull();
     expect(parseOutput("codex", "")).toBeNull();
+  });
+});
+
+describe("pick file", () => {
+  const dir = mkdtempSync(join(tmpdir(), "model-pick-"));
+  const file = join(dir, "model-pick");
+  const save = (c: object) => writeToken(file, JSON.stringify(c));
+  let saves = 0;
+  const routes = pickRoutes(file, () => saves++)["/model-pick"];
+  const put = (body: string, type = "application/json") =>
+    routes.PUT(new Request("http://x/model-pick", { method: "PUT", body, headers: { "content-type": type } }));
+
+  beforeEach(() => {
+    rmSync(file, { force: true });
+    saves = 0;
+  });
+  afterAll(() => rmSync(dir, { recursive: true, force: true }));
+
+  test("no file or an invalid file gives no pick and the switch off", () => {
+    expect(readPickFile(file)).toEqual({ pick: null, catchUp: false });
+    save({ pick: "gpt" });
+    expect(readPickFile(file)).toEqual({ pick: null, catchUp: false });
+  });
+  test("the switch defaults to on for claude and codex, off for local", () => {
+    for (const [pick, catchUp] of [
+      ["claude", true],
+      ["codex", true],
+      ["local", false],
+    ] as const) {
+      save({ pick });
+      expect(readPickFile(file)).toEqual({ pick, catchUp });
+    }
+  });
+  test("a stored switch wins for every pick", () => {
+    for (const pick of ["claude", "codex", "local"]) {
+      save({ pick, catchUp: pick === "local" });
+      expect(readPickFile(file).catchUp).toBe(pick === "local");
+      save({ pick, catchUp: pick !== "local" });
+      expect(readPickFile(file).catchUp).toBe(pick !== "local");
+    }
+  });
+  test("PUT merges into the stored fields, saves and answers like GET", async () => {
+    save({ pick: "local", catchUp: true });
+    const res = await put(JSON.stringify({ pick: "claude" }));
+    expect(await res.json()).toEqual({ pick: "claude", catchUp: true });
+    expect(JSON.parse(await Bun.file(file).text())).toEqual({ pick: "claude", catchUp: true });
+    expect(await (await put(JSON.stringify({ catchUp: false }))).json()).toEqual({ pick: "claude", catchUp: false });
+    expect(await routes.GET().json()).toEqual({ pick: "claude", catchUp: false });
+    expect(saves).toBe(2);
+  });
+  test("PUT of local with no stored switch resolves to off", async () => {
+    expect(await (await put(JSON.stringify({ pick: "local" }))).json()).toEqual({ pick: "local", catchUp: false });
+  });
+  test("400 on a bad body, 415 on a non-JSON body", async () => {
+    expect((await put(JSON.stringify({ pick: "gpt" }))).status).toBe(400);
+    expect((await put("not json")).status).toBe(400);
+    expect((await put("x", "text/plain")).status).toBe(415);
+    expect(saves).toBe(0);
   });
 });
 
