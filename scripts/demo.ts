@@ -7,7 +7,7 @@ import { findRoutes } from "../src/server/find.ts";
 import { cliPath, type CliRun, sendService } from "../src/server/send.ts";
 import { settledPage, settledRoutes, settledSignature } from "../src/server/settled.ts";
 import type { Pr, Project, Thread } from "../src/server/t3.ts";
-import type { BriefAction, ModelPick } from "../src/shared/brief.ts";
+import type { BriefAction, LocalConfig, LocalState, ModelPick } from "../src/shared/brief.ts";
 import { parseLabels, type LinearIssue } from "../src/shared/tree.ts";
 
 const now = Date.now();
@@ -357,17 +357,26 @@ function stubRun(cli: ModelPick): { done: Promise<Outcome | null>; cancel: () =>
   return { done, cancel };
 }
 
+/** In-memory Local model config. `LOCAL` seeds it with that state; unset starts empty. */
+const LOCAL_STATES: readonly LocalState[] = ["ok", "down", "missing"];
+const localEnv = LOCAL_STATES.find((s) => s === process.env.LOCAL);
+let localConfig: LocalConfig | null = localEnv
+  ? { baseUrl: "http://localhost:11434/v1", model: "qwen3.5:4b-nvfp4" }
+  : null;
+const localAnswer = () => Response.json({ config: localConfig, state: localConfig ? (localEnv ?? "ok") : "unset" });
+
 const listeners = new Set<(event: string, data: string) => void>();
 const brief = briefService({
   offered: () =>
-    Promise.resolve(
-      process.env.CLIS === "0"
+    Promise.resolve([
+      ...(process.env.CLIS === "0"
         ? []
         : [
             { id: "claude" as const, label: "Claude Haiku" },
             { id: "codex" as const, label: "Codex Luna" },
-          ],
-    ),
+          ]),
+      ...(localConfig ? [{ id: "local" as const, label: `Local · ${localConfig.model}` }] : []),
+    ]),
   input: () => {
     const i = briefInput(projectsFor(false), () => new Map(), now);
     return process.env.BRIEF === "rules" ? { ...i, threads: [] } : i;
@@ -454,6 +463,14 @@ const server = Bun.serve({
     "/": index,
     "/up-next": upNext,
     ...brief.routes,
+    "/local-model": async (req) => {
+      if (req.method === "PUT") {
+        const b = (await req.json().catch(() => null)) as Partial<LocalConfig> | null;
+        if (!b?.baseUrl || !b.model) return new Response("Not a valid config", { status: 400 });
+        localConfig = { baseUrl: b.baseUrl, model: b.model };
+      }
+      return localAnswer();
+    },
     ...sender.routes,
     ...lastMessageRoutes({ read: lastMessage, has: (id) => threads.some((th) => th.id === id) }),
     ...findRoutes(() => projectsFor(true, false)),
