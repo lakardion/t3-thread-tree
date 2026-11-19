@@ -116,6 +116,17 @@ import {
   withoutSnoozed,
 } from "./attention.ts";
 import { BriefControls, BriefPanel, CopyPrompt, type Offered } from "./brief.tsx";
+import {
+  CatchUpBar,
+  CatchUpDesktopMock,
+  CatchUpPrototype,
+  CatchUpStateText,
+  CatchUpSubline,
+  CatchUpText,
+  isCatchUpDemoThread,
+  useCatchUpPrototype,
+  useCatchUpReading,
+} from "./catch-up-prototype.tsx";
 import { FindDialog, FIND_KEY, MAC } from "./find.tsx";
 import {
   addFocus,
@@ -1463,12 +1474,24 @@ function DetailBlock({ t }: { t: ThreadNode }) {
     .join(" · ");
   const tags = [d.tags.join(", "), d.pinned && "Pinned"].filter(Boolean).join(" · ");
   const last = useLastMessage(t.id, t.updatedAt);
+  const catchUp = useCatchUpReading(t, "in-details");
+  const askFirst = useCatchUpReading(t, "ask-first");
+  const detailCatchUp = catchUp ?? askFirst;
   return (
     <dl className="m-0 grid grid-cols-[auto_1fr] gap-x-3 gap-y-0.5 py-1 pl-[156px] text-xs max-[720px]:pl-7">
       {d.request && <Line label="Request">{d.request}</Line>}
       {d.error && (
         <Line label="Error">
           {[[d.error.class, d.error.code].filter(Boolean).join(" · "), d.error.text].filter(Boolean).join(" ")}
+        </Line>
+      )}
+      {detailCatchUp && (detailCatchUp.state !== "ready" || "ask" in detailCatchUp.line) && (
+        <Line label="Catch-up">
+          {detailCatchUp.state === "ready" ? (
+            <CatchUpText line={detailCatchUp.line} variant={askFirst ? "ask-first" : "in-details"} />
+          ) : (
+            <CatchUpStateText state={detailCatchUp.state} />
+          )}
         </Line>
       )}
       {last && (
@@ -1555,6 +1578,30 @@ function StatusCell({ t, now }: { t: ThreadNode; now: number }) {
 
 /** The phrase beside the icon on rows that wait on the user, with the Wait; failed rows show the phrase only. Hidden by the status text setting. */
 function PhraseCell({ t, now }: { t: ThreadNode; now: number }) {
+  const catchUp = useCatchUpReading(t, "ask-first");
+  const { show } = useContext(Details);
+  if (catchUp && ("ask" in catchUp.line || catchUp.line.raw)) {
+    return (
+      <button
+        type="button"
+        className="flex max-w-[min(26vw,350px)] min-w-0 shrink-0 items-center gap-1.5 text-left text-xs text-muted-foreground hover:underline in-data-[status-text=off]:hidden max-[720px]:max-w-[68%]"
+        aria-label={`${"ask" in catchUp.line ? catchUp.line.ask : catchUp.line.raw} Show last message`}
+        onClick={() => show(t.id)}
+      >
+        <span
+          className={cn(
+            "min-w-0",
+            "ask" in catchUp.line ? "line-clamp-2" : "truncate max-[720px]:line-clamp-2 max-[720px]:whitespace-normal",
+          )}
+        >
+          <CatchUpText line={catchUp.line} variant="ask-first" actionOnly />
+        </span>
+        {t.since && (
+          <span className={cn(STATUS[t.status].shape, "flex-none font-mono tabular-nums")}>{ago(t.since, now)}</span>
+        )}
+      </button>
+    );
+  }
   if (!needsYou(t.status) && t.status !== "failed") return null;
   return (
     <span
@@ -1669,6 +1716,8 @@ function ThreadRow({
   const chipHref = chip ? linearHref(chip, linear) : null;
   const pulse = useChanges(t.status);
   const noPrLabel = t.stack ? `PR stack · ${t.stack.total} PRs · no PR from this thread` : undefined;
+  const catchUp = useCatchUpReading(t, "under-title");
+  const subline = catchUp && (catchUp.state !== "ready" || "ask" in catchUp.line || catchUp.line.raw) ? catchUp : null;
   const render = (ref: RefFn, handleRef?: RefFn) => (
     <Collapsible asChild open={open.has(t.id)} onOpenChange={() => toggle(t.id)}>
       <li
@@ -1712,18 +1761,21 @@ function ThreadRow({
             </Badge>
           )}
           {review && <Eye className="size-3.5 flex-none text-review" aria-label="Review" />}
-          <a
-            className={cn(
-              "min-w-0 flex-1 break-words group-focus-within/row:truncate group-hover/row:truncate hover:underline",
-              t.status === "your-turn" ? "font-[650]" : "font-medium",
-              (t.status === "snoozed" || t.settled || dim) && "text-muted-foreground",
-              "max-[720px]:basis-full max-[720px]:pl-5",
-            )}
-            href={t.href}
-            data-stop={t.id}
-          >
-            {(chip ? stripKey(t.title, chip) : t.title) || t.id}
-          </a>
+          <div className={subline ? "min-w-0 flex-1 max-[720px]:basis-full max-[720px]:pl-5" : "contents"}>
+            <a
+              className={cn(
+                "min-w-0 break-words group-focus-within/row:truncate group-hover/row:truncate hover:underline",
+                t.status === "your-turn" ? "font-[650]" : "font-medium",
+                (t.status === "snoozed" || t.settled || dim) && "text-muted-foreground",
+                subline ? "block" : "flex-1 max-[720px]:basis-full max-[720px]:pl-5",
+              )}
+              href={t.href}
+              data-stop={t.id}
+            >
+              {(chip ? stripKey(t.title, chip) : t.title) || t.id}
+            </a>
+            {subline && <CatchUpSubline {...subline} showSource={() => show(t.id)} />}
+          </div>
           <span className="ml-auto flex flex-none items-center gap-1.5 max-[720px]:ml-0 max-[720px]:basis-full max-[720px]:flex-wrap max-[720px]:pl-5">
             {t.input && (
               <Badge variant="outline" className={CHIP}>
@@ -2778,6 +2830,7 @@ function App() {
     void fetch("/brief/run", { method: "POST", body: JSON.stringify({ cli: pick }) });
   };
   const live = new Map((tree?.projects ?? []).flatMap(allThreads).map((t) => [t.id, t]));
+  const catchUp = useCatchUpPrototype(Array.from(live.values()).some(isCatchUpDemoThread));
   const kept = tree ? pruneFocus(focus, live, tree.conn) : focus;
   if (kept !== focus) setFocus(kept);
   const pend =
@@ -3056,7 +3109,7 @@ function App() {
   const inner = projects?.flatMap((p) => [p.id, ...foldIds(p)]) ?? [];
   const tabCount = tree ? needsYouThreads(tree.projects).length : 0;
 
-  return (
+  const page = (
     /** A tooltip covers the row above, so a hoverable one stays open while the pointer moves up. */
     <TooltipProvider disableHoverableContent>
       <title>{tabTitle(tabCount)}</title>
@@ -3154,7 +3207,17 @@ function App() {
           />
         </div>
       </header>
-      <div ref={listRef} className="min-h-0 flex-1 overflow-y-auto">
+      <div ref={listRef} className={cn("min-h-0 flex-1 overflow-y-auto", catchUp.enabled && "pb-14")}>
+        {catchUp.enabled && catchUp.mock && (
+          <CatchUpDesktopMock
+            prototype={catchUp}
+            samples={(tree?.projects ?? []).flatMap((project) =>
+              allThreads(project).map((thread) => ({ thread, project: thread.t3Project?.label ?? project.label })),
+            )}
+            now={now}
+            targetId={target?.id}
+          />
+        )}
         <Focus value={focusApi}>
           {tree?.conn === "down" && (
             <Alert className="mb-3 border-l-[3px] border-l-status-needs-input">
@@ -3357,8 +3420,10 @@ function App() {
         message=""
         onOpenChange={(open) => setSendTo((s) => ({ ...s, open }))}
       />
+      {catchUp.enabled && <CatchUpBar prototype={catchUp} />}
     </TooltipProvider>
   );
+  return <CatchUpPrototype value={catchUp}>{page}</CatchUpPrototype>;
 }
 
 /** Hot reload re-runs this module; reuse the root so two roots never share one container. */
