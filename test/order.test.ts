@@ -9,6 +9,7 @@ const thread = (id: string, status: Status = "working", children: ThreadNode[] =
   href: `/${id}`,
   title: id,
   key: null,
+  linear: null,
   status,
   phrase: status,
   since: null,

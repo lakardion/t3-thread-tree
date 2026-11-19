@@ -6,6 +6,7 @@ import {
   type Branch,
   type Detail,
   type Label,
+  type LinearIssue,
   type PrNode,
   type Status,
   type ThreadNode,
@@ -62,6 +63,8 @@ export type BuildInput = {
   /** Watched label names. Empty: no PR gets labels. */
   labels?: string[];
   labelsOf?: (p: Thread["prs"][number]) => Label[] | undefined;
+  /** Linear data of an issue key. Unset: no node gets Linear data. */
+  linearOf?: (key: string) => LinearIssue | undefined;
 };
 
 type Node = ThreadNode & { t: Thread; first: string };
@@ -195,12 +198,14 @@ export function buildTree(input: BuildInput): Branch[] {
     const created = (t.prs.find((p) => p.source === "created") ?? t.prs.find((p) => p.source === "agent"))?.n;
     const st = si === undefined ? null : stacks[si];
     const pos = st && created !== undefined && st.order.includes(created) ? st.order.indexOf(created) + 1 : null;
+    const key = issueKey(t.title);
     nodes.set(t.id, {
       t,
       id: t.id,
       href: hrefOf(environmentId, t.id),
       title: t.title,
-      key: issueKey(t.title),
+      key,
+      linear: (key && input.linearOf?.(key)) || null,
       ...statusOf(t, now),
       raw: t.pending ? `${t.status} · pending ${t.pending.kind ?? "request"}` : t.status,
       updatedAt: t.updatedAt,

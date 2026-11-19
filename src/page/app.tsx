@@ -316,6 +316,62 @@ function LinearForm({ linear, setLinear }: LinearProps) {
   );
 }
 
+/** Sends the Linear API key to the server. The page never reads the key back. */
+function LinearKeyForm() {
+  const [value, setValue] = useState("");
+  const [saving, setSaving] = useState(false);
+  const [message, setMessage] = useState<{ text: string; error: boolean }>();
+  const submit = async () => {
+    setSaving(true);
+    setMessage(undefined);
+    try {
+      const res = await fetch("/linear-key", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ key: value }),
+      });
+      /** Clears the field only when the server saved the key. */
+      if (res.ok) setValue("");
+      if (!res.ok) throw new Error((await res.text()) || `Save failed (${res.status})`);
+      setMessage({ text: "Saved.", error: false });
+    } catch (e) {
+      setMessage({ text: e instanceof Error ? e.message : String(e), error: true });
+    }
+    setSaving(false);
+  };
+  return (
+    <form
+      className="grid gap-1.5"
+      onSubmit={(e) => {
+        e.preventDefault();
+        void submit();
+      }}
+    >
+      <Label htmlFor="linear-api-key">API key</Label>
+      <ButtonGroup className="w-full">
+        <Input
+          id="linear-api-key"
+          type="password"
+          placeholder="Paste a key"
+          autoComplete="off"
+          value={value}
+          onChange={(e) => setValue(e.target.value)}
+        />
+        <Button type="submit" disabled={!value || saving}>
+          Save
+        </Button>
+      </ButtonGroup>
+      <p className={HINT}>
+        Make a personal API key at <code>linear.app/settings/account/security</code>. The app uses it to read the
+        project and milestone of each issue. Paste a new one at any time to replace it.
+      </p>
+      <p aria-live="polite" className={cn(HINT, message?.error && "text-destructive")}>
+        {message?.text}
+      </p>
+    </form>
+  );
+}
+
 type LabelsProps = { labels: string[]; setLabels: (s: string) => void };
 
 /** Mounts with the panel, so the field starts from the current setting each time it opens. */
@@ -905,6 +961,10 @@ const tokenSummary = (conn: Tree["conn"] | undefined) =>
   conn === "no-token" ? "Not set" : conn === "unauthorized" ? "Rejected" : "Connected";
 const linearSummary = (l: Tree["linear"]) =>
   l ? [l.workspace, l.teams.join(", ")].filter(Boolean).join(" · ") : "Not set";
+const linearFoldValue = (l: Tree["linear"], key: Tree["linearKey"] | undefined) =>
+  [l && linearSummary(l), key === "rejected" ? "Key rejected" : key === "ok" ? "Key set" : "Key not set"]
+    .filter(Boolean)
+    .join(" · ");
 
 type PanelProps = LinearProps &
   LabelsProps & {
@@ -922,6 +982,7 @@ type PanelProps = LinearProps &
     setTheme: (t: Theme) => void;
     update: UpdateState | undefined;
     conn: Tree["conn"] | undefined;
+    linearKey: Tree["linearKey"] | undefined;
     /** Opens the T3 token fold. */
     tokenOpen: boolean;
   };
@@ -998,8 +1059,15 @@ function SettingsPanel(p: PanelProps) {
               <TokenForm />
             </div>
           </Fold>
-          <Fold label="Linear links" value={linearSummary(p.linear)} tone={p.linear ? "ok" : "warn"}>
-            <LinearForm linear={p.linear} setLinear={p.setLinear} />
+          <Fold
+            label="Linear links"
+            value={linearFoldValue(p.linear, p.linearKey)}
+            tone={p.linearKey === "ok" ? "ok" : "warn"}
+          >
+            <div className="grid gap-3">
+              <LinearForm linear={p.linear} setLinear={p.setLinear} />
+              <LinearKeyForm />
+            </div>
           </Fold>
           <Fold
             label="Watched labels"
@@ -2959,6 +3027,7 @@ function App() {
           setTheme={setTheme}
           update={update}
           conn={tree?.conn}
+          linearKey={tree?.linearKey}
           tokenOpen={tokenOpen}
         />
       )}

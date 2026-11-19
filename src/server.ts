@@ -4,10 +4,12 @@ import { join } from "node:path";
 import index from "./page/index.html";
 import upNext from "./page/up-next.html";
 import { briefInput, briefService, detectClis, lastMessageRoutes } from "./server/brief.ts";
-import { buildTree } from "./server/build-tree.ts";
+import { buildTree, issueKey } from "./server/build-tree.ts";
 import { findRoutes } from "./server/find.ts";
 import { labelStore } from "./server/labels.ts";
 import { mayBeLaunched, needsScan, openLineage } from "./server/lineage.ts";
+import { fetchLinear } from "./server/linear-api.ts";
+import { linearStore } from "./server/linear.ts";
 import { checkCli, cliPath, sendService } from "./server/send.ts";
 import { settleRoutes } from "./server/settle.ts";
 import { settledPage, settledRoutes, settledSignature } from "./server/settled.ts";
@@ -86,15 +88,16 @@ function resolveSpawners() {
   }, 2000);
 }
 
-type Client = { nest: boolean; labels: string[]; send: (data: string, event?: string) => void };
+type Client = { nest: boolean; labels: string[]; wantsLinear: boolean; send: (data: string, event?: string) => void };
 const clients = new Set<Client>();
 
 const linear = parseLinear(process.env.LINEAR_WORKSPACE, process.env.LINEAR_TEAMS);
 
-const treeFor = (settled: boolean, nest = false, labels: string[] = []): Tree => ({
+const treeFor = (settled: boolean, nest = false, labels: string[] = [], wantsLinear = false): Tree => ({
   conn: ready ? conn : "connecting",
   lastUpdate,
   linear,
+  linearKey: linearSource.state(),
   settled: settledSignature(threads.values()),
   projects: buildTree({
     threads: threads.values(),
@@ -106,6 +109,7 @@ const treeFor = (settled: boolean, nest = false, labels: string[] = []): Tree =>
     now: Date.now(),
     labels,
     labelsOf: store.labelsOf,
+    linearOf: wantsLinear ? linearSource.of : undefined,
   }),
 });
 
@@ -116,20 +120,39 @@ const store = labelStore({
   onChange: () => changed(),
 });
 
+const linearSource = linearStore({ fetch: fetchLinear, every: 600_000, onChange: () => changed() });
+
+/** Tells the Linear source every issue key of the visible threads. It learns them even when no page wants Linear data. */
+function syncLinear() {
+  const keys = new Set<string>();
+  for (const t of threads.values()) {
+    const key = issueKey(t.title);
+    if (key && !t.parentThreadId && !t.sideChat && !t.gone && !t.settledAt) keys.add(key);
+  }
+  linearSource.sync(
+    keys,
+    [...clients].some((c) => c.wantsLinear),
+  );
+}
+
 let timer: ReturnType<typeof setTimeout> | undefined;
 function changed() {
   clearTimeout(timer);
   timer = setTimeout(() => {
     const cache = new Map<string, string>();
     for (const c of clients) {
-      const key = `${c.nest}|${c.labels.join(",")}`;
-      if (!cache.has(key)) cache.set(key, JSON.stringify(treeFor(false, c.nest, c.labels)));
+      const key = `${c.nest}|${c.labels.join(",")}|${c.wantsLinear}`;
+      if (!cache.has(key)) cache.set(key, JSON.stringify(treeFor(false, c.nest, c.labels, c.wantsLinear)));
       c.send(cache.get(key)!);
     }
   }, 150);
 }
 /** Snoozes end on a clock, not on a stream event. */
 setInterval(changed, 30_000);
+
+/** The page saves the Linear API key here. `LINEAR_API_KEY` is the fallback when the file has none. */
+const linearKeyFile = process.env.LINEAR_KEY_FILE ?? join(homedir(), ".config", "t3-thread-tree", "linear-key");
+linearSource.setKey(readToken(linearKeyFile) ?? parseToken(process.env.LINEAR_API_KEY) ?? undefined);
 
 /** The page saves the token here. `T3_TOKEN` is the fallback when the file has none. */
 const tokenFile = process.env.T3_TOKEN_FILE ?? join(homedir(), ".config", "t3-thread-tree", "token");
@@ -180,6 +203,7 @@ const shell = connectShell({
     }
     resolveSpawners();
     store.sync(threads.values(), active());
+    syncLinear();
     changed();
     checkReady();
   },
@@ -238,11 +262,25 @@ const server = Bun.serve({
         return tokenResponse(c);
       },
     },
+    "/linear-key": {
+      /** JSON only, like `/token`. The key is never sent back. */
+      POST: async (req) => {
+        if (!req.headers.get("content-type")?.startsWith("application/json"))
+          return new Response(null, { status: 415 });
+        const body = (await req.json().catch(() => null)) as { key?: unknown } | null;
+        const next = parseToken(body?.key);
+        if (!next) return new Response("Not a valid key", { status: 400 });
+        writeToken(linearKeyFile, next);
+        linearSource.setKey(next);
+        return new Response(null, { status: 204 });
+      },
+    },
     "/events": (req) => {
       server.timeout(req, 0);
       const params = new URL(req.url).searchParams;
       const nest = params.get("nest") === "1";
       const labels = parseLabels(params.get("labels") ?? "");
+      const wantsLinear = params.get("linear") === "1";
       const enc = new TextEncoder();
       let client: Client;
       return new Response(
@@ -251,16 +289,19 @@ const server = Bun.serve({
             client = {
               nest,
               labels,
+              wantsLinear,
               send: (d, event) => ctrl.enqueue(enc.encode(`${event ? `event: ${event}\n` : ""}data: ${d}\n\n`)),
             };
             clients.add(client);
             if (labels.length) store.sync(threads.values(), true);
-            client.send(JSON.stringify(treeFor(false, nest, labels)));
+            syncLinear();
+            client.send(JSON.stringify(treeFor(false, nest, labels, wantsLinear)));
             client.send(JSON.stringify(brief.state()), "brief");
           },
           cancel() {
             clients.delete(client);
             store.sync(threads.values(), active());
+            syncLinear();
           },
         }),
         { headers: { "Content-Type": "text/event-stream", "Cache-Control": "no-store" } },

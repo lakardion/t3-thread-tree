@@ -784,3 +784,23 @@ describe("labels", () => {
     expect(prsOf({ labels: ["size:L"], labelsOf: () => undefined })[0].labels).toEqual([]);
   });
 });
+
+describe("linearOf", () => {
+  const ISSUE = {
+    project: { id: "p", name: "Checkout", url: "https://linear.app/w/project/checkout" },
+    milestone: null,
+  };
+  const linearOf = (key: string) => (key === "SHOP-1" ? ISSUE : undefined);
+  const nodeOf = (title: string, over: Partial<BuildInput> = {}) =>
+    build([shell("a", title)], {}, over)[0].branches[0].threads[0];
+
+  test("a node gets the Linear data of the first key in its title", () => {
+    expect(nodeOf("SHOP-1 and SHOP-2 x", { linearOf }).linear).toEqual(ISSUE);
+  });
+
+  test("a node is null with no key, no answer, or no linearOf", () => {
+    expect(nodeOf("no key here", { linearOf }).linear).toBeNull();
+    expect(nodeOf("SHOP-2 x", { linearOf }).linear).toBeNull();
+    expect(nodeOf("SHOP-1 x").linear).toBeNull();
+  });
+});

@@ -584,12 +584,20 @@ export type Detail = {
   pinned: boolean;
 };
 
+/** The Linear project and milestone of one issue. Null means the issue has none. */
+export type LinearIssue = {
+  project: { id: string; name: string; url: string } | null;
+  milestone: { id: string; name: string; targetDate: string | null } | null;
+};
+
 export type ThreadNode = {
   id: string;
   href: string;
   title: string;
   /** The issue key of the title, for the fold. */
   key: string | null;
+  /** Linear data of `key`. Null with no key, no answer yet, or no `linear=1`. */
+  linear: LinearIssue | null;
   status: Status;
   phrase: string;
   /** Start of the elapsed time in the phrase. */
@@ -621,7 +629,7 @@ export type Branch = {
 };
 ```
 
-`Conn` and `Tree` do not change. No new endpoint and no new push are necessary: the page computes elapsed time, age, the fold, the filter and the summary from the tree.
+`Conn` does not change. `Tree` gains `linearKey: "ok" | "no-key" | "rejected"`, the state of the Linear API key. No new push is necessary: the page computes elapsed time, age, the fold, the filter and the summary from the tree.
 
 ## Checks for each build key
 

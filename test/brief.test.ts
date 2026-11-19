@@ -26,6 +26,7 @@ function node(id: string, over: Partial<ThreadNode> = {}): ThreadNode {
     href: `t3://${id}`,
     title: `Thread ${id}`,
     key: null,
+    linear: null,
     status: "your-turn",
     phrase: "Your turn",
     since: null,
