@@ -1,6 +1,7 @@
 import type { BriefAction } from "../shared/brief.ts";
 import type { SendError } from "../shared/send.ts";
 import { allThreads, type Branch, type Status, type ThreadNode } from "../shared/tree.ts";
+import { isLinear } from "./order.ts";
 
 /** Statuses in which a sent message waits for the thread's next turn. */
 const BUSY: Status[] = ["working", "starting", "waiting"];
@@ -40,6 +41,24 @@ export const postStart = (projectId: string, title: string, message: string) =>
 
 /** Branch ids of projects are `p:<projectId>`. */
 export const projectIdOf = (b: Branch) => b.id.replace(/^p:/, "");
+
+/** A Linear tree as one `p:` branch per T3 project, in first-seen order. Any other tree as is. */
+export function t3Projects(projects: Branch[]): Branch[] {
+  if (!isLinear(projects)) return projects;
+  const byId = new Map<string, Branch>();
+  for (const t of projects.flatMap(allThreads)) {
+    if (!t.t3Project) continue;
+    const b = byId.get(t.t3Project.id) ?? {
+      id: `p:${t.t3Project.id}`,
+      label: t.t3Project.label,
+      branches: [],
+      threads: [],
+    };
+    byId.set(t.t3Project.id, b);
+    b.threads.push(t);
+  }
+  return [...byId.values()];
+}
 
 /** The project of the first live step thread, else the first project. The title leads with the issue key of the step's first thread. */
 export function startDefaults(

@@ -386,6 +386,17 @@ describe("upNextList", () => {
       ["n", "two", "your-turn"],
     ]);
   });
+  test("a Linear tree gives the T3 project of each thread", () => {
+    const t3 = (id: string, label: string) => ({
+      ...w(id, "needs-input", "2026-11-12T09:00:00.000Z"),
+      t3Project: { id: label, label },
+    });
+    const tree = [branch("lp:x", [], [branch("lm:m", [t3("a", "frontend"), t3("b", "backend")])])];
+    expect(upNextList(tree, openNextQueue(tree), null, null).rows.map((r) => r.project)).toEqual([
+      "frontend",
+      "backend",
+    ]);
+  });
   test("sets the Linear URL only with Linear and a key", () => {
     expect(upNextList(projects, queue, null, linear).rows.map((r) => [r.key, r.linearUrl])).toEqual([
       ["ONE-1", "https://linear.app/acme/issue/ONE-1"],

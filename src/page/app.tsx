@@ -9,7 +9,7 @@ import {
 } from "@dnd-kit/dom";
 import { DragDropProvider } from "@dnd-kit/react";
 import { isSortable, useSortable } from "@dnd-kit/react/sortable";
-import { ChevronsDownUp, ChevronsUpDown, Rows3 } from "lucide";
+import { ChevronsDownUp, ChevronsUpDown } from "lucide";
 import {
   ArrowDownUp,
   Check,
@@ -21,6 +21,7 @@ import {
   Crosshair,
   ExternalLink,
   Eye,
+  Rows3,
   GripVertical,
   Info,
   Layers,
@@ -84,10 +85,14 @@ import { hits } from "../shared/find.ts";
 import type { CliStatus } from "../shared/send.ts";
 import {
   allThreads,
+  isFallback,
+  LINEAR_LOOSE,
+  isLinearReviews,
   parseLabels,
   parseLinear,
   REVIEWS,
   type Branch,
+  type LinearKeyState,
   type PrNode,
   type Status,
   type ThreadNode,
@@ -137,6 +142,7 @@ import {
   linearHref,
   prTone,
   railRows,
+  shortDate,
   stackRuns,
   stopLabel,
   stripKey,
@@ -145,6 +151,7 @@ import { pageKey } from "./keys.ts";
 import {
   PROJECTS,
   arrange,
+  isLinear,
   isPinned,
   applyOrder,
   parseOrders,
@@ -161,7 +168,7 @@ import {
 import { Presence, useMotion } from "./presence.tsx";
 import { ProjectIcon, projectHex } from "./project-icon.tsx";
 import { CliGate, LastMessage, SendDialog, useLastMessage } from "./send-dialog.tsx";
-import { postSettle } from "./send.ts";
+import { postSettle, t3Projects } from "./send.ts";
 import { LEGEND, LegendIcon, STATUS, StatusIcon } from "./status-icon.tsx";
 import { nextStop, refocusIndex, stopsIn } from "./stops.ts";
 import { Swap, useChanges } from "./swap.tsx";
@@ -207,6 +214,8 @@ const LABELS_KEY = "thread-tree:labels";
 const SORT_KEY = "thread-tree:sort";
 const LAYOUT_KEY = "thread-tree:layout";
 const GROUP_KEY = "thread-tree:group";
+const TREE_GROUP_KEY = "thread-tree:tree-group";
+const ORDER_LINEAR_KEY = "thread-tree:order-linear";
 const BRIEF_FOLD_KEY = "thread-tree:brief-fold";
 const THEMES = ["system", "light", "dark"] as const;
 type Theme = (typeof THEMES)[number];
@@ -594,63 +603,73 @@ const GROUPS: [GroupBy, string][] = [
   ["none", "None"],
   ["status", "Status"],
 ];
-/**
- * One header button: fold all in the tree, the Group by menu in the flat view. It stays mounted across a view
- * switch, so its icon morphs from one to the other. The menu never opens in the tree.
- */
-function FoldOrGroup({
+type TreeGroup = "t3" | "linear";
+const TREE_GROUPS: [TreeGroup, string][] = [
+  ["t3", "T3 project"],
+  ["linear", "Linear project"],
+];
+
+/** The Group by choices of the layout. "Linear project" stays disabled until the server holds a working Linear key. */
+function GroupItems({
   flat,
-  inner,
-  closed,
-  fold,
-  groupBy,
-  setGroupBy,
-}: { flat: boolean; inner: string[]; groupBy: GroupBy; setGroupBy: (g: GroupBy) => void } & Omit<Fold, "toggle">) {
-  const [menu, setMenu] = useState(false);
-  const { tip, onCloseAutoFocus } = useQuietTip();
-  if (!flat && inner.length === 0) return null;
-  const shut = inner.every((id) => !closed.has(id));
-  const label = flat ? "Group by" : `${shut ? "Collapse" : "Expand"} all`;
+  value,
+  set,
+  linearKey,
+}: {
+  flat: boolean;
+  value: string;
+  set: (v: string) => void;
+  linearKey: LinearKeyState | undefined;
+}) {
+  const options: [string, string][] = flat ? GROUPS : TREE_GROUPS;
   return (
-    <DropdownMenu modal={false} open={flat && menu} onOpenChange={setMenu}>
+    <DropdownMenuRadioGroup value={value} onValueChange={set}>
+      {options.map(([g, name]) => (
+        <DropdownMenuRadioItem key={g} value={g} disabled={g === "linear" && linearKey !== "ok"}>
+          {name}
+        </DropdownMenuRadioItem>
+      ))}
+    </DropdownMenuRadioGroup>
+  );
+}
+
+/** The Group by menu: None or Status in the flat view, T3 project or Linear project in the tree. */
+function GroupMenu(p: {
+  flat: boolean;
+  value: string;
+  set: (v: string) => void;
+  linearKey: LinearKeyState | undefined;
+}) {
+  const { tip, onCloseAutoFocus } = useQuietTip();
+  const name = (p.flat ? GROUPS : TREE_GROUPS).find(([g]) => g === p.value)?.[1];
+  return (
+    <DropdownMenu modal={false}>
       <Tooltip {...tip}>
         <TooltipTrigger asChild>
           <DropdownMenuTrigger asChild>
-            <Button
-              variant="ghost"
-              size="icon-sm"
-              aria-label={label}
-              aria-haspopup={flat ? "menu" : undefined}
-              aria-expanded={flat ? menu : undefined}
-              onClick={flat ? undefined : () => fold(inner, shut)}
-            >
-              <MorphIcon icon={flat ? Rows3 : shut ? ChevronsDownUp : ChevronsUpDown} size={16} reducedMotion="user" />
+            <Button variant="ghost" size="icon-sm" aria-label="Group by">
+              <Rows3 />
             </Button>
           </DropdownMenuTrigger>
         </TooltipTrigger>
-        <TooltipContent>{flat ? `Group by: ${GROUPS.find(([g]) => g === groupBy)?.[1]}` : label}</TooltipContent>
+        <TooltipContent>Group by: {name}</TooltipContent>
       </Tooltip>
       <DropdownMenuContent align="end" className="min-w-40" onCloseAutoFocus={onCloseAutoFocus}>
-        <DropdownMenuRadioGroup value={groupBy} onValueChange={(v) => setGroupBy(v as GroupBy)}>
-          {GROUPS.map(([g, name]) => (
-            <DropdownMenuRadioItem key={g} value={g}>
-              {name}
-            </DropdownMenuRadioItem>
-          ))}
-        </DropdownMenuRadioGroup>
+        <GroupItems {...p} />
       </DropdownMenuContent>
     </DropdownMenu>
   );
 }
 
-/** Phone-width header menu: Sort, Layout, then Group by in the flat view or fold all in the tree. */
+/** Phone-width header menu: Sort, Layout, Group by, then fold all in the tree. */
 function ViewMenu({
   sortBy,
   setSortBy,
   layout,
   setLayout,
-  groupBy,
-  setGroupBy,
+  group,
+  setGroup,
+  linearKey,
   inner,
   closed,
   fold,
@@ -659,8 +678,9 @@ function ViewMenu({
   setSortBy: (s: SortBy) => void;
   layout: Layout;
   setLayout: (l: Layout) => void;
-  groupBy: GroupBy;
-  setGroupBy: (g: GroupBy) => void;
+  group: string;
+  setGroup: (g: string) => void;
+  linearKey: LinearKeyState | undefined;
   inner: string[];
 } & Omit<Fold, "toggle">) {
   const { tip, onCloseAutoFocus } = useQuietTip();
@@ -697,19 +717,9 @@ function ViewMenu({
             </DropdownMenuRadioItem>
           ))}
         </DropdownMenuRadioGroup>
-        {flat && (
-          <>
-            <DropdownMenuSeparator />
-            <DropdownMenuLabel>Group by</DropdownMenuLabel>
-            <DropdownMenuRadioGroup value={groupBy} onValueChange={(v) => setGroupBy(v as GroupBy)}>
-              {GROUPS.map(([g, name]) => (
-                <DropdownMenuRadioItem key={g} value={g}>
-                  {name}
-                </DropdownMenuRadioItem>
-              ))}
-            </DropdownMenuRadioGroup>
-          </>
-        )}
+        <DropdownMenuSeparator />
+        <DropdownMenuLabel>Group by</DropdownMenuLabel>
+        <GroupItems flat={flat} value={group} set={setGroup} linearKey={linearKey} />
         {!flat && inner.length > 0 && (
           <>
             <DropdownMenuSeparator />
@@ -985,6 +995,8 @@ type PanelProps = LinearProps &
     linearKey: Tree["linearKey"] | undefined;
     /** Opens the T3 token fold. */
     tokenOpen: boolean;
+    /** Opens the Linear links fold. */
+    linearOpen: boolean;
   };
 
 /** View options and settings, beside the list so a change shows at once. */
@@ -1063,6 +1075,7 @@ function SettingsPanel(p: PanelProps) {
             label="Linear links"
             value={linearFoldValue(p.linear, p.linearKey)}
             tone={p.linearKey === "ok" ? "ok" : "warn"}
+            defaultOpen={p.linearOpen}
           >
             <div className="grid gap-3">
               <LinearForm linear={p.linear} setLinear={p.setLinear} />
@@ -1547,6 +1560,12 @@ function ThreadRow({
               )}
             </Badge>
           )}
+          {t.t3Project && (
+            <Badge variant="outline" className={cn(CHIP, "flex-none")} title={t.t3Project.label}>
+              <ProjectIcon name={t.t3Project.label} />
+              <span className="max-[720px]:hidden">{t.t3Project.label}</span>
+            </Badge>
+          )}
           {review && <Eye className="size-3.5 flex-none text-review" aria-label="Review" />}
           <a
             className={cn(
@@ -1782,6 +1801,12 @@ function GroupRow({ b, closed, toggle, fold, sort }: { b: Branch; sort?: Sort } 
             >
               {b.label}
             </span>
+            {b.linear && (
+              <span className="flex-none text-[11px] font-normal text-muted-foreground tabular-nums">
+                {b.linear.date && `${shortDate(b.linear.date)} · `}
+                {allThreads(b).length}
+              </span>
+            )}
           </CollapsibleTrigger>
           {groupHref && (
             <a
@@ -1819,7 +1844,13 @@ function GroupRow({ b, closed, toggle, fold, sort }: { b: Branch; sort?: Sort } 
               )}
             </Presence>
             <Presence items={b.threads} keyOf={(t) => t.id}>
-              {(t) => <ThreadRow t={t} sort={sortOf(lists, threadsKey(b.id), threadUnitId(t), t.title || t.id)} />}
+              {(t) => (
+                <ThreadRow
+                  t={t}
+                  chip={b.linear ? (t.key ?? undefined) : undefined}
+                  sort={sortOf(lists, threadsKey(b.id), threadUnitId(t), t.title || t.id)}
+                />
+              )}
             </Presence>
           </ul>
         </CollapsibleContent>
@@ -2051,7 +2082,25 @@ function FlatRow({
 function ProjectBlock({ b, closed, toggle, fold }: { b: Branch } & Fold) {
   const open = !closed.has(b.id);
   const lists = useContext(Lists);
-  const color = projectHex(b.label);
+  const fallback = isFallback(b);
+  const color = fallback ? "var(--border)" : projectHex(b.label);
+  const threads = (
+    <Presence items={b.threads} keyOf={(t) => t.id}>
+      {(t) => (
+        <ThreadRow
+          t={t}
+          chip={t.key ?? undefined}
+          sort={sortOf(lists, threadsKey(b.id), threadUnitId(t), t.title || t.id)}
+        />
+      )}
+    </Presence>
+  );
+  if (b.id === LINEAR_LOOSE)
+    return (
+      <li className="border-l-[3px] px-1 py-1" style={{ borderLeftColor: color }}>
+        <ul className="m-0 list-none p-0">{threads}</ul>
+      </li>
+    );
   const render = (ref: RefFn, handleRef?: RefFn) => (
     <li ref={ref} className="border-l-[3px] not-last:border-b" style={{ borderLeftColor: color }}>
       <Collapsible asChild open={open} onOpenChange={() => toggle(b.id)}>
@@ -2066,11 +2115,29 @@ function ProjectBlock({ b, closed, toggle, fold }: { b: Branch } & Fold) {
               className="flex min-w-0 cursor-pointer items-center gap-1.5 select-none after:absolute after:inset-0"
             >
               <Chevron open={open} />
-              <ProjectIcon name={b.label} />
+              {isLinearReviews(b) && <Eye className="size-3.5 flex-none text-review" aria-hidden />}
+              {!fallback && <ProjectIcon name={b.label} />}
               <span className="min-w-0 truncate text-[13px] font-semibold" title={b.repo ?? b.label}>
                 {b.label}
               </span>
+              {b.linear && (
+                <span className="flex-none text-[11px] font-normal text-muted-foreground tabular-nums">
+                  {allThreads(b).length}
+                </span>
+              )}
             </CollapsibleTrigger>
+            {b.linear?.url && (
+              <a
+                href={b.linear.url}
+                target="_blank"
+                rel="noreferrer"
+                aria-label={`Open ${b.label} in Linear`}
+                title="Open in Linear"
+                className="relative z-10 flex-none text-muted-foreground hover:text-foreground"
+              >
+                <ExternalLink className="size-3" aria-hidden />
+              </a>
+            )}
             {!open && <ClosedSummary b={b} />}
             <FoldAll inner={foldIds(b)} self={b.id} name={b.label} closed={closed} fold={fold} className={ROW_FOLD} />
           </div>
@@ -2097,6 +2164,7 @@ function ProjectBlock({ b, closed, toggle, fold }: { b: Branch } & Fold) {
                     );
                   }}
                 </Presence>
+                {threads}
               </ul>
             </CollapsibleContent>
           </div>
@@ -2289,6 +2357,7 @@ function App() {
   const [sortBy, setSortBy] = useState<SortBy>(() => (load(SORT_KEY) === "updated" ? "updated" : "manual"));
   const [layout, setLayout] = useState<Layout>(() => (load(LAYOUT_KEY) === "flat" ? "flat" : "tree"));
   const [groupBy, setGroupBy] = useState<GroupBy>(() => (load(GROUP_KEY) === "status" ? "status" : "none"));
+  const [treeGroup, setTreeGroup] = useState<TreeGroup>(() => (load(TREE_GROUP_KEY) === "linear" ? "linear" : "t3"));
   const [now, setNow] = useState(Date.now);
   const [shown, setShown] = useState(() => new Set<string>());
   const [closed, setClosed] = useState(() => new Set<string>(JSON.parse(load(CLOSED_KEY) ?? "[]") as string[]));
@@ -2304,6 +2373,7 @@ function App() {
   const [sendTo, setSendTo] = useState({ id: "", open: false });
   const briefStatus = useRef<BriefState["status"]>("idle");
   const [orders, setOrders] = useState(() => parseOrders(load(ORDER_KEY)));
+  const [linearOrders, setLinearOrders] = useState(() => parseOrders(load(ORDER_LINEAR_KEY)));
   const [focus, setFocus] = useState(() => parseFocus(load(FOCUS_KEY)));
   const [focusShow, setFocusShow] = useState(load(FOCUS_SHOW_KEY) === "1");
   const [briefFolded, setBriefFolded] = useState(load(BRIEF_FOLD_KEY) === "1");
@@ -2327,8 +2397,15 @@ function App() {
   const settingsButtonRef = useRef<HTMLButtonElement>(null);
   const [seen, setSeen] = useState<ReadonlySet<string>>(new Set());
   const [tokenOpen, setTokenOpen] = useState(false);
+  const [linearOpen, setLinearOpen] = useState(false);
+  /** Linear grouping is on in the tree, unless the server holds no key. */
+  const treeMode: TreeGroup = treeGroup === "linear" && tree?.linearKey !== "no-key" ? "linear" : "t3";
+  const linearOn = layout === "tree" && treeMode === "linear";
   const update = useUpdate();
-  const closeSettings = useCallback(() => setSettingsOpen(false), []);
+  const closeSettings = useCallback(() => {
+    setSettingsOpen(false);
+    setLinearOpen(false);
+  }, []);
   const setLinear = (workspace: string, teams: string) => {
     const next = parseLinear(workspace, teams);
     setLinearSet(next);
@@ -2547,7 +2624,16 @@ function App() {
   const counts = countAttention(tree?.projects ?? []);
   const needsTip = needsYouTip(counts);
   const connecting = !tree || tree.conn === "connecting";
-  const cfg: Cfg = { orders, needsOnly, snoozed, shutSections, sortBy, layout, groupBy, freeze };
+  const cfg: Cfg = {
+    orders: isLinear(tree?.projects ?? []) ? linearOrders : orders,
+    needsOnly,
+    snoozed,
+    shutSections,
+    sortBy,
+    layout,
+    groupBy,
+    freeze,
+  };
   const { full, view } = pipeline(tree?.projects ?? [], cfg);
   const inView = new Set(view.projects.flatMap(allThreads).map((t) => t.id));
   /** The ids of the rendered rows and section headers, in order, for a tree. */
@@ -2661,7 +2747,7 @@ function App() {
   useEffect(() => {
     save(NEST_KEY, nest ? "1" : "0");
     const es = new EventSource(
-      `/events?nest=${nest ? 1 : 0}${labelsParam ? `&labels=${encodeURIComponent(labelsParam)}` : ""}`,
+      `/events?nest=${nest ? 1 : 0}${labelsParam ? `&labels=${encodeURIComponent(labelsParam)}` : ""}${linearOn ? "&linear=1" : ""}`,
     );
     es.onmessage = (e) => {
       const next = JSON.parse(e.data) as Tree;
@@ -2677,7 +2763,7 @@ function App() {
       setBrief(b);
     });
     return () => es.close();
-  }, [nest, labelsParam]);
+  }, [nest, labelsParam, linearOn]);
   useEffect(() => save(SETTLED_KEY, settled ? "1" : "0"), [settled]);
 
   const projects = connecting ? undefined : view.projects;
@@ -2746,15 +2832,20 @@ function App() {
     if (!all || !visible) return;
     const moved = reorder(all, visible, source.sortable.initialIndex, source.sortable.index);
     const lists = latest.current.full.lists;
-    setOrders((prev) => {
+    const [setStore, storeKey] = isLinear(latest.current.full.projects)
+      ? ([setLinearOrders, ORDER_LINEAR_KEY] as const)
+      : ([setOrders, ORDER_KEY] as const);
+    setStore((prev) => {
       const next = prune({ ...prev, [store]: moved }, lists);
-      save(ORDER_KEY, JSON.stringify(next));
+      save(storeKey, JSON.stringify(next));
       return next;
     });
   };
   const resetOrder = () => {
     setOrders({});
+    setLinearOrders({});
     forget(ORDER_KEY);
+    forget(ORDER_LINEAR_KEY);
   };
 
   const pickSort = (s: SortBy) => {
@@ -2769,6 +2860,12 @@ function App() {
     save(GROUP_KEY, g);
     transition(() => setGroupBy(g));
   };
+  const pickTreeGroup = (g: TreeGroup) => {
+    save(TREE_GROUP_KEY, g);
+    transition(() => setTreeGroup(g));
+  };
+  const groupValue = layout === "flat" ? groupBy : treeMode;
+  const pickGroupBy = (v: string) => (layout === "flat" ? pickGroup(v as GroupBy) : pickTreeGroup(v as TreeGroup));
   const inner = projects?.flatMap((p) => [p.id, ...foldIds(p)]) ?? [];
   const tabCount = tree ? needsYouThreads(tree.projects).length : 0;
 
@@ -2840,8 +2937,9 @@ function App() {
               setSortBy={pickSort}
               layout={layout}
               setLayout={pickLayout}
-              groupBy={groupBy}
-              setGroupBy={pickGroup}
+              group={groupValue}
+              setGroup={pickGroupBy}
+              linearKey={tree?.linearKey}
               inner={inner}
               closed={closed}
               fold={fold}
@@ -2851,14 +2949,10 @@ function App() {
             <SortMenu sortBy={sortBy} setSortBy={pickSort} />
             <LayoutToggle layout={layout} setLayout={pickLayout} />
             {projects && (
-              <FoldOrGroup
-                flat={layout === "flat"}
-                inner={inner}
-                closed={closed}
-                fold={fold}
-                groupBy={groupBy}
-                setGroupBy={pickGroup}
-              />
+              <>
+                <GroupMenu flat={layout === "flat"} value={groupValue} set={pickGroupBy} linearKey={tree?.linearKey} />
+                {layout === "tree" && <FoldAll inner={inner} closed={closed} fold={fold} />}
+              </>
             )}
           </div>
           <SettingsButton
@@ -2867,6 +2961,7 @@ function App() {
             open={settingsOpen}
             toggle={() => {
               setTokenOpen(false);
+              setLinearOpen(false);
               setSettingsOpen((o) => !o);
             }}
           />
@@ -2899,13 +2994,31 @@ function App() {
               </AlertDescription>
             </Alert>
           )}
+          {linearOn && tree?.linearKey === "rejected" && (
+            <Alert className="mb-3 border-l-[3px] border-l-status-needs-input">
+              <AlertDescription className="flex flex-wrap items-center gap-x-2 text-foreground">
+                Linear rejected the API key.
+                <Button
+                  variant="link"
+                  size="sm"
+                  className="h-auto p-0"
+                  onClick={() => {
+                    setLinearOpen(true);
+                    setSettingsOpen(true);
+                  }}
+                >
+                  Set the key
+                </Button>
+              </AlertDescription>
+            </Alert>
+          )}
           {!hideBrief && brief.status !== "idle" && (
             <BriefPanel
               state={brief}
               clis={clis}
               live={live}
               now={now}
-              projects={tree?.projects ?? []}
+              projects={t3Projects(tree?.projects ?? [])}
               t3cli={t3cli}
               sent={sent}
               onSent={(key, id) =>
@@ -3021,7 +3134,7 @@ function App() {
           setSnoozed={setSnoozed}
           nest={nest}
           setNest={setNest}
-          canReset={Object.keys(orders).length > 0}
+          canReset={Object.keys(orders).length + Object.keys(linearOrders).length > 0}
           resetOrder={resetOrder}
           theme={theme}
           setTheme={setTheme}
@@ -3029,6 +3142,7 @@ function App() {
           conn={tree?.conn}
           linearKey={tree?.linearKey}
           tokenOpen={tokenOpen}
+          linearOpen={linearOpen}
         />
       )}
       <FindDialog

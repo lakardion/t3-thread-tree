@@ -101,6 +101,11 @@ export const NO_MILESTONE = "No milestone";
 
 /** Fallback groups of the Linear tree have ids with the `lf:` prefix. */
 export const isFallback = (b: Branch): boolean => b.id.startsWith("lf:");
+/** The id of the Reviews group of the Linear tree. */
+export const LINEAR_REVIEWS = "lf:reviews";
+export const isLinearReviews = (b: Branch): boolean => b.id === LINEAR_REVIEWS;
+/** The id of the keyless threads of the Linear tree. They show as loose rows, with no header. */
+export const LINEAR_LOOSE = "lf:loose";
 
 /** `connecting`: the server is up but has no tree yet. */
 export type Conn = "connecting" | "up" | "down" | "no-token" | "unauthorized";

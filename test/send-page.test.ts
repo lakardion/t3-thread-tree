@@ -1,6 +1,6 @@
 import { afterAll, afterEach, describe, expect, spyOn, test } from "bun:test";
 
-import { isBusy, markKey, postSend, postStart, startDefaults } from "../src/page/send.ts";
+import { isBusy, markKey, postSend, postStart, startDefaults, t3Projects } from "../src/page/send.ts";
 import type { BriefAction } from "../src/shared/brief.ts";
 import type { Branch, Status, ThreadNode } from "../src/shared/tree.ts";
 
@@ -99,5 +99,33 @@ describe("startDefaults", () => {
 
   test("a keyless first thread gives the bare title", () => {
     expect(startDefaults(step(["a"]), live, projects).title).toBe("Fix it");
+  });
+});
+
+describe("t3Projects", () => {
+  const thread = (id: string, project: string, children: ThreadNode[] = []) =>
+    ({ id, key: null, children, t3Project: { id: project, label: project } }) as unknown as ThreadNode;
+  const branch = (id: string, over: Partial<Branch>): Branch => ({ id, label: id, branches: [], threads: [], ...over });
+
+  test("returns the tree as is when no top-level branch is Linear", () => {
+    const tree = [branch("p:one", {})];
+    expect(t3Projects(tree)).toBe(tree);
+  });
+
+  test("regroups a Linear tree by T3 project, in first-seen order", () => {
+    const tree = [
+      branch("lp:x", {
+        linear: {},
+        branches: [branch("lm:m", { threads: [thread("a", "two"), thread("b", "one", [thread("c", "two")])] })],
+      }),
+      branch("lf:none", { linear: {}, threads: [thread("d", "one")] }),
+    ];
+    const out = t3Projects(tree);
+    expect(out.map((p) => [p.id, p.label])).toEqual([
+      ["p:two", "two"],
+      ["p:one", "one"],
+    ]);
+    expect(out[0].threads.map((t) => t.id)).toEqual(["a", "c"]);
+    expect(out[1].threads.map((t) => t.id)).toEqual(["b", "d"]);
   });
 });

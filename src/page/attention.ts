@@ -86,7 +86,7 @@ export const upNextList = (
               phrase: t.phrase,
               raw: t.raw,
               since: t.since,
-              project: projectOf.get(t.id) ?? "",
+              project: t.t3Project?.label ?? projectOf.get(t.id) ?? "",
               key: t.key,
               linearUrl: t.key ? linearHref(t.key, linear) : null,
             },
