@@ -6,7 +6,7 @@ Research date: 2026-11-19. Machine: Apple M4 Pro, 24 GB unified memory, other ap
 
 Use **Ollama** (v0.40.16, released 2026-11-09). Compare two Qwen models against Haiku:
 
-1. **`qwen3.5:4b-nvfp4`** (Qwen3.5-4B, MLX build, 4.0 GB). This is the main candidate. It is the only one that is expected to beat 18 s up to 8K input tokens.
+1. **`qwen3.5:4b-nvfp4`** (Qwen3.5-4B, MLX build, 4.0 GB). This is the main candidate. It is expected to be clearly faster than Haiku up to about 6K input tokens, and equal or slower at 8K.
 2. **`qwen3.5:9b-nvfp4`** (Qwen3.5-9B, MLX build, 7.2 GB). This is the quality check. It is expected to beat 18 s only up to about 3K input tokens.
 
 Send these fields in every request:
@@ -15,7 +15,7 @@ Send these fields in every request:
 - `reasoning_effort: "none"`. Qwen3.5 thinks by default, and thinking tokens destroy the latency budget.
 - `keep_alive: "30m"`, or longer, so that the model stays loaded between briefs.
 
-Start the server with `OLLAMA_CONTEXT_LENGTH=16384`. This is mandatory. On this machine the default context is probably 4096 tokens, and the `/v1` endpoint cannot change it per request (see [Caveats](#caveats)).
+Start the server with `OLLAMA_CONTEXT_LENGTH=16384`. On this machine the default context is 4,096 or 32,768 tokens (the tier was not determined), and the `/v1` endpoint cannot change it per request (see [Context window](#context-window)).
 
 Reasons for Ollama:
 
@@ -55,7 +55,7 @@ Estimated time for one brief, from prefill 640 tok/s and generation 75 tok/s (4B
 
 Results:
 
-- The 4B is expected to beat Haiku up to about 8K input. At 8K with 600 output tokens it is about 21 s, so it is borderline there.
+- The 4B is expected to be clearly faster than Haiku up to about 6K input. At 8K it ties Haiku with 400 output tokens and is slower (about 21 s) with 600 output tokens.
 - The 9B is expected to beat Haiku only below about 3K input.
 - A 20-core M4 Pro GPU prefills about 20% faster than the 16-core GPU. The llama.cpp Apple Silicon table shows Llama 7B Q4_0 at 364 tok/s (16-core) and 440 tok/s (20-core) prefill, and about 50 tok/s generation on both ([llama.cpp discussion 4167](https://github.com/ggml-org/llama.cpp/discussions/4167)).
 - A cold load adds time. See [Load time and keep-alive](#load-time-and-keep-alive).
@@ -78,14 +78,14 @@ Sources: Ollama source at tag v0.40.16 and at main commit `42ac2c0`, Ollama docs
 ### Ollama details
 
 - **Schema path.** The OpenAI shim copies `response_format.json_schema.schema` into the native `format` field (`openai/openai.go`, `FromChatRequest`). `json_object` becomes the plain JSON grammar.
-- **GGUF engine.** Ollama runs `llama-server` as a subprocess and passes the schema as `json_schema`. When the response has a thinking block, Ollama converts the schema to GBNF first and wraps it, so the schema applies after the closing think tag (`llm/llama_server.go`). The pinned llama.cpp build is b12257.
+- **GGUF engine.** Ollama runs `llama-server` as a subprocess and passes the schema as `json_schema`. When the response has a thinking block, Ollama converts the schema to GBNF first and wraps it, so the schema applies after the closing think tag (`llm/llama_server.go`). The pinned llama.cpp build on main is b12257 (`LLAMA_CPP_VERSION`; not checked at the tag).
 - **MLX engine.** The MLX runner uses XGrammar (`mlxrunner/grammar.go`). It also lets free thinking run first and applies the schema after the closing tag (`mlxrunner/client.go`, `requestGrammar`).
 - **Engine choice.** On `darwin/arm64` the runner preference is MLX, then llama.cpp, then GGML (`manifest/manifest.go`, `runnerPreferences`, same at v0.40.16). A plain tag such as `qwen3.5:4b` holds several builds (the library shows "3.3GB - 4.0GB"). Use an explicit MLX tag so that the comparison is reproducible, and check it with `ollama show`.
 - **Thinking.** `reasoning_effort: "none"` maps to `think: false` (`ThinkingFromReasoningEffort`). Other values map to model-defined levels. The shim does not read `chat_template_kwargs`.
 - **`/v1/models`.** The route uses `ListHandler`, the same list as `ollama list`: all pulled models, not only loaded ones. `created` is the last modification time. Loaded models are in `GET /api/ps`.
 - **Keep-alive.** Default 5 minutes (`envconfig`: `OLLAMA_KEEP_ALIVE`, default "5m"). The OpenAI body accepts `keep_alive` and passes it through. `-1` keeps the model loaded. `0` unloads it after the response. `OLLAMA_MAX_LOADED_MODELS` defaults to 3 per GPU ([FAQ](https://docs.ollama.com/faq)).
-- **Context.** At startup Ollama sums the GPU memory and sets the default context: 262,144 at 47 GiB or more, 32,768 at 23 GiB or more, else 4,096 (`server/routes.go`, same at v0.40.16; [context length docs](https://docs.ollama.com/context-length)). On Metal the reported memory comes from the llama-server device probe, which reports the Metal working-set limit, not the full RAM. On a 24 GB Mac that limit is below 23 GiB, so the default is probably 4,096. Check the `vram-based default context` line in the server log.
-- **Structured outputs docs** say that the schema "works through the OpenAI-compatible API via `response_format`", and that Ollama Cloud does not support structured outputs ([structured outputs](https://docs.ollama.com/capabilities/structured-outputs)).
+- **Context.** At startup Ollama sums the GPU memory and sets the default context: 262,144 at 47 GiB or more, 32,768 at 23 GiB or more, else 4,096 (`server/routes.go`, same at v0.40.16; [context length docs](https://docs.ollama.com/context-length)). On Metal the reported memory comes from the llama-server device probe. Whether that value is the Metal working-set limit or the full RAM was not determined, so the tier on a 24 GB Mac is 4,096 or 32,768. Check the `vram-based default context` line in the server log.
+- **Structured outputs docs** say: "Structured outputs work through the OpenAI-compatible API via `response_format`" and "Ollama's cloud currently does not support structured outputs" ([structured outputs](https://docs.ollama.com/capabilities/structured-outputs)).
 
 ### Schema keyword support
 
@@ -125,14 +125,29 @@ The app schema uses `type: "object"`, `additionalProperties: false`, `required`,
 
 Current Qwen text models (all are vision-language, Apache 2.0 unless noted, from the [Qwen Hugging Face org](https://huggingface.co/Qwen)):
 
-| Model | Released | Type | 4-bit size | Fits 24 GB with headroom |
+| Model | Hugging Face repo created | Type | 4-bit size | Fits 24 GB with headroom |
 |---|---|---|---|---|
 | Qwen3.5-4B | 2026-02-27 | Dense, 32 layers | GGUF Q4_K_M 2.74 GB; Ollama MLX nvfp4 4.0 GB | Yes |
 | Qwen3.5-9B | 2026-02-27 | Dense, 32 layers | GGUF Q4_K_M 5.68 GB; Ollama MLX nvfp4 7.2 GB | Yes |
+| Qwen3.5-27B | 2026-02-24 | Dense, 64 layers | not checked (same size class as Qwen3.6-27B) | No: same reason as Qwen3.6-27B |
 | Qwen3.6-27B | 2026-04-21 | Dense, 64 layers | GGUF Q4_K_M 16.82 GB | No: near the Metal limit, slow prefill |
 | Qwen3.8-27B | 2026-08-05 | Dense, 64 layers | GGUF UD-Q4_K_M 16.56 GB; Ollama 18 to 19 GB | No: same reason |
 | Qwen3.5-35B-A3B / Qwen3.6-35B-A3B | 2026-02-24 / 2026-04-15 | MoE, 3B active | GGUF Q4_K_M 22.13 GB; Q3_K_M 16.60 GB | No: too large |
 | Qwen3.8-Flash-Next | 2026-08-24 | MoE, 125B + 51B n-gram embedding | n/a | No (Qwen community license) |
+
+RAM per quantization for the two candidates (weights only; add about 0.5 to 1 GB for a 16K context and runtime buffers):
+
+| Build | Qwen3.5-4B | Qwen3.5-9B |
+|---|---|---|
+| GGUF Q4_K_M | 2.74 GB | 5.68 GB |
+| GGUF Q6_K | 3.53 GB | 7.46 GB |
+| GGUF Q8_0 | 4.48 GB | 9.53 GB |
+| GGUF BF16 | 8.42 GB | 17.92 GB |
+| Ollama `nvfp4` (MLX) | 4.0 GB | 7.2 GB |
+| Ollama `mxfp8` (MLX) | 5.6 GB | 11 GB |
+| Ollama `mlx-bf16` (MLX) | 9.1 GB | 19 GB |
+
+Generation on Apple Silicon is limited by memory bandwidth (M4 Pro: 273 GB/s), so fewer bytes per token give more tokens per second. The llama.cpp table shows Llama 7B generation at about 50 tok/s for Q4_0 and about 31 tok/s for Q8_0 on an M4 Pro. Use 4-bit for latency. Test 8-bit only if the 4-bit output quality is too low.
 
 Notes:
 
@@ -166,7 +181,10 @@ The cards advise at least 128K context "to preserve thinking capabilities". This
 
 The runtime limit matters more than the model limit:
 
-- **Ollama.** The default is probably 4,096 on this machine (see Ollama details). The `/v1` shim has no `num_ctx` field. On the GGUF path, `chatPrompt` drops old messages that do not fit, with no error. On the MLX path, Ollama skips this truncation (`server/routes.go`: `truncate = false` for MLX). Set `OLLAMA_CONTEXT_LENGTH=16384`, or use the context slider in the Ollama app.
+- **Ollama.** The default is 4,096 or 32,768 on this machine (see Ollama details). The `/v1` shim has no `num_ctx` field.
+  - GGUF path: `chatPrompt` drops old messages that do not fit, with no error.
+  - MLX path (the recommended tags): Ollama skips this truncation (`server/routes.go`: `truncate = false` for MLX). It passes the context setting to the MLX runner as a soft limit, which the code comment calls a "recommended limit to avoid poor performance" (`mlxrunner/client.go`). What the runner does with a prompt above the soft limit was not verified.
+  - Set `OLLAMA_CONTEXT_LENGTH=16384` (or the context slider in the Ollama app) on both paths.
 - **llama-server.** Set `-c 16384`.
 - **LM Studio.** Set the context length in the model load settings.
 
@@ -195,7 +213,10 @@ Pull the two candidates:
 ollama pull qwen3.5:4b-nvfp4
 ollama pull qwen3.5:9b-nvfp4
 ollama show qwen3.5:4b-nvfp4
+ollama show qwen3.5:9b-nvfp4
 ```
+
+The Ollama tags page labels both tags `MLX`.
 
 Check the endpoint:
 
@@ -233,7 +254,7 @@ Optional variants to test after the first comparison:
 
 ## Caveats
 
-- **Context trap.** Without `OLLAMA_CONTEXT_LENGTH`, an 8K Digest can be cut with no error on the GGUF path. The app cannot fix this per request through `/v1`. The app should state this setup step, or check `prompt_tokens` in the `usage` field of the response against the expected size.
+- **Context trap.** Without `OLLAMA_CONTEXT_LENGTH`, an 8K Digest can be cut with no error on the GGUF path. The MLX path behavior above the limit was not verified. The app cannot fix this per request through `/v1`. The app should state this setup step, or check `prompt_tokens` in the `usage` field of the response against the expected size.
 - **Speed numbers are a proxy.** They come from oMLX at 4-bit, not from Ollama and not from nvfp4. Measure on the real machine with real Digests.
 - **Main branch versus release.** The Ollama source facts were read at main commit `42ac2c0`. The facts that the recommendation depends on were checked again at tag v0.40.16: MLX-first preference, the XGrammar path, `keep_alive` and `reasoning_effort: "none"` in the shim, the `/v1/models` route and the context tiers. The truncation and Metal-memory details were read on main only.
 - **Small-model quality.** Constrained decoding guarantees valid JSON, not good content. The 4B can rank actions worse than Haiku. The comparison must check content quality, not only speed.
