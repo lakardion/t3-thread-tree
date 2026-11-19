@@ -3,7 +3,7 @@ import * as v from "valibot";
 
 import type { ModelPick } from "../shared/brief.ts";
 import { bySince, type CatchUp, type ThreadNode } from "../shared/tree.ts";
-import { digestOf } from "./brief.ts";
+import { digestOf, questionOf, tailOf } from "./brief.ts";
 import guideText from "./catch-up-prompt.md" with { type: "text" };
 import type { Models, PickSettings } from "./model.ts";
 
@@ -49,7 +49,7 @@ export function parseAnswer(answer: unknown): Required<Pick<CatchUp, "did" | "as
 const waiting = (nodes: ThreadNode[]) => nodes.filter((n) => WAITING.has(n.status) && !n.settled && !n.snoozedUntil);
 
 /** `at` is the Wait start, or `updatedAt` when the thread has none. It orders the queue. */
-type Seen = { key: string; at: string; input: string };
+type Seen = { key: string; at: string; input: string; question: string | null };
 type Entry = Seen & { pick: ModelPick; run?: { cancel(): void } } & Pick<
     CatchUp,
     "state" | "did" | "ask" | "options" | "doneLike"
@@ -119,7 +119,11 @@ export function catchUpService(o: {
         wait.map((n) => {
           const msg = msgs.get(n.id) ?? null;
           const key = `${n.id}|${msg?.id ?? ""}|${n.status === "needs-input" ? (n.since ?? "") : ""}`;
-          return [n.id, { key, at: n.since ?? n.updatedAt, input: digestOf(n, "", msg?.text ?? null, now, TAIL) }];
+          const question = msg?.text ? questionOf(tailOf(msg.text)) : null;
+          return [
+            n.id,
+            { key, at: n.since ?? n.updatedAt, input: digestOf(n, "", msg?.text ?? null, now, TAIL), question },
+          ];
         }),
       );
       let dropped = false;
@@ -152,8 +156,13 @@ export function catchUpService(o: {
     of(id: string): CatchUp | undefined {
       const e = entries.get(id);
       if (!e || seen.get(id)?.key !== e.key) return undefined;
-      const { state, pick, did, ask, options, doneLike } = e;
-      return { state, pick, ...(state === "done" && { did, ask, options, doneLike }) };
+      const { state, pick, did, ask, options, doneLike, question } = e;
+      return {
+        state,
+        pick,
+        ...(state === "done" && { did, ask, options, doneLike }),
+        ...((state === "done" || state === "failed") && { question }),
+      };
     },
     /** Cancels the running calls and empties the queue, the timers and the cache. */
     clear() {

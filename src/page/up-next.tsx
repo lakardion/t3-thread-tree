@@ -3,10 +3,11 @@ import { useEffect, useState } from "react";
 import { createRoot } from "react-dom/client";
 
 import { Button } from "@/components/ui/button";
+import { Skeleton } from "@/components/ui/skeleton";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import { cn } from "@/lib/utils";
 
-import type { UpNext, UpNextRow } from "../shared/desktop.ts";
+import { catchUpLines, type UpNext, type UpNextRow } from "../shared/desktop.ts";
 import { ago, stripKey } from "./format.ts";
 import { ProjectIcon } from "./project-icon.tsx";
 import { STATUS, StatusIcon } from "./status-icon.tsx";
@@ -48,6 +49,26 @@ function useUpNext(): UpNext | undefined {
   return list;
 }
 
+/** The second line of a row: the ask, else what the thread did; a skeleton while the call runs; a dashed tag and the raw question when there is no clear ask. */
+function SecondLine({ row }: { row: UpNextRow }) {
+  const { catchUp } = row;
+  if (!catchUp) return null;
+  const lines = catchUpLines(catchUp);
+  let line;
+  if (!lines) line = <Skeleton className="h-2.5 w-40" />;
+  else if (lines.ask) line = <span className="truncate">{`Asks: ${lines.ask}`}</span>;
+  else
+    line = (
+      <>
+        <span className="mr-1 flex-none rounded-sm border border-dashed px-1 text-[10px] tracking-wide uppercase">
+          {lines.why}
+        </span>
+        <span className="truncate italic">{lines.raw ? `“${lines.raw}”` : (lines.did ?? row.title)}</span>
+      </>
+    );
+  return <span className="flex h-4 min-w-0 items-center pl-[20px] text-[11px] text-muted-foreground">{line}</span>;
+}
+
 function Row({ row, target, now }: { row: UpNextRow; target: boolean; now: number }) {
   const bridge = window.upNextBridge;
   const open = () => bridge?.openThread(row.id);
@@ -60,34 +81,40 @@ function Row({ row, target, now }: { row: UpNextRow; target: boolean; now: numbe
       onClick={open}
       onKeyDown={(e) => e.key === "Enter" && e.target === e.currentTarget && open()}
       className={cn(
-        "flex h-7 w-full cursor-pointer items-center gap-1.5 rounded-md border-l-2 border-transparent px-2 text-left text-[13px] hover:bg-accent",
+        "flex w-full cursor-pointer flex-col justify-center rounded-md border-l-2 border-transparent px-2 text-left text-[13px] hover:bg-accent",
         target && "border-status-needs-input bg-accent/50",
+        row.catchUp && "pb-1",
       )}
     >
-      <StatusIcon t={row} now={now} />
-      <span className="flex-none" aria-label={row.project}>
-        <ProjectIcon name={row.project} />
-      </span>
-      {row.key &&
-        (linearUrl ? (
-          <a
-            href={linearUrl}
-            onClick={(e) => {
-              e.stopPropagation();
-              e.preventDefault();
-              bridge?.openLinear(linearUrl);
-            }}
-            className="flex-none font-mono text-[11px] text-muted-foreground hover:underline"
-          >
-            {row.key}
-          </a>
-        ) : (
-          <span className="flex-none font-mono text-[11px] text-muted-foreground">{row.key}</span>
-        ))}
-      <span className="min-w-0 flex-1 truncate">{(row.key ? stripKey(row.title, row.key) : row.title) || row.id}</span>
-      <span className={cn(STATUS[row.status].shape, "font-mono text-[12px] tabular-nums")}>
-        {row.since ? ago(row.since, now) : ""}
-      </span>
+      <div className="flex h-7 min-w-0 items-center gap-1.5">
+        <StatusIcon t={row} now={now} />
+        <span className="flex-none" aria-label={row.project}>
+          <ProjectIcon name={row.project} />
+        </span>
+        {row.key &&
+          (linearUrl ? (
+            <a
+              href={linearUrl}
+              onClick={(e) => {
+                e.stopPropagation();
+                e.preventDefault();
+                bridge?.openLinear(linearUrl);
+              }}
+              className="flex-none font-mono text-[11px] text-muted-foreground hover:underline"
+            >
+              {row.key}
+            </a>
+          ) : (
+            <span className="flex-none font-mono text-[11px] text-muted-foreground">{row.key}</span>
+          ))}
+        <span className="min-w-0 flex-1 truncate">
+          {(row.key ? stripKey(row.title, row.key) : row.title) || row.id}
+        </span>
+        <span className={cn(STATUS[row.status].shape, "font-mono text-[12px] tabular-nums")}>
+          {row.since ? ago(row.since, now) : ""}
+        </span>
+      </div>
+      <SecondLine row={row} />
     </div>
   );
 }

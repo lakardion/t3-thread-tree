@@ -2,7 +2,13 @@ import { createServer } from "node:net";
 
 import * as v from "valibot";
 
-import type { NeedsYouThread, NotifyStatus, UpdateState } from "../shared/desktop.ts";
+import {
+  catchUpLines,
+  type NeedsYouThread,
+  type NotifyStatus,
+  type ThreadNotifyEvent,
+  type UpdateState,
+} from "../shared/desktop.ts";
 import { bySince } from "../shared/tree.ts";
 
 /** The first port from `start` up that a server can listen on at 127.0.0.1. */
@@ -41,15 +47,28 @@ export const STATUS_TITLE: Record<NotifyStatus, string> = {
 export const threadUrl = (environmentId: string, id: string) =>
   `t3code://threads/${encodeURIComponent(environmentId)}/${encodeURIComponent(id)}`;
 
+/** The title and body of a thread notification. Plain text: Electron gives no bold. */
+export function notificationText(e: ThreadNotifyEvent): { title: string; body: string } {
+  const lines = catchUpLines(e.catchUp);
+  if (!lines) return { title: STATUS_TITLE[e.status], body: e.title };
+  const body = lines.ask
+    ? [`Asks: ${lines.ask}`, lines.did].filter(Boolean).join("\n")
+    : (lines.raw ?? lines.did ?? e.title);
+  return { title: `${STATUS_TITLE[e.status]} · ${e.title}`, body };
+}
+
 const TRAY_MAX = 10;
 
 /** The menu-bar thread items, longest wait first. `url: null` means "show the window". */
 export function trayItems(threads: NeedsYouThread[]): { label: string; url: string | null }[] {
   const sorted = threads.toSorted((a, b) => bySince(a.since, b.since));
-  const items: { label: string; url: string | null }[] = sorted.slice(0, TRAY_MAX).map((t) => ({
-    label: `${STATUS_TITLE[t.status]} · ${t.title}`,
-    url: threadUrl(t.environmentId, t.id),
-  }));
+  const items: { label: string; url: string | null }[] = sorted.slice(0, TRAY_MAX).map((t) => {
+    const ask = catchUpLines(t.catchUp)?.ask;
+    return {
+      label: `${STATUS_TITLE[t.status]} · ${t.title}${ask ? ` — ${ask}` : ""}`,
+      url: threadUrl(t.environmentId, t.id),
+    };
+  });
   if (sorted.length > TRAY_MAX) items.push({ label: `+${sorted.length - TRAY_MAX} more… (open tree)`, url: null });
   return items;
 }

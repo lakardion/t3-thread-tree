@@ -51,13 +51,14 @@ export type Detail = {
   pinned: boolean;
 };
 
-/** The one-line read of a waiting thread. `did`, `ask`, `options` and `doneLike` are set when `state` is `done`. */
+/** The one-line read of a waiting thread. `did`, `ask`, `options` and `doneLike` are set when `state` is `done`. `question` is the raw last question, set when `state` is `done` or `failed`. */
 export type CatchUp = {
   state: "queued" | "running" | "done" | "failed";
   did?: string;
   ask?: string | null;
   options?: string[];
   doneLike?: boolean;
+  question?: string | null;
   pick: ModelPick;
 };
 

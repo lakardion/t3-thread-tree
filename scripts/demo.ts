@@ -8,7 +8,7 @@ import { cliPath, type CliRun, sendService } from "../src/server/send.ts";
 import { settledPage, settledRoutes, settledSignature } from "../src/server/settled.ts";
 import type { Pr, Project, Thread } from "../src/server/t3.ts";
 import type { BriefAction, LocalConfig, LocalState, ModelPick } from "../src/shared/brief.ts";
-import { parseLabels, type LinearIssue } from "../src/shared/tree.ts";
+import { type CatchUp, parseLabels, type LinearIssue } from "../src/shared/tree.ts";
 
 const now = Date.now();
 const ago = (min: number) => new Date(now - min * 60_000).toISOString();
@@ -281,6 +281,36 @@ const LINEAR: Record<string, LinearIssue> = {
   "SHOP-398": { project: PAYMENTS, milestone: { id: "demo-launch", name: "Launch", targetDate: "2026-12-15" } },
 };
 
+/** A fixed Catch-up for some waiting threads, one per state, so the surfaces show every look. */
+const CATCH_UP: Record<string, CatchUp> = {
+  "demo-2": {
+    state: "done",
+    pick: "claude",
+    did: "Saved cards list works.",
+    ask: "Make a new card the default?",
+    options: ["At once", "Only when picked"],
+    question: "Should a new card become the default at once, or only when picked?",
+  },
+  "demo-15": {
+    state: "done",
+    pick: "claude",
+    did: "Retry queue needs a new table.",
+    ask: "Approve db:migrate retry_queue?",
+    options: [],
+    question: "Approve db:migrate retry_queue?",
+  },
+  "demo-17": {
+    state: "done",
+    pick: "claude",
+    did: "Looked at the cache layer.",
+    ask: null,
+    options: [],
+    question: "I looked at the cache layer and the notes are in the thread.",
+  },
+  m2: { state: "failed", pick: "claude", question: "Dialog is migrated. Merge it now?" },
+  "search-b": { state: "running", pick: "claude" },
+};
+
 const projectsFor = (settled: boolean, nest = false, labels: string[] = [], wantsLinear = false) =>
   (wantsLinear ? buildLinearTree : buildTree)({
     threads,
@@ -292,6 +322,7 @@ const projectsFor = (settled: boolean, nest = false, labels: string[] = [], want
     now,
     labels,
     labelsOf: (p) => LABELS[p.n],
+    catchUpOf: (id) => CATCH_UP[id],
     linearOf: wantsLinear ? (key) => LINEAR[key] : undefined,
   });
 const treeFor = (nest: boolean, labels: string[], wantsLinear: boolean) =>

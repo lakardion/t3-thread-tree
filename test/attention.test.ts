@@ -6,6 +6,8 @@ import {
   needsYou,
   needsYouTip,
   needsYouThreads,
+  type Held,
+  releaseHeld,
   nextTarget,
   notifyEvents,
   onlyNeedsYou,
@@ -407,5 +409,94 @@ describe("upNextList", () => {
   test("gives the id of the target, or null with none", () => {
     expect(upNextList(projects, queue, queue[1], null).targetId).toBe("n");
     expect(upNextList(projects, queue, null, null).targetId).toBeNull();
+  });
+});
+
+describe("Catch-up on the payloads", () => {
+  const catchUp = {
+    state: "done" as const,
+    pick: "claude" as const,
+    did: "d",
+    ask: "a?",
+    options: ["x"],
+    doneLike: true,
+  };
+  const w = (over: Partial<ThreadNode> = {}): ThreadNode => ({
+    ...thread("a", "needs-input"),
+    href: "t3code://threads/e/a",
+    since: "2026-11-12T09:00:00.000Z",
+    ...over,
+  });
+  const line = { state: "done" as const, did: "d", ask: "a?", options: ["x"], question: undefined };
+
+  test("each payload carries the Catch-up without pick and doneLike", () => {
+    const tree = [branch("p", [w({ catchUp })])];
+    expect(needsYouThreads(tree)[0].catchUp).toEqual(line);
+    expect(upNextList(tree, openNextQueue(tree), null, null).rows[0].catchUp).toEqual(line);
+    const live: Tree = { conn: "up", lastUpdate: null, linearKey: "ok", linear: null, settled: "", projects: tree };
+    const [e] = notifyEvents(new Map([["a", "working"]]), live).events;
+    expect(e.kind === "thread" && e.catchUp).toEqual(line);
+  });
+  test("a node with no Catch-up gives no key", () => {
+    const tree = [branch("p", [w()])];
+    expect("catchUp" in needsYouThreads(tree)[0]).toBe(false);
+    expect("catchUp" in upNextList(tree, openNextQueue(tree), null, null).rows[0]).toBe(false);
+  });
+});
+
+describe("releaseHeld", () => {
+  const event = {
+    kind: "thread" as const,
+    threadId: "a",
+    environmentId: "e",
+    title: "a",
+    status: "needs-input" as const,
+  };
+  const held = (): Held => new Map([["a", { event, at: 1000 }]]);
+  const live = (t: ThreadNode[], conn: Conn = "up"): Tree => ({
+    conn,
+    lastUpdate: null,
+    linearKey: "ok",
+    linear: null,
+    settled: "",
+    projects: [branch("p", t)],
+  });
+  const node = (over: Partial<ThreadNode> = {}) => ({ ...thread("a", "needs-input"), ...over });
+  const cu = (state: "queued" | "running" | "done" | "failed") => ({ state, pick: "claude" as const, did: "d" });
+
+  test("keeps the event until its Catch-up is done", () => {
+    for (const state of ["queued", "running"] as const) {
+      const r = releaseHeld(held(), live([node({ catchUp: cu(state) })]), 2000);
+      expect(r.send).toEqual([]);
+      expect(r.held.size).toBe(1);
+    }
+    expect(releaseHeld(held(), live([node()]), 2000).held.size).toBe(1);
+  });
+  test("sends the event with its Catch-up when done or failed", () => {
+    for (const state of ["done", "failed"] as const) {
+      const r = releaseHeld(held(), live([node({ catchUp: cu(state) })]), 2000);
+      expect(r.send).toHaveLength(1);
+      expect(r.send[0].catchUp?.state).toBe(state);
+      expect(r.held.size).toBe(0);
+    }
+  });
+  test("sends the event as it is at the hold limit", () => {
+    const tree = live([node({ catchUp: cu("running") })]);
+    expect(releaseHeld(held(), tree, 15_999).send).toEqual([]);
+    const r = releaseHeld(held(), tree, 16_000);
+    expect(r.send).toEqual([event]);
+    expect(r.held.size).toBe(0);
+  });
+  test("drops the event when the status changes, the thread settles or leaves the tree", () => {
+    for (const t of [[node({ status: "working" })], [node({ settled: true })], []]) {
+      const r = releaseHeld(held(), live(t), 2000);
+      expect(r.send).toEqual([]);
+      expect(r.held.size).toBe(0);
+    }
+  });
+  test("a tree that is not up keeps every event", () => {
+    const r = releaseHeld(held(), live([], "down"), 99_000);
+    expect(r.send).toEqual([]);
+    expect(r.held.size).toBe(1);
   });
 });

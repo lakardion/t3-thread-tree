@@ -1,4 +1,11 @@
-import type { NeedsYouThread, NotifyEvent, NotifyStatus, UpNext } from "../shared/desktop.ts";
+import type {
+  CatchUpLineData,
+  NeedsYouThread,
+  NotifyEvent,
+  NotifyStatus,
+  ThreadNotifyEvent,
+  UpNext,
+} from "../shared/desktop.ts";
 import { allThreads, bySince, type Branch, type Status, type ThreadNode, type Tree } from "../shared/tree.ts";
 import { linearHref } from "./format.ts";
 
@@ -44,6 +51,13 @@ export const onlyNeedsYou = (projects: Branch[]): Branch[] =>
 export const withoutSnoozed = (projects: Branch[]): Branch[] =>
   projects.flatMap((b) => keepBranch(b, (t) => t.status !== "snoozed"));
 
+/** The Catch-up fields that cross the bridge, as an optional key to spread. */
+const lineOf = (t: ThreadNode): { catchUp?: CatchUpLineData } => {
+  if (!t.catchUp) return {};
+  const { state, did, ask, options, question } = t.catchUp;
+  return { catchUp: { state, did, ask, options, question } };
+};
+
 const envOf = (t: ThreadNode) => decodeURIComponent(t.href.split("/")[3] ?? "");
 
 const waiting = (t: ThreadNode): t is ThreadNode & { status: "needs-input" | "plan-ready" } =>
@@ -57,7 +71,9 @@ export const needsYouThreads = (projects: Branch[]): NeedsYouThread[] =>
   projects
     .flatMap(allThreads)
     .flatMap((t) =>
-      waiting(t) ? [{ id: t.id, title: t.title, environmentId: envOf(t), since: t.since, status: t.status }] : [],
+      waiting(t)
+        ? [{ id: t.id, title: t.title, environmentId: envOf(t), since: t.since, status: t.status, ...lineOf(t) }]
+        : [],
     );
 
 /** The threads "Open next" can open: needs input, plan ready or your turn, not settled, subthreads included. Oldest `since` first, no `since` last, ties in tree order. */
@@ -89,6 +105,7 @@ export const upNextList = (
               project: t.t3Project?.label ?? projectOf.get(t.id) ?? "",
               key: t.key,
               linearUrl: t.key ? linearHref(t.key, linear) : null,
+              ...lineOf(t),
             },
           ]
         : [],
@@ -145,6 +162,32 @@ export function notifyEvents(
     environmentId: envOf(t),
     title: t.title,
     status: t.status,
+    ...lineOf(t),
   }));
   return { events, nextStatuses };
+}
+
+/** Thread events held for their Catch-up, by thread id, with the time each one started to wait. */
+export type Held = Map<string, { event: ThreadNotifyEvent; at: number }>;
+
+export const HOLD_MS = 15_000;
+
+/**
+ * Splits the held events into those to send now and those to keep. A held event drops when its thread left the tree,
+ * settled, or changed status. It goes out with its Catch-up once that is `done` or `failed`, and as it is after `HOLD_MS`.
+ * A tree that is not up keeps every held event.
+ */
+export function releaseHeld(held: Held, tree: Tree, now: number): { send: ThreadNotifyEvent[]; held: Held } {
+  if (tree.conn !== "up") return { send: [], held };
+  const byId = new Map(tree.projects.flatMap(allThreads).map((t) => [t.id, t]));
+  const send: ThreadNotifyEvent[] = [];
+  const keep: Held = new Map();
+  for (const [id, h] of held) {
+    const t = byId.get(id);
+    if (!t || t.settled || t.status !== h.event.status) continue;
+    if (t.catchUp?.state === "done" || t.catchUp?.state === "failed") send.push({ ...h.event, ...lineOf(t) });
+    else if (now - h.at >= HOLD_MS) send.push(h.event);
+    else keep.set(id, h);
+  }
+  return { send, held: keep };
 }
