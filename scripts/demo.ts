@@ -5,6 +5,7 @@ import { buildLinearTree, buildTree } from "../src/server/build-tree.ts";
 import { findRoutes } from "../src/server/find.ts";
 import { lastMessageRoutes } from "../src/server/last-message.ts";
 import { cliPath, type CliRun, sendService } from "../src/server/send.ts";
+import { settleRoutes } from "../src/server/settle.ts";
 import { settledPage, settledRoutes, settledSignature } from "../src/server/settled.ts";
 import type { Pr, Project, Thread } from "../src/server/t3.ts";
 import type { LocalConfig, LocalState, ModelPick } from "../src/shared/model.ts";
@@ -459,6 +460,16 @@ const server = Bun.serve({
     ...sender.routes,
     ...lastMessageRoutes({ read: lastMessage, has: (id) => threads.some((th) => th.id === id) }),
     ...findRoutes(() => projectsFor(true, false)),
+    ...settleRoutes({
+      hasThread: (id) => threads.some((th) => th.id === id && !th.gone),
+      dispatch: async (c) => {
+        const id = c.threadId as string;
+        if (c.type === "thread.settle") touch(id, { settledAt: ago(0) });
+        else if (c.type === "thread.unsettle") touch(id, { settledAt: null });
+        else touch(id, { snoozedUntil: c.snoozedUntil as string });
+        pushes.forEach((push) => push());
+      },
+    }),
     ...settledRoutes({
       page: (after, limit) => settledPage(projectsFor(true), new Map(threads.map((th) => [th.id, th])), after, limit),
     }),

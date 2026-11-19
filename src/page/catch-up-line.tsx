@@ -22,6 +22,22 @@ function Source({ t }: { t: ThreadNode }) {
   );
 }
 
+/** "Asks:" in the status color. */
+export const AsksLabel = ({ status }: { status: ThreadNode["status"] }) => (
+  <span className={cn(STATUS[status].shape, "font-semibold")}>Asks:</span>
+);
+
+/** The line of a Catch-up with no clear ask or a failed call: a dashed tag, then the first line of the raw question, else what the thread did. */
+export function NoAsk({ lines }: { lines: NonNullable<ReturnType<typeof catchUpLines>> }) {
+  const raw = lines.raw?.split("\n").find((l) => l.trim());
+  return (
+    <>
+      <span className="mr-1 rounded-sm border border-dashed px-1 text-[10px] tracking-wide uppercase">{lines.why}</span>
+      {(raw ?? lines.did) && <span className={raw ? "italic" : undefined}>{raw ? `“${raw}”` : lines.did}</span>}
+    </>
+  );
+}
+
 /** Wraps the row title. Adds the Catch-up line under it when the thread has one. */
 export function CatchUpTitle({ t, children }: { t: ThreadNode; children: ReactNode }) {
   if (!hasCatchUpLine(t)) return children;
@@ -29,15 +45,13 @@ export function CatchUpTitle({ t, children }: { t: ThreadNode; children: ReactNo
   let line: ReactNode;
   if (!lines) line = <Skeleton className="my-[3px] h-3 w-56 max-w-full motion-reduce:animate-none" />;
   else {
-    const raw = lines.raw?.split("\n").find((l) => l.trim());
     line = (
       <Tooltip>
         <TooltipTrigger asChild>
           <span className="min-w-0 truncate">
             {lines.ask ? (
               <>
-                {lines.did} <span className={cn(STATUS[t.status].shape, "font-semibold")}>Asks:</span>{" "}
-                <span className="text-foreground">{t.catchUp?.ask}</span>{" "}
+                {lines.did} <AsksLabel status={t.status} /> <span className="text-foreground">{t.catchUp?.ask}</span>{" "}
                 {t.catchUp?.options?.map((o) => (
                   <Badge key={o} variant="outline" className="h-[18px] px-1.5 text-[11px] font-normal">
                     {o}
@@ -45,14 +59,7 @@ export function CatchUpTitle({ t, children }: { t: ThreadNode; children: ReactNo
                 ))}
               </>
             ) : (
-              <>
-                <span className="mr-1 rounded-sm border border-dashed px-1 text-[10px] tracking-wide uppercase">
-                  {lines.why}
-                </span>
-                {(raw ?? lines.did) && (
-                  <span className={raw ? "italic" : undefined}>{raw ? `“${raw}”` : lines.did}</span>
-                )}
-              </>
+              <NoAsk lines={lines} />
             )}
           </span>
         </TooltipTrigger>

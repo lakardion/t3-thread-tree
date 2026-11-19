@@ -497,6 +497,20 @@ A thread row with a Catch-up has a line under the title. The title keeps its pla
 - **Tooltip:** the line shows the last message of the thread. Like the "Updated" tooltip of the row, it does not open on touch.
 - **No Catch-up:** one line, as before.
 
+### Triage card
+
+The card sits at the top of the list, inside the list scroller, before the Focus strip. It is `sticky top-0 z-30 mb-3` on the page background, so it stays over the project headers. It has `rounded-lg border bg-card p-3 shadow-sm`.
+
+- **Head row:** the status icon, the status title in the status color and semibold, the phrase, the Wait in the status color, then "N of M" (and "+K new" in the needs-input color) and a close button on the right.
+- **Title:** a link, semibold, with the issue key in mono before it.
+- **Catch-up:** as in the row line, without the options. A skeleton shows while it runs.
+- **Chips:** outline `xs` buttons with the number key in front.
+- **Reply:** a textarea with the Send button at its end.
+- **Action row:** ghost `xs` buttons, each with its key. "Skip" sits at the end.
+- **Next line:** one truncated line under a top border.
+- **End:** a centered check icon, "Nothing waits", the counts, and the buttons.
+- **390 px:** the rows wrap and the card keeps its width. The tree row that the card shows stays visible under it.
+
 ### Up next second line
 
 A row of the Up next window with a Catch-up has a second line under the top line. The top line stays 28 px. The second line has `pl-[20px]`, `text-[11px]` and `--muted-foreground`, and it truncates to one line.
@@ -657,3 +671,4 @@ export type Branch = {
 - Reduced motion: no animation runs.
 - `PUSH=1 bun run demo` shows each change transition.
 - A thread with absent optional fields shows no empty line, chip or mark.
+- Triage card: it is sticky over the project headers, wraps at 390 px, and shows the same in light and dark mode.

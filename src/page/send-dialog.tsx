@@ -47,6 +47,21 @@ function ActionDialog({
   );
 }
 
+/** The failure of a send, settle or snooze: the message, the exit code and the tail of stderr. */
+export const SendErrorAlert = ({ err }: { err: SendError }) => (
+  <Alert className="border-l-[3px] border-l-status-failed">
+    <AlertDescription className="block text-foreground">
+      {err.error}
+      {err.exitCode !== null && <span className="text-muted-foreground"> exit {err.exitCode}</span>}
+      {err.stderrTail && (
+        <pre className="mt-1.5 max-h-24 overflow-auto rounded-[6px] bg-muted p-2 font-mono text-[11px] leading-4 whitespace-pre-wrap text-muted-foreground">
+          {err.stderrTail}
+        </pre>
+      )}
+    </AlertDescription>
+  </Alert>
+);
+
 /** Header, fields, failure alert and buttons of an action dialog. A `<fieldset>` disables the fields while `run` is in flight. */
 function ActionForm({
   title,
@@ -97,19 +112,7 @@ function ActionForm({
       >
         {children}
       </fieldset>
-      {err && (
-        <Alert className="border-l-[3px] border-l-status-failed">
-          <AlertDescription className="block text-foreground">
-            {err.error}
-            {err.exitCode !== null && <span className="text-muted-foreground"> exit {err.exitCode}</span>}
-            {err.stderrTail && (
-              <pre className="mt-1.5 max-h-24 overflow-auto rounded-[6px] bg-muted p-2 font-mono text-[11px] leading-4 whitespace-pre-wrap text-muted-foreground">
-                {err.stderrTail}
-              </pre>
-            )}
-          </AlertDescription>
-        </Alert>
-      )}
+      {err && <SendErrorAlert err={err} />}
       <DialogFooter>
         <Button variant="ghost" disabled={busy} onClick={close}>
           Cancel

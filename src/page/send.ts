@@ -30,3 +30,5 @@ async function post(path: string, body: object): Promise<Result> {
 export const postSend = (threadId: string, message: string) => post("/t3/send", { threadId, message });
 
 export const postSettle = (threadId: string, settled: boolean) => post("/t3/settle", { threadId, settled });
+
+export const postSnooze = (threadId: string, snoozedUntil: string) => post("/t3/snooze", { threadId, snoozedUntil });
