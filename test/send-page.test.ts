@@ -1,23 +1,7 @@
 import { afterAll, afterEach, describe, expect, spyOn, test } from "bun:test";
 
-import { isBusy, markKey, postSend, postStart, startDefaults, t3Projects } from "../src/page/send.ts";
-import type { BriefAction } from "../src/shared/brief.ts";
-import type { Branch, Status, ThreadNode } from "../src/shared/tree.ts";
-
-const step = (threadIds: string[]): BriefAction => ({
-  kind: "fix",
-  title: "Fix it",
-  reason: "r",
-  threadIds,
-  prompt: null,
-});
-
-describe("markKey", () => {
-  test("equal steps match, other threads differ", () => {
-    expect(markKey(step(["a"]))).toBe(markKey(step(["a"])));
-    expect(markKey(step(["a"]))).not.toBe(markKey(step(["a", "b"])));
-  });
-});
+import { isBusy, postSend } from "../src/page/send.ts";
+import type { Status } from "../src/shared/tree.ts";
 
 test("isBusy is true for working, starting, waiting only", () => {
   const all: Status[] = [
@@ -61,71 +45,5 @@ describe("postSend", () => {
     spy.mockRejectedValue(new Error("down"));
     const r = await postSend("t", "m");
     expect(r).toEqual({ ok: false, err: { error: "The server did not answer.", exitCode: null, stderrTail: "" } });
-  });
-
-  test("posts the project, title and message", async () => {
-    spy.mockResolvedValue(new Response("{}"));
-    expect(await postStart("p", "t", "m")).toEqual({ ok: true });
-    expect(spy.mock.calls[0][0]).toBe("/t3/start");
-    expect(JSON.parse(spy.mock.calls[0][1]?.body as string)).toEqual({ projectId: "p", title: "t", message: "m" });
-  });
-
-  test("502 body is the error", async () => {
-    const err = { error: "boom", exitCode: 1, stderrTail: "x" };
-    spy.mockResolvedValue(new Response(JSON.stringify(err), { status: 502 }));
-    expect(await postStart("p", "t", "m")).toEqual({ ok: false, err });
-  });
-});
-
-describe("startDefaults", () => {
-  const thread = (id: string, key: string | null) => ({ id, key, children: [] }) as unknown as ThreadNode;
-  const project = (id: string, threads: ThreadNode[]) =>
-    ({ id: `p:${id}`, label: id, branches: [], threads }) as Branch;
-  const projects = [project("one", [thread("a", null)]), project("two", [thread("b", "KEY-1")])];
-  const live = new Map(projects.flatMap((p) => p.threads).map((t) => [t.id, t]));
-
-  test("project of the first live thread, title with its key", () => {
-    expect(startDefaults(step(["gone", "b"]), live, projects).projectId).toBe("two");
-    expect(startDefaults(step(["b"]), live, projects)).toEqual({ projectId: "two", title: "KEY-1 Fix it" });
-  });
-
-  test("no live thread falls back to the first project", () => {
-    expect(startDefaults(step(["gone"]), live, projects)).toEqual({ projectId: "one", title: "Fix it" });
-  });
-
-  test("no projects gives an empty id", () => {
-    expect(startDefaults(step(["a"]), live, []).projectId).toBe("");
-  });
-
-  test("a keyless first thread gives the bare title", () => {
-    expect(startDefaults(step(["a"]), live, projects).title).toBe("Fix it");
-  });
-});
-
-describe("t3Projects", () => {
-  const thread = (id: string, project: string, children: ThreadNode[] = []) =>
-    ({ id, key: null, children, t3Project: { id: project, label: project } }) as unknown as ThreadNode;
-  const branch = (id: string, over: Partial<Branch>): Branch => ({ id, label: id, branches: [], threads: [], ...over });
-
-  test("returns the tree as is when no top-level branch is Linear", () => {
-    const tree = [branch("p:one", {})];
-    expect(t3Projects(tree)).toBe(tree);
-  });
-
-  test("regroups a Linear tree by T3 project, in first-seen order", () => {
-    const tree = [
-      branch("lp:x", {
-        linear: {},
-        branches: [branch("lm:m", { threads: [thread("a", "two"), thread("b", "one", [thread("c", "two")])] })],
-      }),
-      branch("lf:none", { linear: {}, threads: [thread("d", "one")] }),
-    ];
-    const out = t3Projects(tree);
-    expect(out.map((p) => [p.id, p.label])).toEqual([
-      ["p:two", "two"],
-      ["p:one", "one"],
-    ]);
-    expect(out[0].threads.map((t) => t.id)).toEqual(["a", "c"]);
-    expect(out[1].threads.map((t) => t.id)).toEqual(["b", "d"]);
   });
 });

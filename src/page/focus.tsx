@@ -13,7 +13,7 @@ import { FOCUS_MAX } from "./focus.ts";
 import { ago } from "./format.ts";
 import { STATUS, StatusIcon } from "./status-icon.tsx";
 
-/** The Focus list for the add buttons of rows and the brief. */
+/** The Focus list for the add buttons of rows. */
 export const Focus = createContext<{
   ids: string[];
   add: (id: string) => void;

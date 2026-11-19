@@ -68,43 +68,23 @@ The tree served on a local port and opened in a browser tab, with no Dock badge,
 _Avoid_: web app, web version
 
 **Focus list**:
-Up to three threads that the user chose to continue, shown above the tree. It is opt-in: the strip is hidden until the user turns it on. The UI calls it Focus. The user adds a thread from a row, from the brief, or by drag. A settled or deleted thread leaves the list. It is local to this page: it changes no T3 state and does not reorder the tree.
+Up to three threads that the user chose to continue, shown above the tree. It is opt-in: the strip is hidden until the user turns it on. The UI calls it Focus. The user adds a thread from a row or by drag. A settled or deleted thread leaves the list. It is local to this page: it changes no T3 state and does not reorder the tree.
 _Avoid_: Now and Next, pins, favorites, working set
 
 **Find**:
 The control that finds any thread by title, issue key, project, branch or PR number, and opens it or shows it in the tree. It searches the active threads, and the settled threads on request.
 _Avoid_: search, quick open, command palette
 
-**Next-step brief**:
-A model-written, ranked list of recommended actions over the active threads. Each action links to one or more threads. The user asks for it with the "What's next" button.
-_Avoid_: suggestion, summary, advice
-
-**Action**:
-One ranked item of a **Next-step brief**. It has a kind (answer, merge, fix, review, clean-up, unblock) and links to one or more top-level threads.
-_Avoid_: step, task, todo
-
-**Open**:
-An **Action** whose facts still hold.
-_Avoid_: active, pending
-
-**Done**:
-An **Action** whose rule no longer holds in the live tree, or whose linked threads all left the tree or settled.
-_Avoid_: resolved, closed
-
-**Changed**:
-An **Action** with a linked thread whose status or **Wait** differs from the brief time. The Action may be out of date.
-_Avoid_: stale, outdated
-
 **Digest**:
-The compact text form of one thread that the model reads for a **Next-step brief**: one line of facts, then the tail of the last assistant message. Code builds it on each click.
+The compact text form of one thread that the model reads for a **Catch-up**: one line of facts, then the tail of the last assistant message.
 _Avoid_: summary, snapshot
 
 **Model pick**:
-The way the app runs a model, chosen by the user: Claude Haiku, Codex Luna or the **Local model**. The **Next-step brief** is its first user.
+The way the app runs a model, chosen by the user: Claude Haiku, Codex Luna or the **Local model**. The **Catch-up** uses it. The user sets it in the Catch-up fold of Settings.
 _Avoid_: CLI, provider, engine
 
 **Local model**:
-A model that runs on the user's machine, in a runtime the user starts, and writes the **Next-step brief**. Thread text does not leave the machine. It is an opt-in **Model pick** next to the remote ones: the page never picks it on its own, and never falls back from it to a remote CLI.
+A model that runs on the user's machine, in a runtime the user starts, and writes the **Catch-up**. Thread text does not leave the machine. It is an opt-in **Model pick** next to the remote ones: the page never picks it on its own, and never falls back from it to a remote CLI.
 _Avoid_: offline model, on-device AI
 
 **Catch-up**:
@@ -116,7 +96,7 @@ One message from the page to one thread, through the `t3` CLI, after the user co
 _Avoid_: post, push, dispatch
 
 **Start thread**:
-A new top-level thread in a project, with a first message, through the `t3` CLI, after the user confirms it in the start dialog. T3 records it as a **Launched thread** with no spawner.
+A new top-level thread in a project, with a first message, through the `t3` CLI. The server has the route, and the page has no control for it. T3 records it as a **Launched thread** with no spawner.
 _Avoid_: launch, spawn, create
 
 **Watched label**:

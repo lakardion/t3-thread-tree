@@ -26,7 +26,7 @@ type Frame = { busy: boolean; setBusy: (v: boolean) => void; close: () => void }
 const FrameContext = createContext<Frame>(null!);
 
 /** While an action runs, nothing closes the dialog. Children mount only while open. */
-export function ActionDialog({
+function ActionDialog({
   open,
   onOpenChange,
   children,
@@ -48,7 +48,7 @@ export function ActionDialog({
 }
 
 /** Header, fields, failure alert and buttons of an action dialog. A `<fieldset>` disables the fields while `run` is in flight. */
-export function ActionForm({
+function ActionForm({
   title,
   description,
   label,
