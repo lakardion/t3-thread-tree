@@ -1,10 +1,19 @@
 import { describe, expect, test } from "bun:test";
 import { homedir } from "node:os";
 
-import { buildTree, issueKey, statusOf, type BuildInput } from "../src/server/build-tree.ts";
+import { buildLinearTree, buildTree, issueKey, statusOf, type BuildInput } from "../src/server/build-tree.ts";
 import { launchedIds } from "../src/server/lineage.ts";
 import { decodeItem, decodeThread, type Thread } from "../src/server/t3.ts";
-import type { Branch, Status, ThreadNode } from "../src/shared/tree.ts";
+import {
+  NO_KEY,
+  NO_MILESTONE,
+  NO_PROJECT,
+  isFallback,
+  type Branch,
+  type LinearIssue,
+  type Status,
+  type ThreadNode,
+} from "../src/shared/tree.ts";
 
 const NOW = Date.parse("2026-11-12T12:00:00.000Z");
 let clock = 0;
@@ -61,9 +70,9 @@ const pr = (number: number, source: string, state = "open", stack: object | null
   stack,
 });
 
-function build(raws: object[], spawners: Record<string, string> = {}, over: Partial<BuildInput> = {}) {
+function inputOf(raws: object[], spawners: Record<string, string> = {}, over: Partial<BuildInput> = {}): BuildInput {
   const threads = raws.map((r) => decodeThread(r)!);
-  return buildTree({
+  return {
     threads,
     projects: new Map([
       ["p1", { title: "frontend", repo: "acme/frontend" }],
@@ -75,7 +84,11 @@ function build(raws: object[], spawners: Record<string, string> = {}, over: Part
     nest: true,
     now: NOW,
     ...over,
-  });
+  };
+}
+
+function build(raws: object[], spawners: Record<string, string> = {}, over: Partial<BuildInput> = {}) {
+  return buildTree(inputOf(raws, spawners, over));
 }
 
 const labels = (b: Branch[]) => b.map((x) => x.label);
@@ -802,5 +815,252 @@ describe("linearOf", () => {
     expect(nodeOf("no key here", { linearOf }).linear).toBeNull();
     expect(nodeOf("SHOP-2 x", { linearOf }).linear).toBeNull();
     expect(nodeOf("SHOP-1 x").linear).toBeNull();
+  });
+});
+
+describe("buildLinearTree", () => {
+  const proj = (id: string) => ({ id, name: `Proj ${id}`, url: `https://linear.app/w/project/${id}` });
+  const ms = (id: string, targetDate: string | null) => ({ id, name: `Mile ${id}`, targetDate });
+  const issue = (project: string | null, milestone: LinearIssue["milestone"] = null): LinearIssue => ({
+    project: project ? proj(project) : null,
+    milestone,
+  });
+  const buildL = (
+    raws: object[],
+    answers: Record<string, LinearIssue | null> = {},
+    spawners: Record<string, string> = {},
+    over: Partial<BuildInput> = {},
+  ) => {
+    const linearOf = (k: string) => answers[k] ?? undefined;
+    return buildLinearTree(inputOf(raws, spawners, { linearOf, ...over }));
+  };
+  const ids = (b: Branch[]) => b.map((x) => x.id);
+
+  test("a keyed thread goes to its project, then its milestone", () => {
+    const tree = buildL([shell("a", "SHOP-1 x")], { "SHOP-1": issue("x", ms("m", "2026-12-04")) });
+    expect(tree).toHaveLength(1);
+    expect(tree[0].label).toBe("Proj x");
+    expect(tree[0].threads).toEqual([]);
+    expect(tree[0].branches[0].label).toBe("Mile m");
+    expect(titles(tree[0].branches[0].threads)).toEqual(["SHOP-1 x"]);
+  });
+
+  test("a project without a milestone goes to No milestone", () => {
+    const tree = buildL([shell("a", "SHOP-1 x")], { "SHOP-1": issue("x") });
+    expect(tree[0].branches.map((b) => [b.id, b.label])).toEqual([["lm:x:none", NO_MILESTONE]]);
+  });
+
+  test("a keyed thread with null linear or no project goes to No project", () => {
+    const tree = buildL([shell("a", "SHOP-1 x"), shell("b", "SHOP-2 y"), shell("c", "SHOP-3 z")], {
+      "SHOP-2": issue(null),
+      "SHOP-3": issue("x"),
+    });
+    expect(ids(tree)).toEqual(["lp:x", "lf:none"]);
+    expect(tree[1].label).toBe(NO_PROJECT);
+    expect(titles(tree[1].threads)).toEqual(["SHOP-1 x", "SHOP-2 y"]);
+  });
+
+  test("Reviews keeps key subgroups, as the T3 tree does", () => {
+    const tree = buildL([shell("a", "Review #4 SHOP-1"), shell("b", "Review #5 SHOP-1"), shell("c", "Review #6")], {
+      "SHOP-1": issue("x"),
+    });
+    expect(tree[0].id).toBe("lf:reviews");
+    expect(tree[0].label).toBe("Reviews");
+    expect(tree[0].threads).toEqual([]);
+    expect(tree[0].branches.map((b) => [b.id, b.label, b.threads.length])).toEqual([
+      ["lf:reviews:SHOP-1", "SHOP-1", 2],
+      [`lf:reviews:${NO_KEY}`, NO_KEY, 1],
+    ]);
+  });
+
+  test("a keyless thread is a loose row, with no header label", () => {
+    const tree = buildL([shell("a", "combobox")]);
+    expect(tree.map((b) => [b.id, b.label])).toEqual([["lf:loose", ""]]);
+    expect(titles(tree[0].threads)).toEqual(["combobox"]);
+  });
+
+  test("milestones sort by date, then undated, then No milestone", () => {
+    const tree = buildL(
+      [shell("a", "SHOP-1 x"), shell("b", "SHOP-2 x"), shell("c", "SHOP-3 x"), shell("d", "SHOP-4 x")],
+      {
+        "SHOP-1": issue("x"),
+        "SHOP-2": issue("x", ms("late", "2027-01-15")),
+        "SHOP-3": issue("x", ms("none", null)),
+        "SHOP-4": issue("x", ms("soon", "2026-12-04")),
+      },
+    );
+    expect(ids(tree[0].branches)).toEqual(["lm:soon", "lm:late", "lm:none", "lm:x:none"]);
+  });
+
+  test("milestones with the same date sort by oldest thread", () => {
+    const tree = buildL([shell("a", "SHOP-1 x"), shell("b", "SHOP-2 x")], {
+      "SHOP-1": issue("x", ms("second", "2026-12-04")),
+      "SHOP-2": issue("x", ms("first", "2026-12-04")),
+    });
+    expect(ids(tree[0].branches)).toEqual(["lm:second", "lm:first"]);
+  });
+
+  test("projects sort by oldest thread, then Reviews, No project, loose rows; empty fallbacks go", () => {
+    const raws = [
+      shell("k", "no key"),
+      shell("n", "SHOP-9 none"),
+      shell("r", "Review #1"),
+      shell("b", "SHOP-2 beta"),
+      shell("a", "SHOP-1 alpha"),
+    ];
+    const answers = { "SHOP-1": issue("alpha"), "SHOP-2": issue("beta") };
+    expect(ids(buildL(raws, answers))).toEqual(["lp:beta", "lp:alpha", "lf:reviews", "lf:none", "lf:loose"]);
+    expect(ids(buildL([shell("a", "SHOP-1 alpha")], answers))).toEqual(["lp:alpha"]);
+  });
+
+  const stackRaws = () => [
+    shell("s2", "WEB-2 two", { pullRequests: [pr(11, "created"), pr(10, "stack")] }),
+    shell("o", "WEB-9 other"),
+    shell("s1", "WEB-1 one", { pullRequests: [pr(10, "created"), pr(11, "stack")] }),
+  ];
+
+  test("stack mates sit together in stack order inside a milestone", () => {
+    const m = ms("m", "2026-12-04");
+    const tree = buildL(stackRaws(), { "WEB-1": issue("x", m), "WEB-2": issue("x", m), "WEB-9": issue("x", m) });
+    expect(titles(tree[0].branches[0].threads)).toEqual(["WEB-1 one", "WEB-2 two", "WEB-9 other"]);
+  });
+
+  test("a stack stays whole in the milestone of its lowest member", () => {
+    const tree = buildL(stackRaws(), {
+      "WEB-1": issue("x", ms("a", "2026-12-04")),
+      "WEB-2": issue("y", ms("b", "2027-01-01")),
+      "WEB-9": issue("x"),
+    });
+    expect(ids(tree)).toEqual(["lp:x"]);
+    expect(tree[0].branches.map((b) => titles(b.threads))).toEqual([["WEB-1 one", "WEB-2 two"], ["WEB-9 other"]]);
+  });
+
+  test("a stack is placed by its lowest member that has a key", () => {
+    const tree = buildL(
+      [
+        shell("s1", "one", { pullRequests: [pr(10, "created"), pr(11, "stack"), pr(12, "stack")] }),
+        shell("s2", "WEB-2 two", { pullRequests: [pr(11, "created"), pr(10, "stack")] }),
+        shell("s3", "WEB-3 three", { pullRequests: [pr(12, "created"), pr(11, "stack")] }),
+      ],
+      { "WEB-2": issue(null), "WEB-3": issue("x") },
+    );
+    expect(ids(tree)).toEqual(["lf:none"]);
+    expect(titles(tree[0].threads)).toEqual(["one", "WEB-2 two", "WEB-3 three"]);
+  });
+
+  test("keyless stack threads sit together in the loose rows", () => {
+    const tree = buildL([
+      shell("s2", "two", { pullRequests: [pr(11, "created"), pr(10, "stack")] }),
+      shell("o", "other"),
+      shell("s1", "one", { pullRequests: [pr(10, "created"), pr(11, "stack")] }),
+    ]);
+    expect(titles(tree[0].threads)).toEqual(["one", "two", "other"]);
+  });
+
+  test("a keyless thread nests under a keyless spawner, not under a keyed one", () => {
+    const raws = [shell("p", "parent"), shell("k", "SHOP-1 keyed"), shell("c", "child"), shell("d", "other child")];
+    const tree = buildL(raws, { "SHOP-1": issue("x") }, { c: "p", d: "k" });
+    const nokey = tree.find((b) => b.id === "lf:loose")!;
+    expect(titles(nokey.threads)).toEqual(["parent", "other child"]);
+    expect(titles(nokey.threads[0].children)).toEqual(["child"]);
+    expect(nokey.threads[0].children[0].detail.launchedBy).toBeNull();
+    expect(nokey.threads[1].detail.launchedBy?.title).toBe("SHOP-1 keyed");
+  });
+
+  test("a keyless thread does not nest with nest off", () => {
+    const tree = buildL([shell("p", "parent"), shell("c", "child")], {}, { c: "p" }, { nest: false });
+    expect(titles(tree[0].threads)).toEqual(["parent", "child"]);
+    expect(tree[0].threads[1].detail.launchedBy?.title).toBe("parent");
+  });
+
+  test("ids, Linear meta on branches, and t3Project on nodes and children", () => {
+    const m = ms("m", "2026-12-04");
+    const tree = buildL(
+      [
+        shell("a", "SHOP-1 x", { projectId: "p2" }),
+        shell("n", "SHOP-2 none"),
+        shell("p", "parent"),
+        shell("c", "child", { projectId: "p2" }),
+        shell("r", "Review #1"),
+      ],
+      { "SHOP-1": issue("x", m), "SHOP-2": issue("x") },
+      { c: "p" },
+    );
+    expect(ids(tree)).toEqual(["lp:x", "lf:reviews", "lf:loose"]);
+    expect(ids(tree[0].branches)).toEqual(["lm:m", "lm:x:none"]);
+    expect(tree.map(isFallback)).toEqual([false, true, true]);
+    expect(tree[0].linear).toEqual({ url: "https://linear.app/w/project/x" });
+    expect(tree[0].branches[0].linear).toEqual({ date: "2026-12-04" });
+    expect(tree[0].branches[1].linear).toEqual({ date: null });
+    expect(tree[1].linear).toEqual({});
+    expect(tree[0].branches[0].threads[0].t3Project).toEqual({ id: "p2", label: "backend" });
+    expect(tree[0].branches[1].threads[0].t3Project).toEqual({ id: "p1", label: "frontend" });
+    const parent = tree[2].threads[0];
+    expect(parent.children[0].t3Project).toEqual({ id: "p2", label: "backend" });
+  });
+
+  test("a keyless stack thread does not nest under its keyless spawner", () => {
+    const tree = buildL(
+      [
+        shell("p", "parent"),
+        shell("s1", "one", { pullRequests: [pr(10, "created"), pr(11, "stack")] }),
+        shell("s2", "two", { pullRequests: [pr(11, "created"), pr(10, "stack")] }),
+      ],
+      {},
+      { s1: "p" },
+    );
+    expect(titles(tree[0].threads)).toEqual(["parent", "one", "two"]);
+    expect(tree[0].threads[0].children).toEqual([]);
+    expect(tree[0].threads[1].detail.launchedBy?.title).toBe("parent");
+  });
+
+  test("a keyless thread does not nest under a keyless review", () => {
+    const tree = buildL([shell("r", "Review #1"), shell("c", "child")], {}, { c: "r" });
+    expect(ids(tree)).toEqual(["lf:reviews", "lf:loose"]);
+    expect(titles(tree[1].threads)).toEqual(["child"]);
+    expect(tree[1].threads[0].detail.launchedBy?.title).toBe("Review #1");
+  });
+
+  test("nesting follows a nested spawner", () => {
+    const tree = buildL([shell("a", "A"), shell("b", "B"), shell("c", "C")], {}, { b: "a", c: "b" });
+    expect(titles(tree[0].threads)).toEqual(["A"]);
+    expect(titles(tree[0].threads[0].children)).toEqual(["B"]);
+    expect(titles(tree[0].threads[0].children[0].children)).toEqual(["C"]);
+  });
+
+  test("nested children sort by creation and a parent takes its oldest child's place", () => {
+    const tree = buildL(
+      [
+        shell("late", "late child", { createdAt: "2026-11-12T10:00:00.000Z" }),
+        shell("x", "x"),
+        shell("early", "early child"),
+        shell("y", "y"),
+        shell("p", "parent"),
+      ],
+      {},
+      { late: "p", early: "p" },
+    );
+    expect(titles(tree[0].threads)).toEqual(["x", "parent", "y"]);
+    expect(titles(tree[0].threads[1].children)).toEqual(["early child", "late child"]);
+  });
+
+  test("stack mates take the place of their oldest member among unrelated threads", () => {
+    const m = ms("m", "2026-12-04");
+    const raws = [
+      shell("o0", "WEB-8 o0"),
+      shell("s2", "WEB-2 two", { pullRequests: [pr(11, "created"), pr(10, "stack")] }),
+      shell("o1", "WEB-9 o1"),
+      shell("s1", "WEB-1 one", { pullRequests: [pr(10, "created"), pr(11, "stack")] }),
+      shell("o2", "WEB-7 o2"),
+    ];
+    const answers = Object.fromEntries(["WEB-8", "WEB-2", "WEB-9", "WEB-1", "WEB-7"].map((k) => [k, issue("x", m)]));
+    const tree = buildL(raws, answers);
+    expect(titles(tree[0].branches[0].threads)).toEqual(["WEB-8 o0", "WEB-1 one", "WEB-2 two", "WEB-9 o1", "WEB-7 o2"]);
+  });
+
+  test("the T3 tree stays free of Linear fields", () => {
+    const tree = build([shell("a", "SHOP-1 x")], {}, { linearOf: () => issue("x") });
+    expect(tree[0].linear).toBeUndefined();
+    expect(tree[0].branches[0].threads[0].t3Project).toBeUndefined();
   });
 });

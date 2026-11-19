@@ -2,6 +2,8 @@ import { ago } from "../page/format.ts";
 /** The tree rules: visibility, placement, stack order and status. Pure, so `bun test` covers it. */
 import {
   NO_KEY,
+  NO_MILESTONE,
+  NO_PROJECT,
   REVIEWS,
   type Branch,
   type Detail,
@@ -13,6 +15,8 @@ import {
 } from "../shared/tree.ts";
 import type { Project, Thread } from "./t3.ts";
 
+/** Review threads sit in Reviews, whatever their key. */
+const isReview = (t: { title: string }) => t.title.startsWith("Review #");
 const KEY = /\b[A-Z][A-Z0-9]+-\d+\b/;
 const STACK_SOURCES = new Set(["created", "stack", "agent"]);
 
@@ -174,8 +178,9 @@ export function computeStacks(threads: Thread[]): Stack[] {
 const newest = (a: string | null, b: string | null): string | null =>
   a && b ? (Date.parse(a) >= Date.parse(b) ? a : b) : (a ?? b);
 
-export function buildTree(input: BuildInput): Branch[] {
-  const { projects, spawnerOf, environmentId, settled, nest, now } = input;
+/** The visible threads as nodes, with their stacks and spawner lookups. Shared by both trees. */
+function prepare(input: BuildInput) {
+  const { spawnerOf, environmentId, settled, now } = input;
   const watched = new Set((input.labels ?? []).map((l) => l.toLowerCase()));
   const labelsFor = (t: Thread, p: Thread["prs"][number]): Label[] =>
     t.settledAt || watched.size === 0
@@ -234,6 +239,28 @@ export function buildTree(input: BuildInput): Branch[] {
     return null;
   };
 
+  /** Sets `launchedBy` unless the node nests under its spawner. */
+  const markLaunched = (n: Node) => {
+    const sp = spawnerOf(n.id);
+    const spawner = sp ? all.get(sp) : undefined;
+    if (spawner && !nodes.get(spawner.id)?.children.includes(n))
+      n.detail.launchedBy = { title: spawner.title || spawner.id, href: hrefOf(environmentId, spawner.id) };
+  };
+
+  return { visible, stacks, stackIdOf, nodes, visibleSpawner, markLaunched };
+}
+
+/** The creation key of a node is the oldest of its own and its nested threads'. Sorts children on the way. */
+const settle = (n: Node): string => {
+  for (const c of n.children as Node[]) n.first = [n.first, settle(c)].toSorted()[0]!;
+  (n.children as Node[]).sort(byFirst);
+  return n.first;
+};
+
+export function buildTree(input: BuildInput): Branch[] {
+  const { projects, nest } = input;
+  const { visible, stacks, stackIdOf, nodes, visibleSpawner, markLaunched } = prepare(input);
+
   const groups = new Map<string, Map<string, Group>>();
   const addTo = (projectId: string, key: string, n: Node) => {
     const g = groups.get(projectId) ?? new Map<string, Group>();
@@ -244,12 +271,10 @@ export function buildTree(input: BuildInput): Branch[] {
   };
   for (const n of nodes.values()) {
     const { t } = n;
-    const sp = spawnerOf(t.id);
-    const spawner = sp ? all.get(sp) : undefined;
     /** A stack outranks lineage: keyless mates share one group, so the stack keeps its rail. */
     const si = stackIdOf.get(t.id);
     const stackKey = si === undefined ? null : `PR stack #${stacks[si].order[0]}`;
-    if (t.title.startsWith("Review #")) addTo(t.projectId, REVIEWS, n);
+    if (isReview(t)) addTo(t.projectId, REVIEWS, n);
     else if (n.key) addTo(t.projectId, n.key, n);
     else if (stackKey) addTo(t.projectId, stackKey, n);
     else {
@@ -257,16 +282,8 @@ export function buildTree(input: BuildInput): Branch[] {
       if (vs && visible.get(vs)!.projectId === t.projectId) nodes.get(vs)!.children.push(n);
       else addTo(t.projectId, NO_KEY, n);
     }
-    if (spawner && !nodes.get(spawner.id)?.children.includes(n))
-      n.detail.launchedBy = { title: spawner.title || spawner.id, href: hrefOf(environmentId, spawner.id) };
+    markLaunched(n);
   }
-
-  /** The creation key of a node is the oldest of its own and its nested threads'. Sorts children on the way. */
-  const settle = (n: Node): string => {
-    for (const c of n.children as Node[]) n.first = [n.first, settle(c)].toSorted()[0]!;
-    (n.children as Node[]).sort(byFirst);
-    return n.first;
-  };
 
   const out: { branch: Branch; first: string }[] = [];
   for (const [projectId, gmap] of groups) {
@@ -316,19 +333,7 @@ export function buildTree(input: BuildInput): Branch[] {
         const stack = g.key === NO_KEY ? undefined : railOf(g);
         return { id: gid(g.key), label: g.key, ...(stack && { stack }), branches: [], threads: g.nodes.map(clean) };
       }
-      const byKey = new Map<string, Node[]>();
-      for (const n of g.nodes) byKey.set(n.key ?? NO_KEY, [...(byKey.get(n.key ?? NO_KEY) ?? []), n]);
-      return {
-        id: gid(REVIEWS),
-        label: REVIEWS,
-        threads: [],
-        branches: [...byKey].map(([k, ns]) => ({
-          id: `${gid(REVIEWS)}:${k}`,
-          label: k,
-          branches: [],
-          threads: ns.map(clean),
-        })),
-      };
+      return { id: gid(REVIEWS), label: REVIEWS, threads: [], branches: reviewGroups(g.nodes, gid(REVIEWS)) };
     });
     const project = projects.get(projectId);
     out.push({
@@ -344,6 +349,135 @@ export function buildTree(input: BuildInput): Branch[] {
   }
   return out.toSorted(byFirst).map((o) => o.branch);
 }
+
+/** Nodes by creation. Stack mates follow the oldest of them, in stack order. */
+const stackAdjacent = (nodes: Node[], stackIdOf: Map<string, number>): Node[] => {
+  const sorted = nodes.toSorted(byFirst);
+  const placed = new Set<Node>();
+  return sorted.flatMap((n) => {
+    if (placed.has(n)) return [];
+    const si = stackIdOf.get(n.id);
+    const mates =
+      si === undefined
+        ? [n]
+        : sorted
+            .filter((m) => stackIdOf.get(m.id) === si)
+            .toSorted((a, b) => (a.stack?.pos ?? Infinity) - (b.stack?.pos ?? Infinity));
+    mates.forEach((m) => placed.add(m));
+    return mates;
+  });
+};
+
+type Milestone = { id: string; label: string; date: string | null; none: boolean; nodes: Node[] };
+
+/** Linear project, then milestone, then thread. Fallback groups follow the projects. */
+export function buildLinearTree(input: BuildInput): Branch[] {
+  const { projects, nest } = input;
+  const { stackIdOf, nodes, visibleSpawner, markLaunched } = prepare(input);
+
+  const byProject = new Map<string, { name: string; url: string; milestones: Map<string, Milestone> }>();
+  const reviews: Node[] = [];
+  const noProject: Node[] = [];
+  const loose: Node[] = [];
+  /** A stack stays whole where its lowest member with a key goes. */
+  const placer = new Map<number, Node>();
+  const byPos = (a: Node, b: Node) => (a.stack?.pos ?? Infinity) - (b.stack?.pos ?? Infinity) || byFirst(a, b);
+  for (const n of [...nodes.values()].toSorted(byPos)) {
+    const si = stackIdOf.get(n.id);
+    if (si !== undefined && n.key && !isReview(n) && !placer.has(si)) placer.set(si, n);
+  }
+  for (const n of nodes.values()) {
+    const { t } = n;
+    n.t3Project = { id: t.projectId, label: projects.get(t.projectId)?.title ?? t.projectId };
+    const si = stackIdOf.get(t.id);
+    const by = si === undefined ? n : placer.get(si);
+    const lp = by?.linear?.project;
+    if (isReview(n)) reviews.push(n);
+    else if (by?.key) {
+      if (!lp) noProject.push(n);
+      else {
+        const p = byProject.get(lp.id) ?? { name: lp.name, url: lp.url, milestones: new Map() };
+        byProject.set(lp.id, p);
+        const m = by.linear?.milestone;
+        const id = m ? `lm:${m.id}` : `lm:${lp.id}:none`;
+        const entry = p.milestones.get(id) ?? {
+          id,
+          label: m?.name ?? NO_MILESTONE,
+          date: m?.targetDate ?? null,
+          none: !m,
+          nodes: [],
+        };
+        p.milestones.set(id, entry);
+        entry.nodes.push(n);
+      }
+    } else {
+      const vs = nest && !stackIdOf.has(t.id) ? visibleSpawner(t.id) : null;
+      const spawner = vs ? nodes.get(vs)! : null;
+      if (spawner && !spawner.key && !isReview(spawner)) spawner.children.push(n);
+      else loose.push(n);
+    }
+    markLaunched(n);
+  }
+
+  /** Settles nested threads, then orders the group. */
+  const place = (ns: Node[]) => {
+    ns.forEach(settle);
+    return stackAdjacent(ns, stackIdOf);
+  };
+  const oldest = (ns: Node[]) => ns.toSorted(byFirst)[0].first;
+  const rank = (m: Milestone) => (m.none ? 2 : m.date ? 0 : 1);
+
+  for (const p of byProject.values()) for (const m of p.milestones.values()) m.nodes = place(m.nodes);
+
+  const top = [...byProject]
+    .map(([id, p]) => {
+      const ms = [...p.milestones.values()];
+      const first = (m: Milestone) => oldest(m.nodes);
+      ms.sort(
+        (a, b) => rank(a) - rank(b) || (a.date ?? "").localeCompare(b.date ?? "") || first(a).localeCompare(first(b)),
+      );
+      return {
+        first: oldest(ms.flatMap((m) => m.nodes)),
+        branch: {
+          id: `lp:${id}`,
+          label: p.name,
+          linear: { url: p.url },
+          threads: [],
+          branches: ms.map((m): Branch => ({
+            id: m.id,
+            label: m.label,
+            linear: { date: m.date },
+            branches: [],
+            threads: m.nodes.map(clean),
+          })),
+        } satisfies Branch,
+      };
+    })
+    .toSorted(byFirst)
+    .map((o) => o.branch);
+
+  const fallback = (id: string, label: string, ns: Node[]): Branch[] =>
+    ns.length ? [{ id, label, linear: {}, branches: [], threads: place(ns).map(clean) }] : [];
+  const reviewBranch: Branch[] = reviews.length
+    ? [
+        {
+          id: "lf:reviews",
+          label: REVIEWS,
+          linear: {},
+          threads: [],
+          branches: reviewGroups(place(reviews), "lf:reviews"),
+        },
+      ]
+    : [];
+  return [...top, ...reviewBranch, ...fallback("lf:none", NO_PROJECT, noProject), ...fallback("lf:loose", "", loose)];
+}
+
+/** Review threads in one subgroup per issue key, in first-seen order. */
+const reviewGroups = (nodes: Node[], id: string): Branch[] => {
+  const byKey = new Map<string, Node[]>();
+  for (const n of nodes) byKey.set(n.key ?? NO_KEY, [...(byKey.get(n.key ?? NO_KEY) ?? []), n]);
+  return [...byKey].map(([k, ns]) => ({ id: `${id}:${k}`, label: k, branches: [], threads: ns.map(clean) }));
+};
 
 /** Strips the build-only fields before the node goes on the wire. */
 const clean = ({ t: _t, first: _f, children, ...n }: Node): ThreadNode => ({

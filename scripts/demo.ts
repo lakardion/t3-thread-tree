@@ -2,7 +2,7 @@
 import index from "../src/page/index.html";
 import upNext from "../src/page/up-next.html";
 import { briefInput, briefService, lastMessageRoutes, type Outcome } from "../src/server/brief.ts";
-import { buildTree } from "../src/server/build-tree.ts";
+import { buildLinearTree, buildTree } from "../src/server/build-tree.ts";
 import { findRoutes } from "../src/server/find.ts";
 import { cliPath, type CliRun, sendService } from "../src/server/send.ts";
 import { settledPage, settledRoutes, settledSignature } from "../src/server/settled.ts";
@@ -271,7 +271,7 @@ const LINEAR: Record<string, LinearIssue> = {
 };
 
 const projectsFor = (settled: boolean, nest = false, labels: string[] = [], wantsLinear = false) =>
-  buildTree({
+  (wantsLinear ? buildLinearTree : buildTree)({
     threads,
     projects,
     spawnerOf: (id) => spawners[id],
@@ -288,7 +288,7 @@ const treeFor = (nest: boolean, labels: string[], wantsLinear: boolean) =>
     conn: process.env.CONN ?? "up",
     lastUpdate: new Date(now).toISOString(),
     linear: { workspace: "acme", teams: ["SHOP"] },
-    linearKey: "ok",
+    linearKey: process.env.LINEAR_KEY ?? "ok",
     settled: settledSignature(threads),
     projects: projectsFor(false, nest, labels, wantsLinear),
   });
