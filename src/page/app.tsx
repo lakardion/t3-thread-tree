@@ -2058,6 +2058,7 @@ function FlatRow({
         />
       </Section>
     );
+  if (i.key === LINEAR_LOOSE) return <li aria-hidden className="mx-2 my-1 border-t" />;
   return (
     <MotionHook>
       {(ref) => (

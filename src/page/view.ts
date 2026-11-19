@@ -4,6 +4,7 @@ import {
   flat,
   isFallback,
   isLinearReviews,
+  LINEAR_LOOSE,
   NO_KEY,
   REVIEWS,
   type Branch,
@@ -201,7 +202,7 @@ export function sections(units: FlatUnit[], snoozed = true): Section[] {
 
 /**
  * The Linear sections of an arranged Linear tree, in tree order: one per milestone, labelled "Project · Milestone",
- * and one per fallback group. A section takes the units whose thread sits in it, in unit order. Empty sections drop.
+ * and one per fallback group, the loose keyless threads last. A section takes the units whose thread sits in it, in unit order. Empty sections drop.
  */
 export function linearSections(projects: Branch[], units: FlatUnit[]): Section[] {
   return projects
@@ -236,7 +237,7 @@ export const folds = (t: ThreadNode, statuses: Status[]): boolean => flat(t).eve
  * The flat sequence: the units, or section headers each followed by its units. A header counts the threads that
  * match its section, subthreads included. Context rows are not counted. A Linear section has no statuses: it counts
  * all threads of its units. A section in `shut` keeps its header and count and gives no units. `shut` does nothing
- * without grouping.
+ * without grouping. The Linear loose section has no label: the page shows no header for it, and it never shuts.
  */
 export const sequence = (
   units: FlatUnit[],
@@ -247,7 +248,7 @@ export const sequence = (
 ): FlatItem[] =>
   groupBy !== "none"
     ? groupSections(units, groupBy, snoozed, projects).flatMap((s): FlatItem[] => {
-        const open = !shut.has(s.key);
+        const open = s.key === LINEAR_LOOSE || !shut.has(s.key);
         return [
           {
             kind: "section",

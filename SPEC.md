@@ -209,8 +209,9 @@ With `linear=1`, the server builds `projects` with `buildLinearTree`, not `build
 
 The flat view has a third "Group by" choice, "Linear project", saved under `thread-tree:group` as `"linear"`. It is disabled unless the key state is `ok`. While the key state is `no-key`, the flat view shows "None" and the saved choice stays. While the choice is on, the page sends `linear=1` and the sections follow the Linear tree.
 
-- **Sections.** One fold section per milestone, headed "Project · Milestone" or "Project · No milestone", with the target date in muted text beside the name. Then Reviews, "No project" and "No issue key". The order is the order of the Linear tree. A section with no thread is hidden.
-- **Units.** A thread goes to the section that holds it. Reviews keeps one section for all its key subgroups. The Linear tree has no PR stack, so each thread is one row.
+- **Sections.** One fold section per milestone, headed "Project · Milestone" or "Project · No milestone", with the target date in muted text beside the name. Then Reviews and "No project". The order is the order of the Linear tree. A section with no thread is hidden.
+- **Loose rows.** Keyless threads come last, as rows with no header and no fold, below a thin divider line. They drag among themselves.
+- **Units.** A thread goes to the section that holds it. Reviews keeps one section for all its key subgroups. The Linear tree keeps a PR stack in one milestone, so all its threads are in one section. Each thread is one row.
 - **Count.** A header counts all threads of its rows, subthreads and settled threads included, as the Tree does.
 - **No context rows.** A section groups by place, not by status. So no row shows muted, no PR stack folds, and no "+N other threads" button shows.
 - **Rows.** A row shows its issue key as a chip and its T3 project as a muted chip, as in the Tree. It shows no Linear project column.

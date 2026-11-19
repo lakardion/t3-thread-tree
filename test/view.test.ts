@@ -20,7 +20,15 @@ import {
   sortTree,
   vtName,
 } from "../src/page/view.ts";
-import { allThreads, NO_KEY, REVIEWS, type Branch, type Status, type ThreadNode } from "../src/shared/tree.ts";
+import {
+  allThreads,
+  LINEAR_LOOSE,
+  NO_KEY,
+  REVIEWS,
+  type Branch,
+  type Status,
+  type ThreadNode,
+} from "../src/shared/tree.ts";
 
 const T = (n: number) => `2026-11-12T12:00:${String(n).padStart(2, "0")}.000Z`;
 const thread = (
@@ -555,13 +563,13 @@ describe("Linear flat", () => {
       "Reviews",
     ),
     named(lin(branch("lf:none", [thread("n1", 3), thread("n2", 7)])), "No project"),
-    named(lin(branch("lf:nokey", [thread("k1", 4)])), "No issue key"),
+    named(lin(branch(LINEAR_LOOSE, [thread("k1", 4)])), ""),
   ];
   const seq = (shut: string[] = [], units = flatten(tree())) => sequence(units, "linear", new Set(shut), true, tree());
   const heads = (items: ReturnType<typeof seq>) =>
-    items.flatMap((i) => (i.kind === "section" ? [`${i.label}|${i.count}|${i.date ?? ""}`] : []));
+    items.flatMap((i) => (i.kind === "section" && i.label ? [`${i.label}|${i.count}|${i.date ?? ""}`] : []));
 
-  test("flatten keeps the No project and No issue key threads", () => {
+  test("flatten keeps the No project and keyless threads", () => {
     expect(ids(flatten(tree()))).toEqual(["t:old", "t:new", "t:x", "t:r1", "t:r2", "t:n1", "t:n2", "t:k1"]);
   });
 
@@ -576,13 +584,14 @@ describe("Linear flat", () => {
   });
 
   test("sequence makes one section per milestone and fallback, in tree order, with counts and date", () => {
-    expect(heads(seq())).toEqual([
-      "P · M1|3|2026-12-04",
-      "P · No milestone|1|",
-      "Reviews|2|",
-      "No project|2|",
-      "No issue key|1|",
-    ]);
+    expect(heads(seq())).toEqual(["P · M1|3|2026-12-04", "P · No milestone|1|", "Reviews|2|", "No project|2|"]);
+  });
+
+  test("keyless threads come last as loose rows: a section with no label that a fold never shuts", () => {
+    const items = seq([LINEAR_LOOSE]);
+    expect(items.at(-2)).toMatchObject({ kind: "section", key: LINEAR_LOOSE, label: "", open: true });
+    expect(ids(items).at(-1)).toBe("t:k1");
+    expect(flatLists(items).get(sectionList(LINEAR_LOOSE))).toEqual(["t:k1"]);
   });
 
   test("sequence keeps the unit order inside a section, for manual and updated sort", () => {
