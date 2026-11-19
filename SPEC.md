@@ -434,6 +434,15 @@ The server runs the check in the debounced tree push, so the 30 s tick also driv
 - **Cache:** a `Map` in memory by key. Each key gets one try and no retry: a model error, a timeout or an invalid answer stays `failed` until the key changes. A server restart runs the calls again. A new pick does not change the cached entries.
 - **Delivery:** each thread node holds `catchUp?: { state: "queued" | "running" | "done" | "failed", did?, ask?, options?, doneLike?, question?, pick }` while an entry of its current key exists. `did`, `ask`, `options` and `doneLike` are set in `done`. `question` is set in `done` and `failed`: it is the last question of the last message, cut like the "What's next" reason (`questionOf` of its 4000-character tail), or `null` when the thread has no message. Each state change sends the tree again.
 
+### Row line
+
+A thread row in the tree and the flat list shows a **Catch-up line** under the title when the thread has a `catchUp` and its status is needs input, plan ready, your turn or failed. Other rows do not change. The status text switch does not hide the line.
+
+- **Done with an ask:** what the thread did, then "Asks:" in the status color, then the ask, then each option as a small chip.
+- **Queued or running:** a skeleton bar.
+- **No clear ask or failed call:** a dashed tag, "No clear ask" or "Catch-up failed", then the first line of the raw question in italic and quotes. With no raw question, what the thread did, else the tag alone.
+- **Trust:** a tooltip on the line shows the last message of the thread. The page loads it only when the tooltip opens.
+
 ## Send message
 
 Source: map [send-message](.wayfinder/send-message/map.md), decisions at charting and grilling.
