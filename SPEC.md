@@ -268,7 +268,9 @@ Source: map [whats-next](.wayfinder/whats-next/map.md), tickets [How do we run c
 
 A click on "What's next" runs a local agent CLI on a cheap model. Code makes the obvious **Actions** (`answer`, `fix`, `merge`). The CLI returns the rest of the **Next-step brief**: up to 7 ranked **Actions** over the threads that code did not cover. The CLI runs with its tools off and writes nothing to T3.
 
-### CLIs
+### Model picks
+
+One shared module, `src/server/model.ts`, runs every Model pick: a feature gives its guide, input and JSON schema.
 
 | Pick     | Label        | Model                        | Effort                             |
 | -------- | ------------ | ---------------------------- | ---------------------------------- |
@@ -304,7 +306,7 @@ A click on "What's next" runs a local agent CLI on a cheap model. Code makes the
 
 ### Brief shape
 
-The JSON schema for both CLIs (strict: every property required, `additionalProperties: false` at each level):
+The JSON schema for both Model picks (strict: every property required, `additionalProperties: false` at each level):
 
 ```ts
 type Action = {
@@ -338,7 +340,7 @@ type BriefState =
   | { status: "idle" }
   | {
       status: "running";
-      cli: Cli;
+      cli: ModelPick;
       threadCount: number;
       startedAt: string;
       actions: BriefAction[];
@@ -348,7 +350,7 @@ type BriefState =
     }
   | {
       status: "done";
-      cli: Cli;
+      cli: ModelPick;
       generatedAt: string;
       rulesOnly?: true;
       actions: BriefAction[];
@@ -358,7 +360,7 @@ type BriefState =
     }
   | {
       status: "failed";
-      cli: Cli;
+      cli: ModelPick;
       error: string;
       stderrTail: string;
       actions: BriefAction[];
@@ -370,8 +372,8 @@ type BriefState =
 
 `BriefAction` is `Action` after the id filter. The state type lives in a shared module, like `Tree`. In `running` and `failed`, `actions` and `titles` hold the code actions only, so the page can show them at once and after a model failure. In `done`, `actions` holds the code actions first, then the model actions. `rulesOnly` is set when no thread went to the model, so the actions come from code alone. `statuses` and `since` are the snapshot of the tree at brief time. The server takes it when the run starts, rules-only runs too. `statuses` holds the status of every thread that went into the brief, code threads and model threads. `since` holds the `since` of each `answer` thread. A new run replaces the last brief only when it ends; a cancel returns to the state before the run.
 
-- `GET /brief/clis`: the offered CLIs, as `{ id, label }[]`.
-- `POST /brief/run` with `{ cli }`: starts a run. 409 when a run is active, 400 for a CLI that is not offered.
+- `GET /models`: the offered Model picks, as `{ id, label }[]`.
+- `POST /brief/run` with `{ cli }`: starts a run. 409 when a run is active, 400 for a model that is not offered.
 - `POST /brief/cancel`: sends SIGTERM to the active run.
 - `GET /events` also sends the brief state as a named SSE event `brief`: once when the connection opens, and again at each change. The page does not poll.
 - **Error text:** the CLI error message (Claude `result`, Codex `turn.failed` message), or "timed out" or the parse error. `stderrTail` is the last 2 KB of stderr.

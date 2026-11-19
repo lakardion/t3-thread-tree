@@ -8,13 +8,13 @@ import {
   digestOf,
   filterAnswer,
   lastMessageRoutes,
-  parseAnswer,
+  runBrief,
   questionOf,
-  stdinFor,
   tailOf,
   type InputThread,
   type Outcome,
 } from "../src/server/brief.ts";
+import type { ModelResult } from "../src/server/model.ts";
 import type { BriefAction } from "../src/shared/brief.ts";
 import type { Branch, ThreadNode } from "../src/shared/tree.ts";
 
@@ -304,60 +304,6 @@ describe("lastMessageRoutes", () => {
   });
 });
 
-describe("stdinFor", () => {
-  const threads = [
-    { id: "A", ref: "t1", title: "a", digest: "t1 line" },
-    { id: "B", ref: "t2", title: "b", digest: "t2 line" },
-  ];
-  test("claude gets the blocks only; an empty list gives No threads.", () => {
-    expect(stdinFor("claude", "G", threads)).toBe("t1 line\n\nt2 line");
-    expect(stdinFor("claude", "G", [])).toBe("No threads.");
-  });
-  test("codex gets the guide, a Threads heading and the blocks", () => {
-    expect(stdinFor("codex", "G", threads)).toBe("G\n\n## Threads\n\nt1 line\n\nt2 line");
-  });
-});
-
-describe("parseAnswer", () => {
-  const ok = { actions: [] };
-  test("claude: reads structured_output from the result line, after a tag line", () => {
-    const out = `[claude-code:tag] {"x":1}\n${JSON.stringify({ type: "result", is_error: false, structured_output: ok })}\n`;
-    expect(parseAnswer("claude", out)).toEqual({ answer: ok });
-  });
-  test("claude: is_error gives the result text", () => {
-    const out = JSON.stringify({ type: "result", is_error: true, result: "There's an issue with the selected model" });
-    expect(parseAnswer("claude", out)).toEqual({ error: "There's an issue with the selected model" });
-  });
-  test("codex: parses the last agent_message", () => {
-    const out = [
-      { type: "thread.started" },
-      { type: "item.completed", item: { type: "agent_message", text: "{}" } },
-      { type: "item.completed", item: { type: "agent_message", text: JSON.stringify(ok) } },
-      { type: "turn.completed" },
-    ]
-      .map((l) => JSON.stringify(l))
-      .join("\n");
-    expect(parseAnswer("codex", out)).toEqual({ answer: ok });
-  });
-  test("codex: turn.failed gives its message", () => {
-    const out = [
-      { type: "error", message: "e" },
-      { type: "turn.failed", error: { message: "model not supported" } },
-    ]
-      .map((l) => JSON.stringify(l))
-      .join("\n");
-    expect(parseAnswer("codex", out)).toEqual({ error: "model not supported" });
-  });
-  test("codex: bad JSON is a parse error", () => {
-    const out = JSON.stringify({ type: "item.completed", item: { type: "agent_message", text: "{nope" } });
-    expect(parseAnswer("codex", out)).toMatchObject({ error: expect.stringContaining("Cannot parse the answer") });
-  });
-  test("no answer at all gives null", () => {
-    expect(parseAnswer("claude", "")).toBeNull();
-    expect(parseAnswer("codex", "")).toBeNull();
-  });
-});
-
 describe("filterAnswer", () => {
   const threads = [
     { id: "A", ref: "t1", title: "Alpha" },
@@ -397,7 +343,7 @@ describe("filterAnswer", () => {
 });
 
 describe("briefService", () => {
-  const CLIS = Promise.resolve([{ id: "claude" as const, label: "Claude Haiku" }]);
+  const CLIS = () => Promise.resolve([{ id: "claude" as const, label: "Claude Haiku" }]);
   const post = (path: string, body?: unknown) =>
     new Request(`http://x${path}`, { method: "POST", body: body === undefined ? undefined : JSON.stringify(body) });
   const done = (actions: BriefAction[] = [], titles: Record<string, string> = {}): Outcome => ({
@@ -422,7 +368,7 @@ describe("briefService", () => {
     let finish!: (o: Outcome | null) => void;
     const changes: string[] = [];
     const svc = briefService({
-      clis: CLIS,
+      offered: CLIS,
       input: () => ({ code, threads: [{ id: "o" } as InputThread] }),
       onChange: () => changes.push(svc.state().status),
       run: () => {
@@ -445,11 +391,16 @@ describe("briefService", () => {
     expect(changes).toEqual(["running", "done"]);
   });
 
-  test("refuses a CLI that is not offered", async () => {
+  test("refuses a model that is not offered", async () => {
     const { svc } = setup();
     expect((await svc.routes["/brief/run"].POST(post("/brief/run", { cli: "codex" }))).status).toBe(400);
     expect((await svc.routes["/brief/run"].POST(post("/brief/run"))).status).toBe(400);
     expect(svc.state().status).toBe("idle");
+  });
+
+  test("GET /models returns what offered gives", async () => {
+    const { svc } = setup();
+    expect(await (await svc.routes["/models"].GET()).json()).toEqual(await CLIS());
   });
 
   test("a cancel returns to the state before the run", async () => {
@@ -466,7 +417,7 @@ describe("briefService", () => {
 
   test("a thrown run becomes a failed state", async () => {
     const svc = briefService({
-      clis: CLIS,
+      offered: CLIS,
       input: () => ({ code: CODE, threads: [{ id: "A" } as InputThread] }),
       onChange: () => {},
       run: () => ({ done: Promise.reject(new Error("boom")), cancel: () => {} }),
@@ -502,7 +453,7 @@ describe("briefService", () => {
   test("with no model threads the run is skipped and the state is done with the code actions", async () => {
     let ran = false;
     const svc = briefService({
-      clis: CLIS,
+      offered: CLIS,
       input: () => ({ code: CODE, threads: [] }),
       onChange: () => {},
       run: () => ((ran = true), { done: new Promise(() => {}), cancel: () => {} }),
@@ -510,5 +461,41 @@ describe("briefService", () => {
     expect((await svc.routes["/brief/run"].POST(post("/brief/run", { cli: "claude" }))).status).toBe(202);
     expect(ran).toBe(false);
     expect(svc.state()).toMatchObject({ status: "done", cli: "claude", rulesOnly: true, ...CODE });
+  });
+});
+
+describe("runBrief", () => {
+  const threads = [{ id: "A", ref: "t1", title: "Alpha", digest: "t1 line" }];
+  function fakeRun(res: ModelResult | null) {
+    return { done: Promise.resolve(res), cancel() {} };
+  }
+  const fake = (res: ModelResult | null) => () => fakeRun(res);
+  test("passes the guide, the digests and the schema to the model", async () => {
+    let job: { guide: string; input: string; schema: object } | undefined;
+    await runBrief((_p, j) => ((job = j), fakeRun({ answer: { actions: [] } })), "claude", threads).done;
+    expect(job?.input).toBe("t1 line");
+    expect(job?.schema).toHaveProperty("required", ["actions"]);
+  });
+  test("an answer is filtered into done", async () => {
+    const answer = { actions: [{ kind: "review", title: "t", reason: "r", threadIds: ["t1", "X"], prompt: null }] };
+    const out = await runBrief(fake({ answer }), "claude", threads, () => new Date(0)).done;
+    expect(out).toEqual({
+      status: "done",
+      cli: "claude",
+      generatedAt: "1970-01-01T00:00:00.000Z",
+      actions: [{ kind: "review", title: "t", reason: "r", threadIds: ["A"], prompt: null }],
+      titles: { A: "Alpha" },
+    });
+  });
+  test("an error becomes failed with the detail as stderrTail", async () => {
+    const out = await runBrief(fake({ error: "e", detail: "d" }), "codex", threads).done;
+    expect(out).toEqual({ status: "failed", cli: "codex", error: "e", stderrTail: "d", actions: [], titles: {} });
+  });
+  test("null after cancel stays null", async () => {
+    expect(await runBrief(fake(null), "claude", threads).done).toBeNull();
+  });
+  test("a bad answer is failed", async () => {
+    const out = await runBrief(fake({ answer: {} }), "claude", threads).done;
+    expect(out).toMatchObject({ status: "failed", error: "The answer has no actions list.", stderrTail: "" });
   });
 });

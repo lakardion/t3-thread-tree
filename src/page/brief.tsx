@@ -40,7 +40,7 @@ import {
   type ActionKind,
   type BriefAction,
   type BriefState,
-  type Cli,
+  type ModelPick,
   type Mark,
   type Snapshot,
 } from "../shared/brief.ts";
@@ -55,7 +55,7 @@ import { markKey } from "./send.ts";
 import { StartDialog } from "./start-dialog.tsx";
 import { StatusIcon } from "./status-icon.tsx";
 
-export type Offered = { id: Cli; label: string }[];
+export type Offered = { id: ModelPick; label: string }[];
 
 /** Each kind takes the colours of one status token. */
 const KIND: Record<ActionKind, { label: string; token: string }> = {
@@ -69,8 +69,8 @@ const KIND: Record<ActionKind, { label: string; token: string }> = {
 
 export function BriefControls(p: {
   clis: Offered | null;
-  cli: Cli | undefined;
-  setCli: (c: Cli) => void;
+  cli: ModelPick | undefined;
+  setCli: (c: ModelPick) => void;
   running: boolean;
   run: () => void;
 }) {
@@ -110,7 +110,7 @@ export function BriefControls(p: {
         </DropdownMenuTrigger>
         <DropdownMenuContent align="end" className="min-w-44">
           <DropdownMenuLabel className="text-xs text-muted-foreground">Model</DropdownMenuLabel>
-          <DropdownMenuRadioGroup value={p.cli ?? ""} onValueChange={(v) => p.setCli(v as Cli)}>
+          <DropdownMenuRadioGroup value={p.cli ?? ""} onValueChange={(v) => p.setCli(v as ModelPick)}>
             {p.clis?.map((c) => (
               <DropdownMenuRadioItem key={c.id} value={c.id}>
                 <ProviderIcon cli={c.id} className="size-3.5" />

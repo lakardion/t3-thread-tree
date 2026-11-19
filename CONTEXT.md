@@ -99,6 +99,10 @@ _Avoid_: stale, outdated
 The compact text form of one thread that the model reads for a **Next-step brief**: one line of facts, then the tail of the last assistant message. Code builds it on each click.
 _Avoid_: summary, snapshot
 
+**Model pick**:
+The way the app runs a model, chosen by the user: Claude Haiku or Codex Luna. The **Next-step brief** is its first user.
+_Avoid_: CLI, provider, engine
+
 **Send**:
 One message from the page to one thread, through the `t3` CLI, after the user confirms it in the send dialog. A busy thread gets it as its next turn. Nothing is interrupted.
 _Avoid_: post, push, dispatch
