@@ -185,18 +185,18 @@ describe("arrange on a Linear tree", () => {
     lin(branch("lp:b", [], [lin(branch("lm:m3", [thread("t5")]))])),
     lin(branch("lf:reviews", [], [branch("lf:reviews:K", [thread("t6")]), branch("lf:reviews:L", [thread("t7")])])),
     lin(branch("lf:none", [thread("t8"), thread("t9")])),
-    lin(branch("lf:nokey", [thread("t10")])),
+    lin(branch("lf:loose", [thread("t10")])),
   ];
 
   test("a stored project order applies, and fallbacks stay last in server order", () => {
     const { projects, lists } = arrange(sampleL(), { projects: ["lp:b", "lp:a"] });
-    expect(ids(projects)).toEqual(["lp:b", "lp:a", "lf:reviews", "lf:none", "lf:nokey"]);
+    expect(ids(projects)).toEqual(["lp:b", "lp:a", "lf:reviews", "lf:none", "lf:loose"]);
     expect(lists.get("projects")).toEqual(["lp:b", "lp:a"]);
   });
 
   test("a stored project order cannot move a fallback", () => {
     const { projects } = arrange(sampleL(), { projects: ["lf:none", "lp:b", "lp:a"] });
-    expect(ids(projects)).toEqual(["lp:b", "lp:a", "lf:reviews", "lf:none", "lf:nokey"]);
+    expect(ids(projects)).toEqual(["lp:b", "lp:a", "lf:reviews", "lf:none", "lf:loose"]);
   });
 
   test("milestones keep server order and have no list", () => {

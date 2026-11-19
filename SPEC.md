@@ -99,7 +99,7 @@ The header holds the title, the filter ("All", "Needs you"), "Open next", "Focus
 
 The tree choice of the "Group by" menu is saved under `thread-tree:tree-group` (`"t3"` or `"linear"`). "Linear project" is disabled unless the key state is `ok`, and the tree shows T3 projects while the state is `no-key`. While the tree groups by Linear project and the key state is `rejected`, a banner reads "Linear rejected the API key." Its "Set the key" link opens the panel with the "Linear links" fold open. The tree keeps the last good data.
 
-With "Linear project", the page sends `linear=1` and shows the Linear tree (see "Linear grouping"). A Linear project header has the project icon, the name, a link to the Linear project and the thread count. A milestone header has the name, the target date in muted text ("Dec 4", read as UTC) and the count. A fallback group header has the name, the count and a neutral left edge. Reviews has its eye icon. A thread row shows its issue key as a chip and its T3 project as a muted chip (an icon only on a phone). Projects drag. Threads drag inside a milestone, in "No project" and in "No issue key". Milestones do not drag. The order of the Linear tree is saved under `thread-tree:order-linear`, apart from `thread-tree:order`. "Last updated" keeps the project and milestone order and sorts only the threads. The Start dialog lists T3 projects. Find and Up next show the T3 project of a thread.
+With "Linear project", the page sends `linear=1` and shows the Linear tree (see "Linear grouping"). A Linear project header has the project icon, the name, a link to the Linear project and the thread count. A milestone header has the name, the target date in muted text ("Dec 4", read as UTC) and the count. A fallback group header has the name, the count and a neutral left edge. Reviews has its eye icon. A thread row shows its issue key as a chip and its T3 project as a muted chip (an icon only on a phone). Projects drag. Keyless threads show as loose rows after the groups, with no header and no fold. Threads drag inside a milestone, in "No project" and in the loose rows. Milestones do not drag. The order of the Linear tree is saved under `thread-tree:order-linear`, apart from `thread-tree:order`. "Last updated" keeps the project and milestone order and sorts only the threads. The Start dialog lists T3 projects. Find and Up next show the T3 project of a thread.
 
 A pending request wins over snooze. A snoozed thread with a pending request shows as needs input.
 
@@ -173,20 +173,22 @@ The server knows the Linear project and milestone of each issue key in the tree.
 
 With `linear=1`, the server builds `projects` with `buildLinearTree`, not `buildTree`. The levels are Linear project, then milestone, then thread. There is no T3 project level and no issue-key level. Each thread node carries `t3Project` (`{ id, label }`), the T3 project of the thread, also on nested threads. Other users of the tree (the brief, `/find`, `/settled`) never send `linear=1`.
 
+- **Stack placement.** A PR stack stays whole. The lowest stack member that has an issue key and is not a review places the full stack. Each other stack member that is not a review uses the key of that member in the rules below. A stack with no keyed member places as a keyless stack.
 - **Placement.** The first match wins.
   1. A title that starts with `Review #`: Reviews.
   2. A key with a Linear project: that project, then its milestone, else "No milestone".
   3. A key with no Linear project, no answer yet, or an issue that Linear does not know: "No project".
-  4. No key, in a PR stack: "No issue key". A stack outranks the spawner.
-  5. No key, not in a stack, launch nesting on, and the visible spawner has no key and is not a review: a child of the spawner. The spawner sits in "No issue key", at the top or nested.
-  6. Else "No issue key".
-- **Launched by.** A thread that has a spawner and does not nest under it gets `launchedBy`, as in the T3 tree. A keyless thread whose spawner has a key goes to "No issue key", not under the spawner.
-- **Fallback groups.** After the Linear projects, in this order: Reviews, "No project", "No issue key". A group with no thread is left out. Reviews keeps one subgroup per issue key, in first-seen order.
+  4. No key, in a PR stack: a loose row. A stack outranks the spawner.
+  5. No key, not in a stack, launch nesting on, and the visible spawner has no key and is not a review: a child of the spawner. The spawner is a loose row, or nested.
+  6. Else a loose row.
+- **Launched by.** A thread that has a spawner and does not nest under it gets `launchedBy`, as in the T3 tree. A keyless thread whose spawner has a key is a loose row, not under the spawner.
+- **Fallback groups.** After the Linear projects, in this order: Reviews, "No project", then the loose rows. A group with no thread is left out. Reviews keeps one subgroup per issue key, in first-seen order.
+- **Loose rows.** Keyless threads have no group header. They come last, as rows with no fold. The server sends them in one branch with the id `lf:loose` and an empty label.
 - **Order.**
   - Projects sort by their oldest thread.
   - Milestones sort by target date, soonest first, then milestones with no date, then "No milestone". The oldest thread breaks a tie.
   - Threads in a group sort by creation time. Nested threads sort the same way.
-  - Stack mates in one group sit next to each other in stack order, at the place of the oldest mate. Stack mates in different groups split.
+  - Stack mates sit next to each other in stack order, at the place of the oldest mate.
   - Each thread sorts and drags alone inside its milestone. So "Last updated" and a drag in the page can separate stack mates.
 - **Headers.** Project: name, project URL, thread count. Milestone: name, target date, count. Fallback group: name and count. The server sends no count.
 - **Ids.** These ids feed the fold store and the order lists. They never clash with the T3 ids `p:` and `g:`.
@@ -199,7 +201,7 @@ With `linear=1`, the server builds `projects` with `buildLinearTree`, not `build
   | Reviews              | `lf:reviews`          |
   | Reviews key subgroup | `lf:reviews:<key>`    |
   | No project           | `lf:none`             |
-  | No issue key         | `lf:nokey`            |
+  | Loose rows           | `lf:loose`            |
 
 - **Payload shape.** Every top-level branch and every milestone branch has `linear`. A project has `linear.url`. A milestone has `linear.date` (`"YYYY-MM-DD"` or `null`). A fallback group has `linear: {}`. A branch of the T3 tree never has `linear`. A fallback group has an id that starts with `lf:`, so the page tells it from a project. Projects have milestone branches in `branches` and no `threads`. Milestones and fallback groups hold the threads. Reviews holds its key subgroups in `branches`.
 
