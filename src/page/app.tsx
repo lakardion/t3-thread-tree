@@ -1433,13 +1433,37 @@ function DetailBlock({ t }: { t: ThreadNode }) {
   );
 }
 
-/** The phrase beside the icon on rows that wait on the user, with the Wait; failed rows show the phrase only. */
-function WaitText({ t, now }: { t: ThreadNode; now: number }) {
-  if (!needsYou(t.status) && t.status !== "failed") return null;
+/** The status icon, with the Wait under it on rows that wait on the user. A fixed width keeps every row aligned. */
+function StatusCell({ t, now }: { t: ThreadNode; now: number }) {
+  const time = needsYou(t.status) && t.since ? ago(t.since, now) : null;
   return (
-    <span className={cn(STATUS[t.status].shape, "flex-none text-[12px] font-medium whitespace-nowrap")}>
-      <span className="in-data-[status-text=off]:hidden">{t.phrase} </span>
-      {needsYou(t.status) && t.since && <span className="font-mono tabular-nums">{ago(t.since, now)}</span>}
+    <span className="flex w-[30px] flex-none flex-col items-center justify-center gap-px">
+      <StatusIcon t={t} now={now} />
+      {time && (
+        <span
+          className={cn(
+            STATUS[t.status].shape,
+            "font-mono text-[10px] leading-[11px] font-semibold whitespace-nowrap tabular-nums",
+          )}
+        >
+          {time}
+        </span>
+      )}
+    </span>
+  );
+}
+
+/** The phrase of a row that waits on the user or failed, in a fixed column on every row; hidden by the status text setting. */
+function PhraseCell({ t }: { t: ThreadNode }) {
+  const shown = needsYou(t.status) || t.status === "failed";
+  return (
+    <span
+      className={cn(
+        STATUS[t.status].shape,
+        "w-[68px] flex-none truncate text-[12px] font-medium in-data-[status-text=off]:hidden",
+      )}
+    >
+      {shown && t.phrase}
     </span>
   );
 }
@@ -1557,8 +1581,8 @@ function ThreadRow({
           data-thread={t.id}
         >
           {!inStack && <DragHandle handleRef={handleRef} name={t.title || t.id} />}
-          <StatusIcon t={t} now={now} />
-          <WaitText t={t} now={now} />
+          <StatusCell t={t} now={now} />
+          <PhraseCell t={t} />
           {pulse > 0 && <span key={pulse} aria-hidden className={cn("row-pulse", STATUS[t.status].shape)} />}
           {project && <ProjectColumn b={project} />}
           {chip && (
