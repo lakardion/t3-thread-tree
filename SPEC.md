@@ -12,7 +12,7 @@ Terms are defined in [CONTEXT.md](CONTEXT.md). Each section links the ticket tha
 
 ## Runtime and stack
 
-Source: [How does the standalone app run, and on which stack?](.wayfinder/tickets/006-runtime-and-stack.md), research on branch `research/frontend-framework`.
+Source: [How does the standalone app run, and on which stack?](https://github.com/lakardion/t3-thread-tree/blob/7e5463c0b53fbc429f23a1d732ff5be4070d15e5/.wayfinder/tickets/006-runtime-and-stack.md), research on branch `research/frontend-framework`.
 
 - **Start:** one command, `bun start`, in the repo. It serves the page and the API on `http://127.0.0.1:4773`. The page uses relative URLs. The app stops when the terminal closes.
 - **Backend:** Bun 1.3 and TypeScript, with no framework.
@@ -24,7 +24,7 @@ Source: [How does the standalone app run, and on which stack?](.wayfinder/ticket
 
 ## Data source
 
-Source: [How can a local process read T3 thread data live?](.wayfinder/tickets/001-data-source-for-local-reader.md), research on branch `research/data-source`.
+Source: [How can a local process read T3 thread data live?](https://github.com/lakardion/t3-thread-tree/blob/7e5463c0b53fbc429f23a1d732ff5be4070d15e5/.wayfinder/tickets/001-data-source-for-local-reader.md), research on branch `research/data-source`.
 
 1. Read `~/.t3/userdata/server-runtime.json` to get `origin` (the port can change at each T3 start). Read `~/.t3/userdata/environment-id` to get the environment id for the deep links.
 2. Open `ws://127.0.0.1:<port>/ws?orchestrationProtocol=2` with the header `Authorization: Bearer <token>`.
@@ -52,7 +52,7 @@ Source: [How can a local process read T3 thread data live?](.wayfinder/tickets/0
 
 ## Launched-thread lineage
 
-Source: [Can the spawner of a launched thread be recovered?](.wayfinder/tickets/002-recover-launched-lineage.md), [Standalone webapp or a view inside T3 Code?](.wayfinder/tickets/003-standalone-or-in-t3.md), research on branch `research/launched-lineage`.
+Source: [Can the spawner of a launched thread be recovered?](https://github.com/lakardion/t3-thread-tree/blob/7e5463c0b53fbc429f23a1d732ff5be4070d15e5/.wayfinder/tickets/002-recover-launched-lineage.md), [Standalone webapp or a view inside T3 Code?](https://github.com/lakardion/t3-thread-tree/blob/7e5463c0b53fbc429f23a1d732ff5be4070d15e5/.wayfinder/tickets/003-standalone-or-in-t3.md), research on branch `research/launched-lineage`.
 
 A thread that an agent starts with `t3_thread_launch`, `create_threads` or `delegate_task` has no native parent. Its **spawner** is found in `statev2.sqlite`:
 
@@ -63,7 +63,7 @@ Run the lookup when the backend first sees a top-level thread whose id contains 
 
 ## Tree rules
 
-Source: [Tree model rules for the nested tree](.wayfinder/tickets/004-tree-model-rules.md), changed by [Rough tree UI on a real snapshot](.wayfinder/tickets/005-rough-tree-ui.md).
+Source: [Tree model rules for the nested tree](https://github.com/lakardion/t3-thread-tree/blob/7e5463c0b53fbc429f23a1d732ff5be4070d15e5/.wayfinder/tickets/004-tree-model-rules.md), changed by [Rough tree UI on a real snapshot](https://github.com/lakardion/t3-thread-tree/blob/7e5463c0b53fbc429f23a1d732ff5be4070d15e5/.wayfinder/tickets/005-rough-tree-ui.md).
 
 A **top-level thread** has no native `parentThreadId`. A **subagent** has `relationshipToParent: subagent`. The backend applies these rules and builds the whole tree.
 
@@ -219,7 +219,7 @@ The flat view has a third "Group by" choice, "Linear project", saved under `thre
 
 ## Label pills
 
-Source: map [pr-label-pill](.wayfinder/pr-label-pill/map.md), tickets [Where do PR labels come from, and how fresh are they?](.wayfinder/pr-label-pill/tickets/001-label-data-source.md) (research on branch `research/pr-label-source`), [How does a Label pill read in the row?](.wayfinder/pr-label-pill/tickets/002-label-pill-look.md) (prototype on branch `prototype/label-pill-look`), [How does the Watched labels section in Settings work?](.wayfinder/pr-label-pill/tickets/003-watched-labels-setting.md).
+Source: map [pr-label-pill](https://github.com/lakardion/t3-thread-tree/blob/7e5463c0b53fbc429f23a1d732ff5be4070d15e5/.wayfinder/pr-label-pill/map.md), tickets [Where do PR labels come from, and how fresh are they?](https://github.com/lakardion/t3-thread-tree/blob/7e5463c0b53fbc429f23a1d732ff5be4070d15e5/.wayfinder/pr-label-pill/tickets/001-label-data-source.md) (research on branch `research/pr-label-source`), [How does a Label pill read in the row?](https://github.com/lakardion/t3-thread-tree/blob/7e5463c0b53fbc429f23a1d732ff5be4070d15e5/.wayfinder/pr-label-pill/tickets/002-label-pill-look.md) (prototype on branch `prototype/label-pill-look`), [How does the Watched labels section in Settings work?](https://github.com/lakardion/t3-thread-tree/blob/7e5463c0b53fbc429f23a1d732ff5be4070d15e5/.wayfinder/pr-label-pill/tickets/003-watched-labels-setting.md).
 
 A Tree or Flat row shows a **Label pill** when one of its PRs has a **Watched label**. The user sets the Watched labels in Settings. The list is empty by default, so no pill shows until the user adds a name.
 
@@ -264,7 +264,7 @@ The shell stream has no labels. The server reads them with the T3 RPC `pullReque
 
 ## "What's next" and the Next-step brief
 
-Source: map [whats-next](.wayfinder/whats-next/map.md), tickets [How do we run claude and codex headless, with no tools, on a cheap model?](.wayfinder/whats-next/tickets/01-headless-cli-invocation.md) (research on branch `research/headless-cli`), [Where does the backend read the last assistant message of a thread?](.wayfinder/whats-next/tickets/02-thread-messages-source.md) (research on branch `research/thread-messages`), [What makes a good next step, and what is the shape of a brief?](.wayfinder/whats-next/tickets/03-ranking-rules-and-brief-shape.md), [Where and how does the brief show on the page?](.wayfinder/whats-next/tickets/04-brief-layout-prototype.md) (prototype on branch `prototype/brief-layout`).
+Source: map [whats-next](https://github.com/lakardion/t3-thread-tree/blob/7e5463c0b53fbc429f23a1d732ff5be4070d15e5/.wayfinder/whats-next/map.md), tickets [How do we run claude and codex headless, with no tools, on a cheap model?](https://github.com/lakardion/t3-thread-tree/blob/7e5463c0b53fbc429f23a1d732ff5be4070d15e5/.wayfinder/whats-next/tickets/01-headless-cli-invocation.md) (research on branch `research/headless-cli`), [Where does the backend read the last assistant message of a thread?](https://github.com/lakardion/t3-thread-tree/blob/7e5463c0b53fbc429f23a1d732ff5be4070d15e5/.wayfinder/whats-next/tickets/02-thread-messages-source.md) (research on branch `research/thread-messages`), [What makes a good next step, and what is the shape of a brief?](https://github.com/lakardion/t3-thread-tree/blob/7e5463c0b53fbc429f23a1d732ff5be4070d15e5/.wayfinder/whats-next/tickets/03-ranking-rules-and-brief-shape.md), [Where and how does the brief show on the page?](https://github.com/lakardion/t3-thread-tree/blob/7e5463c0b53fbc429f23a1d732ff5be4070d15e5/.wayfinder/whats-next/tickets/04-brief-layout-prototype.md) (prototype on branch `prototype/brief-layout`).
 
 A click on "What's next" runs a local agent CLI on a cheap model. Code makes the obvious **Actions** (`answer`, `fix`, `merge`). The CLI returns the rest of the **Next-step brief**: up to 7 ranked **Actions** over the threads that code did not cover. The CLI runs with its tools off and writes nothing to T3.
 
@@ -396,7 +396,7 @@ The full look is in ticket 04. In short:
 
 ## Send message
 
-Source: map [send-message](.wayfinder/send-message/map.md), decisions at charting and grilling.
+Source: map [send-message](https://github.com/lakardion/t3-thread-tree/blob/7e5463c0b53fbc429f23a1d732ff5be4070d15e5/.wayfinder/send-message/map.md), decisions at charting and grilling.
 
 The user can send a message to one thread, and start a thread in a project, from the page. Each action opens a dialog, and nothing goes to T3 until the user confirms.
 
@@ -529,11 +529,11 @@ Tickets 02 and 05 each run one smoke test against the real T3, with `bun start`:
 
 ### README
 
-[Ticket 02](.wayfinder/send-message/tickets/02-send-endpoints.md) adds `T3_BIN` to Setup in `README.md` and the demo knobs to Run. [Ticket 03](.wayfinder/send-message/tickets/03-brief-send.md), [ticket 04](.wayfinder/send-message/tickets/04-row-send.md) and [ticket 05](.wayfinder/send-message/tickets/05-step-start-thread.md) add their "What you get" entries.
+[Ticket 02](https://github.com/lakardion/t3-thread-tree/blob/7e5463c0b53fbc429f23a1d732ff5be4070d15e5/.wayfinder/send-message/tickets/02-send-endpoints.md) adds `T3_BIN` to Setup in `README.md` and the demo knobs to Run. [Ticket 03](https://github.com/lakardion/t3-thread-tree/blob/7e5463c0b53fbc429f23a1d732ff5be4070d15e5/.wayfinder/send-message/tickets/03-brief-send.md), [ticket 04](https://github.com/lakardion/t3-thread-tree/blob/7e5463c0b53fbc429f23a1d732ff5be4070d15e5/.wayfinder/send-message/tickets/04-row-send.md) and [ticket 05](https://github.com/lakardion/t3-thread-tree/blob/7e5463c0b53fbc429f23a1d732ff5be4070d15e5/.wayfinder/send-message/tickets/05-step-start-thread.md) add their "What you get" entries.
 
 ## Desktop app
 
-Source: map [desktop](.wayfinder/desktop/map.md), tickets [What does the Bun app use, and how does T3 Code ship its desktop app?](.wayfinder/desktop/tickets/01-port-inventory.md) (research in `.wayfinder/desktop/research/01-port-inventory.md`), [Which shell and runtime?](.wayfinder/desktop/tickets/02-shell-and-runtime.md), [What do the badge, the notifications and the menu-bar entry do?](.wayfinder/desktop/tickets/03-desktop-features.md), [How is the app built, run in dev and installed?](.wayfinder/desktop/tickets/04-build-and-install.md).
+Source: map [desktop](https://github.com/lakardion/t3-thread-tree/blob/7e5463c0b53fbc429f23a1d732ff5be4070d15e5/.wayfinder/desktop/map.md), tickets [What does the Bun app use, and how does T3 Code ship its desktop app?](https://github.com/lakardion/t3-thread-tree/blob/7e5463c0b53fbc429f23a1d732ff5be4070d15e5/.wayfinder/desktop/tickets/01-port-inventory.md) (research in [01-port-inventory.md](https://github.com/lakardion/t3-thread-tree/blob/7e5463c0b53fbc429f23a1d732ff5be4070d15e5/.wayfinder/desktop/research/01-port-inventory.md)), [Which shell and runtime?](https://github.com/lakardion/t3-thread-tree/blob/7e5463c0b53fbc429f23a1d732ff5be4070d15e5/.wayfinder/desktop/tickets/02-shell-and-runtime.md), [What do the badge, the notifications and the menu-bar entry do?](https://github.com/lakardion/t3-thread-tree/blob/7e5463c0b53fbc429f23a1d732ff5be4070d15e5/.wayfinder/desktop/tickets/03-desktop-features.md), [How is the app built, run in dev and installed?](https://github.com/lakardion/t3-thread-tree/blob/7e5463c0b53fbc429f23a1d732ff5be4070d15e5/.wayfinder/desktop/tickets/04-build-and-install.md).
 
 The **Desktop app** runs the tree in its own macOS window, with a Dock icon, a Dock badge, notifications and a menu-bar entry. It changes where the app runs, not what it does to T3. The browser version (`bun start`) stays as it is.
 
