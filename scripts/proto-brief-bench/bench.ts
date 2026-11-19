@@ -16,11 +16,15 @@ const inputs = slices.map(([name, a, b]) => ({
   threads: live.slice(a, b).map((t, i) => ({ ...t, ref: `t${i + 1}`, digest: t.digest.replace(/^t\d+/, `t${i + 1}`) })),
 }));
 
+const saved = JSON.parse(readFileSync(join(dir, "results-haiku.json"), "utf8")).inputs;
+if (JSON.stringify(saved) !== JSON.stringify(inputs)) throw new Error("inputs differ from results-haiku.json");
+
 const KINDS = ["review", "clean-up", "unblock"];
-function check(ans: any, refs: Set<string>) {
+const REF = /\bt\d+\b/;
+export function check(ans: any, refs: Set<string>) {
   const errs: string[] = [];
-  const acts = ans?.actions;
-  if (!Array.isArray(acts)) return { valid: false, errs: ["no actions"], invented: [] as string[] };
+  const acts = ans?.actions?.map((a: any) => ({ ...a, prompt: a.prompt ?? null }));
+  if (!Array.isArray(acts)) return { valid: false, errs: ["no actions"], invented: [] as string[], refInText: 0, nullString: 0, empty: false };
   if (acts.length > 7) errs.push("more than 7");
   for (const a of acts) {
     for (const k of ["kind", "title", "reason", "threadIds", "prompt"]) if (!(k in a)) errs.push(`missing ${k}`);
@@ -29,13 +33,29 @@ function check(ans: any, refs: Set<string>) {
     if (!(a.prompt === null || typeof a.prompt === "string")) errs.push("prompt type");
   }
   const invented = acts.flatMap((a: any) => (a.threadIds ?? []).filter((r: string) => !refs.has(r)));
-  return { valid: errs.length === 0, errs, invented };
+  const refInText = acts.filter((a: any) => REF.test(a.title) || REF.test(a.reason)).length;
+  const nullString = acts.filter((a: any) => typeof a.prompt === "string" && a.prompt.trim().toLowerCase() === "null").length;
+  return { valid: errs.length === 0, errs, invented, refInText, nullString, empty: acts.length === 0 };
 }
 
 const cwd = join(dir, "cwd");
 mkdirSync(cwd, { recursive: true });
 const schemaFile = join(dir, "schema.json");
-writeFileSync(schemaFile, JSON.stringify(SCHEMA));
+if (MODELS.some((m) => m !== "apple")) writeFileSync(schemaFile, JSON.stringify(SCHEMA));
+const guideFile = join(dir, "guide.md");
+writeFileSync(guideFile, guide);
+const appleSchema = join(import.meta.dir, "schema-apple.json");
+
+/** Spawns the Swift helper; exit 2 GenerationError, 3 unavailable. */
+async function apple(threads: InputThread[]) {
+  const p = Bun.spawn([join(dir, "brief-apple"), appleSchema, guideFile], { stdin: Buffer.from(stdinFor("claude", guide, threads)), stdout: "pipe", stderr: "pipe", timeout: 120_000 });
+  const [out, stderr] = [await new Response(p.stdout).text(), await new Response(p.stderr).text()];
+  const exit = await p.exited;
+  const num = (k: string) => Number(stderr.match(new RegExp(`${k}=(\\d+)`))?.[1] ?? NaN);
+  let answer = null, error = exit === 0 ? null : stderr.trim().split("\n").at(-1)!;
+  if (exit === 0) try { answer = JSON.parse(out); } catch (e) { error = `parse: ${(e as Error).message}`; }
+  return { answer, error, exit, stderr, promptTokens: num("sum"), tokens: { instructions: num("instructions"), prompt: num("prompt"), schema: num("schema") }, completionTokens: num("output"), genMs: num("genms"), finish: null };
+}
 
 async function haiku(threads: InputThread[]) {
   const p = Bun.spawn(cliArgs("claude", guide, schemaFile, cwd), { cwd, stdin: Buffer.from(stdinFor("claude", guide, threads)), stdout: "pipe", stderr: "pipe" });
@@ -68,13 +88,13 @@ async function local(model: string, threads: InputThread[]) {
 const unload = (model: string) => fetch("http://localhost:11434/api/generate", { method: "POST", body: JSON.stringify({ model, keep_alive: 0 }) });
 
 const results: any[] = [];
-for (const model of MODELS) {
-  if (model !== "haiku") for (const m of MODELS.filter((x) => x !== "haiku")) await unload(m);
+if (import.meta.main) for (const model of MODELS) {
+  if (model !== "haiku" && model !== "apple") for (const m of MODELS.filter((x) => x !== "haiku")) await unload(m);
   let first = true;
   for (let round = 0; round < ROUNDS; round++)
-    for (const inp of inputs) {
+    for (const inp of inputs.filter((i) => !process.env.ONLY || i.name === process.env.ONLY)) {
       const t0 = performance.now();
-      const r = model === "haiku" ? await haiku(inp.threads) : await local(model, inp.threads);
+      const r = model === "haiku" ? await haiku(inp.threads) : model === "apple" ? await apple(inp.threads) : await local(model, inp.threads);
       const ms = Math.round(performance.now() - t0);
       const c = check(r.answer, new Set(inp.threads.map((t) => t.ref)));
       const row = { model, input: inp.name, round, cold: model !== "haiku" && first, ms, ...r, ...c };
