@@ -1,3 +1,7 @@
+import { Ghost } from "lucide-react";
+
+import { NO_PROJECT } from "../shared/tree.ts";
+
 /** The project monogram and color rule of T3 Code, so a project has the same icon here as in T3. */
 const normalize = (projectName: string) => projectName.normalize("NFKC").trim();
 
@@ -67,6 +71,7 @@ const HEX: Record<(typeof PROJECT_ICON_COLORS)[number], string> = {
 };
 
 export function ProjectIcon({ name }: { name: string }) {
+  if (name === NO_PROJECT) return <Ghost aria-hidden className="size-4 shrink-0 text-muted-foreground" />;
   const text = projectMonogram(name);
   return (
     <span aria-hidden className="inline-flex size-4 shrink-0 items-center justify-center">

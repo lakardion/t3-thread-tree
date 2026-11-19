@@ -205,6 +205,7 @@ const SETTLED_KEY = "thread-tree:settled";
 const SNOOZED_KEY = "thread-tree:snoozed";
 const SECTIONS_KEY = "thread-tree:sections";
 const NEST_KEY = "thread-tree:nest";
+const PROJECT_NAMES_KEY = "thread-tree:project-names";
 const FILTER_KEY = "thread-tree:filter";
 const THEME_KEY = "thread-tree:theme";
 const CLI_KEY = "thread-tree:cli";
@@ -987,6 +988,8 @@ type PanelProps = LinearProps &
     setSnoozed: (v: boolean) => void;
     nest: boolean;
     setNest: (v: boolean) => void;
+    projectNames: boolean;
+    setProjectNames: (v: boolean) => void;
     canReset: boolean;
     resetOrder: () => void;
     theme: Theme;
@@ -1048,6 +1051,9 @@ function SettingsPanel(p: PanelProps) {
           </Row>
           <Row label="Nest launched threads" htmlFor="nest">
             <Switch id="nest" checked={p.nest} onCheckedChange={p.setNest} />
+          </Row>
+          <Row label="Show project names in rows" htmlFor="project-names">
+            <Switch id="project-names" checked={p.projectNames} onCheckedChange={p.setProjectNames} />
           </Row>
           <Row label="Drag-and-drop order">
             <Button variant="outline" size="sm" disabled={!p.canReset} onClick={p.resetOrder}>
@@ -1133,6 +1139,8 @@ const Details = createContext<{ open: Set<string>; toggle: (id: string) => void;
 /** Opens the send dialog for a thread. Null where rows cannot send. */
 const SendTo = createContext<{ t3cli: CliStatus | null; open: (id: string) => void } | null>(null);
 const NeedsOnly = createContext(false);
+/** Whether rows show the project name next to its icon. */
+const ProjectNames = createContext(true);
 /** The statuses of the status section that holds the row. Null outside one. */
 const Section = createContext<Status[] | null>(null);
 const Linear = createContext<Tree["linear"]>(null);
@@ -1523,6 +1531,7 @@ function ThreadRow({
   const now = useContext(Now);
   const { open, toggle, show } = useContext(Details);
   const section = useContext(Section);
+  const projectNames = useContext(ProjectNames);
   const dim = (useContext(NeedsOnly) && !needsYou(t.status)) || (section !== null && isContext(t, section));
   const linear = useContext(Linear);
   const sendTo = useContext(SendTo);
@@ -1564,7 +1573,7 @@ function ThreadRow({
           {t.t3Project && (
             <Badge variant="outline" className={cn(CHIP, "flex-none")} title={t.t3Project.label}>
               <ProjectIcon name={t.t3Project.label} />
-              <span className="max-[720px]:hidden">{t.t3Project.label}</span>
+              {projectNames && <span className="max-[720px]:hidden">{t.t3Project.label}</span>}
             </Badge>
           )}
           {review && <Eye className="size-3.5 flex-none text-review" aria-label="Review" />}
@@ -1683,12 +1692,18 @@ function ThreadRow({
 }
 
 /** The project icon and name of a flat row. Phone widths show the icon only. */
-const ProjectColumn = ({ b }: { b: Branch }) => (
-  <span className="flex w-32 flex-none items-center gap-1.5 max-[720px]:w-auto" title={b.repo ?? b.label}>
-    <ProjectIcon name={b.label} />
-    <span className="truncate text-xs text-muted-foreground max-[720px]:hidden">{b.label}</span>
-  </span>
-);
+const ProjectColumn = ({ b }: { b: Branch }) => {
+  const names = useContext(ProjectNames);
+  return (
+    <span
+      className={cn("flex flex-none items-center gap-1.5", names ? "w-32 max-[720px]:w-auto" : "w-auto")}
+      title={b.repo ?? b.label}
+    >
+      <ProjectIcon name={b.label} />
+      {names && <span className="truncate text-xs text-muted-foreground max-[720px]:hidden">{b.label}</span>}
+    </span>
+  );
+};
 
 const Chevron = ({ open }: { open: boolean }) => (
   <ChevronRight
@@ -2357,6 +2372,7 @@ function App() {
   const [settled, setSettled] = useState(load(SETTLED_KEY) === "1");
   const [snoozed, setSnoozed] = useState(load(SNOOZED_KEY) !== "0");
   const [nest, setNest] = useState(load(NEST_KEY) === "1");
+  const [projectNames, setProjectNames] = useState(load(PROJECT_NAMES_KEY) !== "0");
   const [needsOnly, setNeedsOnly] = useState(load(FILTER_KEY) === "needs");
   const [theme, setTheme] = useState<Theme>(() => THEMES.find((t) => t === load(THEME_KEY)) ?? "system");
   const [sortBy, setSortBy] = useState<SortBy>(() => (load(SORT_KEY) === "updated" ? "updated" : "manual"));
@@ -2510,6 +2526,9 @@ function App() {
   useEffect(() => {
     save(FILTER_KEY, needsOnly ? "needs" : "all");
   }, [needsOnly]);
+  useEffect(() => {
+    save(PROJECT_NAMES_KEY, projectNames ? "1" : "0");
+  }, [projectNames]);
   useEffect(() => {
     save(SNOOZED_KEY, snoozed ? "1" : "0");
   }, [snoozed]);
@@ -3063,69 +3082,71 @@ function App() {
             )}
             <Details value={details}>
               <NeedsOnly value={needsOnly}>
-                <Linear value={linear}>
-                  <Watched value={labels}>
-                    <Lists value={sortBy === "updated" ? NO_LISTS : view.lists}>
-                      <Now value={now}>
-                        <div
-                          className={!connecting && tree.conn !== "up" ? "grayscale" : ""}
-                          data-conn={!connecting && tree.conn !== "up" ? "down" : undefined}
-                        >
-                          {projects?.length === 0 && <p className="text-muted-foreground">No active threads.</p>}
-                          {projects ? (
-                            <Card className="gap-0 overflow-clip rounded-[12px] px-2 py-0 shadow-none">
-                              <ul key={listKey} className={cn("m-0 list-none p-0", layout === "flat" && "p-1")}>
-                                <SendTo value={sendToApi}>
-                                  {layout === "flat" ? (
-                                    <Presence key="flat" items={view.flat ?? []} keyOf={(i) => i.id}>
-                                      {(i) => (
-                                        <FlatRow
-                                          i={i}
-                                          corners={edgeCorners(view.flat ?? [], i)}
-                                          section={sectionOf(view.flat ?? [], i)}
-                                          closed={closed}
-                                          toggle={toggle}
-                                          fold={fold}
-                                          toggleSection={toggleSection}
-                                        />
-                                      )}
-                                    </Presence>
-                                  ) : (
-                                    <Presence key="tree" items={projects} keyOf={(p) => p.id}>
-                                      {(p) => <ProjectBlock b={p} closed={closed} toggle={toggle} fold={fold} />}
-                                    </Presence>
-                                  )}
-                                </SendTo>
-                              </ul>
-                            </Card>
-                          ) : (
-                            <>
-                              <p className="mb-2 text-sm text-muted-foreground" role="status">
-                                Connecting to T3…
-                              </p>
-                              <Card
-                                className="gap-0 rounded-[12px] py-0 shadow-none"
-                                aria-busy="true"
-                                aria-label="Loading threads"
-                              >
-                                <CardContent className="flex flex-col gap-0.5 p-1.5">
-                                  {[0, 1, 2].map((i) => (
-                                    <Skeleton key={i} className="h-9 rounded-[8px] motion-reduce:animate-none" />
-                                  ))}
-                                </CardContent>
+                <ProjectNames value={projectNames}>
+                  <Linear value={linear}>
+                    <Watched value={labels}>
+                      <Lists value={sortBy === "updated" ? NO_LISTS : view.lists}>
+                        <Now value={now}>
+                          <div
+                            className={!connecting && tree.conn !== "up" ? "grayscale" : ""}
+                            data-conn={!connecting && tree.conn !== "up" ? "down" : undefined}
+                          >
+                            {projects?.length === 0 && <p className="text-muted-foreground">No active threads.</p>}
+                            {projects ? (
+                              <Card className="gap-0 overflow-clip rounded-[12px] px-2 py-0 shadow-none">
+                                <ul key={listKey} className={cn("m-0 list-none p-0", layout === "flat" && "p-1")}>
+                                  <SendTo value={sendToApi}>
+                                    {layout === "flat" ? (
+                                      <Presence key="flat" items={view.flat ?? []} keyOf={(i) => i.id}>
+                                        {(i) => (
+                                          <FlatRow
+                                            i={i}
+                                            corners={edgeCorners(view.flat ?? [], i)}
+                                            section={sectionOf(view.flat ?? [], i)}
+                                            closed={closed}
+                                            toggle={toggle}
+                                            fold={fold}
+                                            toggleSection={toggleSection}
+                                          />
+                                        )}
+                                      </Presence>
+                                    ) : (
+                                      <Presence key="tree" items={projects} keyOf={(p) => p.id}>
+                                        {(p) => <ProjectBlock b={p} closed={closed} toggle={toggle} fold={fold} />}
+                                      </Presence>
+                                    )}
+                                  </SendTo>
+                                </ul>
                               </Card>
-                            </>
-                          )}
-                          {settled && projects && (
-                            <SendTo value={sendToApi}>
-                              <SettledList signature={tree?.settled ?? ""} scrollRoot={listRef} />
-                            </SendTo>
-                          )}
-                        </div>
-                      </Now>
-                    </Lists>
-                  </Watched>
-                </Linear>
+                            ) : (
+                              <>
+                                <p className="mb-2 text-sm text-muted-foreground" role="status">
+                                  Connecting to T3…
+                                </p>
+                                <Card
+                                  className="gap-0 rounded-[12px] py-0 shadow-none"
+                                  aria-busy="true"
+                                  aria-label="Loading threads"
+                                >
+                                  <CardContent className="flex flex-col gap-0.5 p-1.5">
+                                    {[0, 1, 2].map((i) => (
+                                      <Skeleton key={i} className="h-9 rounded-[8px] motion-reduce:animate-none" />
+                                    ))}
+                                  </CardContent>
+                                </Card>
+                              </>
+                            )}
+                            {settled && projects && (
+                              <SendTo value={sendToApi}>
+                                <SettledList signature={tree?.settled ?? ""} scrollRoot={listRef} />
+                              </SendTo>
+                            )}
+                          </div>
+                        </Now>
+                      </Lists>
+                    </Watched>
+                  </Linear>
+                </ProjectNames>
               </NeedsOnly>
             </Details>
           </DragDropProvider>
@@ -3145,6 +3166,8 @@ function App() {
           setSnoozed={setSnoozed}
           nest={nest}
           setNest={setNest}
+          projectNames={projectNames}
+          setProjectNames={setProjectNames}
           canReset={Object.keys(orders).length + Object.keys(linearOrders).length > 0}
           resetOrder={resetOrder}
           theme={theme}
