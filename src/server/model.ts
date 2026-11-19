@@ -1,23 +1,85 @@
 /** The shared model runner: run one Model pick with a feature's guide, input and JSON schema, and parse its answer. */
-import { existsSync, mkdirSync, writeFileSync } from "node:fs";
+import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 
+import * as v from "valibot";
+
 import type { ModelPick } from "../shared/brief.ts";
+import { writeToken } from "./token.ts";
 
 export type LocalConfig = { baseUrl: string; model: string };
 export type ModelResult = { answer: unknown } | { error: string; detail: string };
 export type ModelRun = { done: Promise<ModelResult | null>; cancel(): void };
 
-const CLIS: Record<ModelPick, { label: string; status: string[] }> = {
+type CliPick = Exclude<ModelPick, "local">;
+
+const LocalConfigSchema = v.object({
+  baseUrl: v.pipe(
+    v.string(),
+    v.trim(),
+    v.url(),
+    v.regex(/^https?:\/\//),
+    v.transform((u) => u.replace(/\/+$/, "")),
+  ),
+  model: v.pipe(v.string(), v.trim(), v.regex(/^[^\r\n]+$/)),
+});
+
+/** The saved Local model config, or `null` when the file is missing or invalid. */
+export function readLocalConfig(file: string): LocalConfig | null {
+  try {
+    const r = v.safeParse(LocalConfigSchema, JSON.parse(readFileSync(file, "utf8")));
+    return r.success ? r.output : null;
+  } catch {
+    return null;
+  }
+}
+
+export type LocalState = "unset" | "ok" | "missing" | "down";
+
+/** Asks the runtime for its model list. */
+export async function localState(c: LocalConfig | null): Promise<LocalState> {
+  if (!c) return "unset";
+  try {
+    const res = await fetch(`${c.baseUrl}/models`, { signal: AbortSignal.timeout(2000) });
+    if (!res.ok) return "down";
+    const body = (await res.json()) as { data?: { id?: string }[] };
+    return body.data?.some((m) => m.id === c.model) ? "ok" : "missing";
+  } catch {
+    return "down";
+  }
+}
+
+/** The `/local-model` routes: `GET` gives the config and its state, `PUT` saves a new config. JSON only, like `/token`. */
+export function localModelRoutes(file: string) {
+  const reply = async () => {
+    const config = readLocalConfig(file);
+    return Response.json({ config, state: await localState(config) });
+  };
+  return {
+    "/local-model": {
+      GET: reply,
+      PUT: async (req: Request) => {
+        if (!req.headers.get("content-type")?.startsWith("application/json"))
+          return new Response(null, { status: 415 });
+        const r = v.safeParse(LocalConfigSchema, await req.json().catch(() => null));
+        if (!r.success) return new Response("Not a valid config", { status: 400 });
+        writeToken(file, JSON.stringify(r.output));
+        return reply();
+      },
+    },
+  };
+}
+
+const CLIS: Record<CliPick, { label: string; status: string[] }> = {
   claude: { label: "Claude Haiku", status: ["claude", "auth", "status"] },
   codex: { label: "Codex Luna", status: ["codex", "login", "status"] },
 };
 
 /** Model picks on `PATH` and logged in. Free and local: no model call. */
-async function detect(): Promise<{ id: ModelPick; label: string }[]> {
+async function detect(): Promise<{ id: CliPick; label: string }[]> {
   const ok = await Promise.all(
-    (Object.keys(CLIS) as ModelPick[]).map(async (id) => {
+    (Object.keys(CLIS) as CliPick[]).map(async (id) => {
       try {
         return (await Bun.spawn(CLIS[id].status, { stdout: "ignore", stderr: "ignore" }).exited) === 0;
       } catch {
@@ -25,10 +87,10 @@ async function detect(): Promise<{ id: ModelPick; label: string }[]> {
       }
     }),
   );
-  return (Object.keys(CLIS) as ModelPick[]).filter((_, i) => ok[i]).map((id) => ({ id, label: CLIS[id].label }));
+  return (Object.keys(CLIS) as CliPick[]).filter((_, i) => ok[i]).map((id) => ({ id, label: CLIS[id].label }));
 }
 
-function cliArgs(pick: ModelPick, guide: string, schema: object, schemaFile: string, cwd: string): string[] {
+function cliArgs(pick: CliPick, guide: string, schema: object, schemaFile: string, cwd: string): string[] {
   if (pick === "claude")
     return [
       "claude",
@@ -87,7 +149,7 @@ function cliArgs(pick: ModelPick, guide: string, schema: object, schemaFile: str
 }
 
 /** Exported for tests. Codex has no system prompt flag, so the guide goes before the input on stdin. */
-export function stdinFor(pick: ModelPick, guide: string, input: string): string {
+export function stdinFor(pick: CliPick, guide: string, input: string): string {
   return pick === "claude" ? input : `${guide}\n\n## Input\n\n${input}`;
 }
 
@@ -113,7 +175,7 @@ const jsonLines = (out: string): JsonLine[] =>
   });
 
 /** Exported for tests. The answer object, or the CLI's own error text. */
-export function parseOutput(pick: ModelPick, stdout: string): { answer: unknown } | { error: string } | null {
+export function parseOutput(pick: CliPick, stdout: string): { answer: unknown } | { error: string } | null {
   const lines = jsonLines(stdout);
   if (pick === "claude") {
     const r = lines.findLast((l) => l.type === "result");
@@ -148,13 +210,74 @@ function workDirs(schema: object) {
   return { cwd, schemaFile: file };
 }
 
-/** `localConfig` is the config of the local adapter. */
-export function createModels(_o: { localConfig: () => LocalConfig | null }) {
+/** One Local model run. `null` config means the file was removed after the pick was offered. */
+function runLocal(
+  c: LocalConfig | null,
+  job: { guide: string; input: string; schema: object },
+  timeoutMs: number,
+): ModelRun {
+  const ctl = new AbortController();
+  let cancelled = false;
+  let timedOut = false;
+  const done = (async (): Promise<ModelResult | null> => {
+    if (!c) return { error: "The Local model is not set up.", detail: "" };
+    const timer = setTimeout(() => ((timedOut = true), ctl.abort()), timeoutMs);
+    try {
+      const res = await fetch(`${c.baseUrl}/chat/completions`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        signal: ctl.signal,
+        body: JSON.stringify({
+          model: c.model,
+          messages: [
+            { role: "system", content: job.guide },
+            { role: "user", content: job.input },
+          ],
+          response_format: { type: "json_schema", json_schema: { name: "answer", strict: true, schema: job.schema } },
+          reasoning_effort: "none",
+          keep_alive: "30m",
+          max_tokens: 2000,
+        }),
+      });
+      const text = await res.text();
+      const detail = text.slice(-TAIL);
+      if (res.status === 501)
+        return { error: "The runtime cannot enforce the schema. Install the Ollama app build.", detail };
+      if (res.status === 404) return { error: `Model ${c.model} is not in the runtime.`, detail };
+      if (!res.ok) return { error: `The local runtime answered HTTP ${res.status}.`, detail };
+      try {
+        const choice = JSON.parse(text).choices[0];
+        if (choice.finish_reason !== "length") return { answer: JSON.parse(choice.message.content) };
+      } catch {}
+      return { error: "The local model gave no valid brief.", detail };
+    } catch (e) {
+      if (cancelled) return null;
+      if (timedOut) return { error: "timed out", detail: "" };
+      return { error: `Local model not reachable at ${c.baseUrl}.`, detail: (e as Error).message };
+    } finally {
+      clearTimeout(timer);
+    }
+  })();
+  return {
+    done,
+    cancel() {
+      cancelled = true;
+      ctl.abort();
+    },
+  };
+}
+
+/** `localConfig` is the saved Local model config, read on each call. `timeoutMs` is the Local model run timeout. */
+export function createModels(o: { localConfig: () => LocalConfig | null; timeoutMs?: number }) {
   const detected = detect();
   return {
-    offered: () => detected,
+    offered: async (): Promise<{ id: ModelPick; label: string }[]> => {
+      const c = o.localConfig();
+      return [...(await detected), ...(c ? [{ id: "local" as const, label: `Local · ${c.model}` }] : [])];
+    },
     /** One run. `done` gives `null` after `cancel()`. */
     run(pick: ModelPick, job: { guide: string; input: string; schema: object }): ModelRun {
+      if (pick === "local") return runLocal(o.localConfig(), job, o.timeoutMs ?? TIMEOUT_MS);
       let cancelled = false;
       let proc: ReturnType<typeof Bun.spawn> | undefined;
       const done = (async (): Promise<ModelResult | null> => {

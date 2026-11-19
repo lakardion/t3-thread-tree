@@ -100,8 +100,12 @@ The compact text form of one thread that the model reads for a **Next-step brief
 _Avoid_: summary, snapshot
 
 **Model pick**:
-The way the app runs a model, chosen by the user: Claude Haiku or Codex Luna. The **Next-step brief** is its first user.
+The way the app runs a model, chosen by the user: Claude Haiku, Codex Luna or the **Local model**. The **Next-step brief** is its first user.
 _Avoid_: CLI, provider, engine
+
+**Local model**:
+A model that runs on the user's machine, in a runtime the user starts, and writes the **Next-step brief**. Thread text does not leave the machine. It is an opt-in **Model pick** next to the remote ones: the page never picks it on its own, and never falls back from it to a remote CLI.
+_Avoid_: offline model, on-device AI
 
 **Send**:
 One message from the page to one thread, through the `t3` CLI, after the user confirms it in the send dialog. A busy thread gets it as its next turn. Nothing is interrupted.

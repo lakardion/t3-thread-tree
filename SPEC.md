@@ -272,16 +272,21 @@ A click on "What's next" runs a local agent CLI on a cheap model. Code makes the
 
 One shared module, `src/server/model.ts`, runs every Model pick: a feature gives its guide, input and JSON schema.
 
-| Pick     | Label        | Model                        | Effort                             |
-| -------- | ------------ | ---------------------------- | ---------------------------------- |
-| `claude` | Claude Haiku | `haiku` (`claude-haiku-5-5`) | `--effort medium`                  |
-| `codex`  | Codex Luna   | `gpt-6-luna`                 | `-c model_reasoning_effort=medium` |
+| Pick     | Label           | Model                        | Effort                             |
+| -------- | --------------- | ---------------------------- | ---------------------------------- |
+| `claude` | Claude Haiku    | `haiku` (`claude-haiku-5-5`) | `--effort medium`                  |
+| `codex`  | Codex Luna      | `gpt-6-luna`                 | `-c model_reasoning_effort=medium` |
+| `local`  | Local · <model> | `model` from the config      | `reasoning_effort: "none"`         |
 
 - **Detection:** at start, run `claude auth status` and `codex login status`. Exit 0 means logged in. A CLI that is not on `PATH` (spawn gives `ENOENT`) or not logged in is not offered.
 - **Run:** use the tested command lines in ticket 01 (research file on branch `research/headless-cli`), with the prompt on stdin. Do not use `claude --bare`: it ignores the OAuth login. Codex runs with `-C` set to an empty temp folder and reads the schema from a temp file.
 - **Answer:** Claude: `structured_output` of the last JSON object on stdout; a failure is `is_error: true` or a non-zero exit. Codex: `JSON.parse` of the text of the last `item.completed` event with `item.type == "agent_message"`; a failure is `turn.failed` or a non-zero exit.
 - **Timeout:** 60 s, then SIGTERM. **Cancel:** SIGTERM to the process.
 - **One run at a time.** A second start while a run is active is refused.
+- **Local model config:** `{ baseUrl, model }` as JSON in `~/.config/t3-thread-tree/local-model`, the same folder as the Linear key (`LOCAL_MODEL_FILE` sets another path). No file means no Local model. `baseUrl` is an `http` or `https` URL, with no trailing `/`. `model` is one non-empty line. The server reads the file on each call.
+- **Local model offered:** `local` is the last pick, with the label `Local · <model>`, whenever a config is saved, whatever the runtime state. A down runtime or a missing model shows as the run error. The page never picks it on its own.
+- **Local model detection:** `GET /local-model` returns `{ config, state }`. It calls `GET <baseUrl>/models` with a 2 s timeout each time. `state` is `ok` when the list holds `model`, `missing` when the runtime answers but the list does not hold it, `down` when the call fails or is not 2xx, and `unset` with no config. `PUT /local-model` takes the JSON config (415 for other content, 400 for a bad config), saves it, then answers like `GET`.
+- **Local model call:** `POST <baseUrl>/chat/completions` with `model`, the guide as the system message, the input as the user message, `response_format` `{ type: "json_schema", json_schema: { name: "answer", strict: true, schema } }`, `reasoning_effort: "none"`, `keep_alive: "30m"` and `max_tokens: 2000`. The answer is `JSON.parse` of `choices[0].message.content`. Cancel and the 60 s timeout abort the request.
 
 ### Input
 
@@ -376,7 +381,7 @@ type BriefState =
 - `POST /brief/run` with `{ cli }`: starts a run. 409 when a run is active, 400 for a model that is not offered.
 - `POST /brief/cancel`: sends SIGTERM to the active run.
 - `GET /events` also sends the brief state as a named SSE event `brief`: once when the connection opens, and again at each change. The page does not poll.
-- **Error text:** the CLI error message (Claude `result`, Codex `turn.failed` message), or "timed out" or the parse error. `stderrTail` is the last 2 KB of stderr.
+- **Error text:** the CLI error message (Claude `result`, Codex `turn.failed` message), or "timed out" or the parse error. `stderrTail` is the last 2 KB of stderr. The Local model gives one of these texts, and `stderrTail` is the last 2 KB of the response body, or the fetch error message: "Local model not reachable at <baseUrl>." (the runtime is down), "Model <model> is not in the runtime." (HTTP 404), "The runtime cannot enforce the schema. Install the Ollama app build." (HTTP 501), "The local runtime answered HTTP <status>." (any other failure status), "The local model gave no valid brief." (`finish_reason` is `length`, or the answer is not JSON), "The Local model is not set up." (the config was removed after the pick was offered), or "timed out".
 
 `bun run demo` uses a stub runner. `BRIEF=failed`, `BRIEF=empty` and `BRIEF=rules` pick the failed, empty and rules-only states. It returns a sample of the model part after a short delay; code makes the other actions from the demo tree, so the page works with no CLI.
 

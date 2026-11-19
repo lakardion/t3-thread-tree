@@ -2,8 +2,9 @@ import { MorphIcon, type IconNode } from "morphicons/react";
 
 import type { ModelPick } from "../shared/brief.ts";
 
-/** Brand marks from Simple Icons (CC0). */
+/** Brand marks from Simple Icons (CC0), and a plain monitor glyph for the Local model. */
 const PATH: Record<ModelPick, string> = {
+  local: "M3 4h18a1 1 0 0 1 1 1v11a1 1 0 0 1-1 1h-7v2h3v2H7v-2h3v-2H3a1 1 0 0 1-1-1V5a1 1 0 0 1 1-1Z",
   claude:
     "M17.3041 3.541h-3.6718l6.696 16.918H24Zm-10.6082 0L0 20.459h3.7442l1.3693-3.5527h7.0052l1.3693 3.5528h3.7442L10.5363 3.5409Zm-.3712 10.2232 2.2914-5.9456 2.2914 5.9456Z",
   codex:
@@ -11,6 +12,7 @@ const PATH: Record<ModelPick, string> = {
 };
 
 const MORPH_ICON: Record<ModelPick, IconNode> = {
+  local: [["path", { d: PATH.local, fill: "currentColor", stroke: "none" }]],
   claude: [["path", { d: PATH.claude, fill: "currentColor", stroke: "none" }]],
   codex: [["path", { d: PATH.codex, fill: "currentColor", stroke: "none" }]],
 };
