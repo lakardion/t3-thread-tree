@@ -271,7 +271,7 @@ describe("order", () => {
     expect(titles(child(tree, "frontend", "No issue key").threads)).toEqual(["old root", "new root"]);
   });
 
-  test("lastRun is the later of run start and run end, and null when both are null", () => {
+  test("lastRun is the latest of activity run start, run start and run end, and null when all are null", () => {
     const run = (over: Record<string, unknown>) =>
       build([shell("a", "SHOP-1 a", over)])[0].branches[0].threads[0].lastRun;
     const early = "2026-11-12T07:00:00.000Z";
@@ -279,6 +279,9 @@ describe("order", () => {
     expect(run({ latestRunStartedAt: early, latestRunCompletedAt: late })).toBe(late);
     expect(run({ latestRunStartedAt: late, latestRunCompletedAt: early })).toBe(late);
     expect(run({ latestRunStartedAt: early })).toBe(early);
+    expect(run({ activityRunStartedAt: late })).toBe(late);
+    expect(run({ activityRunStartedAt: late, latestRunStartedAt: early, latestRunCompletedAt: early })).toBe(late);
+    expect(run({ activityRunStartedAt: early, latestRunCompletedAt: late })).toBe(late);
     expect(run({})).toBeNull();
   });
 

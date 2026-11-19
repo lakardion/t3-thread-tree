@@ -216,7 +216,7 @@ function prepare(input: BuildInput) {
       ...statusOf(t, now),
       raw: t.pending ? `${t.status} · pending ${t.pending.kind ?? "request"}` : t.status,
       updatedAt: t.updatedAt,
-      lastRun: newest(t.latestRunStartedAt, t.latestRunCompletedAt),
+      lastRun: newest(t.activityRunStartedAt, newest(t.latestRunStartedAt, t.latestRunCompletedAt)),
       settled: !!t.settledAt,
       input: t.pending?.blocking === false,
       snoozedUntil: t.snoozedUntil && Date.parse(t.snoozedUntil) > now ? t.snoozedUntil : null,
