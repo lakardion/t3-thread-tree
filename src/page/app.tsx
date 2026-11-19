@@ -1571,8 +1571,12 @@ function ThreadRow({
             </Badge>
           )}
           {t.t3Project && (
-            <Badge variant="outline" className={cn(CHIP, "flex-none")} title={t.t3Project.label}>
-              <ProjectIcon name={t.t3Project.label} />
+            <Badge
+              variant="outline"
+              className={cn(CHIP, "flex-none")}
+              title={projectNames ? t.t3Project.label : undefined}
+            >
+              <ProjectTip name={t.t3Project.label} />
               {projectNames && <span className="max-[720px]:hidden">{t.t3Project.label}</span>}
             </Badge>
           )}
@@ -1691,12 +1695,30 @@ function ThreadRow({
   return <Sortable sort={sort && { ...sort, thread: t.id }}>{render}</Sortable>;
 }
 
+/** The project icon, with the name as a tooltip while rows hide project names. */
+const ProjectTip = ({ name }: { name: string }) =>
+  useContext(ProjectNames) ? (
+    <ProjectIcon name={name} />
+  ) : (
+    <Tooltip>
+      <TooltipTrigger asChild>
+        <span className="flex flex-none">
+          <ProjectIcon name={name} />
+        </span>
+      </TooltipTrigger>
+      <TooltipContent>{name}</TooltipContent>
+    </Tooltip>
+  );
+
 /** The project icon and name of a flat row. Phone widths show the icon only. */
 const ProjectColumn = ({ b }: { b: Branch }) => {
   const names = useContext(ProjectNames);
   return (
-    <span className={cn("flex min-w-0 flex-none items-center gap-1.5", names && "max-w-32")} title={b.repo ?? b.label}>
-      <ProjectIcon name={b.label} />
+    <span
+      className={cn("flex min-w-0 flex-none items-center gap-1.5", names && "max-w-32")}
+      title={names ? (b.repo ?? b.label) : undefined}
+    >
+      <ProjectTip name={b.label} />
       {names && <span className="truncate text-xs text-muted-foreground max-[720px]:hidden">{b.label}</span>}
     </span>
   );
