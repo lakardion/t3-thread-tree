@@ -1433,17 +1433,17 @@ function DetailBlock({ t }: { t: ThreadNode }) {
   );
 }
 
-/** The status icon, with the Wait under it on rows that wait on the user. A fixed width keeps every row aligned. */
+/** The status icon. With status text hidden, a fixed width keeps every row aligned and the Wait sits under the icon. */
 function StatusCell({ t, now }: { t: ThreadNode; now: number }) {
   const time = needsYou(t.status) && t.since ? ago(t.since, now) : null;
   return (
-    <span className="flex w-[30px] flex-none flex-col items-center justify-center gap-px">
+    <span className="flex flex-none flex-col items-center justify-center gap-px in-data-[status-text=off]:w-[30px]">
       <StatusIcon t={t} now={now} />
       {time && (
         <span
           className={cn(
             STATUS[t.status].shape,
-            "font-mono text-[10px] leading-[11px] font-semibold whitespace-nowrap tabular-nums",
+            "hidden font-mono text-[10px] leading-[11px] font-semibold whitespace-nowrap tabular-nums in-data-[status-text=off]:inline",
           )}
         >
           {time}
@@ -1453,17 +1453,18 @@ function StatusCell({ t, now }: { t: ThreadNode; now: number }) {
   );
 }
 
-/** The phrase of a row that waits on the user or failed, in a fixed column on every row; hidden by the status text setting. */
-function PhraseCell({ t }: { t: ThreadNode }) {
-  const shown = needsYou(t.status) || t.status === "failed";
+/** The phrase beside the icon on rows that wait on the user, with the Wait; failed rows show the phrase only. Hidden by the status text setting. */
+function PhraseCell({ t, now }: { t: ThreadNode; now: number }) {
+  if (!needsYou(t.status) && t.status !== "failed") return null;
   return (
     <span
       className={cn(
         STATUS[t.status].shape,
-        "w-[68px] flex-none truncate text-[12px] font-medium in-data-[status-text=off]:hidden",
+        "flex-none text-[12px] font-medium whitespace-nowrap in-data-[status-text=off]:hidden",
       )}
     >
-      {shown && t.phrase}
+      {t.phrase}
+      {needsYou(t.status) && t.since && <span className="font-mono tabular-nums"> {ago(t.since, now)}</span>}
     </span>
   );
 }
@@ -1582,7 +1583,7 @@ function ThreadRow({
         >
           {!inStack && <DragHandle handleRef={handleRef} name={t.title || t.id} />}
           <StatusCell t={t} now={now} />
-          <PhraseCell t={t} />
+          <PhraseCell t={t} now={now} />
           {pulse > 0 && <span key={pulse} aria-hidden className={cn("row-pulse", STATUS[t.status].shape)} />}
           {project && <ProjectColumn b={project} />}
           {chip && (
