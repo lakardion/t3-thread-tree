@@ -379,18 +379,27 @@ export function buildLinearTree(input: BuildInput): Branch[] {
   const byProject = new Map<string, { name: string; url: string; milestones: Map<string, Milestone> }>();
   const reviews: Node[] = [];
   const noProject: Node[] = [];
-  const noKey: Node[] = [];
+  const loose: Node[] = [];
+  /** A stack stays whole where its lowest member with a key goes. */
+  const placer = new Map<number, Node>();
+  const byPos = (a: Node, b: Node) => (a.stack?.pos ?? Infinity) - (b.stack?.pos ?? Infinity) || byFirst(a, b);
+  for (const n of [...nodes.values()].toSorted(byPos)) {
+    const si = stackIdOf.get(n.id);
+    if (si !== undefined && n.key && !isReview(n) && !placer.has(si)) placer.set(si, n);
+  }
   for (const n of nodes.values()) {
     const { t } = n;
     n.t3Project = { id: t.projectId, label: projects.get(t.projectId)?.title ?? t.projectId };
-    const lp = n.linear?.project;
+    const si = stackIdOf.get(t.id);
+    const by = si === undefined ? n : placer.get(si);
+    const lp = by?.linear?.project;
     if (isReview(n)) reviews.push(n);
-    else if (n.key) {
+    else if (by?.key) {
       if (!lp) noProject.push(n);
       else {
         const p = byProject.get(lp.id) ?? { name: lp.name, url: lp.url, milestones: new Map() };
         byProject.set(lp.id, p);
-        const m = n.linear?.milestone;
+        const m = by.linear?.milestone;
         const id = m ? `lm:${m.id}` : `lm:${lp.id}:none`;
         const entry = p.milestones.get(id) ?? {
           id,
@@ -406,7 +415,7 @@ export function buildLinearTree(input: BuildInput): Branch[] {
       const vs = nest && !stackIdOf.has(t.id) ? visibleSpawner(t.id) : null;
       const spawner = vs ? nodes.get(vs)! : null;
       if (spawner && !spawner.key && !isReview(spawner)) spawner.children.push(n);
-      else noKey.push(n);
+      else loose.push(n);
     }
     markLaunched(n);
   }
@@ -461,12 +470,7 @@ export function buildLinearTree(input: BuildInput): Branch[] {
         },
       ]
     : [];
-  return [
-    ...top,
-    ...reviewBranch,
-    ...fallback("lf:none", NO_PROJECT, noProject),
-    ...fallback("lf:nokey", NO_KEY, noKey),
-  ];
+  return [...top, ...reviewBranch, ...fallback("lf:none", NO_PROJECT, noProject), ...fallback("lf:loose", "", loose)];
 }
 
 /** Review threads in one subgroup per issue key, in first-seen order. */

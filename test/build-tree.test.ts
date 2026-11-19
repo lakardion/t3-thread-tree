@@ -873,9 +873,9 @@ describe("buildLinearTree", () => {
     ]);
   });
 
-  test("a keyless thread goes to No issue key", () => {
+  test("a keyless thread is a loose row, with no header label", () => {
     const tree = buildL([shell("a", "combobox")]);
-    expect(tree.map((b) => [b.id, b.label])).toEqual([["lf:nokey", NO_KEY]]);
+    expect(tree.map((b) => [b.id, b.label])).toEqual([["lf:loose", ""]]);
     expect(titles(tree[0].threads)).toEqual(["combobox"]);
   });
 
@@ -900,7 +900,7 @@ describe("buildLinearTree", () => {
     expect(ids(tree[0].branches)).toEqual(["lm:second", "lm:first"]);
   });
 
-  test("projects sort by oldest thread, then Reviews, No project, No issue key; empty fallbacks go", () => {
+  test("projects sort by oldest thread, then Reviews, No project, loose rows; empty fallbacks go", () => {
     const raws = [
       shell("k", "no key"),
       shell("n", "SHOP-9 none"),
@@ -909,7 +909,7 @@ describe("buildLinearTree", () => {
       shell("a", "SHOP-1 alpha"),
     ];
     const answers = { "SHOP-1": issue("alpha"), "SHOP-2": issue("beta") };
-    expect(ids(buildL(raws, answers))).toEqual(["lp:beta", "lp:alpha", "lf:reviews", "lf:none", "lf:nokey"]);
+    expect(ids(buildL(raws, answers))).toEqual(["lp:beta", "lp:alpha", "lf:reviews", "lf:none", "lf:loose"]);
     expect(ids(buildL([shell("a", "SHOP-1 alpha")], answers))).toEqual(["lp:alpha"]);
   });
 
@@ -925,16 +925,30 @@ describe("buildLinearTree", () => {
     expect(titles(tree[0].branches[0].threads)).toEqual(["WEB-1 one", "WEB-2 two", "WEB-9 other"]);
   });
 
-  test("stack mates in different milestones split", () => {
+  test("a stack stays whole in the milestone of its lowest member", () => {
     const tree = buildL(stackRaws(), {
       "WEB-1": issue("x", ms("a", "2026-12-04")),
-      "WEB-2": issue("x", ms("b", "2027-01-01")),
+      "WEB-2": issue("y", ms("b", "2027-01-01")),
       "WEB-9": issue("x"),
     });
-    expect(tree[0].branches.map((b) => titles(b.threads))).toEqual([["WEB-1 one"], ["WEB-2 two"], ["WEB-9 other"]]);
+    expect(ids(tree)).toEqual(["lp:x"]);
+    expect(tree[0].branches.map((b) => titles(b.threads))).toEqual([["WEB-1 one", "WEB-2 two"], ["WEB-9 other"]]);
   });
 
-  test("keyless stack threads sit together in No issue key", () => {
+  test("a stack is placed by its lowest member that has a key", () => {
+    const tree = buildL(
+      [
+        shell("s1", "one", { pullRequests: [pr(10, "created"), pr(11, "stack"), pr(12, "stack")] }),
+        shell("s2", "WEB-2 two", { pullRequests: [pr(11, "created"), pr(10, "stack")] }),
+        shell("s3", "WEB-3 three", { pullRequests: [pr(12, "created"), pr(11, "stack")] }),
+      ],
+      { "WEB-2": issue(null), "WEB-3": issue("x") },
+    );
+    expect(ids(tree)).toEqual(["lf:none"]);
+    expect(titles(tree[0].threads)).toEqual(["one", "WEB-2 two", "WEB-3 three"]);
+  });
+
+  test("keyless stack threads sit together in the loose rows", () => {
     const tree = buildL([
       shell("s2", "two", { pullRequests: [pr(11, "created"), pr(10, "stack")] }),
       shell("o", "other"),
@@ -946,7 +960,7 @@ describe("buildLinearTree", () => {
   test("a keyless thread nests under a keyless spawner, not under a keyed one", () => {
     const raws = [shell("p", "parent"), shell("k", "SHOP-1 keyed"), shell("c", "child"), shell("d", "other child")];
     const tree = buildL(raws, { "SHOP-1": issue("x") }, { c: "p", d: "k" });
-    const nokey = tree.find((b) => b.id === "lf:nokey")!;
+    const nokey = tree.find((b) => b.id === "lf:loose")!;
     expect(titles(nokey.threads)).toEqual(["parent", "other child"]);
     expect(titles(nokey.threads[0].children)).toEqual(["child"]);
     expect(nokey.threads[0].children[0].detail.launchedBy).toBeNull();
@@ -972,7 +986,7 @@ describe("buildLinearTree", () => {
       { "SHOP-1": issue("x", m), "SHOP-2": issue("x") },
       { c: "p" },
     );
-    expect(ids(tree)).toEqual(["lp:x", "lf:reviews", "lf:nokey"]);
+    expect(ids(tree)).toEqual(["lp:x", "lf:reviews", "lf:loose"]);
     expect(ids(tree[0].branches)).toEqual(["lm:m", "lm:x:none"]);
     expect(tree.map(isFallback)).toEqual([false, true, true]);
     expect(tree[0].linear).toEqual({ url: "https://linear.app/w/project/x" });
@@ -1002,7 +1016,7 @@ describe("buildLinearTree", () => {
 
   test("a keyless thread does not nest under a keyless review", () => {
     const tree = buildL([shell("r", "Review #1"), shell("c", "child")], {}, { c: "r" });
-    expect(ids(tree)).toEqual(["lf:reviews", "lf:nokey"]);
+    expect(ids(tree)).toEqual(["lf:reviews", "lf:loose"]);
     expect(titles(tree[1].threads)).toEqual(["child"]);
     expect(tree[1].threads[0].detail.launchedBy?.title).toBe("Review #1");
   });
