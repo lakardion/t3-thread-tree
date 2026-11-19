@@ -602,6 +602,7 @@ const LayoutToggle = ({ layout, setLayout }: { layout: Layout; setLayout: (l: La
 const GROUPS: [GroupBy, string][] = [
   ["none", "None"],
   ["status", "Status"],
+  ["linear", "Linear project"],
 ];
 type TreeGroup = "t3" | "linear";
 const TREE_GROUPS: [TreeGroup, string][] = [
@@ -633,7 +634,7 @@ function GroupItems({
   );
 }
 
-/** The Group by menu: None or Status in the flat view, T3 project or Linear project in the tree. */
+/** The Group by menu: None, Status or Linear project in the flat view, T3 project or Linear project in the tree. */
 function GroupMenu(p: {
   flat: boolean;
   value: string;
@@ -2036,7 +2037,7 @@ function FlatRow({
         <ThreadRow
           t={i.t}
           chip={i.t.key ?? undefined}
-          project={i.project}
+          project={i.project.linear ? undefined : i.project}
           corners={corners}
           review={i.review}
           sort={sortOf(lists, list, i.id, i.t.title || i.t.id)}
@@ -2057,6 +2058,7 @@ function FlatRow({
         />
       </Section>
     );
+  if (i.key === LINEAR_LOOSE) return <li aria-hidden className="mx-2 my-1 border-t" />;
   return (
     <MotionHook>
       {(ref) => (
@@ -2070,6 +2072,7 @@ function FlatRow({
           >
             <Chevron open={i.open} />
             {i.label}
+            {i.date && <span className="font-normal">· {shortDate(i.date)}</span>}
             <span className="font-normal tabular-nums">{i.count}</span>
           </button>
         </li>
@@ -2257,7 +2260,9 @@ const pipeline = (ps: Branch[], c: Cfg): { full: Arranged; view: Arranged & { fl
     const own = c.freeze?.list === FLAT ? c.freeze.ids : c.orders[FLAT];
     const units =
       c.sortBy === "updated" ? sortFlat(flatten(view.projects)) : applyOrder(flatten(view.projects), (u) => u.id, own);
-    const flat = sequence(units, c.groupBy, c.shutSections, c.snoozed);
+    /** The payload can still have the T3 shape just after the choice changes: it groups as None until the Linear tree arrives. */
+    const groupBy = c.groupBy === "linear" && !isLinear(ps) ? "none" : c.groupBy;
+    const flat = sequence(units, groupBy, c.shutSections, c.snoozed, view.projects);
     return { full, view: { ...view, lists: flatLists(flat), flat } };
   }
   return { full, view: { ...view, projects: c.sortBy === "updated" ? sortTree(view.projects) : view.projects } };
@@ -2356,7 +2361,10 @@ function App() {
   const [theme, setTheme] = useState<Theme>(() => THEMES.find((t) => t === load(THEME_KEY)) ?? "system");
   const [sortBy, setSortBy] = useState<SortBy>(() => (load(SORT_KEY) === "updated" ? "updated" : "manual"));
   const [layout, setLayout] = useState<Layout>(() => (load(LAYOUT_KEY) === "flat" ? "flat" : "tree"));
-  const [groupBy, setGroupBy] = useState<GroupBy>(() => (load(GROUP_KEY) === "status" ? "status" : "none"));
+  const [groupBy, setGroupBy] = useState<GroupBy>(() => {
+    const g = load(GROUP_KEY);
+    return g === "status" || g === "linear" ? g : "none";
+  });
   const [treeGroup, setTreeGroup] = useState<TreeGroup>(() => (load(TREE_GROUP_KEY) === "linear" ? "linear" : "t3"));
   const [now, setNow] = useState(Date.now);
   const [shown, setShown] = useState(() => new Set<string>());
@@ -2400,7 +2408,9 @@ function App() {
   const [linearOpen, setLinearOpen] = useState(false);
   /** Linear grouping is on in the tree, unless the server holds no key. */
   const treeMode: TreeGroup = treeGroup === "linear" && tree?.linearKey !== "no-key" ? "linear" : "t3";
-  const linearOn = layout === "tree" && treeMode === "linear";
+  /** Linear grouping is on in the flat view, unless the server holds no key. */
+  const flatMode: GroupBy = groupBy === "linear" && tree?.linearKey === "no-key" ? "none" : groupBy;
+  const linearOn = layout === "tree" ? treeMode === "linear" : flatMode === "linear";
   const update = useUpdate();
   const closeSettings = useCallback(() => {
     setSettingsOpen(false);
@@ -2607,7 +2617,8 @@ function App() {
     flushSync(() => {
       if (layout === "tree") fold(pathFolds(full.projects, id), false);
       else {
-        const key = groupBy === "status" ? sectionHolding(flatten(view.projects), snoozed, id) : null;
+        const key =
+          flatMode === "none" ? null : sectionHolding(flatten(view.projects), snoozed, id, flatMode, view.projects);
         if (key && shutSections.has(key)) toggleSection(key);
       }
     });
@@ -2631,7 +2642,7 @@ function App() {
     shutSections,
     sortBy,
     layout,
-    groupBy,
+    groupBy: flatMode,
     freeze,
   };
   const { full, view } = pipeline(tree?.projects ?? [], cfg);
@@ -2864,7 +2875,7 @@ function App() {
     save(TREE_GROUP_KEY, g);
     transition(() => setTreeGroup(g));
   };
-  const groupValue = layout === "flat" ? groupBy : treeMode;
+  const groupValue = layout === "flat" ? flatMode : treeMode;
   const pickGroupBy = (v: string) => (layout === "flat" ? pickGroup(v as GroupBy) : pickTreeGroup(v as TreeGroup));
   const inner = projects?.flatMap((p) => [p.id, ...foldIds(p)]) ?? [];
   const tabCount = tree ? needsYouThreads(tree.projects).length : 0;

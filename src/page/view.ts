@@ -2,7 +2,9 @@ import {
   allThreads,
   bySince,
   flat,
+  isFallback,
   isLinearReviews,
+  LINEAR_LOOSE,
   NO_KEY,
   REVIEWS,
   type Branch,
@@ -14,7 +16,7 @@ import { isLinear, isPinned } from "./order.ts";
 
 export type SortBy = "manual" | "updated";
 export type Layout = "tree" | "flat";
-export type GroupBy = "none" | "status";
+export type GroupBy = "none" | "status" | "linear";
 
 /** The newest `lastRun` of a thread and its subthreads, as a time. `-Infinity` when none has run. */
 export function recency(t: ThreadNode): number {
@@ -69,7 +71,16 @@ export type FlatUnit =
 
 export type FlatItem =
   | FlatUnit
-  | { kind: "section"; id: string; key: string; label: string; count: number; open: boolean; statuses: Status[] };
+  | {
+      kind: "section";
+      id: string;
+      key: string;
+      label: string;
+      count: number;
+      open: boolean;
+      statuses: Status[] | null;
+      date?: string | null;
+    };
 
 const threadUnit = (t: ThreadNode, project: Branch, review: boolean): FlatUnit => ({
   kind: "thread",
@@ -82,19 +93,25 @@ const threadUnit = (t: ThreadNode, project: Branch, review: boolean): FlatUnit =
 /**
  * The units of an arranged tree, in order: per project, the Reviews threads, then each stack run (one unit) or
  * group thread, then the No issue key threads. Subthreads stay in `t.children`.
+ * A Linear top-level group lists the threads of each milestone (or Reviews key subgroup) in order, then its own
+ * threads. Linear milestones carry no `stack`, so the Linear path does not use `stackRuns`.
  */
 export function flatten(projects: Branch[]): FlatUnit[] {
-  return projects.flatMap((p) => [
-    ...p.branches
-      .filter((b) => b.label === REVIEWS)
-      .flatMap((r) => r.branches.flatMap((g) => g.threads.map((t) => threadUnit(t, p, true)))),
-    ...stackRuns(p.branches.filter((b) => !isPinned(b))).flatMap((run): FlatUnit[] =>
-      run[0].stack
-        ? [{ kind: "stack", id: `stack:${p.id}:${run[0].stack.id}`, run, project: p }]
-        : run.flatMap((g) => g.threads.map((t) => threadUnit(t, p, false))),
-    ),
-    ...p.branches.filter((b) => b.label === NO_KEY).flatMap((g) => g.threads.map((t) => threadUnit(t, p, false))),
-  ]);
+  return projects.flatMap((p) => {
+    if (p.linear)
+      return [...p.branches.flatMap((b) => b.threads), ...p.threads].map((t) => threadUnit(t, p, isLinearReviews(p)));
+    return [
+      ...p.branches
+        .filter((b) => b.label === REVIEWS)
+        .flatMap((r) => r.branches.flatMap((g) => g.threads.map((t) => threadUnit(t, p, true)))),
+      ...stackRuns(p.branches.filter((b) => !isPinned(b))).flatMap((run): FlatUnit[] =>
+        run[0].stack
+          ? [{ kind: "stack", id: `stack:${p.id}:${run[0].stack.id}`, run, project: p }]
+          : run.flatMap((g) => g.threads.map((t) => threadUnit(t, p, false))),
+      ),
+      ...p.branches.filter((b) => b.label === NO_KEY).flatMap((g) => g.threads.map((t) => threadUnit(t, p, false))),
+    ];
+  });
 }
 
 /** All threads of a unit, subthreads at any depth. */
@@ -148,16 +165,15 @@ const waitOf = (u: FlatUnit, statuses: Status[]): string | null =>
     .map((t) => t.since)
     .toSorted(bySince)[0] ?? null;
 
+type Section = { key: string; label: string; statuses: Status[] | null; date?: string | null; units: FlatUnit[] };
+
 /**
  * Groups units by status, in section order, and drops empty sections. A unit goes by its most urgent thread,
  * subthreads included. Units keep their input order, except in a waiting section: there the oldest Wait comes
  * first, units with no Wait last, and ties keep the input order. With `snoozed` false, the snoozed status is in no
  * section: a snoozed thread does not place its unit.
  */
-export function sections(
-  units: FlatUnit[],
-  snoozed = true,
-): { key: string; label: string; statuses: Status[]; units: FlatUnit[] }[] {
+export function sections(units: FlatUnit[], snoozed = true): Section[] {
   const list = SECTIONS.map(([key, label, statuses]): [string, string, Status[]] => [
     key,
     label,
@@ -184,6 +200,33 @@ export function sections(
     .filter((s) => s.units.length > 0);
 }
 
+/**
+ * The Linear sections of an arranged Linear tree, in tree order: one per milestone, labelled "Project · Milestone",
+ * and one per fallback group, the loose keyless threads last. A section takes the units whose thread sits in it, in unit order. Empty sections drop.
+ */
+export function linearSections(projects: Branch[], units: FlatUnit[]): Section[] {
+  return projects
+    .flatMap((p): [Branch, string, string | null][] =>
+      isFallback(p)
+        ? [[p, p.label, null]]
+        : p.branches.map((m) => [m, `${p.label} · ${m.label}`, m.linear?.date ?? null]),
+    )
+    .map(([b, label, date]) => {
+      const held = new Set(allThreads(b).map((t) => t.id));
+      return {
+        key: b.id,
+        label,
+        statuses: null,
+        date,
+        units: units.filter((u) => u.kind === "thread" && held.has(u.t.id)),
+      };
+    })
+    .filter((s) => s.units.length > 0);
+}
+
+const groupSections = (units: FlatUnit[], groupBy: GroupBy, snoozed: boolean, projects: Branch[]): Section[] =>
+  groupBy === "linear" ? linearSections(projects, units) : sections(units, snoozed);
+
 /** True when the thread is a context row in a section of `statuses`: it is settled or has another status. */
 export const isContext = (t: ThreadNode, statuses: Status[]): boolean => t.settled || !statuses.includes(t.status);
 
@@ -192,27 +235,30 @@ export const folds = (t: ThreadNode, statuses: Status[]): boolean => flat(t).eve
 
 /**
  * The flat sequence: the units, or section headers each followed by its units. A header counts the threads that
- * match its section, subthreads included. Context rows are not counted. A section in `shut` keeps its header and
- * count and gives no units. `shut` does nothing without grouping.
+ * match its section, subthreads included. Context rows are not counted. A Linear section has no statuses: it counts
+ * all threads of its units. A section in `shut` keeps its header and count and gives no units. `shut` does nothing
+ * without grouping. The Linear loose section has no label: the page shows no header for it, and it never shuts.
  */
 export const sequence = (
   units: FlatUnit[],
   groupBy: GroupBy,
   shut: ReadonlySet<string> = new Set(),
   snoozed = true,
+  projects: Branch[] = [],
 ): FlatItem[] =>
-  groupBy === "status"
-    ? sections(units, snoozed).flatMap((s): FlatItem[] => {
-        const open = !shut.has(s.key);
+  groupBy !== "none"
+    ? groupSections(units, groupBy, snoozed, projects).flatMap((s): FlatItem[] => {
+        const open = s.key === LINEAR_LOOSE || !shut.has(s.key);
         return [
           {
             kind: "section",
             id: `sec:${s.key}`,
             key: s.key,
             label: s.label,
-            count: s.units.flatMap(everyThread).filter((t) => !isContext(t, s.statuses)).length,
+            count: s.units.flatMap(everyThread).filter((t) => !s.statuses || !isContext(t, s.statuses)).length,
             open,
             statuses: s.statuses,
+            date: s.date,
           },
           ...(open ? s.units : []),
         ];
@@ -280,6 +326,14 @@ export function pathFolds(projects: Branch[], id: string): string[] {
   return [];
 }
 
-/** The key of the status section whose unit holds thread `id`, subthreads at any depth. Null when no section does. */
-export const sectionHolding = (units: FlatUnit[], snoozed: boolean, id: string): string | null =>
-  sections(units, snoozed).find((s) => s.units.some((u) => everyThread(u).some((t) => t.id === id)))?.key ?? null;
+/** The key of the section whose unit holds thread `id`, subthreads at any depth. Null when no section does. */
+export const sectionHolding = (
+  units: FlatUnit[],
+  snoozed: boolean,
+  id: string,
+  groupBy: GroupBy = "status",
+  projects: Branch[] = [],
+): string | null =>
+  groupSections(units, groupBy, snoozed, projects).find((s) =>
+    s.units.some((u) => everyThread(u).some((t) => t.id === id)),
+  )?.key ?? null;
