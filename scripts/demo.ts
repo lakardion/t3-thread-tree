@@ -232,6 +232,15 @@ const threads: Thread[] = [
       ),
     }),
   ),
+  /** The latest run is a queued follow-up with no start or end; an older run still works. */
+  t("Move the project docs to the wiki", {
+    projectId: "docs",
+    status: "queued",
+    activityRunStatus: "running",
+    activityRunStartedAt: ago(2),
+    updatedAt: ago(0),
+    prs: [pr(3020, "created")],
+  }),
 ];
 /** The thread that the push steps add to API-77 and remove again. */
 const extra = t("API-77 · Add a per-key quota dashboard", { projectId: "api" });
