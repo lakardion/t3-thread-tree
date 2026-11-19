@@ -2667,7 +2667,7 @@ function App() {
     show: (id: string) => setShown((s) => new Set(s).add(id)),
   };
   const sendToApi = { t3cli, open: (id: string) => setSendTo({ id, open: true }) };
-  const pick = clis?.find((c) => c.id === cli)?.id ?? clis?.[0]?.id;
+  const pick = clis?.find((c) => c.id === cli)?.id ?? clis?.find((c) => c.id !== "local")?.id;
   const runBrief = () => {
     if (!pick) return;
     setHideBrief(false);

@@ -10,7 +10,7 @@ import { labelStore } from "./server/labels.ts";
 import { mayBeLaunched, needsScan, openLineage } from "./server/lineage.ts";
 import { fetchLinear } from "./server/linear-api.ts";
 import { linearStore } from "./server/linear.ts";
-import { createModels } from "./server/model.ts";
+import { createModels, localModelRoutes, readLocalConfig } from "./server/model.ts";
 import { checkCli, cliPath, sendService } from "./server/send.ts";
 import { settleRoutes } from "./server/settle.ts";
 import { settledPage, settledRoutes, settledSignature } from "./server/settled.ts";
@@ -210,7 +210,9 @@ const shell = connectShell({
   },
 });
 
-const models = createModels({ localConfig: () => null });
+/** `PUT /local-model` saves the Local model config here. */
+const localModelFile = process.env.LOCAL_MODEL_FILE ?? join(homedir(), ".config", "t3-thread-tree", "local-model");
+const models = createModels({ localConfig: () => readLocalConfig(localModelFile) });
 const brief = briefService({
   offered: () => models.offered(),
   run: (p, t) => runBrief((pick, job) => models.run(pick, job), p, t),
@@ -239,6 +241,7 @@ const server = Bun.serve({
     "/up-next": upNext,
     ...brief.routes,
     ...send.routes,
+    ...localModelRoutes(localModelFile),
     ...settleRoutes({ dispatch: (c) => shell.dispatch(c), hasThread: (id) => threads.get(id)?.gone === false }),
     ...findRoutes(() => treeFor(true).projects),
     ...settledRoutes({

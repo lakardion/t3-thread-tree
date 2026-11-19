@@ -1,7 +1,7 @@
 /** The Next-step brief that the backend keeps in memory and the page renders. */
 import type { Status, ThreadNode } from "./tree.ts";
 
-export type ModelPick = "claude" | "codex";
+export type ModelPick = "claude" | "codex" | "local";
 
 export type ActionKind = "answer" | "merge" | "fix" | "review" | "clean-up" | "unblock";
 
