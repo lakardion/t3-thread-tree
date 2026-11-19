@@ -79,7 +79,7 @@ import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/comp
 import { cn } from "@/lib/utils";
 
 import appIcon from "../../assets/icon.svg" with { type: "text" };
-import type { BriefState, ModelPick } from "../shared/brief.ts";
+import type { BriefState, LocalConfig, LocalState, ModelPick } from "../shared/brief.ts";
 import type { UpdateState } from "../shared/desktop.ts";
 import { hits } from "../shared/find.ts";
 import type { CliStatus } from "../shared/send.ts";
@@ -379,6 +379,83 @@ function LinearKeyForm() {
       <p aria-live="polite" className={cn(HINT, message?.error && "text-destructive")}>
         {message?.text}
       </p>
+    </form>
+  );
+}
+
+const LOCAL_BASE_URL = "http://localhost:11434/v1";
+
+const LOCAL_FOLD: Record<LocalState, [string, Tone]> = {
+  ok: ["Ready", "ok"],
+  down: ["Not reachable", "warn"],
+  missing: ["Model not found", "warn"],
+  unset: ["Not set", "warn"],
+};
+
+type LocalInfo = { config: LocalConfig | null; state: LocalState };
+
+/** Mounts after the first load, so the fields start from the saved config and the message survives a Save. */
+function LocalModelForm({ config, onSaved }: { config: LocalConfig | null; onSaved: (l: LocalInfo) => void }) {
+  const [baseUrl, setBaseUrl] = useState(config?.baseUrl ?? LOCAL_BASE_URL);
+  const [model, setModel] = useState(config?.model ?? "");
+  const [saving, setSaving] = useState(false);
+  const [message, setMessage] = useState<{ text: string; error: boolean }>();
+  const submit = async () => {
+    setSaving(true);
+    setMessage(undefined);
+    try {
+      const res = await fetch("/local-model", {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ baseUrl, model }),
+      });
+      if (!res.ok) throw new Error((await res.text()) || `Save failed (${res.status})`);
+      onSaved((await res.json()) as LocalInfo);
+      setMessage({ text: "Saved.", error: false });
+    } catch (e) {
+      setMessage({ text: e instanceof Error ? e.message : String(e), error: true });
+    }
+    setSaving(false);
+  };
+  return (
+    <form
+      className="grid gap-3"
+      onSubmit={(e) => {
+        e.preventDefault();
+        void submit();
+      }}
+    >
+      <p className={HINT}>
+        Runs &ldquo;What&rsquo;s next&rdquo; on a model on this machine. Install the Ollama app build (
+        <code>brew install --cask ollama-app</code>), pull the model (<code>ollama pull &lt;model&gt;</code>), and start
+        Ollama.
+      </p>
+      <div className="grid gap-1.5">
+        <Label htmlFor="local-base-url">Base URL</Label>
+        <Input
+          id="local-base-url"
+          placeholder={LOCAL_BASE_URL}
+          value={baseUrl}
+          onChange={(e) => setBaseUrl(e.target.value)}
+        />
+      </div>
+      <div className="grid gap-1.5">
+        <Label htmlFor="local-model-name">Model</Label>
+        <Input
+          id="local-model-name"
+          placeholder="qwen3.5:4b-nvfp4"
+          value={model}
+          onChange={(e) => setModel(e.target.value)}
+        />
+      </div>
+      <div className="flex items-center justify-end gap-2">
+        <span aria-live="polite" className={cn(HINT, message?.error && "text-destructive")}>
+          {message?.text}
+        </span>
+        <Button type="submit" size="sm" disabled={!baseUrl || !model || saving}>
+          Save
+        </Button>
+      </div>
     </form>
   );
 }
@@ -1004,6 +1081,8 @@ type PanelProps = LinearProps &
     tokenOpen: boolean;
     /** Opens the Linear links fold. */
     linearOpen: boolean;
+    /** Reloads the Model pick menu. */
+    reloadModels: () => void;
   };
 
 /** View options and settings, beside the list so a change shows at once. */
@@ -1026,6 +1105,16 @@ function SettingsPanel(p: PanelProps) {
     };
   }, [close, buttonRef]);
   useEffect(() => window.desktopBridge?.checkUpdates(false), []);
+  const [local, setLocal] = useState<LocalInfo | null>(null);
+  useEffect(() => {
+    fetch("/local-model")
+      .then((r) => {
+        if (!r.ok) throw new Error(String(r.status));
+        return r.json() as Promise<LocalInfo>;
+      })
+      .then(setLocal, () => setLocal({ config: null, state: "unset" }));
+  }, []);
+  const [localText, localTone]: [ReactNode, Tone] = local ? LOCAL_FOLD[local.state] : ["Checking…", "none"];
   const token = tokenSummary(p.conn);
   return (
     <aside
@@ -1094,6 +1183,17 @@ function SettingsPanel(p: PanelProps) {
               <LinearForm linear={p.linear} setLinear={p.setLinear} />
               <LinearKeyForm />
             </div>
+          </Fold>
+          <Fold label="Local model" value={localText} tone={localTone}>
+            {local && (
+              <LocalModelForm
+                config={local.config}
+                onSaved={(l) => {
+                  setLocal(l);
+                  p.reloadModels();
+                }}
+              />
+            )}
           </Fold>
           <Fold
             label="Watched labels"
@@ -2560,14 +2660,17 @@ function App() {
     if (events.length > 0) window.desktopBridge.notify(events);
   }, [tree]);
 
-  useEffect(() => {
+  const loadModels = useCallback(() => {
     fetch("/models")
       .then((r) => r.json() as Promise<Offered>)
       .then(setClis, () => setClis([]));
+  }, []);
+  useEffect(() => {
+    loadModels();
     fetch("/t3/cli")
       .then((r) => r.json() as Promise<CliStatus>)
       .then(setT3cli, () => setT3cli(null));
-  }, []);
+  }, [loadModels]);
 
   useEffect(() => {
     const id = setInterval(() => setNow(Date.now()), 60_000);
@@ -3234,6 +3337,7 @@ function App() {
           linearKey={tree?.linearKey}
           tokenOpen={tokenOpen}
           linearOpen={linearOpen}
+          reloadModels={loadModels}
         />
       )}
       <FindDialog

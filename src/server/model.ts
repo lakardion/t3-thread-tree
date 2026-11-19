@@ -5,10 +5,9 @@ import { join } from "node:path";
 
 import * as v from "valibot";
 
-import type { ModelPick } from "../shared/brief.ts";
+import type { LocalConfig, LocalState, ModelPick } from "../shared/brief.ts";
 import { writeToken } from "./token.ts";
 
-export type LocalConfig = { baseUrl: string; model: string };
 export type ModelResult = { answer: unknown } | { error: string; detail: string };
 export type ModelRun = { done: Promise<ModelResult | null>; cancel(): void };
 
@@ -34,8 +33,6 @@ export function readLocalConfig(file: string): LocalConfig | null {
     return null;
   }
 }
-
-export type LocalState = "unset" | "ok" | "missing" | "down";
 
 /** Asks the runtime for its model list. */
 export async function localState(c: LocalConfig | null): Promise<LocalState> {

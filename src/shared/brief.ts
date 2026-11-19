@@ -3,6 +3,10 @@ import type { Status, ThreadNode } from "./tree.ts";
 
 export type ModelPick = "claude" | "codex" | "local";
 
+export type LocalConfig = { baseUrl: string; model: string };
+
+export type LocalState = "unset" | "ok" | "missing" | "down";
+
 export type ActionKind = "answer" | "merge" | "fix" | "review" | "clean-up" | "unblock";
 
 export type BriefAction = {
