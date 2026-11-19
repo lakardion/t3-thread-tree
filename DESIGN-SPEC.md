@@ -2,7 +2,7 @@
 
 This spec defines the visual design of the thread tree page: the tokens, the status model, the row anatomy, the layout, the components, and the data that the backend must add to the tree. Where it differs from [SPEC.md](SPEC.md) › UI, this spec wins. The tree rules, the data source and the runtime in `SPEC.md` do not change. Terms are defined in [CONTEXT.md](CONTEXT.md).
 
-The design merges two proposals: [A, "Harbor"](.wayfinder/design-overhaul/research/02-opus-proposal.md) and [B, "Slate signal"](.wayfinder/design-overhaul/research/03-sol-proposal.md). The mockups in the same folder show the two starting points, not this result.
+The design merges two proposals: [A, "Harbor"](https://github.com/lakardion/t3-thread-tree/blob/7e5463c0b53fbc429f23a1d732ff5be4070d15e5/.wayfinder/design-overhaul/research/02-opus-proposal.md) and [B, "Slate signal"](https://github.com/lakardion/t3-thread-tree/blob/7e5463c0b53fbc429f23a1d732ff5be4070d15e5/.wayfinder/design-overhaul/research/03-sol-proposal.md). The mockups in the same folder show the two starting points, not this result.
 
 ## Choices
 
