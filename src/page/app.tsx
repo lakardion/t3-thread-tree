@@ -116,6 +116,7 @@ import {
   withoutSnoozed,
 } from "./attention.ts";
 import { BriefControls, BriefPanel, CopyPrompt, type Offered } from "./brief.tsx";
+import { CatchUpBar, CatchUpDetail, CatchUpPhrase, CatchUpTitle } from "./catch-up-prototype.tsx";
 import { FindDialog, FIND_KEY, MAC } from "./find.tsx";
 import {
   addFocus,
@@ -1471,6 +1472,7 @@ function DetailBlock({ t }: { t: ThreadNode }) {
           {[[d.error.class, d.error.code].filter(Boolean).join(" · "), d.error.text].filter(Boolean).join(" ")}
         </Line>
       )}
+      <CatchUpDetail t={t} />
       {last && (
         <Line label="Last message">
           <LastMessage text={last} />
@@ -1683,7 +1685,7 @@ function ThreadRow({
         >
           {!inStack && <DragHandle handleRef={handleRef} name={t.title || t.id} />}
           <StatusCell t={t} now={now} />
-          <PhraseCell t={t} now={now} />
+          <CatchUpPhrase t={t} now={now} fallback={<PhraseCell t={t} now={now} />} />
           {pulse > 0 && <span key={pulse} aria-hidden className={cn("row-pulse", STATUS[t.status].shape)} />}
           {project && <ProjectColumn b={project} />}
           {chip && (
@@ -1712,18 +1714,20 @@ function ThreadRow({
             </Badge>
           )}
           {review && <Eye className="size-3.5 flex-none text-review" aria-label="Review" />}
-          <a
-            className={cn(
-              "min-w-0 flex-1 break-words group-focus-within/row:truncate group-hover/row:truncate hover:underline",
-              t.status === "your-turn" ? "font-[650]" : "font-medium",
-              (t.status === "snoozed" || t.settled || dim) && "text-muted-foreground",
-              "max-[720px]:basis-full max-[720px]:pl-5",
-            )}
-            href={t.href}
-            data-stop={t.id}
-          >
-            {(chip ? stripKey(t.title, chip) : t.title) || t.id}
-          </a>
+          <CatchUpTitle t={t}>
+            <a
+              className={cn(
+                "min-w-0 flex-1 break-words group-focus-within/row:truncate group-hover/row:truncate hover:underline",
+                t.status === "your-turn" ? "font-[650]" : "font-medium",
+                (t.status === "snoozed" || t.settled || dim) && "text-muted-foreground",
+                "max-[720px]:basis-full max-[720px]:pl-5",
+              )}
+              href={t.href}
+              data-stop={t.id}
+            >
+              {(chip ? stripKey(t.title, chip) : t.title) || t.id}
+            </a>
+          </CatchUpTitle>
           <span className="ml-auto flex flex-none items-center gap-1.5 max-[720px]:ml-0 max-[720px]:basis-full max-[720px]:flex-wrap max-[720px]:pl-5">
             {t.input && (
               <Badge variant="outline" className={CHIP}>
@@ -3357,6 +3361,7 @@ function App() {
         message=""
         onOpenChange={(open) => setSendTo((s) => ({ ...s, open }))}
       />
+      <CatchUpBar threads={[...live.values()]} now={now} />
     </TooltipProvider>
   );
 }

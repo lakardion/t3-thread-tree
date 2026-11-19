@@ -407,6 +407,26 @@ const MESSAGES: Record<string, string> = {
   "demo-15":
     "The retry queue needs a new table. I will run the migration next:\n\nbun run db:migrate --name retry_queue\n\nApprove the command to continue.",
   "demo-21": "The retry policy change is ready. I need to run the load test script before I confirm the numbers.",
+  /** PROTOTYPE: source texts for the Catch-up stubs in src/page/catch-up-prototype.tsx. */
+  "demo-12":
+    "I found the race in the cart badge test: the count reads before the store updates. I started the fix in cart-badge.spec.ts, then the provider closed the stream.",
+  "demo-17":
+    "The getting-started guide is in docs/cli/start.md. I kept the old install section and added a short troubleshooting part at the end.",
+  "demo-20":
+    "The plan is ready: switch the list endpoints to cursor pagination in three steps.\n\n1. Add the cursor field.\n2. Keep offset as a fallback for one release.\n3. Remove offset.\n\nApprove the plan and I start step 1.",
+  "demo-22":
+    "A guest asked to rename 'Fixed' to 'Bug fixes' in the 4.2 changelog. I did not change it yet. Should I use the guest's wording?",
+  "demo-24":
+    "I linked the four release PRs. #3001 is approved and its checks pass. #3004 is still a draft. Should I mark it ready, or leave it for the docs team?",
+  "demo-25":
+    "The schema change adds a nullable `region` column to orders. Approve the migration and I apply it, then I sleep until the backfill ends.",
+  dispatch:
+    "I started three cache threads as a PR stack (#4201 to #4203). The first two are done; Purge on write still runs. I wait for your go before I request reviews.",
+  m2: "Dialog now uses the new tokens. I updated 14 snapshots. The visual diff shows a 1 px shift on the close button, which comes from the new focus ring.",
+  "search-b":
+    "The backfill script is ready. It covers 2.1 M documents and takes about 40 minutes. Do you want one batch tonight, or batches by shard during the day?",
+  "search-plan":
+    "The index plan is in plan.md. It uses one index per locale. Before I start: is freshness ranking in scope for this map, or does it stay in its own thread?",
 };
 const NO_MESSAGE = new Set(["demo-5", "map", "demo-16", "launched"]);
 const lastMessage = (id: string) =>
