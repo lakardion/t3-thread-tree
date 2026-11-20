@@ -153,6 +153,7 @@ import {
   stopLabel,
   stripKey,
 } from "./format.ts";
+import { Hint, HintPair, KeyHintsPrototype } from "./key-hints.prototype.tsx";
 import { pageKey } from "./keys.ts";
 import { looksDone, parseSkip, pruneSkip, SKIP_KEY } from "./looks-done.ts";
 import { LooksDoneButton, LooksDoneDialog, UndoToast } from "./looks-done.tsx";
@@ -854,6 +855,7 @@ function OpenNextButton({
     <Button variant="outline" size="sm" aria-label="Open next" aria-keyshortcuts="n" disabled={!target} onClick={open}>
       <SkipForward />
       <span className="max-[720px]:hidden">Open next</span>
+      <Hint surface="header">n</Hint>
     </Button>
   );
   return (
@@ -1912,6 +1914,10 @@ function ThreadRow({
                 )}
                 <FocusMark t={t} pressed={false} />
               </span>
+            </span>
+            <span className="flex flex-none items-center gap-2 pr-1">
+              <HintPair surface="row" k="o" label="Details" />
+              <HintPair surface="row" k="s" label="Send" />
             </span>
             <CollapsibleTrigger asChild>
               <Button variant="ghost" size="icon" className={cn(ROW_BUTTON, "group")} aria-label="Details">
@@ -3482,6 +3488,7 @@ function App() {
           setCatchUp={setCatchUp}
         />
       )}
+      <KeyHintsPrototype />
       <FindDialog
         open={findOpen}
         setOpen={setFindOpen}

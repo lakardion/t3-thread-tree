@@ -33,6 +33,7 @@ import { AsksLabel, NoAsk } from "./catch-up-line.tsx";
 import { FOCUS_FULL } from "./focus.ts";
 import { Focus } from "./focus.tsx";
 import { ago, stripKey } from "./format.ts";
+import { Hint } from "./key-hints.prototype.tsx";
 import { CliGate, LastMessage, SendErrorAlert, useLastMessage } from "./send-dialog.tsx";
 import { postSend, postSettle, postSnooze, type Result } from "./send.ts";
 import { STATUS, StatusIcon } from "./status-icon.tsx";
@@ -70,6 +71,7 @@ export function TriageButton({ count, open, toggle }: { count: number; open: boo
         >
           <Inbox />
           <span className="max-[720px]:hidden">Triage</span>
+          <Hint surface="header">t</Hint>
           {count > 0 && (
             <span className="rounded-[4px] bg-status-needs-input px-1 text-[11px] text-white tabular-nums">
               {count}

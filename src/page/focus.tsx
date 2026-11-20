@@ -11,6 +11,7 @@ import type { ThreadNode } from "../shared/tree.ts";
 import { needsYou } from "./attention.ts";
 import { FOCUS_MAX } from "./focus.ts";
 import { ago } from "./format.ts";
+import { Hint } from "./key-hints.prototype.tsx";
 import { STATUS, StatusIcon } from "./status-icon.tsx";
 
 /** The Focus list for the add buttons of rows. */
@@ -142,11 +143,13 @@ function Confirm({ title, replace, cancel }: { title: string; replace: () => voi
 }
 
 function FocusCard({
+  slot,
   t,
   now,
   remove,
   confirm,
 }: {
+  slot: number;
   t: ThreadNode;
   now: number;
   remove: () => void;
@@ -186,6 +189,7 @@ function FocusCard({
           <Button size="sm" className="h-7" asChild>
             <a href={t.href}>Open</a>
           </Button>
+          <Hint surface="slot">{slot + 1}</Hint>
           <Button
             size="sm"
             variant="ghost"
@@ -253,6 +257,7 @@ export function FocusStrip({
                 </div>
               ) : t ? (
                 <FocusCard
+                  slot={i}
                   key={id}
                   t={t}
                   now={now}

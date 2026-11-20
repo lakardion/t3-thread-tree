@@ -9,6 +9,7 @@ import { cn } from "@/lib/utils";
 import { find, type Hit } from "../shared/find.ts";
 import { needsYou } from "./attention.ts";
 import { ago } from "./format.ts";
+import { Hint, HintPair } from "./key-hints.prototype.tsx";
 import { StatusIcon } from "./status-icon.tsx";
 
 /** True on macOS, where Find is Cmd+K. */
@@ -60,7 +61,13 @@ function Row({ h, now, canShow, open, show }: RowProps) {
               : ago(t.updatedAt, now)}
           </span>
         </span>
-        <span className="truncate text-[12px] text-muted-foreground">{meta}</span>
+        <span className="flex items-center gap-2">
+          <span className="min-w-0 flex-1 truncate text-[12px] text-muted-foreground">{meta}</span>
+          <span className="flex flex-none items-center gap-2">
+            <HintPair surface="find-row" k="↵" label="Open" />
+            {canShow && <HintPair surface="find-row" k="⇧↵" label="Show in tree" />}
+          </span>
+        </span>
       </span>
       {canShow && (
         <Button
@@ -68,7 +75,7 @@ function Row({ h, now, canShow, open, show }: RowProps) {
           size="icon-xs"
           className="flex-none text-muted-foreground"
           aria-label={`Show ${t.title || t.id} in tree`}
-          title="Show in tree"
+          title="Show in tree (Shift+Enter)"
           onPointerDown={(e) => e.stopPropagation()}
           onClick={(e) => {
             e.stopPropagation();
@@ -171,6 +178,35 @@ function FindBody({ list, focus, canShow, now, open, show }: BodyProps) {
           </CommandGroup>
         )}
       </CommandList>
+      <div
+        data-hint="find-bar"
+        className="key-hint h-9 items-center gap-3 border-t px-3 text-[11px] text-muted-foreground max-[720px]:mt-auto"
+      >
+        <span className="flex items-center gap-1">
+          <Hint surface="find-bar" className="key-hint-in-bar">
+            ↑↓
+          </Hint>
+          Move
+        </span>
+        <span className="flex items-center gap-1">
+          <Hint surface="find-bar" className="key-hint-in-bar">
+            ↵
+          </Hint>
+          Open
+        </span>
+        <span className="flex items-center gap-1">
+          <Hint surface="find-bar" className="key-hint-in-bar">
+            ⇧↵
+          </Hint>
+          Show in tree
+        </span>
+        <span className="ml-auto flex items-center gap-1">
+          <Hint surface="find-bar" className="key-hint-in-bar">
+            esc
+          </Hint>
+          Close
+        </span>
+      </div>
     </Command>
   );
 }
