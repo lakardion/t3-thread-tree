@@ -1379,7 +1379,7 @@ function LabelPill({ t }: { t: ThreadNode }) {
 
 const CHIP = "gap-1 rounded-[6px] px-1.5 py-0 text-[11px] font-normal text-muted-foreground";
 const ROW_BUTTON =
-  "size-5 cursor-pointer rounded-[6px] text-muted-foreground disabled:cursor-default motion-reduce:transition-none pointer-coarse:min-h-11 pointer-coarse:min-w-11 focus-visible:border-transparent focus-visible:ring-0 focus-visible:outline-2 focus-visible:outline-solid focus-visible:outline-offset-2 focus-visible:outline-ring";
+  "size-5 rounded-[6px] text-muted-foreground motion-reduce:transition-none pointer-coarse:min-h-11 pointer-coarse:min-w-11 focus-visible:border-transparent focus-visible:ring-0 focus-visible:outline-2 focus-visible:outline-solid focus-visible:outline-offset-2 focus-visible:outline-ring";
 /** Opens on hover or focus, always on touch, and stays open while it holds a settle error. Shut, it takes no width. */
 const DRAWER =
   "grid grid-cols-[0fr] transition-[grid-template-columns] duration-150 motion-reduce:transition-none group-hover/row:grid-cols-[1fr] group-focus-within/row:grid-cols-[1fr] has-data-err:grid-cols-[1fr] [@media(hover:none)]:grid-cols-[1fr]";
@@ -2048,7 +2048,7 @@ function GroupRow({ b, closed, toggle, fold, sort }: { b: Branch; sort?: Sort } 
           <DragHandle handleRef={handleRef} name={b.label} />
           <CollapsibleTrigger
             data-stop={b.id}
-            className="flex min-w-0 cursor-pointer items-center gap-2 select-none after:absolute after:inset-0 max-[720px]:min-h-11"
+            className="flex min-w-0 items-center gap-2 select-none after:absolute after:inset-0 max-[720px]:min-h-11"
           >
             <Chevron open={open} />
             {b.label === REVIEWS && <Eye className="size-3.5 flex-none text-review" aria-hidden />}
@@ -2194,7 +2194,7 @@ function StackRail({
           ) : (
             <CollapsibleTrigger
               data-stop={`rail:${id}`}
-              className="flex cursor-pointer items-center gap-1 text-muted-foreground select-none after:absolute after:inset-0 max-[720px]:min-h-11"
+              className="flex items-center gap-1 text-muted-foreground select-none after:absolute after:inset-0 max-[720px]:min-h-11"
               aria-label={`PR stack · ${total} PRs`}
               title={`PR stack · ${total} PRs`}
             >
@@ -2326,7 +2326,7 @@ function FlatRow({
             aria-expanded={i.open}
             data-stop={`sec:${i.key}`}
             onClick={() => toggleSection(i.key)}
-            className="flex h-7 w-full cursor-pointer items-center gap-2 rounded-[8px] px-2 text-xs font-semibold text-muted-foreground select-none hover:bg-accent max-[720px]:min-h-11"
+            className="flex h-7 w-full items-center gap-2 rounded-[8px] px-2 text-xs font-semibold text-muted-foreground select-none hover:bg-accent max-[720px]:min-h-11"
           >
             <Chevron open={i.open} />
             {i.label}
@@ -2373,7 +2373,7 @@ function ProjectBlock({ b, closed, toggle, fold }: { b: Branch } & Fold) {
             <DragHandle handleRef={handleRef} name={b.label} />
             <CollapsibleTrigger
               data-stop={b.id}
-              className="flex min-w-0 cursor-pointer items-center gap-1.5 select-none after:absolute after:inset-0"
+              className="flex min-w-0 items-center gap-1.5 select-none after:absolute after:inset-0"
             >
               <Chevron open={open} />
               {isLinearReviews(b) && <Eye className="size-3.5 flex-none text-review" aria-hidden />}

@@ -120,6 +120,10 @@
     outline: 2px solid var(--ring);
     outline-offset: 2px;
   }
+  button:not(:disabled),
+  [role="button"]:not(:disabled) {
+    cursor: pointer;
+  }
   :has(> [data-stop]:focus-visible) {
     outline: 2px solid var(--ring);
     outline-offset: -2px;
