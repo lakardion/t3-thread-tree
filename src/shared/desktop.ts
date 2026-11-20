@@ -1,5 +1,43 @@
 import * as v from "valibot";
 
+/** The Catch-up fields that cross the bridge. Unknown keys are dropped. */
+export const CatchUpLine = v.optional(
+  v.object({
+    state: v.picklist(["queued", "running", "done", "failed"]),
+    did: v.optional(v.string()),
+    ask: v.optional(v.nullable(v.string())),
+    options: v.optional(v.pipe(v.array(v.string()), v.maxLength(4))),
+    question: v.optional(v.nullable(v.string())),
+  }),
+);
+
+export type CatchUpLineData = v.InferOutput<typeof CatchUpLine>;
+
+/** The ask with its options as "A or B?"; `ask` alone with no options. */
+export const askText = (c: NonNullable<CatchUpLineData>): string =>
+  c.options?.length ? `${c.ask} ${c.options.join(" or ")}?` : (c.ask ?? "");
+
+/**
+ * What a surface shows for a Catch-up. `ask` is set for a done call with an ask. `raw` is the raw question,
+ * and `why` says why it shows, for a failed call or a done call with no ask. `null` for no Catch-up or one that is not finished.
+ */
+export function catchUpLines(c: CatchUpLineData): {
+  ask: string | null;
+  did: string | null;
+  raw: string | null;
+  why: "No clear ask" | "Catch-up failed" | null;
+} | null {
+  if (c?.state === "done" && c.ask) return { ask: askText(c), did: c.did ?? null, raw: null, why: null };
+  if (c?.state === "done" || c?.state === "failed")
+    return {
+      ask: null,
+      did: c.did ?? null,
+      raw: c.question ?? null,
+      why: c.state === "done" ? "No clear ask" : "Catch-up failed",
+    };
+  return null;
+}
+
 /** The bridge payload of `setNeedsYou`. Unknown keys are dropped. */
 export const NeedsYouList = v.pipe(
   v.array(
@@ -9,6 +47,7 @@ export const NeedsYouList = v.pipe(
       environmentId: v.string(),
       since: v.nullable(v.string()),
       status: v.picklist(["needs-input", "plan-ready"]),
+      catchUp: CatchUpLine,
     }),
   ),
   v.maxLength(500),
@@ -33,6 +72,7 @@ export const UpNextList = v.object({
         project: v.string(),
         key: v.nullable(v.string()),
         linearUrl: v.nullable(v.string()),
+        catchUp: CatchUpLine,
       }),
     ),
     v.maxLength(500),
@@ -53,6 +93,7 @@ export const NotifyList = v.pipe(
         environmentId: v.string(),
         title: v.string(),
         status: v.picklist(["needs-input", "plan-ready", "failed"]),
+        catchUp: CatchUpLine,
       }),
       v.object({ kind: v.literal("summary"), count: v.pipe(v.number(), v.integer(), v.minValue(1)) }),
     ]),
@@ -61,7 +102,8 @@ export const NotifyList = v.pipe(
 );
 
 export type NotifyEvent = v.InferOutput<typeof NotifyList>[number];
-export type NotifyStatus = Extract<NotifyEvent, { kind: "thread" }>["status"];
+export type ThreadNotifyEvent = Extract<NotifyEvent, { kind: "thread" }>;
+export type NotifyStatus = ThreadNotifyEvent["status"];
 
 /** The update state the main process keeps and sends to the page. */
 export type UpdateState = {

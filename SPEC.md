@@ -404,7 +404,7 @@ The full look is in ticket 04. In short:
 
 ## Catch-up
 
-A **Catch-up** is one line from the Model pick about a waiting thread: what the thread did, and what it asks of the user. The server makes and caches it. This section covers the server only.
+A **Catch-up** is one line from the Model pick about a waiting thread: what the thread did, and what it asks of the user. The server makes and caches it. The server makes `catchUp` on each thread node. The notification, the Up next window and the menu-bar entry show it (see "Desktop app").
 
 ### Pick file
 
@@ -432,7 +432,7 @@ The server runs the check in the debounced tree push, so the 30 s tick also driv
 ### Cache and delivery
 
 - **Cache:** a `Map` in memory by key. Each key gets one try and no retry: a model error, a timeout or an invalid answer stays `failed` until the key changes. A server restart runs the calls again. A new pick does not change the cached entries.
-- **Delivery:** each thread node holds `catchUp?: { state: "queued" | "running" | "done" | "failed", did?, ask?, options?, doneLike?, pick }` while an entry of its current key exists. The fields after `state` are set in `done`. Each state change sends the tree again.
+- **Delivery:** each thread node holds `catchUp?: { state: "queued" | "running" | "done" | "failed", did?, ask?, options?, doneLike?, question?, pick }` while an entry of its current key exists. `did`, `ask`, `options` and `doneLike` are set in `done`. `question` is set in `done` and `failed`: it is the last question of the last message, cut like the "What's next" reason (`questionOf` of its 4000-character tail), or `null` when the thread has no message. Each state change sends the tree again.
 
 ## Send message
 
@@ -652,16 +652,16 @@ The **Needs you** set is the visible top-level threads with status `needs-input`
 The **Up next window** is a small always-on-top window with the **Open next queue**: one row for each thread, with its Wait, and an "Open next" button. Its title, its top bar and both menu items say "Up next".
 
 - **Page:** `/up-next` on the same server, with its own preload (`up-next-preload.ts`, `window.upNextBridge`). It has no SSE stream, no tree logic and no skip memory.
-- **Data path:** the main page owns the queue, the target and the skip memory. It sends them to main with `setUpNext({ rows, targetId })`. A row holds the id, title, status, phrase, raw status, `since`, project label, issue key and Linear URL. Main checks the payload by hand, stores the last one and sends it to the Up next window. When the window loads, it asks main for the stored list, so it never opens empty while threads wait.
+- **Data path:** the main page owns the queue, the target and the skip memory. It sends them to main with `setUpNext({ rows, targetId })`. A row holds the id, title, status, phrase, raw status, `since`, project label, issue key, Linear URL and, when the thread has one, its Catch-up (`state`, `did`, `ask`, `options`, `question`). Main checks the payload by hand, stores the last one and sends it to the Up next window. When the window loads, it asks main for the stored list, so it never opens empty while threads wait.
 - **IPC:** main takes `setUpNext` from the main window only. It takes `upNext`, `upNextOpenNext`, `upNextOpenThread` and `upNextOpenLinear` from the Up next window only.
 - **Open next:** the button sends `openNext` to the main page, as the menu-bar item does.
 - **Row click:** main sends `openThread(id)` to the main page. The page adds the thread to the skip memory and opens it, so Open next then goes to the next row. The main window does not come forward. Tree rows and menu-bar rows do not change.
 - **Key click:** a linked issue key opens Linear with `shell.openExternal`, only for an `https://linear.app/` URL. It does not touch the skip memory.
 - **Toggle:** the check item "Up next" in the Window menu and after "Open tree" in the menu-bar menu, and the shortcut ⌥⌘U. The shortcut uses `globalShortcut`, so it works in any app. When it cannot register, main logs it and the menu items still work. The window is created at its first show, hidden at start and not restored at restart.
 - **On top:** `type: "panel"`, the floating level, on all Spaces and over full-screen apps. It has no Dock or Cmd-Tab entry, and it does not take focus when it shows.
-- **Size and place:** 360×360 at first, resizable, at least 280×160. Main saves them in `up-next.json` and restores them with the same off-screen check as `window.json`. With no saved place, the window sits at the top right of the work area of the screen that holds the cursor.
+- **Size and place:** 360×480 at first, resizable, at least 280×160. Main saves them in `up-next.json` and restores them with the same off-screen check as `window.json`. With no saved place, the window sits at the top right of the work area of the screen that holds the cursor.
 - **Close:** the close button hides the window and clears the check in both menus. Cmd-Q quits the app.
-- **Look:** a top bar with "Up next", the count and an "Open next" button (disabled with no target), then one 28 px row for each thread: status icon, project icon, issue key, title and Wait. The target row has an amber left mark and a tint. With no thread, the list shows "Nothing waits" and "Threads that need you show here." The theme follows the app theme.
+- **Look:** a top bar with "Up next", the count and an "Open next" button (disabled with no target), then one row for each thread: a 28 px top line with the status icon, project icon, issue key, title and Wait. A row with a Catch-up has a second line: "Asks: <ask>", else what the thread did; a skeleton while the call runs; a dashed tag and the raw question when there is no clear ask or the call failed (see DESIGN-SPEC.md › "Up next second line"). The target row has an amber left mark and a tint. With no thread, the list shows "Nothing waits" and "Threads that need you show here." The theme follows the app theme.
 
 ### Dock badge
 
@@ -675,7 +675,8 @@ The page owns the rules. Main shows them, so the mute switch stays in main.
 - **Trigger:** a thread enters `needs-input`, `plan-ready` or `failed`. "Enters" means its status in this tree differs from its status in the last tree. A thread that is new in the tree with one of these statuses also enters. No notification for your turn or for PR checks.
 - **Baseline:** the first tree after the page loads sends nothing. A tree with `conn` not `up` sends nothing and does not move the baseline.
 - **Grouping:** 1 or 2 threads enter in one tree: one notification per thread. 3 or more: one summary, "N threads need you".
-- **Text:** title "Needs input", "Plan ready" or "Failed"; body the thread title.
+- **Hold:** when the Catch-up switch is on, the page holds a thread notification until the Catch-up of the thread is `done` or `failed`, for 15 s at most. Then it sends the notification with the Catch-up, or as it is after 15 s. A held notification drops when its thread changes status, settles or leaves the tree. A tree with `conn` not `up` keeps it. A new notification for the same thread replaces the held one. The summary and all notifications with the switch off go out at once. The page reads the switch from `GET /model-pick` and from the answer of `PUT /model-pick`; it holds until the first answer, and a failed read sets the switch off.
+- **Text:** with no Catch-up, title "Needs input", "Plan ready" or "Failed"; body the thread title. With a `done` Catch-up that has an ask, title "<status> · <thread title>"; body "Asks: <ask>" (options as "A or B?"), then what the thread did on a second line. With no clear ask or a `failed` call, the body is the raw question, else what the thread did, else the thread title. The body is plain text.
 - **Replace:** a new notification for a thread closes the earlier one for that thread.
 - **Click:** a thread notification opens `t3code://threads/<environmentId>/<threadId>`. The summary shows and focuses the window.
 - **Mute:** "Mute Notifications" in the app menu and in the menu-bar menu. Off by default, saved in `settings.json`. It stops notifications only, not the badge or the menu. macOS Focus covers Do Not Disturb.
@@ -686,7 +687,7 @@ The page owns the rules. Main shows them, so the mute switch stays in main.
 - A `Tray` with a template icon and the Needs-you count as its title. No title when the count is 0.
 - A click opens a native menu:
   1. "Open next · <title>" and a separator, only when the page has an Open next target. A click asks the page to open that target, so the item and the page button open the same thread. The page sends the title with `setOpenNext`; `null` hides the item.
-  2. Up to 10 Needs-you threads, the longest wait first (oldest `since`; `null` last). Each item shows the status and the title. A click opens the thread in T3 Code.
+  2. Up to 10 Needs-you threads, the longest wait first (oldest `since`; `null` last). Each item shows the status and the title, and, for a `done` Catch-up with an ask, " — <ask>" (options as "A or B?"). A click opens the thread in T3 Code.
   3. "+N more… (open tree)" when more than 10, which shows the window.
   4. "Open tree", "Up next" (a check item), "Mute Notifications", "Update available: vX.Y.Z…" when one exists, "Quit".
 - Main builds the menu again on each `setNeedsYou` and each `setOpenNext`.

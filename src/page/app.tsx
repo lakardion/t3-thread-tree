@@ -101,6 +101,8 @@ import {
 import {
   countAttention,
   favicon,
+  HOLD_MS,
+  type Held,
   needsYou,
   needsYouThreads,
   needsYouTip,
@@ -108,6 +110,7 @@ import {
   notifyEvents,
   onlyNeedsYou,
   openNextQueue,
+  releaseHeld,
   remember,
   tabTitle,
   type Statuses,
@@ -1232,15 +1235,15 @@ const forget = (k: string) => {
   } catch {}
 };
 
-/** Whether the server saved the pick. */
+/** The saved Catch-up switch, or `null` when the server did not save the pick. */
 const putPick = (pick: ModelPick) =>
   fetch("/model-pick", {
     method: "PUT",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({ pick }),
   }).then(
-    (res) => res.ok,
-    () => false,
+    (res) => (res.ok ? (res.json() as Promise<{ catchUp: boolean }>).then((s) => s.catchUp) : null),
+    () => null,
   );
 
 const hhmm = (iso: string) => new Date(iso).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" });
@@ -2553,6 +2556,7 @@ function App() {
   const [brief, setBrief] = useState<BriefState>({ status: "idle" });
   const [clis, setClis] = useState<Offered | null>(null);
   const [cli, setCli] = useState<ModelPick | null | undefined>(undefined);
+  const [catchUpOn, setCatchUpOn] = useState<boolean>();
   const [hideBrief, setHideBrief] = useState(false);
   const [t3cli, setT3cli] = useState<CliStatus | null>(null);
   const [sent, setSent] = useState(() => new Map<string, string[]>());
@@ -2664,12 +2668,36 @@ function App() {
   }, [tree]);
 
   const lastStatuses = useRef<Statuses | null>(null);
+  const held = useRef<Held>(new Map());
   useEffect(() => {
     if (!window.desktopBridge || !tree) return;
+    const bridge = window.desktopBridge;
     const { events, nextStatuses } = notifyEvents(lastStatuses.current, tree);
     lastStatuses.current = nextStatuses;
-    if (events.length > 0) window.desktopBridge.notify(events);
-  }, [tree]);
+    const started = Date.now();
+    const sendNow: typeof events = [];
+    for (const e of events) {
+      if (e.kind === "thread" && catchUpOn !== false) held.current.set(e.threadId, { event: e, at: started });
+      else sendNow.push(e);
+    }
+    if (catchUpOn === false) {
+      sendNow.push(...[...held.current.values()].map((h) => h.event));
+      held.current = new Map();
+    }
+    if (sendNow.length > 0) bridge.notify(sendNow);
+    let timer: ReturnType<typeof setTimeout> | undefined;
+    const release = () => {
+      const r = releaseHeld(held.current, tree, Date.now());
+      held.current = r.held;
+      if (r.send.length > 0) bridge.notify(r.send);
+      if (r.held.size > 0 && tree.conn === "up") {
+        const next = Math.min(...[...r.held.values()].map((h) => h.at)) + HOLD_MS;
+        timer = setTimeout(release, Math.max(next - Date.now(), 0));
+      }
+    };
+    release();
+    return () => clearTimeout(timer);
+  }, [tree, catchUpOn]);
 
   const loadModels = useCallback(() => {
     fetch("/models")
@@ -2679,15 +2707,16 @@ function App() {
   /** The pick lives in the server file. A pick that an older page saved in `localStorage` moves there once. */
   useEffect(() => {
     fetch("/model-pick")
-      .then((r) => r.json() as Promise<{ pick: ModelPick | null }>)
+      .then((r) => r.json() as Promise<{ pick: ModelPick | null; catchUp: boolean }>)
       .then(
         async (saved) => {
           const old = load(CLI_KEY) as ModelPick | null;
-          const moved = !saved.pick && old ? await putPick(old) : true;
-          if (moved) forget(CLI_KEY);
+          const savedCatchUp = !saved.pick && old ? await putPick(old) : saved.catchUp;
+          if (savedCatchUp !== null) forget(CLI_KEY);
           setCli(saved.pick ?? old ?? null);
+          setCatchUpOn(savedCatchUp ?? saved.catchUp);
         },
-        () => {},
+        () => setCatchUpOn(false),
       );
   }, []);
   useEffect(() => {
@@ -2796,7 +2825,7 @@ function App() {
   };
   const sendToApi = { t3cli, open: (id: string) => setSendTo({ id, open: true }) };
   const pick = clis?.find((c) => c.id === cli)?.id ?? clis?.find((c) => c.id !== "local")?.id;
-  const pickCli = (c: ModelPick) => (setCli(c), void putPick(c));
+  const pickCli = (c: ModelPick) => (setCli(c), void putPick(c).then((on) => on !== null && setCatchUpOn(on)));
   const runBrief = () => {
     if (!pick) return;
     if (cli === null) pickCli(pick);

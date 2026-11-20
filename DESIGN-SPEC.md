@@ -489,6 +489,15 @@ The block is a two-column list of label and value, 12 px. It shows a line only w
 | Tags         | `tags` as plain text. "Pinned" when `pinnedAt` is set.                                                                                                        |
 | PRs          | One line for each PR, all PRs of the row: number, title, state, checks, review, "+212 -40 · 9 files".                                                         |
 
+### Up next second line
+
+A row of the Up next window with a Catch-up has a second line under the top line. The top line stays 28 px. The second line has `pl-[20px]`, `text-[11px]` and `--muted-foreground`, and it truncates to one line.
+
+- **Ask:** "Asks: <ask>", with the options as "A or B?". With no ask, what the thread did.
+- **Loading:** a skeleton bar, `h-2.5 w-40`.
+- **No clear ask or failed call:** a dashed tag, "No clear ask" or "Catch-up failed" (`text-[10px]`, uppercase, `border-dashed`, no status color), then the raw question in italic and quotes. With no raw question, what the thread did, else the thread title.
+- **No Catch-up:** one line, as before.
+
 ### Typography and focus
 
 - Sans: `Inter` when installed, else `system-ui`. Mono: `ui-monospace, "SF Mono", Menlo`.

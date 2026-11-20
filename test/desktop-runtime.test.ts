@@ -5,6 +5,7 @@ import {
   afterCheck,
   fallbackPath,
   isNewer,
+  notificationText,
   parseRelease,
   releaseNotes,
   pickPort,
@@ -14,7 +15,13 @@ import {
   trayItems,
   updateMenuLabel,
 } from "../src/desktop/runtime.ts";
-import type { NeedsYouThread, UpdateState } from "../src/shared/desktop.ts";
+import {
+  askText,
+  catchUpLines,
+  type NeedsYouThread,
+  type ThreadNotifyEvent,
+  type UpdateState,
+} from "../src/shared/desktop.ts";
 
 const listen = (port: number) =>
   new Promise<Server>((resolve, reject) => {
@@ -89,6 +96,15 @@ describe("trayItems", () => {
     expect(trayItems([{ ...th("a b", null, "plan-ready"), environmentId: "e/1" }])).toEqual([
       { label: "Plan ready · a b", url: "t3code://threads/e%2F1/a%20b" },
     ]);
+  });
+  test("a done Catch-up with an ask adds it to the label; any other state keeps today's label", () => {
+    const label = (catchUp: NeedsYouThread["catchUp"]) => trayItems([{ ...th("a", null), catchUp }])[0].label;
+    expect(label({ state: "done", ask: "Ship it?", options: ["now", "later"] })).toBe(
+      "Needs input · a — Ship it? now or later?",
+    );
+    expect(label({ state: "done", ask: null })).toBe("Needs input · a");
+    expect(label({ state: "failed" })).toBe("Needs input · a");
+    expect(label({ state: "running" })).toBe("Needs input · a");
   });
   test("10 threads have no more item, 13 add one that shows the window", () => {
     const many = (n: number) => Array.from({ length: n }, (_, i) => th(String(i), null));
@@ -234,5 +250,76 @@ describe("updateMenuLabel", () => {
     expect(label({ install: { stage: "unpacking" } })).toBe("Installing Update…");
     expect(label({ install: { stage: "restarting" } })).toBe("Restarting…");
     expect(label({ install: { stage: "failed", error: "x" } })).toBe("Update Failed: Open Release Page…");
+  });
+});
+
+describe("askText", () => {
+  test("adds the options as A or B?", () => {
+    expect(askText({ state: "done", ask: "Which?", options: ["A", "B"] })).toBe("Which? A or B?");
+  });
+  test("is the ask with no options", () => {
+    expect(askText({ state: "done", ask: "Ship it?", options: [] })).toBe("Ship it?");
+    expect(askText({ state: "done", ask: "Ship it?" })).toBe("Ship it?");
+  });
+});
+
+describe("catchUpLines", () => {
+  test("a done call with an ask gives the ask and the did", () => {
+    expect(catchUpLines({ state: "done", did: "Built.", ask: "Ship it?", options: ["now"] })).toEqual({
+      ask: "Ship it? now?",
+      did: "Built.",
+      raw: null,
+      why: null,
+    });
+  });
+  test("a done call with no ask gives the raw question", () => {
+    expect(catchUpLines({ state: "done", did: "Built.", ask: null, question: "All done." })).toEqual({
+      ask: null,
+      did: "Built.",
+      raw: "All done.",
+      why: "No clear ask",
+    });
+  });
+  test("a failed call gives the raw question", () => {
+    expect(catchUpLines({ state: "failed", question: "Retry?" })).toEqual({
+      ask: null,
+      did: null,
+      raw: "Retry?",
+      why: "Catch-up failed",
+    });
+  });
+  test("no Catch-up, queued and running give null", () => {
+    expect(catchUpLines(undefined)).toBeNull();
+    expect(catchUpLines({ state: "queued" })).toBeNull();
+    expect(catchUpLines({ state: "running" })).toBeNull();
+  });
+});
+
+describe("notificationText", () => {
+  const e = (catchUp?: ThreadNotifyEvent["catchUp"]): ThreadNotifyEvent => ({
+    kind: "thread",
+    threadId: "a",
+    environmentId: "e",
+    title: "Fix cart",
+    status: "needs-input",
+    catchUp,
+  });
+  test("a done call with an ask puts the ask and the did in the body", () => {
+    expect(notificationText(e({ state: "done", did: "Built.", ask: "Ship it?", options: ["now", "later"] }))).toEqual({
+      title: "Needs input · Fix cart",
+      body: "Asks: Ship it? now or later?\nBuilt.",
+    });
+  });
+  test("no clear ask or a failed call gives the raw question, then the did, then the title", () => {
+    const body = (c: ThreadNotifyEvent["catchUp"]) => notificationText(e(c)).body;
+    expect(body({ state: "done", did: "Built.", ask: null, question: "All done." })).toBe("All done.");
+    expect(body({ state: "failed", question: "Retry?" })).toBe("Retry?");
+    expect(body({ state: "done", did: "Built.", ask: null, question: null })).toBe("Built.");
+    expect(body({ state: "failed", question: null })).toBe("Fix cart");
+    expect(notificationText(e({ state: "failed", question: "Retry?" })).title).toBe("Needs input · Fix cart");
+  });
+  test("no Catch-up, or one that is not finished, gives today's text", () => {
+    expect(notificationText(e())).toEqual({ title: "Needs input", body: "Fix cart" });
+    expect(notificationText(e({ state: "running" }))).toEqual({ title: "Needs input", body: "Fix cart" });
   });
 });

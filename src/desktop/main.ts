@@ -28,13 +28,13 @@ import {
   afterCheck,
   fallbackPath,
   installing,
+  notificationText,
   parseRelease,
   pickPort,
   RESET_AFTER_MS,
   restartDelay,
   shellPath,
   shouldCheck,
-  STATUS_TITLE,
   threadUrl,
   trayItems,
   updateMenuLabel,
@@ -170,7 +170,7 @@ function showNotification(e: NotifyEvent) {
   let n: Notification;
   if (e.kind === "thread") {
     key = e.threadId;
-    n = new Notification({ title: STATUS_TITLE[e.status], body: e.title, silent: false });
+    n = new Notification({ ...notificationText(e), silent: false });
     n.on("click", () => openOutside(threadUrl(e.environmentId, e.threadId)));
   } else {
     key = "";
@@ -232,7 +232,7 @@ function openWindow(base: string) {
 /** Creates the Up next window on its first show: a floating panel on all Spaces that does not take focus. */
 function createUpNext(base: string) {
   const width = 360;
-  const height = 360;
+  const height = 480;
   const screens = screen.getAllDisplays().map((d) => d.workArea);
   const bounds = parseBounds(readJson(dataFile("up-next.json")), screens);
   if (bounds.x === undefined) {

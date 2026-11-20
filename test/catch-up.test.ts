@@ -195,6 +195,23 @@ describe("queue order fallback", () => {
   });
 });
 
+describe("question", () => {
+  test("a done and a failed entry carry the question of the last message; a queued one has none", async () => {
+    const t = setup(undefined, 1);
+    t.messages.set("a", { id: "m-a", text: "Did it. Ship it?" });
+    t.messages.set("b", { id: "m-b", text: "Could not finish. Retry?" });
+    t.sync([node("a", { since: "2026-11-13T01:00:00.000Z" }), node("b", { since: "2026-11-13T02:00:00.000Z" })]);
+    await wait();
+    expect(t.service.of("b")).toEqual({ state: "queued", pick: "claude" });
+    t.calls[0].finish({ answer: ANSWER });
+    await wait();
+    expect(t.service.of("a")?.question).toBe("Ship it?");
+    t.calls[1].finish({ error: "boom", detail: "" });
+    await wait();
+    expect(t.service.of("b")).toEqual({ state: "failed", pick: "claude", question: "Retry?" });
+  });
+});
+
 describe("failure", () => {
   test("a model error is failed, and the same key makes no new call", async () => {
     const t = setup();
@@ -202,7 +219,7 @@ describe("failure", () => {
     await wait();
     t.calls[0].finish({ error: "boom", detail: "" });
     await wait();
-    expect(t.service.of("a")).toEqual({ state: "failed", pick: "claude" });
+    expect(t.service.of("a")).toEqual({ state: "failed", pick: "claude", question: "text a" });
     t.sync([node("a")]);
     await wait();
     expect(t.calls).toHaveLength(1);
