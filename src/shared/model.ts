@@ -1,5 +1,5 @@
 /** The Model pick and the Local model, shared by the server and the page. */
-export type ModelPick = "claude" | "codex" | "local";
+export type ModelPick = "claude" | "codex" | "apple" | "local";
 
 export type LocalConfig = { baseUrl: string; model: string };
 

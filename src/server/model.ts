@@ -1,7 +1,7 @@
 /** The shared model runner: run one Model pick with a feature's guide, input and JSON schema, and parse its answer. */
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
-import { join } from "node:path";
+import { dirname, join } from "node:path";
 
 import * as v from "valibot";
 
@@ -11,7 +11,7 @@ import { writeToken } from "./token.ts";
 export type ModelResult = { answer: unknown } | { error: string; detail: string };
 export type ModelRun = { done: Promise<ModelResult | null>; cancel(): void };
 
-type CliPick = Exclude<ModelPick, "local">;
+type CliPick = Exclude<ModelPick, "local" | "apple">;
 
 const LocalConfigSchema = v.object({
   baseUrl: v.pipe(
@@ -69,7 +69,7 @@ export function localModelRoutes(file: string) {
 }
 
 const PickFileSchema = v.object({
-  pick: v.optional(v.nullable(v.picklist(["claude", "codex", "local"]))),
+  pick: v.optional(v.nullable(v.picklist(["claude", "codex", "apple", "local"]))),
   catchUp: v.optional(v.boolean()),
 });
 
@@ -84,10 +84,10 @@ const readRaw = (file: string): v.InferOutput<typeof PickFileSchema> => {
   }
 };
 
-/** The saved pick and Catch-up switch. A missing or invalid file gives no pick. An unset switch is on for `claude` and `codex`, off for `local`. No pick means off. */
+/** The saved pick and Catch-up switch. A missing or invalid file gives no pick. An unset switch is on for `claude` and `codex`, off for `local` and `apple`. No pick means off. */
 export function readPickFile(file: string): PickSettings {
   const { pick = null, catchUp } = readRaw(file);
-  return { pick, catchUp: pick !== null && (catchUp ?? pick !== "local") };
+  return { pick, catchUp: pick !== null && (catchUp ?? (pick !== "local" && pick !== "apple")) };
 }
 
 /** The `/model-pick` routes: `GET` gives the saved settings, `PUT` merges `{ pick?, catchUp? }` into them, then calls `onSave`. JSON only, like `/local-model`. */
@@ -305,17 +305,166 @@ function runLocal(
   };
 }
 
-/** `localConfig` is the saved Local model config, read on each call. `timeoutMs` is the Local model run timeout. */
-export function createModels(o: { localConfig: () => LocalConfig | null; timeoutMs?: number }) {
+/** The Apple model helper: the file beside the executable, else the dev build. `null` when neither exists. */
+export function appleHelperPath(): string | null {
+  return (
+    [join(dirname(process.execPath), "apple-model"), "dist/sidecar/apple-model"].find((p) => existsSync(p)) ?? null
+  );
+}
+
+type Json = Record<string, unknown>;
+
+const isNullable = (s: unknown): boolean =>
+  Array.isArray((s as Json)?.type) && ((s as Json).type as unknown[]).includes("null");
+
+/** The helper's schema form: each object gets `title` and `x-order`, and a nullable type becomes its non-null type and leaves `required`. */
+export function appleSchema(schema: object, title = "Answer"): Json {
+  const out: Json = { ...schema };
+  if (Array.isArray(out.type)) out.type = out.type.find((t) => t !== "null");
+  if (out.items) out.items = appleSchema(out.items, title);
+  const props = out.properties as Record<string, Json> | undefined;
+  if (props) {
+    out.title = title;
+    out["x-order"] = Object.keys(props);
+    out.properties = Object.fromEntries(Object.entries(props).map(([k, p]) => [k, appleSchema(p, k)]));
+    if (Array.isArray(out.required)) out.required = out.required.filter((k: string) => !isNullable(props[k]));
+  }
+  return out;
+}
+
+/** Sets each nullable key that the answer leaves out to `null`, following the original schema. */
+function fillNulls(schema: object, value: unknown): unknown {
+  const s = schema as Json;
+  if (Array.isArray(value)) return value.map((x) => fillNulls((s.items as Json) ?? {}, x));
+  if (typeof value !== "object" || value === null) return value;
+  const props = (s.properties ?? {}) as Record<string, Json>;
+  const out = { ...(value as Json) };
+  for (const [k, p] of Object.entries(props)) {
+    if (k in out) out[k] = fillNulls(p, out[k]);
+    else if (isNullable(p)) out[k] = null;
+  }
+  return out;
+}
+
+const APPLE_TEXT: Record<string, string> = {
+  contextWindow: "The thread did not fit in the Apple model's window.",
+  refusal: "The Apple model refused the input.",
+  guardrail: "The Apple model refused the input.",
+  decoding: "The Apple model gave no valid answer.",
+  busy: "The Apple model is busy. Try again.",
+  locale: "The Apple model does not support this language.",
+};
+
+const APPLE_UNAVAILABLE: Record<string, string> = {
+  deviceNotEligible: "This Mac cannot run the Apple model.",
+  appleIntelligenceNotEnabled: "Turn on Apple Intelligence in System Settings to use the Apple model.",
+  modelNotReady: "The Apple model is not ready yet. Try again later.",
+  assetsUnavailable: "The Apple model is not ready yet. Try again later.",
+};
+
+/** The run error for an exit 1 object of the helper. */
+function appleText(out: Json | null): string {
+  const e = out?.error;
+  if (e === "overflow" && typeof out?.tokens === "number" && typeof out.limit === "number")
+    return `The thread is too long for the Apple model: ${out.tokens.toLocaleString("en-US")} of ${out.limit.toLocaleString("en-US")} tokens.`;
+  const [table, key] = e === "unavailable" ? [APPLE_UNAVAILABLE, String(out?.reason)] : [APPLE_TEXT, String(e)];
+  return Object.hasOwn(table, key) ? table[key] : "The Apple model helper exited with code 1.";
+}
+
+const parseJson = (s: string): Json | null => {
+  try {
+    return JSON.parse(s);
+  } catch {
+    return null;
+  }
+};
+
+/** One Apple model run. Spawn, timeout and cancel follow the CLI branch of `run()` in `createModels`: fix both together. */
+function runApple(
+  helper: string | null,
+  job: { guide: string; input: string; schema: object },
+  timeoutMs: number,
+): ModelRun {
+  let cancelled = false;
+  let proc: ReturnType<typeof Bun.spawn> | undefined;
+  const done = (async (): Promise<ModelResult | null> => {
+    try {
+      if (!helper) throw new Error("no helper");
+      proc = Bun.spawn([helper, "run"], {
+        stdin: Buffer.from(JSON.stringify({ ...job, schema: appleSchema(job.schema) })),
+        stdout: "pipe",
+        stderr: "pipe",
+      });
+    } catch (e) {
+      return { error: "Cannot start the Apple model helper.", detail: (e as Error).message };
+    }
+    if (cancelled) proc.kill("SIGTERM");
+    let timedOut = false;
+    const timer = setTimeout(() => ((timedOut = true), proc!.kill("SIGTERM")), timeoutMs);
+    const [stdout, stderr, code] = await Promise.all([
+      new Response(proc.stdout as ReadableStream).text(),
+      new Response(proc.stderr as ReadableStream).text(),
+      proc.exited,
+    ]);
+    clearTimeout(timer);
+    if (cancelled) return null;
+    const detail = stderr.slice(-TAIL);
+    if (timedOut) return { error: "timed out", detail };
+    const out = parseJson(stdout);
+    if (code === 0) {
+      if (!out || !("answer" in out)) return { error: "The Apple model gave no valid answer.", detail };
+      return { answer: fillNulls(job.schema, out.answer) };
+    }
+    return { error: code === 1 ? appleText(out) : `The Apple model helper exited with code ${code}.`, detail };
+  })();
+  return {
+    done,
+    cancel() {
+      cancelled = true;
+      proc?.kill("SIGTERM");
+    },
+  };
+}
+
+/** The Apple model when `check` says it is available, else `null` with the reason logged. Free: no model call. */
+async function appleOffered(helper: string): Promise<{ id: "apple"; label: string } | null> {
+  let why: string;
+  try {
+    const proc = Bun.spawn([helper, "check"], { stdout: "pipe", stderr: "ignore" });
+    const [stdout, code] = await Promise.all([new Response(proc.stdout as ReadableStream).text(), proc.exited]);
+    const out = parseJson(stdout);
+    if (code !== 0) why = `exit code ${code}`;
+    else if (out?.available === true) return { id: "apple", label: "Apple model" };
+    else why = out && "available" in out ? String(out.reason) : "bad output";
+  } catch (e) {
+    why = (e as Error).message;
+  }
+  console.log(`thread tree: Apple model hidden: ${why}`);
+  return null;
+}
+
+/** `localConfig` is the saved Local model config, read on each call. `appleHelper` is the helper path, or `null` for none. `timeoutMs` is the Local and Apple model run timeout. */
+export function createModels(o: {
+  localConfig: () => LocalConfig | null;
+  appleHelper: string | null;
+  timeoutMs?: number;
+}) {
   const detected = detect();
   return {
     offered: async (): Promise<{ id: ModelPick; label: string }[]> => {
       const c = o.localConfig();
-      return [...(await detected), ...(c ? [{ id: "local" as const, label: `Local · ${c.model}` }] : [])];
+      /** ponytail: `check` has no timeout, so a hung helper blocks `GET /models`; add one if a hang is seen. */
+      const apple = o.appleHelper ? await appleOffered(o.appleHelper) : null;
+      return [
+        ...(await detected),
+        ...(apple ? [apple] : []),
+        ...(c ? [{ id: "local" as const, label: `Local · ${c.model}` }] : []),
+      ];
     },
     /** One run. `done` gives `null` after `cancel()`. */
     run(pick: ModelPick, job: { guide: string; input: string; schema: object }): ModelRun {
       if (pick === "local") return runLocal(o.localConfig(), job, o.timeoutMs ?? TIMEOUT_MS);
+      if (pick === "apple") return runApple(o.appleHelper, job, o.timeoutMs ?? TIMEOUT_MS);
       let cancelled = false;
       let proc: ReturnType<typeof Bun.spawn> | undefined;
       const done = (async (): Promise<ModelResult | null> => {
