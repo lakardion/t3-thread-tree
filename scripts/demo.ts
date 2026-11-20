@@ -365,6 +365,13 @@ let localConfig: LocalConfig | null = localEnv
   : null;
 const localAnswer = () => Response.json({ config: localConfig, state: localConfig ? (localEnv ?? "ok") : "unset" });
 
+/** In-memory pick file, so the demo pick saves. */
+let savedPick: { pick?: ModelPick | null; catchUp?: boolean } = {};
+const pickAnswer = () => {
+  const { pick = null, catchUp } = savedPick;
+  return Response.json({ pick, catchUp: pick !== null && (catchUp ?? pick !== "local") });
+};
+
 const listeners = new Set<(event: string, data: string) => void>();
 const brief = briefService({
   offered: () =>
@@ -470,6 +477,14 @@ const server = Bun.serve({
         localConfig = { baseUrl: b.baseUrl, model: b.model };
       }
       return localAnswer();
+    },
+    "/model-pick": async (req) => {
+      if (req.method === "PUT") {
+        const b = (await req.json().catch(() => null)) as typeof savedPick | null;
+        if (!b) return new Response("Not valid settings", { status: 400 });
+        savedPick = { ...savedPick, ...b };
+      }
+      return pickAnswer();
     },
     ...sender.routes,
     ...lastMessageRoutes({ read: lastMessage, has: (id) => threads.some((th) => th.id === id) }),

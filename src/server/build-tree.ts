@@ -8,6 +8,7 @@ import {
   NO_PROJECT,
   REVIEWS,
   type Branch,
+  type CatchUp,
   type Detail,
   type Label,
   type LinearIssue,
@@ -71,6 +72,8 @@ export type BuildInput = {
   labelsOf?: (p: Thread["prs"][number]) => Label[] | undefined;
   /** Linear data of an issue key. Unset: no node gets Linear data. */
   linearOf?: (key: string) => LinearIssue | undefined;
+  /** The Catch-up of a thread. Unset: no node gets one. */
+  catchUpOf?: (id: string) => CatchUp | undefined;
 };
 
 type Node = ThreadNode & { t: Thread; first: string };
@@ -206,6 +209,7 @@ function prepare(input: BuildInput) {
     const st = si === undefined ? null : stacks[si];
     const pos = st && created !== undefined && st.order.includes(created) ? st.order.indexOf(created) + 1 : null;
     const key = issueKey(t.title);
+    const catchUp = input.catchUpOf?.(t.id);
     nodes.set(t.id, {
       t,
       id: t.id,
@@ -226,6 +230,7 @@ function prepare(input: BuildInput) {
         .map((p) => prNode(p, labelsFor(t, p))),
       detail: { ...detailOf(t, now, all), launchedBy: null },
       children: [],
+      ...(catchUp && { catchUp }),
       first: creationKey(t),
     });
   }

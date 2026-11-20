@@ -68,6 +68,47 @@ export function localModelRoutes(file: string) {
   };
 }
 
+const PickFileSchema = v.object({
+  pick: v.optional(v.nullable(v.picklist(["claude", "codex", "local"]))),
+  catchUp: v.optional(v.boolean()),
+});
+
+export type PickSettings = { pick: ModelPick | null; catchUp: boolean };
+
+const readRaw = (file: string): v.InferOutput<typeof PickFileSchema> => {
+  try {
+    const r = v.safeParse(PickFileSchema, JSON.parse(readFileSync(file, "utf8")));
+    return r.success ? r.output : {};
+  } catch {
+    return {};
+  }
+};
+
+/** The saved pick and Catch-up switch. A missing or invalid file gives no pick. An unset switch is on for `claude` and `codex`, off for `local`. No pick means off. */
+export function readPickFile(file: string): PickSettings {
+  const { pick = null, catchUp } = readRaw(file);
+  return { pick, catchUp: pick !== null && (catchUp ?? pick !== "local") };
+}
+
+/** The `/model-pick` routes: `GET` gives the saved settings, `PUT` merges `{ pick?, catchUp? }` into them, then calls `onSave`. JSON only, like `/local-model`. */
+export function pickRoutes(file: string, onSave: () => void) {
+  const reply = () => Response.json(readPickFile(file));
+  return {
+    "/model-pick": {
+      GET: reply,
+      PUT: async (req: Request) => {
+        if (!req.headers.get("content-type")?.startsWith("application/json"))
+          return new Response(null, { status: 415 });
+        const r = v.safeParse(PickFileSchema, await req.json().catch(() => null));
+        if (!r.success) return new Response("Not valid settings", { status: 400 });
+        writeToken(file, JSON.stringify({ ...readRaw(file), ...r.output }));
+        onSave();
+        return reply();
+      },
+    },
+  };
+}
+
 const CLIS: Record<CliPick, { label: string; status: string[] }> = {
   claude: { label: "Claude Haiku", status: ["claude", "auth", "status"] },
   codex: { label: "Codex Luna", status: ["codex", "login", "status"] },

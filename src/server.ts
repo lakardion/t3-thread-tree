@@ -5,18 +5,19 @@ import index from "./page/index.html";
 import upNext from "./page/up-next.html";
 import { briefInput, briefService, lastMessageRoutes, runBrief } from "./server/brief.ts";
 import { buildLinearTree, buildTree, issueKey } from "./server/build-tree.ts";
+import { catchUpService } from "./server/catch-up.ts";
 import { findRoutes } from "./server/find.ts";
 import { labelStore } from "./server/labels.ts";
 import { mayBeLaunched, needsScan, openLineage } from "./server/lineage.ts";
 import { fetchLinear } from "./server/linear-api.ts";
 import { linearStore } from "./server/linear.ts";
-import { createModels, localModelRoutes, readLocalConfig } from "./server/model.ts";
+import { createModels, localModelRoutes, pickRoutes, readLocalConfig, readPickFile } from "./server/model.ts";
 import { checkCli, cliPath, sendService } from "./server/send.ts";
 import { settleRoutes } from "./server/settle.ts";
 import { settledPage, settledRoutes, settledSignature } from "./server/settled.ts";
 import { connectShell, readEnvironmentId, type Project, type Thread } from "./server/t3.ts";
 import { parseToken, readToken, tokenResponse, writeToken } from "./server/token.ts";
-import { parseLabels, parseLinear, type Conn, type Tree } from "./shared/tree.ts";
+import { allThreads, parseLabels, parseLinear, type Conn, type Tree } from "./shared/tree.ts";
 
 const threads = new Map<string, Thread>();
 const projects = new Map<string, Project>();
@@ -111,6 +112,7 @@ const treeFor = (settled: boolean, nest = false, labels: string[] = [], wantsLin
     labels,
     labelsOf: store.labelsOf,
     linearOf: wantsLinear ? linearSource.of : undefined,
+    catchUpOf: (id) => catchUp.of(id),
   }),
 });
 
@@ -140,6 +142,7 @@ let timer: ReturnType<typeof setTimeout> | undefined;
 function changed() {
   clearTimeout(timer);
   timer = setTimeout(() => {
+    catchUp.sync(treeFor(false).projects.flatMap(allThreads), lineage.lastEntries, Date.now());
     const cache = new Map<string, string>();
     for (const c of clients) {
       const key = `${c.nest}|${c.labels.join(",")}|${c.wantsLinear}`;
@@ -213,6 +216,13 @@ const shell = connectShell({
 /** `PUT /local-model` saves the Local model config here. */
 const localModelFile = process.env.LOCAL_MODEL_FILE ?? join(homedir(), ".config", "t3-thread-tree", "local-model");
 const models = createModels({ localConfig: () => readLocalConfig(localModelFile) });
+/** `PUT /model-pick` saves the pick and the Catch-up switch here. */
+const pickFile = process.env.MODEL_PICK_FILE ?? join(homedir(), ".config", "t3-thread-tree", "model-pick");
+const catchUp = catchUpService({
+  run: (pick, job) => models.run(pick, job),
+  settings: () => readPickFile(pickFile),
+  onChange: () => changed(),
+});
 const brief = briefService({
   offered: () => models.offered(),
   run: (p, t) => runBrief((pick, job) => models.run(pick, job), p, t),
@@ -242,6 +252,10 @@ const server = Bun.serve({
     ...brief.routes,
     ...send.routes,
     ...localModelRoutes(localModelFile),
+    ...pickRoutes(pickFile, () => {
+      if (!readPickFile(pickFile).catchUp) catchUp.clear();
+      changed();
+    }),
     ...settleRoutes({ dispatch: (c) => shell.dispatch(c), hasThread: (id) => threads.get(id)?.gone === false }),
     ...findRoutes(() => treeFor(true).projects),
     ...settledRoutes({

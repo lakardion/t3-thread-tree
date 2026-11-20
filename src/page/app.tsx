@@ -1232,6 +1232,17 @@ const forget = (k: string) => {
   } catch {}
 };
 
+/** Whether the server saved the pick. */
+const putPick = (pick: ModelPick) =>
+  fetch("/model-pick", {
+    method: "PUT",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ pick }),
+  }).then(
+    (res) => res.ok,
+    () => false,
+  );
+
 const hhmm = (iso: string) => new Date(iso).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" });
 const until = (iso: string) =>
   new Date(iso).toLocaleString([], { weekday: "short", hour: "2-digit", minute: "2-digit" });
@@ -2541,7 +2552,7 @@ function App() {
   );
   const [brief, setBrief] = useState<BriefState>({ status: "idle" });
   const [clis, setClis] = useState<Offered | null>(null);
-  const [cli, setCli] = useState(load(CLI_KEY) as ModelPick | null);
+  const [cli, setCli] = useState<ModelPick | null | undefined>(undefined);
   const [hideBrief, setHideBrief] = useState(false);
   const [t3cli, setT3cli] = useState<CliStatus | null>(null);
   const [sent, setSent] = useState(() => new Map<string, string[]>());
@@ -2665,6 +2676,20 @@ function App() {
       .then((r) => r.json() as Promise<Offered>)
       .then(setClis, () => setClis([]));
   }, []);
+  /** The pick lives in the server file. A pick that an older page saved in `localStorage` moves there once. */
+  useEffect(() => {
+    fetch("/model-pick")
+      .then((r) => r.json() as Promise<{ pick: ModelPick | null }>)
+      .then(
+        async (saved) => {
+          const old = load(CLI_KEY) as ModelPick | null;
+          const moved = !saved.pick && old ? await putPick(old) : true;
+          if (moved) forget(CLI_KEY);
+          setCli(saved.pick ?? old ?? null);
+        },
+        () => {},
+      );
+  }, []);
   useEffect(() => {
     loadModels();
     fetch("/t3/cli")
@@ -2771,8 +2796,10 @@ function App() {
   };
   const sendToApi = { t3cli, open: (id: string) => setSendTo({ id, open: true }) };
   const pick = clis?.find((c) => c.id === cli)?.id ?? clis?.find((c) => c.id !== "local")?.id;
+  const pickCli = (c: ModelPick) => (setCli(c), void putPick(c));
   const runBrief = () => {
     if (!pick) return;
+    if (cli === null) pickCli(pick);
     setHideBrief(false);
     setBriefFolded(false);
     void fetch("/brief/run", { method: "POST", body: JSON.stringify({ cli: pick }) });
@@ -3110,13 +3137,7 @@ function App() {
         </ToggleGroup>
         <OpenNextButton target={target} title={openNextTitle} now={now} open={openNext} />
         <FocusButton count={focus.length} shown={focusShow} setShown={setFocusShow} />
-        <BriefControls
-          clis={clis}
-          cli={pick}
-          setCli={(c) => (setCli(c), save(CLI_KEY, c))}
-          running={brief.status === "running"}
-          run={runBrief}
-        />
+        <BriefControls clis={clis} cli={pick} setCli={pickCli} running={brief.status === "running"} run={runBrief} />
         <div className="ml-auto flex items-center gap-1">
           <div className="min-[720px]:hidden">
             <ViewMenu

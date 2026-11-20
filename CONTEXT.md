@@ -107,6 +107,10 @@ _Avoid_: CLI, provider, engine
 A model that runs on the user's machine, in a runtime the user starts, and writes the **Next-step brief**. Thread text does not leave the machine. It is an opt-in **Model pick** next to the remote ones: the page never picks it on its own, and never falls back from it to a remote CLI.
 _Avoid_: offline model, on-device AI
 
+**Catch-up**:
+One line, written by the **Model pick**, that says what a waiting thread did and what it asks of the user. The server makes it once for each waiting thread message and request, and keeps it in memory.
+_Avoid_: summary, brief
+
 **Send**:
 One message from the page to one thread, through the `t3` CLI, after the user confirms it in the send dialog. A busy thread gets it as its next turn. Nothing is interrupted.
 _Avoid_: post, push, dispatch

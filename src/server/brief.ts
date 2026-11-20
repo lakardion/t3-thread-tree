@@ -10,8 +10,8 @@ export type InputThread = { id: string; ref: string; title: string; digest: stri
 const MSG_TAIL = 600;
 const NO_ACTION = new Set(["working", "starting", "waiting", "snoozed"]);
 
-/** The last `MSG_TAIL` characters of a message, with a leading `…` when it was cut. */
-export const tailOf = (message: string) => (message.length > MSG_TAIL ? `…${message.slice(-MSG_TAIL)}` : message);
+/** The last `max` characters of a message, with a leading `…` when it was cut. */
+export const tailOf = (message: string, max = MSG_TAIL) => (message.length > max ? `…${message.slice(-max)}` : message);
 
 /** `GET /t3/last-message?id=`: the tail of a thread's last message. The id is a query value because ids hold `:`. */
 export function lastMessageRoutes(o: { read: (id: string) => string | null; has: (id: string) => boolean }) {
@@ -28,8 +28,8 @@ export function lastMessageRoutes(o: { read: (id: string) => string | null; has:
   };
 }
 
-/** One thread as text: a line of facts, then the indented tail of the last assistant message. */
-export function digestOf(n: ThreadNode, ref: string, message: string | null, now: number): string {
+/** One thread as text: a line of facts, then the indented `tail` characters of the last assistant message. */
+export function digestOf(n: ThreadNode, ref: string, message: string | null, now: number, tail = MSG_TAIL): string {
   const prs = n.prs.map((p) =>
     [`#${p.n}`, p.state !== "open" && p.state, p.draft && "draft", p.review, p.checks, p.conflicting && "conflicting"]
       .filter(Boolean)
@@ -46,7 +46,7 @@ export function digestOf(n: ThreadNode, ref: string, message: string | null, now
     .filter(Boolean)
     .join(" · ");
   if (!message) return line;
-  return `${line}\n${tailOf(message).replace(/^/gm, "  ")}`;
+  return `${line}\n${tailOf(message, tail).replace(/^/gm, "  ")}`;
 }
 
 const KIND_RANK: BriefAction["kind"][] = ["answer", "fix", "merge"];
