@@ -489,6 +489,16 @@ The block is a two-column list of label and value, 12 px. It shows a line only w
 | Tags         | `tags` as plain text. "Pinned" when `pinnedAt` is set.                                                                                                        |
 | PRs          | One line for each PR, all PRs of the row: number, title, state, checks, review, "+212 -40 · 9 files".                                                         |
 
+### Catch-up row line
+
+A thread row with a Catch-up has a line under the title. The title keeps its place, and the line sits in the same column. The line has `text-xs`, `leading-[18px]` and `--muted-foreground`, and it truncates to one line. Under 720 px, the line takes the full width with `pl-5`, like the title.
+
+- **Ask:** the `did` text, "Asks:" in semibold in the status color, the ask in `--foreground`, then each option as an outline chip (`h-[18px]`, `text-[11px]`).
+- **Loading:** a skeleton bar, `h-3 w-56`. It does not pulse with reduced motion.
+- **No clear ask or failed call:** a dashed tag (`text-[10px]`, uppercase, `border-dashed`, no status color), then the first line of the raw question in italic and quotes.
+- **Tooltip:** the line shows the last message of the thread. Like the "Updated" tooltip of the row, it does not open on touch.
+- **No Catch-up:** one line, as before.
+
 ### Up next second line
 
 A row of the Up next window with a Catch-up has a second line under the top line. The top line stays 28 px. The second line has `pl-[20px]`, `text-[11px]` and `--muted-foreground`, and it truncates to one line.

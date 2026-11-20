@@ -3,6 +3,7 @@ import { describe, expect, test } from "bun:test";
 import {
   countAttention,
   favicon,
+  hasCatchUpLine,
   needsYou,
   needsYouTip,
   needsYouThreads,
@@ -70,6 +71,19 @@ describe("countAttention", () => {
 
   test("an empty tree gives zeros", () => {
     expect(countAttention([])).toEqual({ needYou: 0, working: 0, yourTurn: 0, stopped: 0 });
+  });
+});
+
+describe("hasCatchUpLine", () => {
+  const catchUp = { state: "queued", pick: "claude" } as const;
+  test("true for a waiting or failed thread with a Catch-up", () => {
+    for (const s of ["needs-input", "plan-ready", "your-turn", "failed"] as const)
+      expect(hasCatchUpLine({ status: s, catchUp })).toBe(true);
+  });
+  test("false for other statuses or no Catch-up", () => {
+    expect(hasCatchUpLine({ status: "working", catchUp })).toBe(false);
+    expect(hasCatchUpLine({ status: "done", catchUp })).toBe(false);
+    expect(hasCatchUpLine({ status: "needs-input" })).toBe(false);
   });
 });
 

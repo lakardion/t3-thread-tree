@@ -119,6 +119,7 @@ import {
   withoutSnoozed,
 } from "./attention.ts";
 import { BriefControls, BriefPanel, CopyPrompt, type Offered } from "./brief.tsx";
+import { CatchUpTitle } from "./catch-up-line.tsx";
 import { FindDialog, FIND_KEY, MAC } from "./find.tsx";
 import {
   addFocus,
@@ -1726,18 +1727,20 @@ function ThreadRow({
             </Badge>
           )}
           {review && <Eye className="size-3.5 flex-none text-review" aria-label="Review" />}
-          <a
-            className={cn(
-              "min-w-0 flex-1 break-words group-focus-within/row:truncate group-hover/row:truncate hover:underline",
-              t.status === "your-turn" ? "font-[650]" : "font-medium",
-              (t.status === "snoozed" || t.settled || dim) && "text-muted-foreground",
-              "max-[720px]:basis-full max-[720px]:pl-5",
-            )}
-            href={t.href}
-            data-stop={t.id}
-          >
-            {(chip ? stripKey(t.title, chip) : t.title) || t.id}
-          </a>
+          <CatchUpTitle t={t}>
+            <a
+              className={cn(
+                "min-w-0 flex-1 break-words group-focus-within/row:truncate group-hover/row:truncate hover:underline",
+                t.status === "your-turn" ? "font-[650]" : "font-medium",
+                (t.status === "snoozed" || t.settled || dim) && "text-muted-foreground",
+                "max-[720px]:basis-full max-[720px]:pl-5",
+              )}
+              href={t.href}
+              data-stop={t.id}
+            >
+              {(chip ? stripKey(t.title, chip) : t.title) || t.id}
+            </a>
+          </CatchUpTitle>
           <span className="ml-auto flex flex-none items-center gap-1.5 max-[720px]:ml-0 max-[720px]:basis-full max-[720px]:flex-wrap max-[720px]:pl-5">
             {t.input && (
               <Badge variant="outline" className={CHIP}>

@@ -15,6 +15,10 @@ export type Counts = { needYou: number; working: number; yourTurn: number; stopp
 export const needsYou = (s: Status): s is "needs-input" | "plan-ready" | "your-turn" =>
   s === "needs-input" || s === "plan-ready" || s === "your-turn";
 
+/** Whether a row shows a Catch-up line. The statuses match `WAITING` in `src/server/catch-up.ts`. */
+export const hasCatchUpLine = (t: Pick<ThreadNode, "status" | "catchUp">) =>
+  !!t.catchUp && (needsYou(t.status) || t.status === "failed");
+
 /** The tooltip of the "Needs you" chip numbers: the Needs-you count, then the your-turn count; "" when both are 0. */
 export const needsYouTip = (c: Counts): string =>
   [c.needYou > 0 && `${c.needYou} need you`, c.yourTurn > 0 && `${c.yourTurn} your turn`].filter(Boolean).join(", ");
