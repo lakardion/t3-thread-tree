@@ -159,6 +159,7 @@ bun run lint             # oxlint
 bun run fmt              # oxfmt, writes fixes
 bun run check            # all of the above, as CI runs it
 bun run build:sidecar    # compiles the server (macOS arm64)
+bun run build:apple-helper  # compiles the Apple model helper (macOS 26.4 SDK)
 bun run desktop:install  # builds and installs the app in /Applications
 bun run desktop:dmg      # builds the .dmg in release/
 bun run release          # builds the .dmg and .zip and creates the GitHub release
