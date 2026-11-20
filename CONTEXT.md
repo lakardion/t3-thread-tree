@@ -79,6 +79,10 @@ _Avoid_: finished, stale, ready to close
 The control that finds any thread by title, issue key, project, branch or PR number, and opens it or shows it in the tree. It searches the active threads, and the settled threads on request.
 _Avoid_: search, quick open, command palette
 
+**Key hint**:
+A small key cap on the page, beside a control or in a row, that names the key that does the same thing, for example ⇧↵ beside "Show in tree" in **Find**. It only names a key; the user can hide all key hints. The tooltips and the Keys legend in Settings are not key hints.
+_Avoid_: shortcut hint, keyboard hint, keycap badge
+
 **Digest**:
 The compact text form of one thread that the model reads for a **Catch-up**: one line of facts, then the tail of the last assistant message.
 _Avoid_: summary, snapshot
