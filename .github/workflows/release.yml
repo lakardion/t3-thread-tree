@@ -23,7 +23,7 @@ jobs:
   release:
     needs: check
     if: needs.check.outputs.published == 'false'
-    runs-on: macos-15
+    runs-on: macos-26
     steps:
       - uses: actions/checkout@v4
       - uses: oven-sh/setup-bun@v2
@@ -31,6 +31,7 @@ jobs:
           bun-version: 1.3.14
       - run: test "$GITHUB_REF_NAME" = "v$(jq -r .version package.json)"
       - run: bun install --frozen-lockfile
+      - run: xcrun --show-sdk-version
       - run: bun run desktop:dmg --publish never
       - run: gh release create "$GITHUB_REF_NAME" release/*.dmg release/*.zip --generate-notes
         env:

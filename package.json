@@ -9,10 +9,11 @@
     "typecheck": "tsc --noEmit",
     "desktop:bundle": "bun build src/desktop/main.ts src/desktop/preload.ts src/desktop/up-next-preload.ts --target node --format cjs --external electron --outdir dist/desktop --entry-naming '[name].cjs'",
     "desktop": "bun run desktop:bundle && electron .",
-    "desktop:install": "bun run build:sidecar && bun run desktop:bundle && electron-builder --dir && rm -rf '/Applications/T3 Thread Tree.app' && ditto 'release/mac-arm64/T3 Thread Tree.app' '/Applications/T3 Thread Tree.app'",
-    "desktop:dmg": "bun run build:sidecar && bun run desktop:bundle && electron-builder",
+    "desktop:install": "bun run build:sidecar && bun run build:apple-helper && bun run desktop:bundle && electron-builder --dir && rm -rf '/Applications/T3 Thread Tree.app' && ditto 'release/mac-arm64/T3 Thread Tree.app' '/Applications/T3 Thread Tree.app'",
+    "desktop:dmg": "bun run build:sidecar && bun run build:apple-helper && bun run desktop:bundle && electron-builder",
     "desktop:demo": "DESKTOP_DEMO=1 bun run desktop",
     "build:sidecar": "bun run scripts/build-sidecar.ts",
+    "build:apple-helper": "mkdir -p dist/sidecar && swiftc -O -target arm64-apple-macos26.4 src/apple-model/main.swift -o dist/sidecar/apple-model",
     "demo": "bun run scripts/demo.ts",
     "lint": "oxlint --deny-warnings --disable-nested-config",
     "fmt": "oxfmt --disable-nested-config",
@@ -64,6 +65,10 @@
       {
         "from": "dist/sidecar/server",
         "to": "server"
+      },
+      {
+        "from": "dist/sidecar/apple-model",
+        "to": "apple-model"
       }
     ],
     "mac": {
