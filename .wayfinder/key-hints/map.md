@@ -57,7 +57,7 @@ Decided at charting (by the user):
 - **Key cap:** the shadcn `Kbd` component (`bunx shadcn add kbd`, one file in `src/components/ui/`, no new package). The Keys legend in Settings moves to `Kbd` too, so every key looks the same. No key cap library.
 - **Term:** **Key hint** in `CONTEXT.md`. Switch label "Show key hints".
 
-- [How do the key hints look, and when do they show?](tickets/01-key-hints-look.md): hold Alt/Option only (nothing always on); Find gets a footer bar; header `n`/`t`, focused row `o`/`s`, slots `1`–`3`, all on hold; the switch off also stops the hold.
+- [How do the key hints look, and when do they show?](tickets/01-key-hints-look.md): hold Alt/Option only (nothing always on); hints float, no layout shift; Find gets a footer bar; header `n`/`t`, focused row `o`/`s`, slots `1`–`3`, all on hold; the switch off also stops the hold.
 
 ## Not yet specified
 

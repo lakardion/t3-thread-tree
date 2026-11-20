@@ -33,13 +33,14 @@ Write the `## Spec` and `## Done when` of [the build ticket](02-key-hints-build.
 
 ## Resolution
 
-Decided by the user on the prototype: [`prototype/key-hints-look`](https://github.com/lakardion/t3-thread-tree/tree/prototype/key-hints-look) (commit `4c0c6bc`, `src/page/key-hints.prototype.tsx`, variants A–D, `bun run demo` then `?variant=B`).
+Decided by the user on the prototype: [`prototype/key-hints-look`](https://github.com/lakardion/t3-thread-tree/tree/prototype/key-hints-look) (commit `4c0c6bc`, floating hints in the next commit on the branch, `src/page/key-hints.prototype.tsx`, variants A–D, `bun run demo` then `?variant=B`).
 
 - **Mode: B, hold only.** No key hint shows until the user asks for it. The user holds Alt/Option alone for 300 ms, then all hints show. They hide on key up, on any other key (a chord, so Option+key typing in a field is safe), on a click, and on window blur. A shorter tap does nothing. Always-on hints (A, C, D) are rejected: "none should show the hints if not requested".
 - **Find: footer bar** under the list, on hold: `↑↓ Move · ↵ Open · ⇧↵ Show in tree · esc Close`. Not hints on the selected row. The ⌖ row button tooltip becomes "Show in tree (Shift+Enter)" (always, it is a tooltip).
 - **Header:** `n` in Open next, `t` in Triage, on hold. The Find header button no longer exists (#94), so ⌘K has no header surface.
 - **Focused row:** `o Details · s Send` on the thread row whose stop has keyboard focus, on hold.
 - **Focus slots:** `1`, `2`, `3` next to the Open button of each filled slot, on hold.
+- **Floating:** every hint floats over the page (absolute, `pointer-events: none`). It takes no space, so a hint never shifts the layout. Header caps sit on the top-right corner of their button. The row hints are one small pill above the right side of the focused row. The Find bar floats over the bottom of the result list. The slot number sits on the top-left corner of the slot card. Asked by the user after the first pick.
 - **Look:** shadcn `Kbd`, small (`h-4`/`h-5`, 10–12 px) and muted (`bg-muted`, `text-muted-foreground`). Readable in light and dark in the prototype.
 - **Touch:** no hints when `(hover: none), (pointer: coarse)`. Below 720 px the header hints hide with the button labels.
 - **Switch:** "Show key hints", on by default. Off turns the hold off too: no key hint shows at all.
