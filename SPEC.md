@@ -517,16 +517,16 @@ When a thread waits for the user, the send dialog offers **Suggested replies**: 
 
 Each **Reply intent** has an id, one or two chip texts and a cue. The chip label and the sent text are the same string. The table order is the pool order.
 
-| Intent id    | Chip text                                    | Cue on the last agent message                                                                           |
-| ------------ | -------------------------------------------- | ------------------------------------------------------------------------------------------------------- |
-| `run-app`    | `run the app and tell me what to test`       | The `ship` cue, and a UI sign: it names a `.tsx`, `.css` or `.html` file, or says "UI", "page" or "browser". |
-| `ship`       | `commit push`, then `commit push pr`         | The work is not committed. The message has no `fail`, `error` or "not tested".                          |
-| `push`       | `push`                                       | The commit is local or not pushed.                                                                      |
-| `handoff`    | `$t3-handoff`                                | It names a next ticket, or writes `/t3-handoff`.                                                        |
-| `retry`      | `retry`                                      | An API or network error, not a usage limit.                                                             |
-| `agree-all`  | `agreed to all`                              | A grill round with `❓ Q<N>` and `➡️` lines.                                                            |
-| `merged`     | `merged`                                     | It asks the user to say when the PR is merged.                                                          |
-| `refresh-pr` | `$refresh-pr`                                | It says the PR body is stale.                                                                           |
+| Intent id    | Chip text                              | Cue on the last agent message                                                                                |
+| ------------ | -------------------------------------- | ------------------------------------------------------------------------------------------------------------ |
+| `run-app`    | `run the app and tell me what to test` | The `ship` cue, and a UI sign: it names a `.tsx`, `.css` or `.html` file, or says "UI", "page" or "browser". |
+| `ship`       | `commit push`, then `commit push pr`   | The work is not committed. The message has no `fail`, `error` or "not tested".                               |
+| `push`       | `push`                                 | The commit is local or not pushed.                                                                           |
+| `handoff`    | `$t3-handoff`                          | It names a next ticket, or writes `/t3-handoff`.                                                             |
+| `retry`      | `retry`                                | An API or network error, not a usage limit.                                                                  |
+| `agree-all`  | `agreed to all`                        | A grill round with `❓ Q<N>` and `➡️` lines.                                                                 |
+| `merged`     | `merged`                               | It asks the user to say when the PR is merged.                                                               |
+| `refresh-pr` | `$refresh-pr`                          | It says the PR body is stale.                                                                                |
 
 `ship` is one intent with two chips, because the text cannot tell `commit push` from `commit push pr`.
 
