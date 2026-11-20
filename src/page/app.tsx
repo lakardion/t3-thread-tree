@@ -555,6 +555,7 @@ const Fold = ({
   defaultOpen,
   open,
   onOpenChange,
+  action,
   children,
 }: {
   label: string;
@@ -563,21 +564,34 @@ const Fold = ({
   defaultOpen?: boolean;
   open?: boolean;
   onOpenChange?: (open: boolean) => void;
+  action?: ReactNode;
   children: ReactNode;
 }) => {
   const { cls, Icon } = TONE[tone];
+  const trigger = (
+    <CollapsibleTrigger className="group flex w-full items-center justify-between gap-2 px-3 py-2.5 text-left">
+      <span className="text-[13px]">{label}</span>
+      <span className="flex items-center gap-1.5">
+        <span className={cn("inline-flex items-center gap-1 text-xs", cls)}>
+          {Icon && <Icon className="size-3.5" aria-hidden />}
+          {value}
+        </span>
+        {action && <span aria-hidden className="w-8 shrink-0" />}
+        <ChevronDown className="size-4 transition-transform group-data-[state=open]:rotate-180" />
+      </span>
+    </CollapsibleTrigger>
+  );
   return (
     <Collapsible defaultOpen={defaultOpen} open={open} onOpenChange={onOpenChange}>
-      <CollapsibleTrigger className="group flex w-full items-center justify-between gap-2 px-3 py-2.5 text-left">
-        <span className="text-[13px]">{label}</span>
-        <span className="flex items-center gap-1.5">
-          <span className={cn("inline-flex items-center gap-1 text-xs", cls)}>
-            {Icon && <Icon className="size-3.5" aria-hidden />}
-            {value}
-          </span>
-          <ChevronDown className="size-4 transition-transform group-data-[state=open]:rotate-180" />
-        </span>
-      </CollapsibleTrigger>
+      {action ? (
+        <div className="relative">
+          {trigger}
+          {/** The `right-[34px]` offset is the trigger padding (px-3, 12px) + the chevron (size-4, 16px) + the gap (gap-1.5, 6px); the `w-8` spacer in the trigger holds this room. */}
+          <div className="absolute top-1/2 right-[34px] flex -translate-y-1/2">{action}</div>
+        </div>
+      ) : (
+        trigger
+      )}
       <CollapsibleContent className="px-3 pb-3">{children}</CollapsibleContent>
     </Collapsible>
   );
@@ -1080,7 +1094,16 @@ function CatchUpFold(p: {
 }) {
   const { text, tone } = foldValue(p.clis, p.pick, p.on);
   return (
-    <Fold label="Catch-up" value={text} tone={tone}>
+    <Fold
+      label="Catch-up"
+      value={text}
+      tone={tone}
+      action={
+        p.clis && p.clis.length > 0 ? (
+          <Switch aria-label="Catch-up" checked={p.on === true} onCheckedChange={p.setOn} />
+        ) : undefined
+      }
+    >
       {p.clis?.length === 0 && (
         <div className="grid justify-items-start gap-1">
           <p className={cn(HINT, "m-0")}>
@@ -1093,12 +1116,6 @@ function CatchUpFold(p: {
       )}
       {p.clis && p.clis.length > 0 && (
         <div className="grid gap-3">
-          <div className="flex items-center justify-between gap-2">
-            <Label htmlFor="catch-up" className="text-[13px] font-normal">
-              Catch-up
-            </Label>
-            <Switch id="catch-up" checked={p.on === true} onCheckedChange={p.setOn} />
-          </div>
           <RadioGroup
             aria-label="Model"
             value={p.pick ?? ""}
@@ -1192,7 +1209,7 @@ function SettingsPanel(p: PanelProps) {
     <aside
       ref={panelRef}
       aria-label="Settings"
-      className="fixed top-0 right-0 z-40 flex h-full w-[380px] max-w-full flex-col overflow-y-auto border-l bg-card shadow-xl"
+      className="fixed top-0 right-0 z-40 flex h-full w-[380px] max-w-full [scrollbar-gutter:stable] flex-col overflow-y-auto border-l bg-card shadow-xl"
     >
       <div className="sticky top-0 z-10 flex items-center justify-between border-b bg-card px-4 py-3">
         <h2 className="m-0 text-[15px] font-semibold">Settings</h2>
@@ -1379,7 +1396,7 @@ function LabelPill({ t }: { t: ThreadNode }) {
 
 const CHIP = "gap-1 rounded-[6px] px-1.5 py-0 text-[11px] font-normal text-muted-foreground";
 const ROW_BUTTON =
-  "size-5 cursor-pointer rounded-[6px] text-muted-foreground disabled:cursor-default motion-reduce:transition-none pointer-coarse:min-h-11 pointer-coarse:min-w-11 focus-visible:border-transparent focus-visible:ring-0 focus-visible:outline-2 focus-visible:outline-solid focus-visible:outline-offset-2 focus-visible:outline-ring";
+  "size-5 rounded-[6px] text-muted-foreground motion-reduce:transition-none pointer-coarse:min-h-11 pointer-coarse:min-w-11 focus-visible:border-transparent focus-visible:ring-0 focus-visible:outline-2 focus-visible:outline-solid focus-visible:outline-offset-2 focus-visible:outline-ring";
 /** Opens on hover or focus, always on touch, and stays open while it holds a settle error. Shut, it takes no width. */
 const DRAWER =
   "grid grid-cols-[0fr] transition-[grid-template-columns] duration-150 motion-reduce:transition-none group-hover/row:grid-cols-[1fr] group-focus-within/row:grid-cols-[1fr] has-data-err:grid-cols-[1fr] [@media(hover:none)]:grid-cols-[1fr]";
@@ -2048,7 +2065,7 @@ function GroupRow({ b, closed, toggle, fold, sort }: { b: Branch; sort?: Sort } 
           <DragHandle handleRef={handleRef} name={b.label} />
           <CollapsibleTrigger
             data-stop={b.id}
-            className="flex min-w-0 cursor-pointer items-center gap-2 select-none after:absolute after:inset-0 max-[720px]:min-h-11"
+            className="flex min-w-0 items-center gap-2 select-none after:absolute after:inset-0 max-[720px]:min-h-11"
           >
             <Chevron open={open} />
             {b.label === REVIEWS && <Eye className="size-3.5 flex-none text-review" aria-hidden />}
@@ -2194,7 +2211,7 @@ function StackRail({
           ) : (
             <CollapsibleTrigger
               data-stop={`rail:${id}`}
-              className="flex cursor-pointer items-center gap-1 text-muted-foreground select-none after:absolute after:inset-0 max-[720px]:min-h-11"
+              className="flex items-center gap-1 text-muted-foreground select-none after:absolute after:inset-0 max-[720px]:min-h-11"
               aria-label={`PR stack · ${total} PRs`}
               title={`PR stack · ${total} PRs`}
             >
@@ -2326,7 +2343,7 @@ function FlatRow({
             aria-expanded={i.open}
             data-stop={`sec:${i.key}`}
             onClick={() => toggleSection(i.key)}
-            className="flex h-7 w-full cursor-pointer items-center gap-2 rounded-[8px] px-2 text-xs font-semibold text-muted-foreground select-none hover:bg-accent max-[720px]:min-h-11"
+            className="flex h-7 w-full items-center gap-2 rounded-[8px] px-2 text-xs font-semibold text-muted-foreground select-none hover:bg-accent max-[720px]:min-h-11"
           >
             <Chevron open={i.open} />
             {i.label}
@@ -2373,7 +2390,7 @@ function ProjectBlock({ b, closed, toggle, fold }: { b: Branch } & Fold) {
             <DragHandle handleRef={handleRef} name={b.label} />
             <CollapsibleTrigger
               data-stop={b.id}
-              className="flex min-w-0 cursor-pointer items-center gap-1.5 select-none after:absolute after:inset-0"
+              className="flex min-w-0 items-center gap-1.5 select-none after:absolute after:inset-0"
             >
               <Chevron open={open} />
               {isLinearReviews(b) && <Eye className="size-3.5 flex-none text-review" aria-hidden />}

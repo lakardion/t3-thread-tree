@@ -81,7 +81,7 @@ function Row({ row, target, now }: { row: UpNextRow; target: boolean; now: numbe
       onClick={open}
       onKeyDown={(e) => e.key === "Enter" && e.target === e.currentTarget && open()}
       className={cn(
-        "flex w-full cursor-pointer flex-col justify-center rounded-md border-l-2 border-transparent px-2 text-left text-[13px] hover:bg-accent",
+        "flex w-full flex-col justify-center rounded-md border-l-2 border-transparent px-2 text-left text-[13px] hover:bg-accent",
         target && "border-status-needs-input bg-accent/50",
         row.catchUp && "pb-1",
       )}

@@ -384,8 +384,8 @@ The server runs the check in the debounced tree push, so the 30 s tick also driv
 
 Settings › Setup, after "Linear links" and before "Local model". It holds the Catch-up switch and the Model pick. It is closed at first.
 
-- **Value:** at the right of the fold: "No model" in yellow with a warning sign when `GET /models` gives no pick, else "Off" in neutral text when the switch is off or no pick is set, else the label of the pick in green. "Checking…" in neutral text shows until the first `GET /models` answers.
-- **Body:** a switch "Catch-up", and a radio group "Model" with each offered pick in the order of `GET /models` (`claude`, `codex`, `apple`, `local`), each with its provider icon and label. The radios are disabled while the switch is off.
+- **Value:** at the right of the fold: "No model" in yellow with a warning sign when `GET /models` gives no pick, else nothing while the switch is off, else "Off" in neutral text when no pick is set, else the label of the pick in green. "Checking…" in neutral text shows until the first `GET /models` answers.
+- **Body:** a radio group "Model" with each offered pick in the order of `GET /models` (`claude`, `codex`, `apple`, `local`), each with its provider icon and label. The radios are disabled while the switch is off. The switch "Catch-up" sits on the fold row, between the value and the chevron, and shows only when a pick is offered. A click on it does not open or close the fold.
 - **Effective pick:** the saved pick when it is offered, else the first offered pick that is not `local` or `apple`.
 - **Pick:** a click on a radio sends `PUT /model-pick` with `{ pick }`. The answer sets the switch.
 - **Switch:** a click sends `PUT /model-pick` with `{ catchUp }`. When no pick is saved, turning the switch on also sends the effective pick, else the first offered pick, so a setup with only a Local model or the Apple model can turn on.
