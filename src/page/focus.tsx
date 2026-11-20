@@ -163,7 +163,10 @@ function FocusCard({
     return () => clearTimeout(id);
   }, [hidden]);
   return (
-    <div data-card className="flex h-full flex-col gap-1.5 rounded-[12px] border bg-card px-3 py-2.5">
+    <div data-card className="relative flex h-full flex-col gap-1.5 rounded-[12px] border bg-card px-3 py-2.5">
+      <Hint surface="slot" className="key-hint-float -top-2 -left-2">
+        {slot + 1}
+      </Hint>
       <div className="flex items-center gap-1.5">
         <StatusIcon t={t} now={now} />
         <span className={cn(STATUS[t.status].shape, "truncate text-[12px] font-medium tabular-nums")}>
@@ -189,7 +192,6 @@ function FocusCard({
           <Button size="sm" className="h-7" asChild>
             <a href={t.href}>Open</a>
           </Button>
-          <Hint surface="slot">{slot + 1}</Hint>
           <Button
             size="sm"
             variant="ghost"

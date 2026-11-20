@@ -63,7 +63,7 @@ export function TriageButton({ count, open, toggle }: { count: number; open: boo
         <Toggle
           variant="outline"
           size="sm"
-          className={cn("gap-1.5 text-foreground", count === 0 && "text-muted-foreground")}
+          className={cn("relative gap-1.5 text-foreground", count === 0 && "text-muted-foreground")}
           aria-label={`Triage, ${count} waiting`}
           aria-keyshortcuts="t"
           pressed={open}
@@ -71,7 +71,9 @@ export function TriageButton({ count, open, toggle }: { count: number; open: boo
         >
           <Inbox />
           <span className="max-[720px]:hidden">Triage</span>
-          <Hint surface="header">t</Hint>
+          <Hint surface="header" className="key-hint-float -top-2 -right-2">
+            t
+          </Hint>
           {count > 0 && (
             <span className="rounded-[4px] bg-status-needs-input px-1 text-[11px] text-white tabular-nums">
               {count}

@@ -43,10 +43,10 @@ export const Hint = ({
   </Kbd>
 );
 
-/** A key cap with its action, as one hint. */
-export const HintPair = ({ surface, k, label }: { surface: Surface; k: string; label: string }) => (
-  <span aria-hidden data-hint={surface} className="key-hint items-center gap-1 text-[11px] text-muted-foreground">
-    <Kbd className="h-4 min-w-4 bg-muted/70 px-1 text-[10px]">{k}</Kbd>
+/** A key cap with its action, inside a floating hint. */
+export const HintPair = ({ k, label }: { surface: Surface; k: string; label: string; bare?: boolean }) => (
+  <span className="inline-flex items-center gap-1 text-[11px] whitespace-nowrap text-muted-foreground">
+    <Kbd className="h-4 min-w-4 px-1 text-[10px]">{k}</Kbd>
     {label}
   </span>
 );

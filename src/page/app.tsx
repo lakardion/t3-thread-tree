@@ -852,10 +852,20 @@ function OpenNextButton({
   open: () => void;
 }) {
   const button = (
-    <Button variant="outline" size="sm" aria-label="Open next" aria-keyshortcuts="n" disabled={!target} onClick={open}>
+    <Button
+      variant="outline"
+      size="sm"
+      className="relative"
+      aria-label="Open next"
+      aria-keyshortcuts="n"
+      disabled={!target}
+      onClick={open}
+    >
       <SkipForward />
       <span className="max-[720px]:hidden">Open next</span>
-      <Hint surface="header">n</Hint>
+      <Hint surface="header" className="key-hint-float -top-2 -right-2">
+        n
+      </Hint>
     </Button>
   );
   return (
@@ -1787,13 +1797,20 @@ function ThreadRow({
         style={{ viewTransitionName: vtName("t", t.id), borderLeftColor: project && projectHex(project.label) }}
       >
         <div
-          className="thread-row group/row flex min-h-9 min-w-0 items-center gap-x-2 rounded-[8px] px-2 py-1 text-[13px] leading-5 max-[720px]:flex-wrap"
+          className="thread-row group/row relative flex min-h-9 min-w-0 items-center gap-x-2 rounded-[8px] px-2 py-1 text-[13px] leading-5 max-[720px]:flex-wrap"
           data-status={t.status}
           data-thread={t.id}
         >
           {!inStack && <DragHandle handleRef={handleRef} name={t.title || t.id} />}
           <StatusCell t={t} now={now} />
           <PhraseCell t={t} now={now} />
+          <span
+            data-hint="row"
+            className="key-hint key-hint-float -top-3 right-8 items-center gap-2 rounded-md border bg-popover px-1.5 py-0.5 shadow-sm"
+          >
+            <HintPair surface="row" k="o" label="Details" bare />
+            <HintPair surface="row" k="s" label="Send" bare />
+          </span>
           {pulse > 0 && <span key={pulse} aria-hidden className={cn("row-pulse", STATUS[t.status].shape)} />}
           {project && <ProjectColumn b={project} />}
           {chip && (
@@ -1914,10 +1931,6 @@ function ThreadRow({
                 )}
                 <FocusMark t={t} pressed={false} />
               </span>
-            </span>
-            <span className="flex flex-none items-center gap-2 pr-1">
-              <HintPair surface="row" k="o" label="Details" />
-              <HintPair surface="row" k="s" label="Send" />
             </span>
             <CollapsibleTrigger asChild>
               <Button variant="ghost" size="icon" className={cn(ROW_BUTTON, "group")} aria-label="Details">

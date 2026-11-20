@@ -9,7 +9,7 @@ import { cn } from "@/lib/utils";
 import { find, type Hit } from "../shared/find.ts";
 import { needsYou } from "./attention.ts";
 import { ago } from "./format.ts";
-import { Hint, HintPair } from "./key-hints.prototype.tsx";
+import { Hint } from "./key-hints.prototype.tsx";
 import { StatusIcon } from "./status-icon.tsx";
 
 /** True on macOS, where Find is Cmd+K. */
@@ -61,13 +61,7 @@ function Row({ h, now, canShow, open, show }: RowProps) {
               : ago(t.updatedAt, now)}
           </span>
         </span>
-        <span className="flex items-center gap-2">
-          <span className="min-w-0 flex-1 truncate text-[12px] text-muted-foreground">{meta}</span>
-          <span className="flex flex-none items-center gap-2">
-            <HintPair surface="find-row" k="↵" label="Open" />
-            {canShow && <HintPair surface="find-row" k="⇧↵" label="Show in tree" />}
-          </span>
-        </span>
+        <span className="truncate text-[12px] text-muted-foreground">{meta}</span>
       </span>
       {canShow && (
         <Button
@@ -148,7 +142,7 @@ function FindBody({ list, focus, canShow, now, open, show }: BodyProps) {
       value={sel}
       onValueChange={setSel}
       onKeyDown={onKeyDown}
-      className="min-h-0 rounded-[inherit] [&_[data-slot=command-input-wrapper]]:h-12 [&_[data-slot=command-input-wrapper]]:pr-11"
+      className="relative min-h-0 rounded-[inherit] [&_[data-slot=command-input-wrapper]]:h-12 [&_[data-slot=command-input-wrapper]]:pr-11"
     >
       <CommandInput value={q} onValueChange={setQ} placeholder="Find a thread" className="h-12 text-[15px]" />
       <CommandList className="max-h-[min(60vh,480px)] max-[720px]:max-h-none max-[720px]:flex-1">
@@ -180,7 +174,7 @@ function FindBody({ list, focus, canShow, now, open, show }: BodyProps) {
       </CommandList>
       <div
         data-hint="find-bar"
-        className="key-hint h-9 items-center gap-3 border-t px-3 text-[11px] text-muted-foreground max-[720px]:mt-auto"
+        className="key-hint key-hint-float right-2 bottom-2 left-2 h-8 items-center gap-3 rounded-md border bg-popover/95 px-3 text-[11px] text-muted-foreground shadow-md backdrop-blur"
       >
         <span className="flex items-center gap-1">
           <Hint surface="find-bar" className="key-hint-in-bar">

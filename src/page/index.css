@@ -315,6 +315,17 @@
 [data-hints="D"] .key-hint[data-hint="find-bar"] {
   display: inline-flex !important;
 }
+/* Hints float over the page: they never take space or shift the layout. */
+.key-hint-float {
+  position: absolute;
+  z-index: 30;
+  pointer-events: none;
+}
+.key-hint-float[data-slot="kbd"] {
+  border: 1px solid var(--border);
+  background: var(--popover);
+  box-shadow: 0 1px 2px rgb(0 0 0 / 0.12);
+}
 /* The header hints hide with the button labels. */
 @media (max-width: 719px) {
   .key-hint[data-hint="header"] {
