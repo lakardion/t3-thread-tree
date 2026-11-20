@@ -555,6 +555,7 @@ const Fold = ({
   defaultOpen,
   open,
   onOpenChange,
+  action,
   children,
 }: {
   label: string;
@@ -563,21 +564,34 @@ const Fold = ({
   defaultOpen?: boolean;
   open?: boolean;
   onOpenChange?: (open: boolean) => void;
+  action?: ReactNode;
   children: ReactNode;
 }) => {
   const { cls, Icon } = TONE[tone];
+  const trigger = (
+    <CollapsibleTrigger className="group flex w-full items-center justify-between gap-2 px-3 py-2.5 text-left">
+      <span className="text-[13px]">{label}</span>
+      <span className="flex items-center gap-1.5">
+        <span className={cn("inline-flex items-center gap-1 text-xs", cls)}>
+          {Icon && <Icon className="size-3.5" aria-hidden />}
+          {value}
+        </span>
+        {action && <span aria-hidden className="w-8 shrink-0" />}
+        <ChevronDown className="size-4 transition-transform group-data-[state=open]:rotate-180" />
+      </span>
+    </CollapsibleTrigger>
+  );
   return (
     <Collapsible defaultOpen={defaultOpen} open={open} onOpenChange={onOpenChange}>
-      <CollapsibleTrigger className="group flex w-full items-center justify-between gap-2 px-3 py-2.5 text-left">
-        <span className="text-[13px]">{label}</span>
-        <span className="flex items-center gap-1.5">
-          <span className={cn("inline-flex items-center gap-1 text-xs", cls)}>
-            {Icon && <Icon className="size-3.5" aria-hidden />}
-            {value}
-          </span>
-          <ChevronDown className="size-4 transition-transform group-data-[state=open]:rotate-180" />
-        </span>
-      </CollapsibleTrigger>
+      {action ? (
+        <div className="relative">
+          {trigger}
+          {/** The `right-[34px]` offset is the trigger padding (px-3, 12px) + the chevron (size-4, 16px) + the gap (gap-1.5, 6px); the `w-8` spacer in the trigger holds this room. */}
+          <div className="absolute top-1/2 right-[34px] flex -translate-y-1/2">{action}</div>
+        </div>
+      ) : (
+        trigger
+      )}
       <CollapsibleContent className="px-3 pb-3">{children}</CollapsibleContent>
     </Collapsible>
   );
@@ -1080,7 +1094,16 @@ function CatchUpFold(p: {
 }) {
   const { text, tone } = foldValue(p.clis, p.pick, p.on);
   return (
-    <Fold label="Catch-up" value={text} tone={tone}>
+    <Fold
+      label="Catch-up"
+      value={text}
+      tone={tone}
+      action={
+        p.clis && p.clis.length > 0 ? (
+          <Switch aria-label="Catch-up" checked={p.on === true} onCheckedChange={p.setOn} />
+        ) : undefined
+      }
+    >
       {p.clis?.length === 0 && (
         <div className="grid justify-items-start gap-1">
           <p className={cn(HINT, "m-0")}>
@@ -1093,12 +1116,6 @@ function CatchUpFold(p: {
       )}
       {p.clis && p.clis.length > 0 && (
         <div className="grid gap-3">
-          <div className="flex items-center justify-between gap-2">
-            <Label htmlFor="catch-up" className="text-[13px] font-normal">
-              Catch-up
-            </Label>
-            <Switch id="catch-up" checked={p.on === true} onCheckedChange={p.setOn} />
-          </div>
           <RadioGroup
             aria-label="Model"
             value={p.pick ?? ""}

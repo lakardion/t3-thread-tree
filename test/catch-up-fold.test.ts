@@ -12,15 +12,15 @@ describe("foldValue", () => {
   test("no offered model is No model", () => {
     expect(foldValue([], undefined, true)).toEqual({ text: "No model", tone: "warn" });
   });
-  test("a switch that is off or not yet loaded is Off, even with a pick", () => {
-    expect(foldValue(clis, "claude", false)).toEqual({ text: "Off", tone: "none" });
+  test("a switch that is off or not yet loaded shows no value", () => {
+    expect(foldValue(clis, "claude", false)).toEqual({ text: "", tone: "none" });
+    expect(foldValue(clis, "claude", undefined)).toEqual({ text: "", tone: "none" });
   });
   test("an on switch shows the label of the pick", () => {
     expect(foldValue(clis, "local", true)).toEqual({ text: "Local · qwen", tone: "ok" });
   });
   test("no effective pick is Off; the offered list not yet loaded is Checking", () => {
     expect(foldValue(clis, undefined, true)).toEqual({ text: "Off", tone: "none" });
-    expect(foldValue(clis, "claude", undefined)).toEqual({ text: "Off", tone: "none" });
     expect(foldValue(null, undefined, undefined).text).toBe("Checking…");
   });
 });

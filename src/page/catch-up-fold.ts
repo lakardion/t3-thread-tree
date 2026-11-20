@@ -1,6 +1,6 @@
 import type { ModelPick, Offered } from "../shared/model.ts";
 
-/** The value and tone of the Catch-up fold: no model, off, or the label of the effective pick. */
+/** The value and tone of the Catch-up fold: no model, else nothing while the switch is off, else the label of the effective pick, else Off. */
 export function foldValue(
   clis: Offered | null,
   pick: ModelPick | undefined,
@@ -8,8 +8,9 @@ export function foldValue(
 ): { text: string; tone: "ok" | "warn" | "none" } {
   if (!clis) return { text: "Checking…", tone: "none" };
   if (clis.length === 0) return { text: "No model", tone: "warn" };
+  if (on !== true) return { text: "", tone: "none" };
   const label = clis.find((c) => c.id === pick)?.label;
-  return on !== true || !label ? { text: "Off", tone: "none" } : { text: label, tone: "ok" };
+  return label ? { text: label, tone: "ok" } : { text: "Off", tone: "none" };
 }
 
 /** The saved pick when offered, else the first offered pick that is not `local` or `apple`. */
