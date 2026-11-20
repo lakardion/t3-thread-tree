@@ -12,7 +12,7 @@ Build the **Key hints** and the "Show key hints" switch, with the rules of [the 
 
 ## Brief
 
-Starts on `main` after the reach-a-thread stack (Find #89 ← row keys #91) merges. Do not start before: the hints name the keys that this stack adds. Update `SPEC.md`, `DESIGN-SPEC.md` and `README.md`. One draft PR.
+Starts on `main` after the reach-a-thread stack (Find #89 ← row keys #91) merges. Do not start before: the hints name the keys that this stack adds. Add the shadcn `Kbd` component (`bunx shadcn add kbd`) and move the Keys legend in Settings to it. Update `SPEC.md`, `DESIGN-SPEC.md` and `README.md`. One draft PR.
 
 ## Spec
 

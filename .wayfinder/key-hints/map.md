@@ -54,6 +54,7 @@ Decided at charting (by the user):
 - **Surfaces to judge:** the Find dialog, the header buttons (Find, Open next), the focused row (`o`, `s`), the Focus slots (`1`–`3`). The look ticket may drop any of them.
 - **Hold to reveal:** the look ticket compares always-on soft hints, hints shown while the user holds Alt/Option, and both. If a hold key is used, it is Alt/Option, not Cmd/Ctrl (no clash with Cmd/Ctrl+K).
 - **One build PR.**
+- **Key cap:** the shadcn `Kbd` component (`bunx shadcn add kbd`, one file in `src/components/ui/`, no new package). The Keys legend in Settings moves to `Kbd` too, so every key looks the same. No key cap library.
 - **Term:** **Key hint** in `CONTEXT.md`. Switch label "Show key hints".
 
 ## Not yet specified
@@ -63,4 +64,4 @@ Nothing at charting. The look ticket may surface more.
 ## Out of scope
 
 - New page keys or changes to what a key does. [The page keys](../reach-a-thread/tickets/03-page-keys.md) own them.
-- Changes to the tooltips and the Keys legend in Settings.
+- Changes to the tooltips, and to which keys the Keys legend in Settings lists. Only the legend's key cap look changes.

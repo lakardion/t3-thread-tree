@@ -23,7 +23,7 @@ Make a prototype with variants on the real page (`?variant=`), and decide:
 - **Header buttons.** A key cap in the Find (⌘K / Ctrl+K) and Open next (`n`) buttons, or none (the tooltips already name the keys). Phone width hides the button labels.
 - **Focused row.** `o` Details · `s` Send on the row with keyboard focus only, or none.
 - **Focus slots.** `1`, `2`, `3` on each filled slot, or none.
-- **Look.** Size, color and contrast in light and dark: soft (muted, small) but legible. The shadcn `Kbd` component, or the `kbd` style of the Keys legend.
+- **Look.** Size, color and contrast in light and dark: soft (muted, small) but legible. The key cap is the shadcn `Kbd` component (decided at charting); tune its size and tone here.
 - **Touch.** No keyboard, no hints? `(pointer: coarse)` or `(hover: none)` as the test.
 - **Switch.** "Show key hints" in the View group of Settings, on by default, kept in `localStorage`. With mode B, does the switch turn off the hold too?
 
