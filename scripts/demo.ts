@@ -302,7 +302,7 @@ const CATCH_UP: Record<string, CatchUp> = {
   },
   "demo-17": {
     state: "done",
-    pick: "claude",
+    pick: process.env.APPLE === "ok" ? "apple" : "claude",
     did: "Looked at the cache layer.",
     ask: null,
     options: [],
@@ -349,7 +349,7 @@ const localAnswer = () => Response.json({ config: localConfig, state: localConfi
 let savedPick: { pick?: ModelPick | null; catchUp?: boolean } = {};
 const pickAnswer = () => {
   const { pick = null, catchUp } = savedPick;
-  return Response.json({ pick, catchUp: pick !== null && (catchUp ?? pick !== "local") });
+  return Response.json({ pick, catchUp: pick !== null && (catchUp ?? (pick !== "local" && pick !== "apple")) });
 };
 
 const listeners = new Set<(event: string, data: string) => void>();
@@ -361,6 +361,7 @@ const offered = () =>
           { id: "claude" as const, label: "Claude Haiku" },
           { id: "codex" as const, label: "Codex Luna" },
         ]),
+    ...(process.env.APPLE === "ok" ? [{ id: "apple" as const, label: "Apple model" }] : []),
     ...(localConfig ? [{ id: "local" as const, label: `Local · ${localConfig.model}` }] : []),
   ]);
 

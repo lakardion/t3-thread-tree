@@ -119,7 +119,7 @@ import {
   waits,
   withoutSnoozed,
 } from "./attention.ts";
-import { foldValue, switchBody } from "./catch-up-fold.ts";
+import { effectivePick, foldValue, switchBody } from "./catch-up-fold.ts";
 import { CatchUpTitle } from "./catch-up-line.tsx";
 import { CopyPrompt } from "./copy-prompt.tsx";
 import { FindDialog, FIND_KEY, MAC } from "./find.tsx";
@@ -2905,7 +2905,7 @@ function App() {
     show: (id: string) => setShown((s) => new Set(s).add(id)),
   };
   const sendToApi = { t3cli, open: (id: string) => setSendTo({ id, open: true }) };
-  const pick = clis?.find((c) => c.id === cli)?.id ?? clis?.find((c) => c.id !== "local")?.id;
+  const pick = effectivePick(clis, cli);
   const pickCli = (c: ModelPick) => (
     setCli(c),
     void putPick({ pick: c }).then((on) => on !== null && setCatchUpOn(on))
