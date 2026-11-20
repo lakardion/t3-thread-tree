@@ -1192,7 +1192,7 @@ function SettingsPanel(p: PanelProps) {
     <aside
       ref={panelRef}
       aria-label="Settings"
-      className="fixed top-0 right-0 z-40 flex h-full w-[380px] max-w-full flex-col overflow-y-auto border-l bg-card shadow-xl"
+      className="fixed top-0 right-0 z-40 flex h-full w-[380px] max-w-full [scrollbar-gutter:stable] flex-col overflow-y-auto border-l bg-card shadow-xl"
     >
       <div className="sticky top-0 z-10 flex items-center justify-between border-b bg-card px-4 py-3">
         <h2 className="m-0 text-[15px] font-semibold">Settings</h2>
