@@ -65,7 +65,7 @@ The cog opens the Settings panel. Each setup fold shows its state, and each fiel
 - **View.** Show settled or snoozed threads, nest launched threads, status text, project names, reset the order, and the theme.
 - **T3 token.** Paste the token. The app reconnects with no restart.
 - **Linear links.** Your Linear workspace and teams, so issue keys link to Linear. A Linear API key adds project and milestone grouping.
-- **Catch-up.** A switch turns the Catch-up on or off. Pick the model that runs it: Claude Haiku or Codex Luna (when the `claude` or `codex` CLI is logged in), or your Local model.
+- **Catch-up.** A switch turns the Catch-up on or off. Pick the model that runs it: Claude Haiku or Codex Luna (when the `claude` or `codex` CLI is logged in), the Apple model (in the desktop app, on a Mac with Apple Intelligence on), or your Local model. The Apple model and the Local model keep thread text on your Mac.
 - **Local model.** The base URL and name of a model on this machine, for example with Ollama.
 - **Watched labels.** PR label names to show as pills on rows.
 
@@ -78,6 +78,7 @@ The cog opens the Settings panel. Each setup fold shows its state, and each fiel
 - Optional, for the desktop app: macOS on Apple Silicon
 - Optional, for the Catch-up: the `claude` or `codex` CLI, logged in
 - Optional, for the Catch-up on a local model: the Ollama app build (`brew install --cask ollama-app`)
+- Optional, for the Catch-up on the Apple model: the desktop app on macOS 26.4 or later, with Apple Intelligence on. To build the desktop app from source, Command Line Tools with the macOS 26.4 SDK or later
 
 ## Setup
 
@@ -96,7 +97,7 @@ LINEAR_TEAMS=JED,ENG,MOR    # optional: link only the keys of these teams
 
 To group by Linear project and milestone, make a personal API key at `linear.app/settings/account/security` and paste it in the "Linear links" fold. A `LINEAR_API_KEY` in `.env` works as the fallback.
 
-Optional: run the Catch-up on a local model. Install the Ollama app build with `brew install --cask ollama-app` (the Homebrew formula cannot return structured output). Pull a model, for example `ollama pull qwen3.5:4b-nvfp4`, and start Ollama. In the "Local model" fold, type the base URL (`http://localhost:11434/v1`) and the model name, and save.
+Optional: run the Catch-up on a local model. Install the Ollama app build with `brew install --cask ollama-app` (the Homebrew formula cannot return structured output). Pull a model, for example `ollama pull qwen3.5:4b-nvfp4`, and start Ollama. In the "Local model" fold, type the base URL (`http://localhost:11434/v1`) and the model name, and save. apfel (`brew install apfel`) also works here: base URL `http://localhost:11434/v1`, model `apple-foundationmodel`.
 
 Optional: set the path of the `t3` CLI, which the app runs to send messages. The default is `~/.t3/bin/t3`:
 

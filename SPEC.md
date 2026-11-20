@@ -138,7 +138,7 @@ The flat view lists all threads of all projects in one list. The switch keeps it
 **Looks done.** An offer to settle in one step the threads that look finished. The rule is `looksDone` in `src/page/looks-done.ts`.
 
 - **Candidate.** A thread of the tree, subthreads included, that is not settled. Its status is `your-turn`, `done` or `idle`. Its `lastRun` is set and older than 1 h. It is not pinned (`detail.pinned`), not in the Focus list and not in the skip list. No subthread has the status `working`, `starting`, `waiting`, `needs-input` or `plan-ready`.
-- **Reason.** A thread with 1 or more PRs, all merged or closed, has the reason `prs`. Else a Catch-up with `state` `done`, `doneLike` and a `pick` other than `local` gives the reason `catch-up`. A thread with no reason is not offered. The Local model never gives a reason.
+- **Reason.** A thread with 1 or more PRs, all merged or closed, has the reason `prs`. Else a Catch-up with `state` `done`, `doneLike` and a `pick` other than `local` gives the reason `catch-up`. A thread with no reason is not offered. The Local model never gives a reason. The Apple model does.
 - **Views.** Every node of the tree is a T3 top-level thread, so the T3 tree and the Linear tree offer the same threads. The subthread rule reads `children`, so it sees a launched thread only while it nests. With Launch nesting on, a keyed thread with a busy keyless launched thread is held back in the T3 tree and offered in the Linear tree. A subagent is not in the tree: a thread that waits for one has the status `waiting`.
 - **Chip.** A "N look done" button after "Triage" (icon `CircleCheckBig`). It is hidden at 0. At phone width, it shows the icon and the count. The tooltip reads "N threads look done".
 - **Dialog.** One row for each thread: a checkbox (checked), the status icon, the title, the project and the reason, "N PRs merged" (or "merged or closed") or "Catch-up: <did>". The rows stay while the tree changes. "Settle N" (N is the checked count) is disabled at 0. "Cancel" closes the dialog.
@@ -295,19 +295,58 @@ One shared module, `src/server/model.ts`, runs every Model pick: a feature gives
 | `claude` | Claude Haiku    | `haiku` (`claude-haiku-5-5`) | `--effort medium`                  |
 | `codex`  | Codex Luna      | `gpt-6-luna`                 | `-c model_reasoning_effort=medium` |
 | `local`  | Local · <model> | `model` from the config      | `reasoning_effort: "none"`         |
+| `apple`  | Apple model     | Apple's on-device model      | none                               |
 
 - **Detection:** at start, run `claude auth status` and `codex login status`. Exit 0 means logged in. A CLI that is not on `PATH` (spawn gives `ENOENT`) or not logged in is not offered.
 - **Run:** use the tested command lines in ticket 01 (research file on branch `research/headless-cli`), with the prompt on stdin. Do not use `claude --bare`: it ignores the OAuth login. Codex runs with `-C` set to an empty temp folder and reads the schema from a temp file.
 - **Answer:** Claude: `structured_output` of the last JSON object on stdout; a failure is `is_error: true` or a non-zero exit. Codex: `JSON.parse` of the text of the last `item.completed` event with `item.type == "agent_message"`; a failure is `turn.failed` or a non-zero exit.
 - **Timeout:** 60 s, then SIGTERM. **Cancel:** SIGTERM to the process.
 - **Local model config:** `{ baseUrl, model }` as JSON in `~/.config/t3-thread-tree/local-model`, the same folder as the Linear key (`LOCAL_MODEL_FILE` sets another path). No file means no Local model. `baseUrl` is an `http` or `https` URL, with no trailing `/`. `model` is one non-empty line. The server reads the file on each call.
-- **Local model offered:** `local` is the last pick, with the label `Local · <model>`, whenever a config is saved, whatever the runtime state. A down runtime or a missing model shows as the run error. The page never picks it on its own: its fallback pick is the first offered pick that is not `local`.
-- **Local model fold:** Settings › Setup, after "Catch-up", before "Watched labels". It loads `GET /local-model` each time the panel opens, and shows its form after the first answer. The form has a help line, "Base URL" (default `http://localhost:11434/v1`), "Model" and "Save". "Save" sends `PUT /local-model` with the JSON config. On success the fold takes the answer, shows "Saved." and the page reloads `GET /models`, so the Local pick shows in the Catch-up fold. On failure the response text shows in the destructive colour.
+- **Local model offered:** `local` is the last pick, with the label `Local · <model>`, whenever a config is saved, whatever the runtime state. A down runtime or a missing model shows as the run error. The page never picks it on its own: its fallback pick is the first offered pick that is not `local` or `apple`.
+- **Local model fold:** Settings › Setup, after "Catch-up", before "Watched labels". It loads `GET /local-model` each time the panel opens, and shows its form after the first answer. The form has a help line, "Base URL" (default `http://localhost:11434/v1`), "Model" and "Save". "Save" sends `PUT /local-model` with the JSON config. On success the fold takes the answer, shows "Saved." and the page reloads `GET /models`, so the Local pick shows in the Catch-up fold. On failure the response text shows in the destructive colour. apfel (`brew install apfel`) also works in this fold: base URL `http://localhost:11434/v1`, model `apple-foundationmodel`. The app has no code and no detection for it.
 - **Local model detection:** `GET /local-model` returns `{ config, state }`. It calls `GET <baseUrl>/models` with a 2 s timeout each time. `state` is `ok` when the list holds `model`, `missing` when the runtime answers but the list does not hold it, `down` when the call fails or is not 2xx, and `unset` with no config. `PUT /local-model` takes the JSON config (415 for other content, 400 for a bad config), saves it, then answers like `GET`.
 - **Local model call:** `POST <baseUrl>/chat/completions` with `model`, the guide as the system message, the input as the user message, `response_format` `{ type: "json_schema", json_schema: { name: "answer", strict: true, schema } }`, `reasoning_effort: "none"`, `keep_alive: "30m"` and `max_tokens: 2000`. The answer is `JSON.parse` of `choices[0].message.content`. Cancel and the 60 s timeout abort the request.
 - **Offered:** `GET /models` answers the offered Model picks as `{ id, label }[]`.
-- **Error text:** the CLI error message (Claude `result`, Codex `turn.failed` message), or "timed out" or the parse error. `stderrTail` is the last 2 KB of stderr. The Local model gives one of these texts, and `stderrTail` is the last 2 KB of the response body, or the fetch error message: "Local model not reachable at <baseUrl>." (the runtime is down), "Model <model> is not in the runtime." (HTTP 404), "The runtime cannot enforce the schema. Install the Ollama app build." (HTTP 501), "The local runtime answered HTTP <status>." (any other failure status), "The local model gave no valid answer." (`finish_reason` is `length`, or the answer is not JSON), "The Local model is not set up." (the config was removed after the pick was offered), or "timed out".
-- **Demo:** `LOCAL=ok`, `LOCAL=down` and `LOCAL=missing` start `bun run demo` with a saved Local model config in that state; with no `LOCAL`, the demo has no config. A Save in the fold keeps the config in memory. `CLIS=0` offers no CLI.
+- **Error text:** the CLI error message (Claude `result`, Codex `turn.failed` message), or "timed out" or the parse error. `stderrTail` is the last 2 KB of stderr. The Local model gives one of these texts, and `stderrTail` is the last 2 KB of the response body, or the fetch error message: "Local model not reachable at <baseUrl>." (the runtime is down), "Model <model> is not in the runtime." (HTTP 404), "The runtime cannot enforce the schema. Install the Ollama app build." (HTTP 501), "The local runtime answered HTTP <status>." (any other failure status), "The local model gave no valid answer." (`finish_reason` is `length`, or the answer is not JSON), "The Local model is not set up." (the config was removed after the pick was offered), or "timed out". The Apple model texts are in "Apple model" below.
+- **Demo:** `LOCAL=ok`, `LOCAL=down` and `LOCAL=missing` start `bun run demo` with a saved Local model config in that state; with no `LOCAL`, the demo has no config. A Save in the fold keeps the config in memory. `APPLE=ok` offers the Apple model pick. `CLIS=0` offers no CLI.
+
+### Apple model
+
+Source: wayfinder map `apple-model` in the wiki (`t3-thread-tree/issues/apple-model/`). Tickets 01, 03 and 04 fix the route, ticket 06 measures the Catch-up, ticket 07 sets its rules. The bench helper, `brief.swift`, is on branch `prototype/apple-model-bench`.
+
+The **Apple model** runs through a small Swift helper, `apple-model`, on `FoundationModels` guided generation. The desktop build compiles it and ships it next to `server` in the `.app`. It is an opt-in **Model pick** with the same rules as the Local model: the page never picks it on its own, and never falls back from it.
+
+- **Helper path:** the first file that exists of `dirname(process.execPath)/apple-model` (the `.app`: `Contents/Resources/apple-model`) and `dist/sidecar/apple-model` (a dev runs `bun run build:apple-helper` by hand, then `bun start`). No env override. In a compiled Bun binary, `process.execPath` is the real absolute path of the binary, whatever the cwd.
+- **Detection:** on each `GET /models`, when the helper exists, the server runs `apple-model check`. `available: true` offers `apple` with the label "Apple model", after `codex` and before `local`. Any other answer, a non-zero exit or a spawn error hides the pick, and the server logs the reason. No helper means no spawn and no pick.
+- **Icon:** the Apple mark from Simple Icons (slug `apple`, CC0), like the Claude and Codex marks. It shows beside the label in the Catch-up fold radio.
+- **`apple-model check`:** prints one JSON object and exits 0: `{"available":true,"contextSize":4096}` or `{"available":false,"reason":"deviceNotEligible" | "appleIntelligenceNotEnabled" | "modelNotReady"}`. It makes no model call.
+- **`apple-model run`:** reads one JSON object on stdin, `{ guide, input, schema }`. The guide goes in as `Instructions`, the input as the prompt, the schema as a `GenerationSchema` decoded from JSON. It prints one JSON object on stdout:
+  - `{"answer": {…}}` and exit 0 (the `GeneratedContent` JSON).
+  - `{"error": "<code>", …}` and exit 1 for a known failure. The codes are in the error table below.
+  - Any other exit is a crash. `stderrTail` holds the last 2 KB of stderr.
+- **Window test:** before it generates, the helper counts guide, schema and input with `tokenCount(for:)` and reads `contextSize` from the model at run time. When count + 600 is more than `contextSize`, it stops at once with `{"error":"overflow","tokens":<count>,"limit":<contextSize - 600>}`. The 600-token output reserve is a constant in the helper.
+- **No output limit:** the helper sets no `maximumResponseTokens`. A low limit cuts the JSON and gives `decodingFailure`.
+- **Schema transform:** `appleSchema(schema)` in `model.ts` is generic over the feature's JSON schema. It adds `title` (the property name, or `Answer` at the root) and `x-order` (the property keys in order) to each object. It changes each type array such as `["string","null"]` to the non-null type, and removes that key from `required`. The `apple` run sets each such key that the answer leaves out to `null`, so the feature gets the shape of its own schema. The helper has no schema logic. A unit test covers the transform with the Catch-up `SCHEMA`.
+- **Timeout:** 60 s, then SIGTERM. **Cancel:** SIGTERM to the process.
+- **Two runs at the same time:** macOS runs one generation at a time and holds the second call until the first ends. It does not refuse it. `tokenCount` also waits behind a running generation. The Catch-up queue keeps its cap of 2 and no retry for `apple`: a held call ends far inside the 60 s timeout (2 s median).
+- **Build:** `bun run build:apple-helper` runs `swiftc -O -target arm64-apple-macos26.4 src/apple-model/main.swift -o dist/sidecar/apple-model`. It needs Command Line Tools with the macOS 26.4+ SDK. When the SDK is missing, the script fails and so does the build: a release always ships the helper. Users build nothing.
+
+Error texts (the run error, which the server logs; the Catch-up line shows "Catch-up failed"):
+
+| Failure                                                       | Text                                                                                             |
+| ------------------------------------------------------------- | ------------------------------------------------------------------------------------------------ |
+| `overflow`                                                    | "The thread is too long for the Apple model: <tokens> of <limit> tokens." (thousands separators) |
+| `contextWindow` (`exceededContextWindowSize` in generation)   | "The thread did not fit in the Apple model's window."                                            |
+| `unavailable`, reason `deviceNotEligible`                     | "This Mac cannot run the Apple model."                                                           |
+| `unavailable`, reason `appleIntelligenceNotEnabled`           | "Turn on Apple Intelligence in System Settings to use the Apple model."                          |
+| `unavailable`, reason `modelNotReady`, or `assetsUnavailable` | "The Apple model is not ready yet. Try again later."                                             |
+| `refusal`, `guardrail`                                        | "The Apple model refused the input."                                                             |
+| `decoding` (`decodingFailure`, `unsupportedGuide`)            | "The Apple model gave no valid answer."                                                          |
+| `busy` (`rateLimited`, `concurrentRequests`)                  | "The Apple model is busy. Try again."                                                            |
+| `locale` (`unsupportedLanguageOrLocale`)                      | "The Apple model does not support this language."                                                |
+| spawn fails                                                   | "Cannot start the Apple model helper."                                                           |
+| other exit                                                    | "The Apple model helper exited with code <N>."                                                   |
+| timeout                                                       | "timed out"                                                                                      |
 
 ## Catch-up
 
@@ -316,7 +355,7 @@ A **Catch-up** is one line from the Model pick about a waiting thread: what the 
 ### Pick file
 
 - **File:** `{ pick, catchUp }` as JSON in `~/.config/t3-thread-tree/model-pick`, beside the Local model config (`MODEL_PICK_FILE` sets another path). The server reads it on each call. A missing or invalid file means no pick.
-- **Switch default:** when the file holds no `catchUp`, the switch is on for `claude` and `codex`, and off for `local`. A saved `catchUp` applies to every pick. With no pick the switch is off. A `PUT` of `pick: "local"` with no saved `catchUp` therefore turns the switch off and clears the cache.
+- **Switch default:** when the file holds no `catchUp`, the switch is on for `claude` and `codex`, and off for `local` and `apple`. A saved `catchUp` applies to every pick. With no pick the switch is off. A `PUT` of `pick: "local"` or `pick: "apple"` with no saved `catchUp` therefore turns the switch off and clears the cache.
 - **`GET /model-pick`:** answers `{ pick, catchUp }` with the switch resolved.
 - **`PUT /model-pick`:** takes JSON `{ pick?, catchUp? }` (415 for other content, 400 for a bad body). It merges the fields into the saved file, writes it with mode `0600`, and answers like `GET`. A resolved switch that is off cancels the running calls and clears the cache.
 - **No saved pick:** no Catch-up runs. The page saves the pick when the user picks a model in the Catch-up fold, or turns the switch on (see "Catch-up fold").
@@ -334,7 +373,7 @@ The server runs the check in the debounced tree push, so the 30 s tick also driv
 - **Queue:** at most 2 calls run at the same time. The other entries are `queued`, and the one with the oldest **Wait** starts first. A thread with no Wait, such as a failed or guest-message thread, counts from its `updatedAt`. The timers start in the same order.
 - **Input:** the `digestOf` text of the thread, with a 4000-character tail of the last message. The guide is `src/server/catch-up-prompt.md`.
 - **Call:** `run(pick, { guide, input, schema })` with the pick that was set when the entry was queued. The schema is `{ did: string, ask: string | null, options: string[], doneLike: boolean }`, all required, no extra properties.
-- **Answer:** the server validates it. It cuts `did` at 140 and `ask` at 120 characters with "…", keeps at most 4 options, and cuts each at 60 characters. An invalid answer is a failure.
+- **Answer:** `parseAnswer` reads an `ask` that is `""` or `"null"` (any case, after trim) as `null`, and drops such entries from `options`. This holds for every pick. Then the server validates the answer. It cuts `did` at 140 and `ask` at 120 characters with "…", keeps at most 4 options, and cuts each at 60 characters. An invalid answer is a failure.
 
 ### Cache and delivery
 
@@ -346,10 +385,10 @@ The server runs the check in the debounced tree push, so the 30 s tick also driv
 Settings › Setup, after "Linear links" and before "Local model". It holds the Catch-up switch and the Model pick. It is closed at first.
 
 - **Value:** at the right of the fold: "No model" in yellow with a warning sign when `GET /models` gives no pick, else "Off" in neutral text when the switch is off or no pick is set, else the label of the pick in green. "Checking…" in neutral text shows until the first `GET /models` answers.
-- **Body:** a switch "Catch-up", and a radio group "Model" with each offered pick, each with its provider icon and label. The radios are disabled while the switch is off.
-- **Effective pick:** the saved pick when it is offered, else the first offered pick that is not `local`.
+- **Body:** a switch "Catch-up", and a radio group "Model" with each offered pick in the order of `GET /models` (`claude`, `codex`, `apple`, `local`), each with its provider icon and label. The radios are disabled while the switch is off.
+- **Effective pick:** the saved pick when it is offered, else the first offered pick that is not `local` or `apple`.
 - **Pick:** a click on a radio sends `PUT /model-pick` with `{ pick }`. The answer sets the switch.
-- **Switch:** a click sends `PUT /model-pick` with `{ catchUp }`. When no pick is saved, turning the switch on also sends the effective pick, else the first offered pick, so a setup with only a Local model can turn on.
+- **Switch:** a click sends `PUT /model-pick` with `{ catchUp }`. When no pick is saved, turning the switch on also sends the effective pick, else the first offered pick, so a setup with only a Local model or the Apple model can turn on.
 - **No model:** the body shows a hint and a link button "Set up a Local model" that opens the "Local model" fold.
 - The page moves a pick that an older page saved in `localStorage` to the file one time, and then reads the pick from the server. The page removes the old `localStorage` value only after the server holds the pick.
 
@@ -598,11 +637,12 @@ The page owns the rules. Main shows them, so the mute switch stays in main.
 - `bun run build:sidecar`: `scripts/build-sidecar.ts` calls `Bun.build({ compile: { target: "bun-darwin-arm64" } })` on `src/server.ts` with the Tailwind plugin, into `dist/sidecar/server`. The CLI is not enough: the Tailwind plugin works only through the JS API.
   - The lineage worker is passed as a string path, so the compiler bundles it as an extra entry point.
   - `catch-up-prompt.md` is imported as text (`with { type: "text" }`), so it is in the binary.
+- `bun run build:apple-helper`: compiles `src/apple-model/main.swift` into `dist/sidecar/apple-model` (see "Apple model").
 - `dist/` and `release/` go in `.gitignore`.
 
 ### Package, sign and install
 
-- **electron-builder** packages the app into `release/`, `arm64`, with the sidecar through `extraResources` (`dist/sidecar/server` → `server`). Product name "T3 Thread Tree".
+- **electron-builder** packages the app into `release/`, `arm64`, with the sidecar and the Apple model helper through `extraResources` (`dist/sidecar/server` → `server`, `dist/sidecar/apple-model` → `apple-model`). `desktop:dmg` and `desktop:install` run `build:apple-helper` after `build:sidecar`. Product name "T3 Thread Tree".
 - **Signing:** ad-hoc (`codesign -s -`), with `com.apple.security.cs.allow-jit` and `com.apple.security.cs.allow-unsigned-executable-memory` for the sidecar. No Developer ID, no notarization.
 - **Install paths** (all in the README):
   - `.dmg` from GitHub Releases. The first open needs System Settings › Privacy & Security › "Open Anyway", or `xattr -dr com.apple.quarantine "/Applications/T3 Thread Tree.app"`.

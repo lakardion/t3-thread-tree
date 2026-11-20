@@ -84,12 +84,16 @@ The compact text form of one thread that the model reads for a **Catch-up**: one
 _Avoid_: summary, snapshot
 
 **Model pick**:
-The way the app runs a model, chosen by the user: Claude Haiku, Codex Luna or the **Local model**. The **Catch-up** uses it. The user sets it in the Catch-up fold of Settings.
+The way the app runs a model, chosen by the user: Claude Haiku, Codex Luna, the **Local model** or the **Apple model**. The **Catch-up** uses it. The user sets it in the Catch-up fold of Settings.
 _Avoid_: CLI, provider, engine
 
 **Local model**:
 A model that runs on the user's machine, in a runtime the user starts, and writes the **Catch-up**. Thread text does not leave the machine. It is an opt-in **Model pick** next to the remote ones: the page never picks it on its own, and never falls back from it to a remote CLI.
 _Avoid_: offline model, on-device AI
+
+**Apple model**:
+Apple's on-device model, which macOS runs on a Mac with Apple Intelligence on, and which writes the **Catch-up**. The user starts and configures nothing. Thread text does not leave the machine. It is an opt-in **Model pick** in the desktop app only, with the same rules as the **Local model**: the page never picks it on its own, and never falls back from it to a remote CLI.
+_Avoid_: Apple Intelligence, FoundationModels, on-device AI, local model
 
 **Catch-up**:
 One line, written by the **Model pick**, that says what a waiting thread did and what it asks of the user. The server makes it once for each waiting thread message and request, and keeps it in memory.
