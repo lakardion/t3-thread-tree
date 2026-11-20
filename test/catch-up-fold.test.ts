@@ -1,6 +1,6 @@
 import { describe, expect, test } from "bun:test";
 
-import { foldValue, switchBody } from "../src/page/catch-up-fold.ts";
+import { effectivePick, foldValue, switchBody } from "../src/page/catch-up-fold.ts";
 import type { Offered } from "../src/shared/model.ts";
 
 const clis: Offered = [
@@ -35,5 +35,32 @@ describe("switchBody", () => {
   });
   test("turning off never sends a pick", () => {
     expect(switchBody(false, null, "claude", clis)).toEqual({ catchUp: false });
+  });
+});
+
+describe("effectivePick", () => {
+  const all: Offered = [
+    { id: "claude", label: "Claude Haiku" },
+    { id: "codex", label: "Codex Luna" },
+    { id: "apple", label: "Apple model" },
+    { id: "local", label: "Local · qwen" },
+  ];
+  const onlyApple: Offered = [
+    { id: "apple", label: "Apple model" },
+    { id: "local", label: "Local · qwen" },
+  ];
+  test("a saved pick that is offered wins, including apple and local", () => {
+    expect(effectivePick(all, "apple")).toBe("apple");
+    expect(effectivePick(all, "local")).toBe("local");
+  });
+  test("no saved pick takes the first offered pick that is not local or apple", () => {
+    expect(effectivePick(all, null)).toBe("claude");
+  });
+  test("a saved pick that is not offered falls back", () => {
+    expect(effectivePick(all.slice(1), "claude")).toBe("codex");
+  });
+  test("only apple and local offered gives no pick, and the switch saves the first offered", () => {
+    expect(effectivePick(onlyApple, null)).toBeUndefined();
+    expect(switchBody(true, null, undefined, onlyApple)).toEqual({ catchUp: true, pick: "apple" });
   });
 });

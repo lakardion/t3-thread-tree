@@ -12,6 +12,11 @@ export function foldValue(
   return on !== true || !label ? { text: "Off", tone: "none" } : { text: label, tone: "ok" };
 }
 
+/** The saved pick when offered, else the first offered pick that is not `local` or `apple`. */
+export function effectivePick(clis: Offered | null, saved: ModelPick | null | undefined): ModelPick | undefined {
+  return clis?.find((c) => c.id === saved)?.id ?? clis?.find((c) => c.id !== "local" && c.id !== "apple")?.id;
+}
+
 /** The `PUT /model-pick` body for the switch. With no saved pick, turning on also saves the effective pick, else the first offered model. */
 export function switchBody(
   on: boolean,
