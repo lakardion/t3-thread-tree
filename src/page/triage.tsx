@@ -10,7 +10,7 @@ import {
   Send,
   X,
 } from "lucide-react";
-import { useContext, useEffect, useRef, useState } from "react";
+import { useContext, useEffect, useRef, useState, type ReactNode } from "react";
 
 import { Button } from "@/components/ui/button";
 import {
@@ -360,11 +360,13 @@ function End({
   skippedLeft,
   onRestart,
   close,
+  extra,
 }: {
   done: Map<string, Outcome>;
   skippedLeft: number;
   onRestart: () => void;
   close: () => void;
+  extra?: ReactNode;
 }) {
   useTriageKeys((e, inField) => !inField && (e.key === "Escape" || e.key === "t") && close());
   const n = (o: Outcome) => [...done.values()].filter((x) => x === o).length;
@@ -375,7 +377,7 @@ function End({
       <span className="text-xs text-muted-foreground">
         {n("sent")} sent · {n("settled")} settled · {n("snoozed")} snoozed
       </span>
-      <div data-slot="triage-end-extra" />
+      <div data-slot="triage-end-extra">{extra}</div>
       <div className="flex gap-2">
         {skippedLeft > 0 && (
           <Button variant="outline" size="sm" onClick={onRestart}>
@@ -397,12 +399,14 @@ export function TriageCard({
   now,
   t3cli,
   close,
+  endExtra,
 }: {
   queue: ThreadNode[];
   live: Map<string, ThreadNode>;
   now: number;
   t3cli: CliStatus | null;
   close: () => void;
+  endExtra?: ReactNode;
 }) {
   const { reveal } = useContext(Focus);
   const revealRef = useRef(reveal);
@@ -443,7 +447,13 @@ export function TriageCard({
             close={close}
           />
         ) : (
-          <End done={round.done} skippedLeft={card.skippedLeft} onRestart={() => setRound(restart)} close={close} />
+          <End
+            done={round.done}
+            skippedLeft={card.skippedLeft}
+            onRestart={() => setRound(restart)}
+            close={close}
+            extra={endExtra}
+          />
         )}
       </div>
     </section>

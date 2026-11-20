@@ -154,6 +154,8 @@ import {
   stripKey,
 } from "./format.ts";
 import { pageKey } from "./keys.ts";
+import { looksDone, parseSkip, pruneSkip, SKIP_KEY } from "./looks-done.ts";
+import { LooksDoneButton, LooksDoneDialog, UndoToast } from "./looks-done.tsx";
 import {
   PROJECTS,
   arrange,
@@ -2640,6 +2642,9 @@ function App() {
   const [linearOrders, setLinearOrders] = useState(() => parseOrders(load(ORDER_LINEAR_KEY)));
   const [focus, setFocus] = useState(() => parseFocus(load(FOCUS_KEY)));
   const [focusShow, setFocusShow] = useState(load(FOCUS_SHOW_KEY) === "1");
+  const [skip, setSkip] = useState(() => parseSkip(load(SKIP_KEY)));
+  const [doneOpen, setDoneOpen] = useState(false);
+  const [undoIds, setUndoIds] = useState<string[] | null>(null);
   const [pending, setPending] = useState<Pending | null>(null);
   const [findOpen, setFindOpen] = useState(false);
   const [triage, setTriage] = useState(false);
@@ -2823,6 +2828,9 @@ function App() {
     save(FOCUS_KEY, JSON.stringify(focus));
   }, [focus]);
   useEffect(() => {
+    save(SKIP_KEY, JSON.stringify(skip));
+  }, [skip]);
+  useEffect(() => {
     save(FOCUS_SHOW_KEY, focusShow ? "1" : "0");
   }, [focusShow]);
 
@@ -2910,6 +2918,10 @@ function App() {
   const live = new Map((tree?.projects ?? []).flatMap(allThreads).map((t) => [t.id, t]));
   const kept = tree ? pruneFocus(focus, live, tree.conn) : focus;
   if (kept !== focus) setFocus(kept);
+  const keptSkip = tree ? pruneSkip(skip, live, tree.conn) : skip;
+  if (keptSkip !== skip) setSkip(keptSkip);
+  const lookDone = looksDone(tree?.projects ?? [], { focus, skip, now });
+  const lookDoneButton = <LooksDoneButton count={lookDone.length} onOpen={() => setDoneOpen(true)} />;
   const pend =
     pending &&
     focus[pending.slot] === pending.over &&
@@ -3236,6 +3248,7 @@ function App() {
         <OpenNextButton target={target} title={openNextTitle} now={now} open={openNext} />
         <FocusButton count={focus.length} shown={focusShow} setShown={setFocusShow} />
         <TriageButton count={queue.length} open={triage} toggle={() => setTriage((o) => !o)} />
+        {lookDoneButton}
         <div className="ml-auto flex items-center gap-1">
           <div className="min-[720px]:hidden">
             <ViewMenu
@@ -3319,7 +3332,16 @@ function App() {
             </Alert>
           )}
           <DragDropProvider plugins={plugins} onDragStart={dragStart} onDragEnd={dragEnd}>
-            {triage && <TriageCard queue={queue} live={live} now={now} t3cli={t3cli} close={() => setTriage(false)} />}
+            {triage && (
+              <TriageCard
+                queue={queue}
+                live={live}
+                now={now}
+                t3cli={t3cli}
+                close={() => setTriage(false)}
+                endExtra={lookDoneButton}
+              />
+            )}
             {focusShow && (
               <FocusStrip
                 ids={focus}
@@ -3452,6 +3474,16 @@ function App() {
         reveal={reveal}
         now={now}
       />
+      <LooksDoneDialog
+        open={doneOpen}
+        items={lookDone}
+        onOpenChange={setDoneOpen}
+        onDone={(settledIds, skipped) => {
+          setSkip((s) => [...s.filter((e) => !skipped.some((k) => k.id === e.id)), ...skipped]);
+          if (settledIds.length > 0) setUndoIds((u) => [...(u ?? []), ...settledIds]);
+        }}
+      />
+      {undoIds && <UndoToast key={undoIds.join()} ids={undoIds} onClose={() => setUndoIds(null)} />}
       <SendDialog
         fixed
         open={sendTo.open}
