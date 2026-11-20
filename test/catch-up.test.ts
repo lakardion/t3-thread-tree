@@ -85,6 +85,19 @@ describe("parseAnswer", () => {
   test("keeps a null ask and short text", () => {
     expect(parseAnswer({ ...ANSWER, ask: null })).toEqual({ ...ANSWER, ask: null });
   });
+  test("reads an empty or null-word ask as null", () => {
+    for (const ask of ["", "null", " NULL "]) expect(parseAnswer({ ...ANSWER, ask })!.ask).toBeNull();
+    expect(parseAnswer({ ...ANSWER, ask: "Ship it?" })!.ask).toBe("Ship it?");
+  });
+  test("drops empty and null-word options before the 4 cut", () => {
+    expect(parseAnswer({ ...ANSWER, options: ["A", "", "null", " Null ", "B"] })!.options).toEqual(["A", "B"]);
+    expect(parseAnswer({ ...ANSWER, options: ["", "null", "NULL", "a", "b", "c", "d"] })!.options).toEqual([
+      "a",
+      "b",
+      "c",
+      "d",
+    ]);
+  });
   test("an invalid shape gives null", () => {
     expect(parseAnswer(null)).toBeNull();
     expect(parseAnswer({ did: "x" })).toBeNull();
