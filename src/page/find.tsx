@@ -4,6 +4,7 @@ import { useEffect, useRef, useState, type KeyboardEvent, type ReactNode } from 
 import { Button } from "@/components/ui/button";
 import { Command, CommandGroup, CommandInput, CommandItem, CommandList } from "@/components/ui/command";
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "@/components/ui/dialog";
+import { Kbd } from "@/components/ui/kbd";
 import { cn } from "@/lib/utils";
 
 import { find, type Hit } from "../shared/find.ts";
@@ -68,7 +69,7 @@ function Row({ h, now, canShow, open, show }: RowProps) {
           size="icon-xs"
           className="flex-none text-muted-foreground"
           aria-label={`Show ${t.title || t.id} in tree`}
-          title="Show in tree"
+          title="Show in tree (Shift+Enter)"
           onPointerDown={(e) => e.stopPropagation()}
           onClick={(e) => {
             e.stopPropagation();
@@ -171,6 +172,24 @@ function FindBody({ list, focus, canShow, now, open, show }: BodyProps) {
           </CommandGroup>
         )}
       </CommandList>
+      <div
+        aria-hidden
+        data-hint="find-bar"
+        className="key-hint right-2 bottom-2 left-2 h-8 items-center gap-3 rounded-md border bg-popover/95 px-3 text-[11px] text-muted-foreground shadow-md backdrop-blur"
+      >
+        <span className="flex items-center gap-1">
+          <Kbd>↑↓</Kbd> Move
+        </span>
+        <span className="flex items-center gap-1">
+          <Kbd>↵</Kbd> Open
+        </span>
+        <span className="flex items-center gap-1">
+          <Kbd>⇧↵</Kbd> Show in tree
+        </span>
+        <span className="ml-auto flex items-center gap-1">
+          <Kbd>esc</Kbd> Close
+        </span>
+      </div>
     </Command>
   );
 }

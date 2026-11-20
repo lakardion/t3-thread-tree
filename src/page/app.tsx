@@ -70,6 +70,7 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import { Input } from "@/components/ui/input";
+import { Kbd } from "@/components/ui/kbd";
 import { Label } from "@/components/ui/label";
 import { Progress } from "@/components/ui/progress";
 import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group";
@@ -153,6 +154,7 @@ import {
   stopLabel,
   stripKey,
 } from "./format.ts";
+import { Hint, useKeyHints } from "./key-hints.tsx";
 import { pageKey } from "./keys.ts";
 import { looksDone, parseSkip, pruneSkip, SKIP_KEY } from "./looks-done.ts";
 import { LooksDoneButton, LooksDoneDialog, UndoToast } from "./looks-done.tsx";
@@ -217,6 +219,7 @@ const SECTIONS_KEY = "thread-tree:sections";
 const NEST_KEY = "thread-tree:nest";
 const PROJECT_NAMES_KEY = "thread-tree:project-names";
 const STATUS_TEXT_KEY = "thread-tree:status-text";
+const KEY_HINTS_KEY = "thread-tree:key-hints";
 const FILTER_KEY = "thread-tree:filter";
 const THEME_KEY = "thread-tree:theme";
 const CLI_KEY = "thread-tree:cli";
@@ -854,6 +857,9 @@ function OpenNextButton({
     <Button variant="outline" size="sm" aria-label="Open next" aria-keyshortcuts="n" disabled={!target} onClick={open}>
       <SkipForward />
       <span className="max-[720px]:hidden">Open next</span>
+      <Hint surface="header" className="-top-2 -right-2">
+        n
+      </Hint>
     </Button>
   );
   return (
@@ -1151,6 +1157,8 @@ type PanelProps = LinearProps &
     setNest: (v: boolean) => void;
     statusText: boolean;
     setStatusText: (v: boolean) => void;
+    keyHints: boolean;
+    setKeyHints: (v: boolean) => void;
     projectNames: boolean;
     setProjectNames: (v: boolean) => void;
     canReset: boolean;
@@ -1235,6 +1243,9 @@ function SettingsPanel(p: PanelProps) {
           </Row>
           <Row label="Show status text in rows" htmlFor="status-text">
             <Switch id="status-text" checked={p.statusText} onCheckedChange={p.setStatusText} />
+          </Row>
+          <Row label="Show key hints" htmlFor="key-hints">
+            <Switch id="key-hints" checked={p.keyHints} onCheckedChange={p.setKeyHints} />
           </Row>
           <Row label="Show project names in rows" htmlFor="project-names">
             <Switch id="project-names" checked={p.projectNames} onCheckedChange={p.setProjectNames} />
@@ -1792,6 +1803,20 @@ function ThreadRow({
           {!inStack && <DragHandle handleRef={handleRef} name={t.title || t.id} />}
           <StatusCell t={t} now={now} />
           <PhraseCell t={t} now={now} />
+          <span
+            aria-hidden
+            data-hint="row"
+            className="key-hint -top-3 right-8 items-center gap-2 rounded-md border bg-popover px-1.5 py-0.5 text-[11px] text-muted-foreground shadow-sm"
+          >
+            <span className="flex items-center gap-1">
+              <Kbd>o</Kbd> Details
+            </span>
+            {sendTo && sendTo.t3cli?.available !== false && (
+              <span className="flex items-center gap-1">
+                <Kbd>s</Kbd> Send
+              </span>
+            )}
+          </span>
           {pulse > 0 && <span key={pulse} aria-hidden className={cn("row-pulse", STATUS[t.status].shape)} />}
           {project && <ProjectColumn b={project} />}
           {chip && (
@@ -2471,9 +2496,7 @@ const Keys = () => (
     {KEYS.map(([keys, action]) => (
       <Fragment key={action}>
         <dt>
-          <kbd className="rounded-[4px] border bg-muted px-1.5 py-0.5 font-mono text-[11px] text-foreground">
-            {keys}
-          </kbd>
+          <Kbd className="font-mono">{keys}</Kbd>
         </dt>
         <dd className="m-0 text-muted-foreground">{action}</dd>
       </Fragment>
@@ -2635,6 +2658,7 @@ function App() {
   const [nest, setNest] = useState(load(NEST_KEY) === "1");
   const [projectNames, setProjectNames] = useState(load(PROJECT_NAMES_KEY) !== "0");
   const [statusText, setStatusText] = useState(load(STATUS_TEXT_KEY) !== "0");
+  const [keyHints, setKeyHints] = useState(load(KEY_HINTS_KEY) !== "0");
   const [needsOnly, setNeedsOnly] = useState(load(FILTER_KEY) === "needs");
   const [theme, setTheme] = useState<Theme>(() => THEMES.find((t) => t === load(THEME_KEY)) ?? "system");
   const [sortBy, setSortBy] = useState<SortBy>(() => (load(SORT_KEY) === "updated" ? "updated" : "manual"));
@@ -2838,6 +2862,10 @@ function App() {
   useEffect(() => {
     save(STATUS_TEXT_KEY, statusText ? "1" : "0");
   }, [statusText]);
+  useEffect(() => {
+    save(KEY_HINTS_KEY, keyHints ? "1" : "0");
+  }, [keyHints]);
+  useKeyHints(keyHints);
   useEffect(() => {
     save(SNOOZED_KEY, snoozed ? "1" : "0");
   }, [snoozed]);
@@ -3463,6 +3491,8 @@ function App() {
           setNest={setNest}
           statusText={statusText}
           setStatusText={setStatusText}
+          keyHints={keyHints}
+          setKeyHints={setKeyHints}
           projectNames={projectNames}
           setProjectNames={setProjectNames}
           canReset={Object.keys(orders).length + Object.keys(linearOrders).length > 0}

@@ -295,3 +295,33 @@
     animation: none;
   }
 }
+
+/* Key hints: float over the page, never take space, show only on the Alt/Option hold. Unlayered so `display: none` beats the `Kbd` utilities. */
+.key-hint {
+  display: none;
+  position: absolute;
+  z-index: 30;
+  pointer-events: none;
+}
+:has(> .key-hint) {
+  position: relative;
+}
+.key-hint[data-slot="kbd"] {
+  border: 1px solid var(--border);
+  background: var(--popover);
+  box-shadow: 0 1px 2px rgb(0 0 0 / 0.12);
+}
+[data-key-hints] .key-hint:not([data-hint="row"]),
+[data-key-hints] .thread-row:has([data-stop]:focus-visible) .key-hint[data-hint="row"] {
+  display: inline-flex;
+}
+@media (max-width: 720px) {
+  .key-hint[data-hint="header"] {
+    display: none !important;
+  }
+}
+@media (hover: none), (pointer: coarse) {
+  .key-hint {
+    display: none !important;
+  }
+}

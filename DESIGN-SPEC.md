@@ -504,9 +504,9 @@ The card sits at the top of the list, inside the list scroller, before the Focus
 - **Head row:** the status icon, the status title in the status color and semibold, the phrase, the Wait in the status color, then "N of M" (and "+K new" in the needs-input color) and a close button on the right.
 - **Title:** a link, semibold, with the issue key in mono before it.
 - **Catch-up:** as in the row line, without the options. A skeleton shows while it runs.
-- **Chips:** outline `xs` buttons with the number key in front.
+- **Chips:** outline `xs` buttons. Their number key is a key hint.
 - **Reply:** a textarea with the Send button at its end.
-- **Action row:** ghost `xs` buttons, each with its key. "Skip" sits at the end.
+- **Action row:** ghost `xs` buttons. Their keys are key hints: they show only while the user holds Alt/Option. "Skip" sits at the end.
 - **Next line:** one truncated line under a top border.
 - **End:** a centered check icon, "Nothing waits", the counts, and the buttons.
 - **390 px:** the rows wrap and the card keeps its width. The tree row that the card shows stays visible under it.
@@ -542,8 +542,11 @@ A row of the Up next window with a Catch-up has a second line under the top line
 | Summary chips, key chip, stack chip, PR chips, notes | `Badge`                        | Installed |
 | Raw status, exact time                               | `Tooltip`                      | Installed |
 | Banner                                               | `Alert`                        | Installed |
+| Key cap (Keys legend, key hints)                     | `Kbd`                          | Installed |
 
 Add components with the shadcn CLI. Status icons, washes, edges and the stack rail are plain Tailwind classes and the CSS in this spec.
+
+**Key hints.** A key hint is a small, muted `Kbd`: `h-4 min-w-4`, 10 px text, `text-muted-foreground`. It floats over the corner of its control, with a 1 px border, the popover background and a small shadow. The Find bar and the row pill use the same border, background and shadow. A hint takes no space. The rules are in [SPEC.md](SPEC.md) › UI › Key hints.
 
 ## Data
 

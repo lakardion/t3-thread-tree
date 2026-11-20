@@ -47,7 +47,7 @@ _Screenshots use made-up data from `bun run demo`._
   ![The Looks done dialog with two threads checked](docs/looks-done.png)
 
 - **Settle and send from a row.** The icons at the end of a row settle the thread in one click, or open a dialog to send it a message. Settled threads show on demand in a list below the tree.
-- **Keys.** `j`/`k` move between rows, Enter opens, `o` opens the details, `s` opens Send. The "Keys" fold in Settings lists all keys.
+- **Keys.** `j`/`k` move between rows, Enter opens, `o` opens the details, `s` opens Send. Hold Alt/Option for a moment to see the keys on the page, next to the controls they work. "Show key hints" in Settings turns this off. The "Keys" fold in Settings lists all keys.
 
 ### Mac app
 
