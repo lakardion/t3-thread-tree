@@ -2,7 +2,7 @@
 title: How do the key hints look, and when do they show?
 type: prototype
 status: open
-assignee:
+assignee: claude (key-hints-01 session)
 blocked-by: []
 ---
 
