@@ -1,13 +1,13 @@
 /** Serves the page with made-up threads, run through the real tree rules. No T3 needed. */
 import index from "../src/page/index.html";
 import upNext from "../src/page/up-next.html";
-import { briefInput, briefService, lastMessageRoutes, type Outcome } from "../src/server/brief.ts";
 import { buildLinearTree, buildTree } from "../src/server/build-tree.ts";
 import { findRoutes } from "../src/server/find.ts";
+import { lastMessageRoutes } from "../src/server/last-message.ts";
 import { cliPath, type CliRun, sendService } from "../src/server/send.ts";
 import { settledPage, settledRoutes, settledSignature } from "../src/server/settled.ts";
 import type { Pr, Project, Thread } from "../src/server/t3.ts";
-import type { BriefAction, LocalConfig, LocalState, ModelPick } from "../src/shared/brief.ts";
+import type { LocalConfig, LocalState, ModelPick } from "../src/shared/model.ts";
 import { type CatchUp, parseLabels, type LinearIssue } from "../src/shared/tree.ts";
 
 const now = Date.now();
@@ -335,59 +335,6 @@ const treeFor = (nest: boolean, labels: string[], wantsLinear: boolean) =>
     projects: projectsFor(false, nest, labels, wantsLinear),
   });
 
-/** The model part of the sample brief. Code makes the `answer`, `fix` and `merge` actions from the tree, so these threads have none of them. `demo-27` is settled, so its heading shows struck through. */
-const SAMPLE: BriefAction[] = [
-  {
-    kind: "unblock",
-    title: "Resume the flaky cart badge test",
-    reason: "The thread failed on a rate limit and the e2e fix waits.",
-    threadIds: ["demo-12"],
-    prompt: "Resume the work and fix the flaky cart badge count test.",
-  },
-  {
-    kind: "review",
-    title: "Mark the Apple Pay draft ready",
-    reason: "The agent finished its turn 2 hours ago and the PR is still a draft.",
-    threadIds: ["demo-3"],
-    prompt: "Mark PR #2104 ready for review and request a reviewer.",
-  },
-  {
-    kind: "clean-up",
-    title: "Settle the finished docs threads",
-    reason: "The getting-started guide is done and the tutorial archive is settled.",
-    threadIds: ["demo-17", "demo-27"],
-    prompt: "Settle the getting-started guide and the tutorial archive threads.",
-  },
-];
-const titles = Object.fromEntries(threads.map((th) => [th.id, th.title]));
-
-/** Stub runner: `BRIEF=failed|empty|rules` picks the outcome, `CLIS=0` offers no CLI. */
-function stubRun(cli: ModelPick): { done: Promise<Outcome | null>; cancel: () => void } {
-  const outcome = (): Outcome =>
-    process.env.BRIEF === "failed"
-      ? {
-          status: "failed",
-          cli,
-          error: "Overloaded",
-          stderrTail: "Error: API Error: 529 overloaded_error\nclaude exited with code 1",
-          actions: [],
-          titles: {},
-        }
-      : {
-          status: "done",
-          cli,
-          generatedAt: new Date().toISOString(),
-          actions: process.env.BRIEF === "empty" ? [] : SAMPLE,
-          titles,
-        };
-  let cancel!: () => void;
-  const done = new Promise<Outcome | null>((resolve) => {
-    const timer = setTimeout(() => resolve(outcome()), 2500);
-    cancel = () => (clearTimeout(timer), resolve(null));
-  });
-  return { done, cancel };
-}
-
 /** In-memory Local model config. `LOCAL` seeds it with that state; unset starts empty. */
 const LOCAL_STATES: readonly LocalState[] = ["ok", "down", "missing"];
 const localEnv = LOCAL_STATES.find((s) => s === process.env.LOCAL);
@@ -404,24 +351,16 @@ const pickAnswer = () => {
 };
 
 const listeners = new Set<(event: string, data: string) => void>();
-const brief = briefService({
-  offered: () =>
-    Promise.resolve([
-      ...(process.env.CLIS === "0"
-        ? []
-        : [
-            { id: "claude" as const, label: "Claude Haiku" },
-            { id: "codex" as const, label: "Codex Luna" },
-          ]),
-      ...(localConfig ? [{ id: "local" as const, label: `Local · ${localConfig.model}` }] : []),
-    ]),
-  input: () => {
-    const i = briefInput(projectsFor(false), () => new Map(), now);
-    return process.env.BRIEF === "rules" ? { ...i, threads: [] } : i;
-  },
-  onChange: () => listeners.forEach((l) => l("brief", JSON.stringify(brief.state()))),
-  run: stubRun,
-});
+const offered = () =>
+  Promise.resolve([
+    ...(process.env.CLIS === "0"
+      ? []
+      : [
+          { id: "claude" as const, label: "Claude Haiku" },
+          { id: "codex" as const, label: "Codex Luna" },
+        ]),
+    ...(localConfig ? [{ id: "local" as const, label: `Local · ${localConfig.model}` }] : []),
+  ]);
 
 /** Waits 1 s, then answers like the CLI. `SEND=failed` fails with the wrapper text. */
 const stubCli: CliRun = async (argv) => {
@@ -500,7 +439,7 @@ const server = Bun.serve({
   routes: {
     "/": index,
     "/up-next": upNext,
-    ...brief.routes,
+    "/models": { GET: async () => Response.json(await offered()) },
     "/local-model": async (req) => {
       if (req.method === "PUT") {
         const b = (await req.json().catch(() => null)) as Partial<LocalConfig> | null;
@@ -540,7 +479,6 @@ const server = Bun.serve({
             listeners.add(send);
             pushes.add(push);
             push();
-            send("brief", JSON.stringify(brief.state()));
           },
           cancel() {
             listeners.delete(send);

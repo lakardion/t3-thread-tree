@@ -72,6 +72,7 @@ import {
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Progress } from "@/components/ui/progress";
+import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Switch } from "@/components/ui/switch";
 import { ToggleGroup, ToggleGroupItem } from "@/components/ui/toggle-group";
@@ -79,9 +80,9 @@ import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/comp
 import { cn } from "@/lib/utils";
 
 import appIcon from "../../assets/icon.svg" with { type: "text" };
-import type { BriefState, LocalConfig, LocalState, ModelPick } from "../shared/brief.ts";
 import type { UpdateState } from "../shared/desktop.ts";
 import { hits } from "../shared/find.ts";
+import type { LocalConfig, LocalState, ModelPick, Offered } from "../shared/model.ts";
 import type { CliStatus } from "../shared/send.ts";
 import {
   allThreads,
@@ -118,8 +119,9 @@ import {
   waits,
   withoutSnoozed,
 } from "./attention.ts";
-import { BriefControls, BriefPanel, CopyPrompt, type Offered } from "./brief.tsx";
+import { foldValue, switchBody } from "./catch-up-fold.ts";
 import { CatchUpTitle } from "./catch-up-line.tsx";
+import { CopyPrompt } from "./copy-prompt.tsx";
 import { FindDialog, FIND_KEY, MAC } from "./find.tsx";
 import {
   addFocus,
@@ -171,8 +173,9 @@ import {
 } from "./order.ts";
 import { Presence, useMotion } from "./presence.tsx";
 import { ProjectIcon, projectHex } from "./project-icon.tsx";
+import { ProviderIcon } from "./provider-icon.tsx";
 import { CliGate, LastMessage, SendDialog, useLastMessage } from "./send-dialog.tsx";
-import { postSettle, t3Projects } from "./send.ts";
+import { postSettle } from "./send.ts";
 import { LEGEND, LegendIcon, STATUS, StatusIcon } from "./status-icon.tsx";
 import { nextStop, refocusIndex, stopsIn } from "./stops.ts";
 import { Swap, useChanges } from "./swap.tsx";
@@ -222,7 +225,6 @@ const LAYOUT_KEY = "thread-tree:layout";
 const GROUP_KEY = "thread-tree:group";
 const TREE_GROUP_KEY = "thread-tree:tree-group";
 const ORDER_LINEAR_KEY = "thread-tree:order-linear";
-const BRIEF_FOLD_KEY = "thread-tree:brief-fold";
 const THEMES = ["system", "light", "dark"] as const;
 type Theme = (typeof THEMES)[number];
 
@@ -430,7 +432,7 @@ function LocalModelForm({ config, onSaved }: { config: LocalConfig | null; onSav
       }}
     >
       <p className={HINT}>
-        Runs &ldquo;What&rsquo;s next&rdquo; on a model on this machine. Install the Ollama app build (
+        Runs the Catch-up on a model on this machine. Install the Ollama app build (
         <code>brew install --cask ollama-app</code>), pull the model (<code>ollama pull &lt;model&gt;</code>), and start
         Ollama.
       </p>
@@ -548,17 +550,21 @@ const Fold = ({
   value,
   tone,
   defaultOpen,
+  open,
+  onOpenChange,
   children,
 }: {
   label: string;
   value: ReactNode;
   tone: Tone;
   defaultOpen?: boolean;
+  open?: boolean;
+  onOpenChange?: (open: boolean) => void;
   children: ReactNode;
 }) => {
   const { cls, Icon } = TONE[tone];
   return (
-    <Collapsible defaultOpen={defaultOpen}>
+    <Collapsible defaultOpen={defaultOpen} open={open} onOpenChange={onOpenChange}>
       <CollapsibleTrigger className="group flex w-full items-center justify-between gap-2 px-3 py-2.5 text-left">
         <span className="text-[13px]">{label}</span>
         <span className="flex items-center gap-1.5">
@@ -1060,6 +1066,59 @@ const linearFoldValue = (l: Tree["linear"], key: Tree["linearKey"] | undefined) 
     .filter(Boolean)
     .join(" · ");
 
+/** The Catch-up switch and the Model pick that it runs on. */
+function CatchUpFold(p: {
+  clis: Offered | null;
+  pick: ModelPick | undefined;
+  on: boolean | undefined;
+  setPick: (c: ModelPick) => void;
+  setOn: (on: boolean) => void;
+  openLocal: () => void;
+}) {
+  const { text, tone } = foldValue(p.clis, p.pick, p.on);
+  return (
+    <Fold label="Catch-up" value={text} tone={tone}>
+      {p.clis?.length === 0 && (
+        <div className="grid justify-items-start gap-1">
+          <p className={cn(HINT, "m-0")}>
+            No logged-in claude or codex CLI and no Local model. The Catch-up has no model to run.
+          </p>
+          <Button variant="link" size="xs" className="px-0" onClick={p.openLocal}>
+            Set up a Local model
+          </Button>
+        </div>
+      )}
+      {p.clis && p.clis.length > 0 && (
+        <div className="grid gap-3">
+          <div className="flex items-center justify-between gap-2">
+            <Label htmlFor="catch-up" className="text-[13px] font-normal">
+              Catch-up
+            </Label>
+            <Switch id="catch-up" checked={p.on === true} onCheckedChange={p.setOn} />
+          </div>
+          <RadioGroup
+            aria-label="Model"
+            value={p.pick ?? ""}
+            onValueChange={(v) => p.setPick(v as ModelPick)}
+            disabled={p.on !== true}
+            className="gap-2"
+          >
+            {p.clis.map((c) => (
+              <div key={c.id} className="flex items-center gap-2">
+                <RadioGroupItem id={`catch-up-${c.id}`} value={c.id} />
+                <Label htmlFor={`catch-up-${c.id}`} className="gap-2 text-[13px] font-normal">
+                  <ProviderIcon cli={c.id} className="size-3.5" />
+                  {c.label}
+                </Label>
+              </div>
+            ))}
+          </RadioGroup>
+        </div>
+      )}
+    </Fold>
+  );
+}
+
 type PanelProps = LinearProps &
   LabelsProps & {
     close: () => void;
@@ -1085,8 +1144,13 @@ type PanelProps = LinearProps &
     tokenOpen: boolean;
     /** Opens the Linear links fold. */
     linearOpen: boolean;
-    /** Reloads the Model pick menu. */
+    /** Reloads the offered Model picks. */
     reloadModels: () => void;
+    clis: Offered | null;
+    pick: ModelPick | undefined;
+    catchUpOn: boolean | undefined;
+    setPick: (c: ModelPick) => void;
+    setCatchUp: (on: boolean) => void;
   };
 
 /** View options and settings, beside the list so a change shows at once. */
@@ -1110,6 +1174,7 @@ function SettingsPanel(p: PanelProps) {
   }, [close, buttonRef]);
   useEffect(() => window.desktopBridge?.checkUpdates(false), []);
   const [local, setLocal] = useState<LocalInfo | null>(null);
+  const [localOpen, setLocalOpen] = useState(false);
   useEffect(() => {
     fetch("/local-model")
       .then((r) => {
@@ -1188,7 +1253,15 @@ function SettingsPanel(p: PanelProps) {
               <LinearKeyForm />
             </div>
           </Fold>
-          <Fold label="Local model" value={localText} tone={localTone}>
+          <CatchUpFold
+            clis={p.clis}
+            pick={p.pick}
+            on={p.catchUpOn}
+            setPick={p.setPick}
+            setOn={p.setCatchUp}
+            openLocal={() => setLocalOpen(true)}
+          />
+          <Fold label="Local model" value={localText} tone={localTone} open={localOpen} onOpenChange={setLocalOpen}>
             {local && (
               <LocalModelForm
                 config={local.config}
@@ -1236,12 +1309,12 @@ const forget = (k: string) => {
   } catch {}
 };
 
-/** The saved Catch-up switch, or `null` when the server did not save the pick. */
-const putPick = (pick: ModelPick) =>
+/** Saves the settings with `PUT /model-pick`. Gives the saved Catch-up switch, or `null` when the server did not save them. */
+const putPick = (body: { pick?: ModelPick; catchUp?: boolean }) =>
   fetch("/model-pick", {
     method: "PUT",
     headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ pick }),
+    body: JSON.stringify(body),
   }).then(
     (res) => (res.ok ? (res.json() as Promise<{ catchUp: boolean }>).then((s) => s.catchUp) : null),
     () => null,
@@ -2556,20 +2629,15 @@ function App() {
   const [shutSections, setShutSections] = useState(
     () => new Set<string>(JSON.parse(load(SECTIONS_KEY) ?? '["idle","done"]') as string[]),
   );
-  const [brief, setBrief] = useState<BriefState>({ status: "idle" });
   const [clis, setClis] = useState<Offered | null>(null);
   const [cli, setCli] = useState<ModelPick | null | undefined>(undefined);
   const [catchUpOn, setCatchUpOn] = useState<boolean>();
-  const [hideBrief, setHideBrief] = useState(false);
   const [t3cli, setT3cli] = useState<CliStatus | null>(null);
-  const [sent, setSent] = useState(() => new Map<string, string[]>());
   const [sendTo, setSendTo] = useState({ id: "", open: false });
-  const briefStatus = useRef<BriefState["status"]>("idle");
   const [orders, setOrders] = useState(() => parseOrders(load(ORDER_KEY)));
   const [linearOrders, setLinearOrders] = useState(() => parseOrders(load(ORDER_LINEAR_KEY)));
   const [focus, setFocus] = useState(() => parseFocus(load(FOCUS_KEY)));
   const [focusShow, setFocusShow] = useState(load(FOCUS_SHOW_KEY) === "1");
-  const [briefFolded, setBriefFolded] = useState(load(BRIEF_FOLD_KEY) === "1");
   const [pending, setPending] = useState<Pending | null>(null);
   const [findOpen, setFindOpen] = useState(false);
   /** A new key remounts the tree list, which drops the row moves that dnd-kit made during a drag onto the strip. */
@@ -2714,7 +2782,7 @@ function App() {
       .then(
         async (saved) => {
           const old = load(CLI_KEY) as ModelPick | null;
-          const savedCatchUp = !saved.pick && old ? await putPick(old) : saved.catchUp;
+          const savedCatchUp = !saved.pick && old ? await putPick({ pick: old }) : saved.catchUp;
           if (savedCatchUp !== null) forget(CLI_KEY);
           setCli(saved.pick ?? old ?? null);
           setCatchUpOn(savedCatchUp ?? saved.catchUp);
@@ -2752,9 +2820,6 @@ function App() {
   useEffect(() => {
     save(FOCUS_SHOW_KEY, focusShow ? "1" : "0");
   }, [focusShow]);
-  useEffect(() => {
-    save(BRIEF_FOLD_KEY, briefFolded ? "1" : "0");
-  }, [briefFolded]);
 
   useEffect(() => {
     save(THEME_KEY, theme);
@@ -2828,13 +2893,14 @@ function App() {
   };
   const sendToApi = { t3cli, open: (id: string) => setSendTo({ id, open: true }) };
   const pick = clis?.find((c) => c.id === cli)?.id ?? clis?.find((c) => c.id !== "local")?.id;
-  const pickCli = (c: ModelPick) => (setCli(c), void putPick(c).then((on) => on !== null && setCatchUpOn(on)));
-  const runBrief = () => {
-    if (!pick) return;
-    if (cli === null) pickCli(pick);
-    setHideBrief(false);
-    setBriefFolded(false);
-    void fetch("/brief/run", { method: "POST", body: JSON.stringify({ cli: pick }) });
+  const pickCli = (c: ModelPick) => (
+    setCli(c),
+    void putPick({ pick: c }).then((on) => on !== null && setCatchUpOn(on))
+  );
+  const setCatchUp = (on: boolean) => {
+    const body = switchBody(on, cli, pick, clis ?? []);
+    if (body.pick) setCli(body.pick);
+    void putPick(body).then((saved) => saved !== null && setCatchUpOn(saved));
   };
   const live = new Map((tree?.projects ?? []).flatMap(allThreads).map((t) => [t.id, t]));
   const kept = tree ? pruneFocus(focus, live, tree.conn) : focus;
@@ -3002,12 +3068,6 @@ function App() {
       if (cur.connecting || cur.rows(next.projects) === cur.rows(cur.projects)) setTree(next);
       else transition(() => setTree(next));
     };
-    es.addEventListener("brief", (e) => {
-      const b = JSON.parse(e.data) as BriefState;
-      if (b.status === "running" && briefStatus.current !== "running") setSent(new Map());
-      briefStatus.current = b.status;
-      setBrief(b);
-    });
     return () => es.close();
   }, [nest, labelsParam, linearOn]);
   useEffect(() => save(SETTLED_KEY, settled ? "1" : "0"), [settled]);
@@ -3169,7 +3229,6 @@ function App() {
         </ToggleGroup>
         <OpenNextButton target={target} title={openNextTitle} now={now} open={openNext} />
         <FocusButton count={focus.length} shown={focusShow} setShown={setFocusShow} />
-        <BriefControls clis={clis} cli={pick} setCli={pickCli} running={brief.status === "running"} run={runBrief} />
         <div className="ml-auto flex items-center gap-1">
           <div className="min-[720px]:hidden">
             <ViewMenu
@@ -3251,28 +3310,6 @@ function App() {
                 </Button>
               </AlertDescription>
             </Alert>
-          )}
-          {!hideBrief && brief.status !== "idle" && (
-            <BriefPanel
-              state={brief}
-              clis={clis}
-              live={live}
-              now={now}
-              projects={t3Projects(tree?.projects ?? [])}
-              t3cli={t3cli}
-              sent={sent}
-              onSent={(key, id) =>
-                setSent((m) => {
-                  const ids = m.get(key) ?? [];
-                  return ids.includes(id) ? m : new Map(m).set(key, [...ids, id]);
-                })
-              }
-              run={runBrief}
-              cancel={() => fetch("/brief/cancel", { method: "POST" })}
-              close={() => setHideBrief(true)}
-              folded={briefFolded}
-              fold={setBriefFolded}
-            />
           )}
           <DragDropProvider plugins={plugins} onDragStart={dragStart} onDragEnd={dragEnd}>
             {focusShow && (
@@ -3391,6 +3428,11 @@ function App() {
           tokenOpen={tokenOpen}
           linearOpen={linearOpen}
           reloadModels={loadModels}
+          clis={clis}
+          pick={pick}
+          catchUpOn={catchUpOn}
+          setPick={pickCli}
+          setCatchUp={setCatchUp}
         />
       )}
       <FindDialog

@@ -5,7 +5,7 @@ import { join } from "node:path";
 
 import * as v from "valibot";
 
-import type { LocalConfig, LocalState, ModelPick } from "../shared/brief.ts";
+import type { LocalConfig, LocalState, ModelPick } from "../shared/model.ts";
 import { writeToken } from "./token.ts";
 
 export type ModelResult = { answer: unknown } | { error: string; detail: string };
@@ -287,7 +287,7 @@ function runLocal(
         const choice = JSON.parse(text).choices[0];
         if (choice.finish_reason !== "length") return { answer: JSON.parse(choice.message.content) };
       } catch {}
-      return { error: "The local model gave no valid brief.", detail };
+      return { error: "The local model gave no valid answer.", detail };
     } catch (e) {
       if (cancelled) return null;
       if (timedOut) return { error: "timed out", detail: "" };

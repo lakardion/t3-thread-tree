@@ -3,11 +3,11 @@ import { join } from "node:path";
 
 import index from "./page/index.html";
 import upNext from "./page/up-next.html";
-import { briefInput, briefService, lastMessageRoutes, runBrief } from "./server/brief.ts";
 import { buildLinearTree, buildTree, issueKey } from "./server/build-tree.ts";
 import { catchUpService } from "./server/catch-up.ts";
 import { findRoutes } from "./server/find.ts";
 import { labelStore } from "./server/labels.ts";
+import { lastMessageRoutes } from "./server/last-message.ts";
 import { mayBeLaunched, needsScan, openLineage } from "./server/lineage.ts";
 import { fetchLinear } from "./server/linear-api.ts";
 import { linearStore } from "./server/linear.ts";
@@ -223,16 +223,6 @@ const catchUp = catchUpService({
   settings: () => readPickFile(pickFile),
   onChange: () => changed(),
 });
-const brief = briefService({
-  offered: () => models.offered(),
-  run: (p, t) => runBrief((pick, job) => models.run(pick, job), p, t),
-  input: () => briefInput(treeFor(false).projects, lineage.lastMessages, Date.now()),
-  onChange: () => {
-    const data = JSON.stringify(brief.state());
-    for (const c of clients) c.send(data, "brief");
-  },
-});
-
 const t3Cli = checkCli(cliPath());
 void t3Cli.then((c) => c.available || log(`no t3 CLI at ${c.path}, sending is off`));
 const send = sendService({
@@ -249,7 +239,7 @@ const server = Bun.serve({
   routes: {
     "/": index,
     "/up-next": upNext,
-    ...brief.routes,
+    "/models": { GET: async () => Response.json(await models.offered()) },
     ...send.routes,
     ...localModelRoutes(localModelFile),
     ...pickRoutes(pickFile, () => {
@@ -316,7 +306,6 @@ const server = Bun.serve({
             if (labels.length) store.sync(threads.values(), true);
             syncLinear();
             client.send(JSON.stringify(treeFor(false, nest, labels, wantsLinear)));
-            client.send(JSON.stringify(brief.state()), "brief");
           },
           cancel() {
             clients.delete(client);

@@ -1,10 +1,10 @@
 /** The Catch-up service: one cached model read per waiting thread, started after a debounce and run through a capped queue. */
 import * as v from "valibot";
 
-import type { ModelPick } from "../shared/brief.ts";
+import type { ModelPick } from "../shared/model.ts";
 import { bySince, type CatchUp, type ThreadNode } from "../shared/tree.ts";
-import { digestOf, questionOf, tailOf } from "./brief.ts";
 import guideText from "./catch-up-prompt.md" with { type: "text" };
+import { digestOf, questionOf, tailOf } from "./last-message.ts";
 import type { Models, PickSettings } from "./model.ts";
 
 const TAIL = 4000;

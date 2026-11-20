@@ -93,13 +93,13 @@ A **top-level thread** has no native `parentThreadId`. A **subagent** has `relat
 
 ## UI
 
-The page shows an outline tree: Project, group, thread. Each thread row has a status icon, a title link to `t3code://threads/<environmentId>/<threadId>`, a stack badge, PR links and, when a PR has a Watched label, a Label pill (see "Label pills"). A row that waits on the user (needs input, plan ready or your turn) shows its phrase and the Wait beside the icon, for example "Approval 12m". The Wait is the time since `since`. A guest message has no `since`, so it shows the phrase only. A failed row shows "Failed" with no time. Other rows show no text. This reverses `d602e6e` (#18) for these rows only. The row end keeps the age of `updatedAt`. Closed rows are saved in `localStorage`. A toggle shows the Settled list below the tree or the flat list. A toggle "Show snoozed threads" hides snoozed threads when it is off; it saves `"0"` under `thread-tree:snoozed`, and it is on by default. It changes the page only: the Needs-you count, the Dock badge, the brief and the notifications do not change, and the server gets no parameter. A second toggle turns on launch nesting. When a Linear workspace is set, an issue key links to its Linear issue. With team keys set, only a key of a listed team links. The Settings panel keeps the workspace and teams in `localStorage`; `LINEAR_WORKSPACE` and `LINEAR_TEAMS` give the default. A banner shows when T3 is down, when no token is set, or when T3 rejects the token. The token banners open the Settings panel.
+The page shows an outline tree: Project, group, thread. Each thread row has a status icon, a title link to `t3code://threads/<environmentId>/<threadId>`, a stack badge, PR links and, when a PR has a Watched label, a Label pill (see "Label pills"). A row that waits on the user (needs input, plan ready or your turn) shows its phrase and the Wait beside the icon, for example "Approval 12m". The Wait is the time since `since`. A guest message has no `since`, so it shows the phrase only. A failed row shows "Failed" with no time. Other rows show no text. This reverses `d602e6e` (#18) for these rows only. The row end keeps the age of `updatedAt`. Closed rows are saved in `localStorage`. A toggle shows the Settled list below the tree or the flat list. A toggle "Show snoozed threads" hides snoozed threads when it is off; it saves `"0"` under `thread-tree:snoozed`, and it is on by default. It changes the page only: the Needs-you count, the Dock badge and the notifications do not change, and the server gets no parameter. A second toggle turns on launch nesting. When a Linear workspace is set, an issue key links to its Linear issue. With team keys set, only a key of a listed team links. The Settings panel keeps the workspace and teams in `localStorage`; `LINEAR_WORKSPACE` and `LINEAR_TEAMS` give the default. A banner shows when T3 is down, when no token is set, or when T3 rejects the token. The token banners open the Settings panel.
 
-The header holds the title, the filter ("All", "Needs you"), "Open next", "Focus", "What's next", a sort menu ("Manual", "Last updated"), a Tree / Flat switch, a "Group by" menu ("T3 project", "Linear project" in the tree; "None", "Status", "Linear project" in the flat view), in the tree a fold all button beside it, and a Settings button (a cog). The "Needs you" chip shows the Needs-you count as a badge. Then it shows the your-turn count as a muted number. A "·" sits between them when both show. Each count shows only when above 0. The tooltip reads "N need you, M your turn". The cog opens the Settings panel on the right, beside the tree. Its header stays in view while the panel scrolls, and Escape closes it. The panel has three groups. "Updates" (desktop app only) has the version, the update state and its action. "View" has show settled, show snoozed, nest launched threads, reset order (it clears the tree order and the Linear tree order) and the theme as three icons (Light, System, Dark). "Setup" has six folds, closed at first: T3 token, Linear links (the workspace and team keys, and an API key field with its own Save, see "Linear grouping"), Local model (see "Model picks"), Watched labels (see "Label pills"), the status icon legend and Keys. A fold shows its state at the right: green text when set, yellow text with a warning sign when not set (Local model shows "Checking…" in neutral text until the first `GET /local-model` answers, then "Ready", or "Not reachable", "Model not found" or "Not set" in yellow; Watched labels shows a neutral "None" instead), a blue info icon for the legend and for Keys. The Keys fold lists `j k ↑ ↓` Move, Enter Open, `o` Details or fold, `l h` Expand, collapse, `s` Send, `n` Open next, ⌘K (Ctrl+K off macOS) Find, and `1`–`3` Open a Focus slot, each key as a `<kbd>` element. The token banners open the panel with the T3 token fold open. When the panel opens in the desktop app, it checks for updates, but not when the last good check is less than 60 s old.
+The header holds the title, the filter ("All", "Needs you"), "Open next", "Focus", a sort menu ("Manual", "Last updated"), a Tree / Flat switch, a "Group by" menu ("T3 project", "Linear project" in the tree; "None", "Status", "Linear project" in the flat view), in the tree a fold all button beside it, and a Settings button (a cog). The "Needs you" chip shows the Needs-you count as a badge. Then it shows the your-turn count as a muted number. A "·" sits between them when both show. Each count shows only when above 0. The tooltip reads "N need you, M your turn". The cog opens the Settings panel on the right, beside the tree. Its header stays in view while the panel scrolls, and Escape closes it. The panel has three groups. "Updates" (desktop app only) has the version, the update state and its action. "View" has show settled, show snoozed, nest launched threads, reset order (it clears the tree order and the Linear tree order) and the theme as three icons (Light, System, Dark). "Setup" has seven folds, closed at first: T3 token, Linear links (the workspace and team keys, and an API key field with its own Save, see "Linear grouping"), Catch-up (see "Catch-up fold"), Local model (see "Model picks"), Watched labels (see "Label pills"), the status icon legend and Keys. A fold shows its state at the right: green text when set, yellow text with a warning sign when not set (Local model shows "Checking…" in neutral text until the first `GET /local-model` answers, then "Ready", or "Not reachable", "Model not found" or "Not set" in yellow; Watched labels shows a neutral "None" instead), a blue info icon for the legend and for Keys. The Keys fold lists `j k ↑ ↓` Move, Enter Open, `o` Details or fold, `l h` Expand, collapse, `s` Send, `n` Open next, ⌘K (Ctrl+K off macOS) Find, and `1`–`3` Open a Focus slot, each key as a `<kbd>` element. The token banners open the panel with the T3 token fold open. When the panel opens in the desktop app, it checks for updates, but not when the last good check is less than 60 s old.
 
 The tree choice of the "Group by" menu is saved under `thread-tree:tree-group` (`"t3"` or `"linear"`). "Linear project" is disabled unless the key state is `ok`, and the tree shows T3 projects while the state is `no-key`. While the tree groups by Linear project and the key state is `rejected`, a banner reads "Linear rejected the API key." Its "Set the key" link opens the panel with the "Linear links" fold open. The tree keeps the last good data.
 
-With "Linear project", the page sends `linear=1` and shows the Linear tree (see "Linear grouping"). A Linear project header has the project icon, the name, a link to the Linear project and the thread count. A milestone header has the name, the target date in muted text ("Dec 4", read as UTC) and the count. A fallback group header has the name, the count and a neutral left edge. Reviews has its eye icon. A thread row shows its issue key as a chip and its T3 project as a muted chip (an icon only on a phone). Projects drag. Keyless threads show as loose rows after the groups, with no header and no fold. Threads drag inside a milestone, in "No project" and in the loose rows. Milestones do not drag. The order of the Linear tree is saved under `thread-tree:order-linear`, apart from `thread-tree:order`. "Last updated" keeps the project and milestone order and sorts only the threads. The Start dialog lists T3 projects. Find and Up next show the T3 project of a thread.
+With "Linear project", the page sends `linear=1` and shows the Linear tree (see "Linear grouping"). A Linear project header has the project icon, the name, a link to the Linear project and the thread count. A milestone header has the name, the target date in muted text ("Dec 4", read as UTC) and the count. A fallback group header has the name, the count and a neutral left edge. Reviews has its eye icon. A thread row shows its issue key as a chip and its T3 project as a muted chip (an icon only on a phone). Projects drag. Keyless threads show as loose rows after the groups, with no header and no fold. Threads drag inside a milestone, in "No project" and in the loose rows. Milestones do not drag. The order of the Linear tree is saved under `thread-tree:order-linear`, apart from `thread-tree:order`. "Last updated" keeps the project and milestone order and sorts only the threads. Find and Up next show the T3 project of a thread.
 
 A pending request wins over snooze. A snoozed thread with a pending request shows as needs input.
 
@@ -115,10 +115,10 @@ The flat view lists all threads of all projects in one list. The switch keeps it
 - **Key `n`.** It is a page key (see **Page keys**). It does nothing with no target.
 - **Opens.** It goes to `t3code://threads/<environmentId>/<threadId>`, the same URL as the row link. It writes nothing to T3.
 
-**Focus list.** A "Focus" button after "Open next" shows the count (`2/3`) and shows or hides the strip. The strip is hidden by default. The page keeps this choice under `thread-tree:focus-show` (`"1"` or `"0"`) and the entry ids under `thread-tree:focus` (a JSON list of at most three thread ids). The strip sits above the tree, under the brief panel. Its heading reads `Focus N of 3`, with `· full, remove one to add another` at 3 of 3. It has three fixed slots; the filled slots come first, and a remove closes the gap. At phone width (720px and less), the slots stack and the empty slots after the first one hide. A card shows the status icon, the phrase (with the Wait for a thread that needs the user), a remove button, the title, an **Open** link and **Show in tree**. A slot whose thread is not in the loaded tree shows "Not loaded" with a remove button; it counts toward the three.
+**Focus list.** A "Focus" button after "Open next" shows the count (`2/3`) and shows or hides the strip. The strip is hidden by default. The page keeps this choice under `thread-tree:focus-show` (`"1"` or `"0"`) and the entry ids under `thread-tree:focus` (a JSON list of at most three thread ids). The strip sits above the tree. Its heading reads `Focus N of 3`, with `· full, remove one to add another` at 3 of 3. It has three fixed slots; the filled slots come first, and a remove closes the gap. At phone width (720px and less), the slots stack and the empty slots after the first one hide. A card shows the status icon, the phrase (with the Wait for a thread that needs the user), a remove button, the title, an **Open** link and **Show in tree**. A slot whose thread is not in the loaded tree shows "Not loaded" with a remove button; it counts toward the three.
 
 - **Prune.** An entry leaves the list when its thread is settled or no longer in the tree. Only a tree with connection `up` prunes, so a down or loading tree never clears the list.
-- **Add.** A crosshair button in each thread row (not in a settled row) adds the thread; it stays visible and pressed on a listed row and removes it. The brief adds a live linked thread of an Action: one thread adds it, more than one open a menu in which a listed thread is checked and disabled. At 3 of 3 the add buttons are disabled with the tooltip "Focus is full (3 of 3). Remove one first."
+- **Add.** A crosshair button in each thread row (not in a settled row) adds the thread; it stays visible and pressed on a listed row and removes it. At 3 of 3 the add buttons are disabled with the tooltip "Focus is full (3 of 3). Remove one first."
 - **Drag.** A thread row dragged by its handle onto the strip adds the thread on an empty slot. On a filled card, the card asks "Replace with <title>?" with Replace and Cancel; Escape and a click outside cancel. A thread that is in the list already changes nothing. A drop on the strip does not reorder the tree; the page remounts the tree list after such a drop. A row drags only where its handle shows: "Manual" sort, a list of two or more units, not on a PR stack rail, and not in the waiting sections of the grouped flat view. The crosshair button covers the other rows.
 - **Show in tree.** It first unfolds the path to the row and stores the folds: in the tree, the project, the groups and the PR stack on the path; in the flat view with "Group by Status" or "Group by Linear project", the shut section that holds the thread. It then scrolls to the row (instant with reduced motion), and the row flashes for about 1.5 s. When the row is still not visible (the "Needs you" filter, hidden snoozed threads, or a row behind the "+N other threads" button of a flat PR stack, whose open state is local and not saved), the button reads "Hidden in the tree" for a few seconds.
 - **Row buttons.** All row buttons show a pointer cursor; a disabled one keeps the default cursor.
@@ -171,7 +171,7 @@ The server knows the Linear project and milestone of each issue key in the tree.
 
 ### Tree
 
-With `linear=1`, the server builds `projects` with `buildLinearTree`, not `buildTree`. The levels are Linear project, then milestone, then thread. There is no T3 project level and no issue-key level. Each thread node carries `t3Project` (`{ id, label }`), the T3 project of the thread, also on nested threads. Other users of the tree (the brief, `/find`, `/settled`) never send `linear=1`.
+With `linear=1`, the server builds `projects` with `buildLinearTree`, not `buildTree`. The levels are Linear project, then milestone, then thread. There is no T3 project level and no issue-key level. Each thread node carries `t3Project` (`{ id, label }`), the T3 project of the thread, also on nested threads. Other users of the tree (`/find`, `/settled`) never send `linear=1`.
 
 - **Stack placement.** A PR stack stays whole. The lowest stack member that has an issue key and is not a review places the full stack. Each other stack member that is not a review uses the key of that member in the rules below. A stack with no keyed member places as a keyless stack.
 - **Placement.** The first match wins.
@@ -262,13 +262,7 @@ The shell stream has no labels. The server reads them with the T3 RPC `pullReque
 - **Phone width.** No change. The pill is at most three letters and "+N".
 - **Before the first answer.** No pill and no placeholder. The pill shows when the labels arrive.
 
-## "What's next" and the Next-step brief
-
-Source: map [whats-next](.wayfinder/whats-next/map.md), tickets [How do we run claude and codex headless, with no tools, on a cheap model?](.wayfinder/whats-next/tickets/01-headless-cli-invocation.md) (research on branch `research/headless-cli`), [Where does the backend read the last assistant message of a thread?](.wayfinder/whats-next/tickets/02-thread-messages-source.md) (research on branch `research/thread-messages`), [What makes a good next step, and what is the shape of a brief?](.wayfinder/whats-next/tickets/03-ranking-rules-and-brief-shape.md), [Where and how does the brief show on the page?](.wayfinder/whats-next/tickets/04-brief-layout-prototype.md) (prototype on branch `prototype/brief-layout`).
-
-A click on "What's next" runs a local agent CLI on a cheap model. Code makes the obvious **Actions** (`answer`, `fix`, `merge`). The CLI returns the rest of the **Next-step brief**: up to 7 ranked **Actions** over the threads that code did not cover. The CLI runs with its tools off and writes nothing to T3.
-
-### Model picks
+## Model picks
 
 One shared module, `src/server/model.ts`, runs every Model pick: a feature gives its guide, input and JSON schema.
 
@@ -282,125 +276,14 @@ One shared module, `src/server/model.ts`, runs every Model pick: a feature gives
 - **Run:** use the tested command lines in ticket 01 (research file on branch `research/headless-cli`), with the prompt on stdin. Do not use `claude --bare`: it ignores the OAuth login. Codex runs with `-C` set to an empty temp folder and reads the schema from a temp file.
 - **Answer:** Claude: `structured_output` of the last JSON object on stdout; a failure is `is_error: true` or a non-zero exit. Codex: `JSON.parse` of the text of the last `item.completed` event with `item.type == "agent_message"`; a failure is `turn.failed` or a non-zero exit.
 - **Timeout:** 60 s, then SIGTERM. **Cancel:** SIGTERM to the process.
-- **One run at a time.** A second start while a run is active is refused.
 - **Local model config:** `{ baseUrl, model }` as JSON in `~/.config/t3-thread-tree/local-model`, the same folder as the Linear key (`LOCAL_MODEL_FILE` sets another path). No file means no Local model. `baseUrl` is an `http` or `https` URL, with no trailing `/`. `model` is one non-empty line. The server reads the file on each call.
 - **Local model offered:** `local` is the last pick, with the label `Local · <model>`, whenever a config is saved, whatever the runtime state. A down runtime or a missing model shows as the run error. The page never picks it on its own: its fallback pick is the first offered pick that is not `local`.
-- **Local model fold:** Settings › Setup, after "Linear links", before "Watched labels". It loads `GET /local-model` each time the panel opens, and shows its form after the first answer. The form has a help line, "Base URL" (default `http://localhost:11434/v1`), "Model" and "Save". "Save" sends `PUT /local-model` with the JSON config. On success the fold takes the answer, shows "Saved." and the page reloads `GET /models`, so the Local pick shows in the model menu. On failure the response text shows in the destructive colour.
+- **Local model fold:** Settings › Setup, after "Catch-up", before "Watched labels". It loads `GET /local-model` each time the panel opens, and shows its form after the first answer. The form has a help line, "Base URL" (default `http://localhost:11434/v1`), "Model" and "Save". "Save" sends `PUT /local-model` with the JSON config. On success the fold takes the answer, shows "Saved." and the page reloads `GET /models`, so the Local pick shows in the Catch-up fold. On failure the response text shows in the destructive colour.
 - **Local model detection:** `GET /local-model` returns `{ config, state }`. It calls `GET <baseUrl>/models` with a 2 s timeout each time. `state` is `ok` when the list holds `model`, `missing` when the runtime answers but the list does not hold it, `down` when the call fails or is not 2xx, and `unset` with no config. `PUT /local-model` takes the JSON config (415 for other content, 400 for a bad config), saves it, then answers like `GET`.
 - **Local model call:** `POST <baseUrl>/chat/completions` with `model`, the guide as the system message, the input as the user message, `response_format` `{ type: "json_schema", json_schema: { name: "answer", strict: true, schema } }`, `reasoning_effort: "none"`, `keep_alive: "30m"` and `max_tokens: 2000`. The answer is `JSON.parse` of `choices[0].message.content`. Cancel and the 60 s timeout abort the request.
-
-### Input
-
-- **Threads:** the visible top-level threads of the active tree (launched threads included). No subthreads. The code removes the threads that are `working`, `starting`, `waiting` or `snoozed`: they need no action.
-- **Code actions:** code makes the actions below, before the model runs. Each thread gets at most one action: the first rule that matches. The list is grouped by kind in rank order (`answer`, `fix`, `merge`). Inside `answer`, the oldest Wait (`since`) goes first and a thread with no Wait goes last. Inside the other kinds, the order is tree order. The `fix` and `merge` text is fixed. The `answer` title names the request kind, and its reason is the last question of the last message.
-
-  | Kind     | Rule                                                                             | Title                                | Prompt                                          |
-  | -------- | -------------------------------------------------------------------------------- | ------------------------------------ | ----------------------------------------------- |
-  | `answer` | status `needs-input`                                                             | The verb of the request kind (below) | `null`                                          |
-  | `answer` | status `plan-ready`                                                              | "Review the plan"                    | `null`                                          |
-  | `fix`    | an open PR has failing checks, conflicts, or changes requested                   | "Fix PR #N"                          | The fixed steps for each fact, then "and push." |
-  | `merge`  | an open PR is not a draft, is approved, its checks pass, and it has no conflicts | "Merge PR #N"                        | `null`                                          |
-
-  The `answer` verb comes from the request kind, the part of `detail.request` before `·`: `user_input` "Answer the question", `mcp-elicitation` "Fill in the form", `command` "Approve the command", `file-change` "Approve the file change", `file-read` "Approve the file read", `permission` "Grant the permission", `dynamic_tool_call` "Approve the tool call". A thread with the phrase "Guest message" gets "Reply to the guest". An unknown kind, or no request, gets "Answer the agent". The `answer` reason is the last question of the last message (the last sentence or line that ends in `?`). With no question, it is the last sentence or line. It is cut at 140 characters with `…`. With no message, the reason is the fixed text "The agent waits for your input." (or "The plan is ready and waits for your approval."). The last message of an `answer` thread is read in the same batched query.
-
-  `N` is the first PR that matches. The `fix` reason names the facts: "PR #N has failing checks, conflicts and changes requested."
-
-- **Model input:** only the threads with no code action. The refs (`t1`, `t2`, …) number these threads only. When no such thread is left, the CLI does not start and the state is `done` at once.
-- **Per thread**, one **Digest** block of text. The first line holds, split by `·`: short thread ref (`t1`, `t2`, … in tree order), status phrase with its age, title (with the issue key), PRs (number, state, draft, review, checks, conflicts), stack position, and pending request. A part with no value is left out. Then the tail of the last assistant message, each line indented by 2 spaces.
-- **Last assistant message:** one batched read-only query on `statev2.sqlite` per run, from `orchestration_v2_projection_messages` (`role = 'assistant'`, newest row with `streaming = 0` per thread). The tested query is in the ticket 02 research file. Keep the last 600 characters of each message, with `…` first when the text is cut. `null` when the thread has no assistant message. The shell stream field `latestVisibleMessage` is always `null`; do not use it.
-- **Prompt:** the system prompt is [src/server/next-step-prompt.md](src/server/next-step-prompt.md). It holds the ranking guide. The digest text is the user prompt. With no threads, the prompt is `No threads.`.
-
-### Brief shape
-
-The JSON schema for both Model picks (strict: every property required, `additionalProperties: false` at each level):
-
-```ts
-type Action = {
-  kind:
-    | "answer"
-    | "merge"
-    | "fix"
-    | "review"
-    | "clean-up"
-    | "unblock" /** the model makes only "review", "clean-up" and "unblock" */;
-  title: string /** imperative, ≤ 8 words */;
-  reason: string /** one sentence */;
-  threadIds: string[] /** ≥ 1 */;
-  prompt: string | null /** paste-ready message for the first thread's agent */;
-  pr?: number /** the PR of a code "fix" or "merge" action; the model never sets it */;
-};
-type Answer = { actions: Action[] }; /** 0–7 from the model, in rank order */
-```
-
-- The code keeps the model's order.
-- **Unknown ids:** the model writes the short refs of the digest in `threadIds`. The code maps each ref back to the thread id and removes each ref that is not in the input. It removes an action with no ids left. It does not reject the answer.
-- **Saved titles:** the code saves the title of each linked thread with the brief, so a thread that leaves the tree still has a name.
-- An answer with 0 actions is valid.
-
-### Endpoints and state
-
-The backend keeps one brief state in memory. A page reload keeps it; a server restart loses it.
-
-```ts
-type BriefState =
-  | { status: "idle" }
-  | {
-      status: "running";
-      cli: ModelPick;
-      threadCount: number;
-      startedAt: string;
-      actions: BriefAction[];
-      titles: Record<string, string>;
-      statuses: Record<string, Status>;
-      since: Record<string, string | null>;
-    }
-  | {
-      status: "done";
-      cli: ModelPick;
-      generatedAt: string;
-      rulesOnly?: true;
-      actions: BriefAction[];
-      titles: Record<string, string>;
-      statuses: Record<string, Status>;
-      since: Record<string, string | null>;
-    }
-  | {
-      status: "failed";
-      cli: ModelPick;
-      error: string;
-      stderrTail: string;
-      actions: BriefAction[];
-      titles: Record<string, string>;
-      statuses: Record<string, Status>;
-      since: Record<string, string | null>;
-    };
-```
-
-`BriefAction` is `Action` after the id filter. The state type lives in a shared module, like `Tree`. In `running` and `failed`, `actions` and `titles` hold the code actions only, so the page can show them at once and after a model failure. In `done`, `actions` holds the code actions first, then the model actions. `rulesOnly` is set when no thread went to the model, so the actions come from code alone. `statuses` and `since` are the snapshot of the tree at brief time. The server takes it when the run starts, rules-only runs too. `statuses` holds the status of every thread that went into the brief, code threads and model threads. `since` holds the `since` of each `answer` thread. A new run replaces the last brief only when it ends; a cancel returns to the state before the run.
-
-- `GET /models`: the offered Model picks, as `{ id, label }[]`.
-- `POST /brief/run` with `{ cli }`: starts a run. 409 when a run is active, 400 for a model that is not offered.
-- `POST /brief/cancel`: sends SIGTERM to the active run.
-- `GET /events` also sends the brief state as a named SSE event `brief`: once when the connection opens, and again at each change. The page does not poll.
-- **Error text:** the CLI error message (Claude `result`, Codex `turn.failed` message), or "timed out" or the parse error. `stderrTail` is the last 2 KB of stderr. The Local model gives one of these texts, and `stderrTail` is the last 2 KB of the response body, or the fetch error message: "Local model not reachable at <baseUrl>." (the runtime is down), "Model <model> is not in the runtime." (HTTP 404), "The runtime cannot enforce the schema. Install the Ollama app build." (HTTP 501), "The local runtime answered HTTP <status>." (any other failure status), "The local model gave no valid brief." (`finish_reason` is `length`, or the answer is not JSON), "The Local model is not set up." (the config was removed after the pick was offered), or "timed out".
-
-`bun run demo` uses a stub runner. `BRIEF=failed`, `BRIEF=empty` and `BRIEF=rules` pick the failed, empty and rules-only states. `LOCAL=ok`, `LOCAL=down` and `LOCAL=missing` start with a saved Local model config in that state; with no `LOCAL`, the demo has no config. A Save in the fold keeps the config in memory. It returns a sample of the model part after a short delay; code makes the other actions from the demo tree, so the page works with no CLI.
-
-### Page
-
-The full look is in ticket 04. In short:
-
-- **Controls:** in the header, after the filter, a split control: a primary "What's next" button (Sparkles icon) joined to a model `Select`. The choice is saved in the server pick file (see "Catch-up"), not in `localStorage`. The page moves a pick that an older page saved in `localStorage` to the file one time, and then reads the pick from the server. A run saves its pick only when the file holds none. A saved pick that is not offered stays as it is. The page removes the old `localStorage` value only after the server holds the pick. With no CLI offered, the button is disabled with a tooltip. The button is disabled while a run is active. At phone width the button shows its icon only, with an `aria-label`, and the model `Select` and the model name are hidden. When a Local model config is saved, the menu shows "Local · <model>" last. After "Save" in the Local model fold, the page loads `/models` again. The page never selects it on its own.
-- **Panel:** an inline card between the header and the tree. It shows only after the first click, or when the brief state is not `idle` at load. The head has "Next steps", a mono stamp "generated HH:MM · <label>" ("generated HH:MM · rules only" when the model did not run), and a close button that hides the panel.
-- **States:** loading ("Reading N threads…" with the letter wave, and "Cancel"); error (alert, "The brief failed.", "Retry", the stderr tail); empty ("Nothing needs you right now."); the ranked actions. In `running`, the code actions show at once as rows above the loading line. In `failed`, they show above the error. In `done`, all rows run in one rank order.
-- **Action row:** after the rank, line 1 has the thread headings (see "Thread headings"). Line 2 has the kind chip, the title, for an `answer` row the live Wait of its thread (the status phrase with its age, in mono; it updates each minute), and the mark badge. Line 3 has the reason. Then the icons, with a copy icon for `prompt` (none when `prompt` is `null`).
-- **Kind chips:** answer = `needs-input`, merge = `done`, unblock = `plan`, fix = `failed`, review = `working`, clean-up = `idle`.
-- **Marks:** in `done`, each row has a mark or none (see "Marks"). Rows with no mark come first in rank order. Changed rows follow, then done rows, each group in rank order. Each row keeps its rank in the brief. A done row shows a check in place of the rank, its thread headings struck through, and a "Done" badge (Check icon) after the Wait. A changed row keeps its rank and shows a "Changed" badge (RefreshCw icon) after the Wait. Marked rows have 55 % opacity, and 100 % on hover. A done row hides Send and Start thread and keeps Copy. A changed row keeps both. "Sent to" shows together with the mark. In `running` and `failed`, no row has a mark.
-- **Mark bar:** under the panel head, only when a row has a mark. It shows "N done · M changed since HH:MM" on the left, with a zero count left out and the time of `generatedAt`. The counts are Actions, not threads. "Run again" (RotateCw icon, link button) on the right starts a run like "What's next".
-- **Three first:** the list shows the first 3 open rows. Marked rows always stay behind "Show all", also when fewer than 3 rows are open. The link button "Show all N" sits under the list and counts every Action. It shows when there are more than 3 Actions or at least one marked row. With all rows shown, it reads "Show less". When no row is open, the list shows "Nothing open · Show all N". "Show all" is not saved. A new run resets it.
-- **Fold:** a chevron in the panel head folds the panel. The panel is open by default. The page saves the state under `thread-tree:brief-fold` (`"1"` or `"0"`). Folded, the head shows "10 Actions · 3 done · 1 changed" in place of the stamp, with a zero part left out, and nothing shows below the head. "What's next" and "Run again" unfold the panel.
-- **Thread headings:** each thread of the Action has one heading, in bold. It shows the live `StatusIcon` and the full title from the current tree, and it opens the thread in T3. The title wraps and is not cut. A thread that is not in the live tree shows its saved title muted and struck through. The brief text does not change.
-- **Phone:** at 720 px and less, the buttons of a row move to their own line under the reason, in line with the headings, and show text labels: Send, New thread, Copy and Focus. The line is left out when the row has no button. On wider screens the row keeps the icons at the right, with tooltips. The `aria-label` of the start button is "Start new thread".
+- **Offered:** `GET /models` answers the offered Model picks as `{ id, label }[]`.
+- **Error text:** the CLI error message (Claude `result`, Codex `turn.failed` message), or "timed out" or the parse error. `stderrTail` is the last 2 KB of stderr. The Local model gives one of these texts, and `stderrTail` is the last 2 KB of the response body, or the fetch error message: "Local model not reachable at <baseUrl>." (the runtime is down), "Model <model> is not in the runtime." (HTTP 404), "The runtime cannot enforce the schema. Install the Ollama app build." (HTTP 501), "The local runtime answered HTTP <status>." (any other failure status), "The local model gave no valid answer." (`finish_reason` is `length`, or the answer is not JSON), "The Local model is not set up." (the config was removed after the pick was offered), or "timed out".
+- **Demo:** `LOCAL=ok`, `LOCAL=down` and `LOCAL=missing` start `bun run demo` with a saved Local model config in that state; with no `LOCAL`, the demo has no config. A Save in the fold keeps the config in memory. `CLIS=0` offers no CLI.
 
 ## Catch-up
 
@@ -412,7 +295,7 @@ A **Catch-up** is one line from the Model pick about a waiting thread: what the 
 - **Switch default:** when the file holds no `catchUp`, the switch is on for `claude` and `codex`, and off for `local`. A saved `catchUp` applies to every pick. With no pick the switch is off. A `PUT` of `pick: "local"` with no saved `catchUp` therefore turns the switch off and clears the cache.
 - **`GET /model-pick`:** answers `{ pick, catchUp }` with the switch resolved.
 - **`PUT /model-pick`:** takes JSON `{ pick?, catchUp? }` (415 for other content, 400 for a bad body). It merges the fields into the saved file, writes it with mode `0600`, and answers like `GET`. A resolved switch that is off cancels the running calls and clears the cache.
-- **No saved pick:** no Catch-up runs. The page saves the pick of a "What's next" run and of its model `Select`, so the first use sets it.
+- **No saved pick:** no Catch-up runs. The page saves the pick when the user picks a model in the Catch-up fold, or turns the switch on (see "Catch-up fold").
 
 ### Trigger
 
@@ -432,7 +315,19 @@ The server runs the check in the debounced tree push, so the 30 s tick also driv
 ### Cache and delivery
 
 - **Cache:** a `Map` in memory by key. Each key gets one try and no retry: a model error, a timeout or an invalid answer stays `failed` until the key changes. A server restart runs the calls again. A new pick does not change the cached entries.
-- **Delivery:** each thread node holds `catchUp?: { state: "queued" | "running" | "done" | "failed", did?, ask?, options?, doneLike?, question?, pick }` while an entry of its current key exists. `did`, `ask`, `options` and `doneLike` are set in `done`. `question` is set in `done` and `failed`: it is the last question of the last message, cut like the "What's next" reason (`questionOf` of its 4000-character tail), or `null` when the thread has no message. Each state change sends the tree again.
+- **Delivery:** each thread node holds `catchUp?: { state: "queued" | "running" | "done" | "failed", did?, ask?, options?, doneLike?, question?, pick }` while an entry of its current key exists. `did`, `ask`, `options` and `doneLike` are set in `done`. `question` is set in `done` and `failed`: it is the last question of the last message (the last sentence or line that ends in `?`, else the last sentence or line), cut at 140 characters with `…` (`questionOf` of its 4000-character tail), or `null` when the thread has no message. Each state change sends the tree again.
+
+### Catch-up fold
+
+Settings › Setup, after "Linear links" and before "Local model". It holds the Catch-up switch and the Model pick. It is closed at first.
+
+- **Value:** at the right of the fold: "No model" in yellow with a warning sign when `GET /models` gives no pick, else "Off" in neutral text when the switch is off or no pick is set, else the label of the pick in green. "Checking…" in neutral text shows until the first `GET /models` answers.
+- **Body:** a switch "Catch-up", and a radio group "Model" with each offered pick, each with its provider icon and label. The radios are disabled while the switch is off.
+- **Effective pick:** the saved pick when it is offered, else the first offered pick that is not `local`.
+- **Pick:** a click on a radio sends `PUT /model-pick` with `{ pick }`. The answer sets the switch.
+- **Switch:** a click sends `PUT /model-pick` with `{ catchUp }`. When no pick is saved, turning the switch on also sends the effective pick, else the first offered pick, so a setup with only a Local model can turn on.
+- **No model:** the body shows a hint and a link button "Set up a Local model" that opens the "Local model" fold.
+- The page moves a pick that an older page saved in `localStorage` to the file one time, and then reads the pick from the server. The page removes the old `localStorage` value only after the server holds the pick.
 
 ### Row line
 
@@ -447,11 +342,11 @@ A thread row in the tree and the flat list shows a **Catch-up line** under the t
 
 Source: map [send-message](.wayfinder/send-message/map.md), decisions at charting and grilling.
 
-The user can send a message to one thread, and start a thread in a project, from the page. Each action opens a dialog, and nothing goes to T3 until the user confirms.
+The user can send a message to one thread from the page. The send opens a dialog, and nothing goes to T3 until the user confirms. The server also has a route that starts a thread in a project. The page does not call it.
 
 ### Transport
 
-The server runs the T3 CLI as a child process (`Bun.spawn`), like the brief runner. It uses T3's own login. The token needs the `orchestration:operate` scope for settle. The database stays read-only.
+The server runs the T3 CLI as a child process (`Bun.spawn`), like the model runner. It uses T3's own login. The token needs the `orchestration:operate` scope for settle. The database stays read-only.
 
 - **Send:** `<bin> thread send --json <threadId> -`.
 - **Start:** `<bin> thread start --json --title=<title> <projectId> -`.
@@ -465,7 +360,7 @@ The server runs the T3 CLI as a child process (`Bun.spawn`), like the brief runn
 
 ### HTTP contract
 
-Ids go in the JSON body, not in the path, because ids hold `:` and `%`. The read-only `GET /t3/last-message` takes the id as a query value. The module `src/server/send.ts` exports a service with `routes`, as `briefService` does. The response types live in `src/shared/send.ts`.
+Ids go in the JSON body, not in the path, because ids hold `:` and `%`. The read-only `GET /t3/last-message` takes the id as a query value. The module `src/server/send.ts` exports a service with `routes`. The response types live in `src/shared/send.ts`.
 
 | Route                      | Body                                                    | Success                                                                          |
 | -------------------------- | ------------------------------------------------------- | -------------------------------------------------------------------------------- |
@@ -490,7 +385,7 @@ The wrapper exit code 127 ("T3 Code has moved…") is a `502`, so the user sees 
 
 ### CLI-available flag
 
-The page reads `GET /t3/cli` once at load. When `available` is false, every send and start control shows disabled, with the tooltip "No t3 CLI at <path>. Set T3_BIN in .env." This is the same disabled-with-tooltip pattern as the "What's next" button.
+The page reads `GET /t3/cli` once at load. When `available` is false, every send control shows disabled, with the tooltip "No t3 CLI at <path>. Set T3_BIN in .env."
 
 ### Settle icon
 
@@ -503,37 +398,20 @@ A thread row, top-level or subthread, in the tree and in the flat list, has a se
 - **Result:** the row changes through the stream: it leaves the live list. With "Show settled threads" on, it shows in the Settled list with the "Settled" chip after the next fetch.
 - **Failure:** the icon turns red and stays visible. The tooltip shows the error until the next click. A token without the `orchestration:operate` scope gives the error "The T3 token cannot settle. Issue a new token with the command in Settings."
 
-### Marks
-
-The page computes the mark of each Action from the live tree and the snapshot. It makes no model call. "Run again" is the only refresh. The rules, in order:
-
-- **Done, all kinds:** every linked thread is settled or out of the tree. With only some gone, the rules below apply to the live threads.
-- **Done, `answer`:** no linked thread is `needs-input` or `plan-ready`.
-- **Done, `fix`:** the PR in `pr` has no failing checks, no conflict and no requested changes, or it is merged or closed, or it is no longer on the thread.
-- **Done, `merge`:** the PR in `pr` is merged or closed, or it is no longer on the thread.
-- **Changed, `review`, `clean-up` and `unblock`:** any linked thread has a status that differs from `statuses`.
-- **Changed, `answer`:** any linked thread has a status that differs from `statuses`, or a `since` that differs from `since`, while it still waits.
-- `fix` and `merge` are never changed.
-- Done wins over changed. Any other Action is open.
-
 ### Send dialog
 
 One reusable component on the shadcn Dialog (Radix).
 
-- **Opens from:**
-  - A "What's next" step that has a `prompt`: a send icon next to the copy icon. The copy icon stays.
-  - A thread row, top-level or subthread: a send icon at the row end, next to the details chevron, after the settle icon (see "Settle icon"). Its tooltip says "Send message". It shows on hover and on keyboard focus within the row. On touch devices (`(hover: none)`), at every width, it always shows. The icon stops propagation, so it does not open the thread and does not start a drag.
-- **Target, from a step:** a picker (shadcn Select) with the threads of the step. Each option shows the live `StatusIcon` and the title. A thread that is not in the current tree shows its saved title struck through and is disabled. The first enabled thread is selected at open. With no enabled thread, Confirm send is disabled.
-- **Target, from a row:** fixed. The dialog shows the icon and title of the row, with no picker.
-- **Changed lines:** for a changed step, one muted line per linked thread whose status differs from the snapshot, above the message: "Changed since HH:MM: <title> was <old>, now <new>". The time is the brief time.
-- **Message:** a textarea, editable. From a step, it starts with the step prompt. From a row, it is empty. Confirm send is disabled while the message is empty after trim.
+- **Opens from:** a thread row, top-level or subthread: a send icon at the row end, next to the details chevron, after the settle icon (see "Settle icon"). Its tooltip says "Send message". It shows on hover and on keyboard focus within the row. On touch devices (`(hover: none)`), at every width, it always shows. The icon stops propagation, so it does not open the thread and does not start a drag.
+- **Target:** fixed. The dialog shows the icon and title of the row, with no picker.
+- **Message:** a textarea, editable. It starts empty. Confirm send is disabled while the message is empty after trim.
 - **Busy note:** when the target status is `working`, `starting` or `waiting`, a muted line under the target says "This thread is working. The message waits for its next turn." Other statuses show no note.
 - **Last message:** a muted box above the textarea, with the label "Last message". It shows the end of the last message of the target thread, in a box of at most 10 rem with scroll. It loads when the dialog opens and again when the target changes. It shows nothing while it loads or when the thread has no message.
 - **Approval note:** when the target status is `needs-input` and its phrase is "Approval", a muted line says "This thread waits for an approval. A message does not approve the request. Approve it in T3."
 - **Buttons:** Cancel and Confirm send.
 - **Keys:** Cmd/Ctrl+Enter sends, Escape cancels, and Enter makes a new line.
 - **In flight:** Confirm send shows a spinner. Until the request ends, the fields, Cancel, Escape and the outside click do nothing. Thus a cancel never hides a message that was sent.
-- **Success:** the dialog closes. From a step, the step shows the mark (see "Sent to" mark). From a row, there is no mark: the row status changes through the stream.
+- **Success:** the dialog closes. There is no mark: the row status changes through the stream.
 - **Failure:** the dialog stays open, with the draft and the target. An inline alert above the buttons shows:
   - `error`;
   - "exit <code>", when `exitCode` is set;
@@ -541,27 +419,9 @@ One reusable component on the shadcn Dialog (Radix).
 
   Confirm send tries again. A network error shows "The server did not answer."
 
-### Start dialog
-
-The same dialog frame, with "Start thread" as the title and as the confirm label.
-
-- **Opens from:** a "Start thread" icon on a "What's next" step that has a `prompt`, next to the send icon.
-- **Project:** a Select with the projects of the current tree (project icon and label). At open, it selects the project of the first thread of the step that is in the tree, else the first project.
-- **Title:** a text input. The default is the issue key of the first linked thread of the step, a space, then the step title. When the thread has no key or is not in the tree, the default is the step title alone. The page sends the title as the user wrote it, trimmed, with no length cap. Confirm is disabled while the title is empty after trim.
-- **Message:** a textarea with the step prompt, editable. Confirm is disabled while it is empty after trim.
-- **No worktree field and no model field.**
-- **Keys, in flight and failure:** as in the send dialog.
-- **Success:** the dialog closes. The new thread shows in the tree through the stream. The page does not add it. The step gets no mark.
-
-### "Sent to" mark
-
-After a send from a step succeeds, the step row shows "Sent to <thread title>" in muted text under its reason, with a check icon. Several sends list each thread once, in send order: "Sent to A, B".
-
-The marks live in page memory. The key of a mark is the `kind`, `title` and `threadIds` of the step. Thus a mark holds in every brief state, also in `running` and `failed`, which show code steps. Each change of the brief state to `running` clears them. A reload clears them.
-
 ### Demo stub
 
-`scripts/demo.ts` passes a stub runner to the send service, as it does for the brief. It never runs the real `t3`.
+`scripts/demo.ts` passes a stub runner to the send service. It never runs the real `t3`.
 
 - The stub answers after 1 s. A send returns `{ delivery: "queued" }`. A start returns `{ threadId: "demo-started" }`. The demo tree does not change.
 - `SEND=failed`: both routes return `502` with `exitCode: 1`, `error: "Thread demo-1 is not reachable."` and a stderr tail of two sample lines.
@@ -578,7 +438,7 @@ Tickets 02 and 05 each run one smoke test against the real T3, with `bun start`:
 
 ### README
 
-[Ticket 02](.wayfinder/send-message/tickets/02-send-endpoints.md) adds `T3_BIN` to Setup in `README.md` and the demo knobs to Run. [Ticket 03](.wayfinder/send-message/tickets/03-brief-send.md), [ticket 04](.wayfinder/send-message/tickets/04-row-send.md) and [ticket 05](.wayfinder/send-message/tickets/05-step-start-thread.md) add their "What you get" entries.
+[Ticket 02](.wayfinder/send-message/tickets/02-send-endpoints.md) adds `T3_BIN` to Setup in `README.md` and the demo knobs to Run.
 
 ## Desktop app
 
@@ -602,7 +462,7 @@ The **Desktop app** runs the tree in its own macOS window, with a Dock icon, a D
 
 ### Shell PATH
 
-An app started from the Dock or Spotlight does not get the shell PATH, so the brief would not find `claude` or `codex`.
+An app started from the Dock or Spotlight does not get the shell PATH, so the Catch-up would not find `claude` or `codex`.
 
 - At start, main runs `$SHELL -l -c env` once, with a 5 s timeout. It takes the `PATH=` line and passes it to the child env.
 - On failure (timeout, non-zero exit, no `PATH=` line), main keeps its own PATH and appends `/opt/homebrew/bin`, `~/.local/bin` and `~/.bun/bin`.
@@ -712,7 +572,7 @@ The page owns the rules. Main shows them, so the mute switch stays in main.
 - `bun run desktop:demo`: the same, with `DESKTOP_DEMO=1`.
 - `bun run build:sidecar`: `scripts/build-sidecar.ts` calls `Bun.build({ compile: { target: "bun-darwin-arm64" } })` on `src/server.ts` with the Tailwind plugin, into `dist/sidecar/server`. The CLI is not enough: the Tailwind plugin works only through the JS API.
   - The lineage worker is passed as a string path, so the compiler bundles it as an extra entry point.
-  - `next-step-prompt.md` is imported as text (`with { type: "text" }`), so it is in the binary.
+  - `catch-up-prompt.md` is imported as text (`with { type: "text" }`), so it is in the binary.
 - `dist/` and `release/` go in `.gitignore`.
 
 ### Package, sign and install
@@ -749,7 +609,7 @@ These facts are not confirmed against a real stream. The research used the MCP t
 - The PR fields: the MCP list has `pullRequests[].state`; the shell has `pullRequests[].snapshot.state`. Confirm the path for the open-PR filter and for the stack.
 - `pendingRuntimeRequest` as the "needs input" signal (the prototype used `orchestration_v2_projection_runtime_requests` with `status = 'pending'`). Also check how the `waiting` run status fits the table.
 - `toolName` for callers that are not Claude (for example Codex) in the lineage lookup.
-- Whether `codex exec --ignore-user-config` skips a global `~/.codex/AGENTS.md`. If not, the brief run sees it.
+- Whether `codex exec --ignore-user-config` skips a global `~/.codex/AGENTS.md`. If not, a model run sees it.
 - Whether a `bun-darwin-arm64` cross-compile on ubuntu runs on a Mac, and whether Bun's compiled binary loads `.env` from its working folder.
 - Label pills: that the token scope `orchestration:read` covers `pullRequests.detail`. The research saw `Success` but read the scope from T3 source only.
 - Label pills: whether a GitLab label change moves the merge request `updated_at`. If not, a GitLab pill changes only on the next other change.

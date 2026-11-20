@@ -2,7 +2,7 @@ import { describe, expect, test } from "bun:test";
 
 import { catchUpService, parseAnswer } from "../src/server/catch-up.ts";
 import type { ModelResult } from "../src/server/model.ts";
-import type { ModelPick } from "../src/shared/brief.ts";
+import type { ModelPick } from "../src/shared/model.ts";
 import type { Status, ThreadNode } from "../src/shared/tree.ts";
 
 const NOW = Date.parse("2026-11-13T12:00:00.000Z");

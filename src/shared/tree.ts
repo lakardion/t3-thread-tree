@@ -1,5 +1,5 @@
 /** The placed tree that the backend pushes and the page renders. */
-import type { ModelPick } from "./brief.ts";
+import type { ModelPick } from "./model.ts";
 
 export type Status =
   | "needs-input"

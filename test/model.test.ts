@@ -256,11 +256,11 @@ describe("Local model", () => {
     });
     test("a cut answer", async () => {
       handler = () => reply('{"actions":[', "length");
-      expect(await run()).toMatchObject({ error: "The local model gave no valid brief." });
+      expect(await run()).toMatchObject({ error: "The local model gave no valid answer." });
     });
     test("bad JSON", async () => {
       handler = () => reply("not json");
-      expect(await run()).toMatchObject({ error: "The local model gave no valid brief." });
+      expect(await run()).toMatchObject({ error: "The local model gave no valid answer." });
     });
     test("timeout", async () => {
       handler = async () => (await Bun.sleep(500), reply("{}"));
