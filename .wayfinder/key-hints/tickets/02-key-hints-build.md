@@ -2,7 +2,7 @@
 title: Add key hints and the "Show key hints" switch
 type: wayfinder:task
 status: open
-assignee:
+assignee: claude (key-hints-02 session)
 blocked-by: [01-key-hints-look]
 ---
 
