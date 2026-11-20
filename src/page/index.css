@@ -301,21 +301,24 @@
   display: none !important;
 }
 /* A: always on. Find hints on the selected row; row hints on the focused row only. */
-[data-hints="A"] .key-hint:is([data-hint="header"], [data-hint="slot"]),
+[data-hints="A"] .key-hint:is([data-hint="header"], [data-hint="triage"], [data-hint="slot"]),
 [data-hints="A"] [data-selected="true"] .key-hint[data-hint="find-row"],
 [data-hints="A"] .thread-row:has([data-stop]:focus-visible) .key-hint[data-hint="row"],
 /* B: everything on hold. */
-[data-hints="B"][data-alt] .key-hint:is([data-hint="header"], [data-hint="slot"], [data-hint="find-bar"]),
+[data-hints="B"][data-alt] .key-hint:is([data-hint="header"], [data-hint="triage"], [data-hint="slot"], [data-hint="find-bar"]),
 [data-hints="B"][data-alt] .thread-row:has([data-stop]:focus-visible) .key-hint[data-hint="row"],
 /* C: Find bar always, the rest on hold. */
 [data-hints="C"] .key-hint[data-hint="find-bar"],
-[data-hints="C"][data-alt] .key-hint:is([data-hint="header"], [data-hint="slot"]),
+[data-hints="C"][data-alt] .key-hint:is([data-hint="header"], [data-hint="triage"], [data-hint="slot"]),
 [data-hints="C"][data-alt] .thread-row:has([data-stop]:focus-visible) .key-hint[data-hint="row"],
 /* D: Find bar only. */
 [data-hints="D"] .key-hint[data-hint="find-bar"] {
   display: inline-flex !important;
 }
 /* Hints float over the page: they never take space or shift the layout. */
+:has(> .key-hint-float) {
+  position: relative;
+}
 .key-hint-float {
   position: absolute;
   z-index: 30;

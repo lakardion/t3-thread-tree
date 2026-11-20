@@ -52,7 +52,9 @@ import {
 import { SECTIONS } from "./view.ts";
 
 const Kbd = ({ children }: { children: string }) => (
-  <kbd className="font-mono text-[11px] text-muted-foreground">{children}</kbd>
+  <Hint surface="triage" className="key-hint-float -top-2 -right-2">
+    {children}
+  </Hint>
 );
 
 /** The header button: the queue count, the key `t`. It opens even with an empty queue, where the card says so. */

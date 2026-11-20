@@ -26,7 +26,7 @@ const KEYS = Object.keys(VARIANTS) as Variant[];
 /** Hold time before the hints show. A shorter tap does nothing. */
 const HOLD_MS = 300;
 
-export type Surface = "find-row" | "find-bar" | "header" | "row" | "slot";
+export type Surface = "find-row" | "find-bar" | "header" | "triage" | "row" | "slot";
 
 /** One soft key cap. Hidden unless the variant CSS shows its surface. */
 export const Hint = ({
