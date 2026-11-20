@@ -18,7 +18,7 @@ Source: markdown tickets in `tickets/`.
 
 ### Lane 1
 
-1. [Add key hints and the "Show key hints" switch](tickets/02-key-hints-build.md) — after [the key hints look](tickets/01-key-hints-look.md) closes, and after the reach-a-thread stack (#89 ← #91) merges to `main`
+1. [Add key hints and the "Show key hints" switch](tickets/02-key-hints-build.md) — [the key hints look](tickets/01-key-hints-look.md) is closed and the reach-a-thread stack (#89 ← #91) is merged, so it is ready
 
 The destination is reached when the route key is done and no map ticket is open.
 
@@ -56,6 +56,8 @@ Decided at charting (by the user):
 - **One build PR.**
 - **Key cap:** the shadcn `Kbd` component (`bunx shadcn add kbd`, one file in `src/components/ui/`, no new package). The Keys legend in Settings moves to `Kbd` too, so every key looks the same. No key cap library.
 - **Term:** **Key hint** in `CONTEXT.md`. Switch label "Show key hints".
+
+- [How do the key hints look, and when do they show?](tickets/01-key-hints-look.md): hold Alt/Option only (nothing always on); Find gets a footer bar; header `n`/`t`, focused row `o`/`s`, slots `1`–`3`, all on hold; the switch off also stops the hold.
 
 ## Not yet specified
 

@@ -1,7 +1,7 @@
 ---
 title: How do the key hints look, and when do they show?
 type: prototype
-status: open
+status: closed
 assignee: claude (key-hints-01 session)
 blocked-by: []
 ---
@@ -30,3 +30,17 @@ Make a prototype with variants on the real page (`?variant=`), and decide:
 ## On resolution
 
 Write the `## Spec` and `## Done when` of [the build ticket](02-key-hints-build.md) from the answer. Link the prototype. Rule out any surface that the user drops.
+
+## Resolution
+
+Decided by the user on the prototype: [`prototype/key-hints-look`](https://github.com/lakardion/t3-thread-tree/tree/prototype/key-hints-look) (commit `4c0c6bc`, `src/page/key-hints.prototype.tsx`, variants A–D, `bun run demo` then `?variant=B`).
+
+- **Mode: B, hold only.** No key hint shows until the user asks for it. The user holds Alt/Option alone for 300 ms, then all hints show. They hide on key up, on any other key (a chord, so Option+key typing in a field is safe), on a click, and on window blur. A shorter tap does nothing. Always-on hints (A, C, D) are rejected: "none should show the hints if not requested".
+- **Find: footer bar** under the list, on hold: `↑↓ Move · ↵ Open · ⇧↵ Show in tree · esc Close`. Not hints on the selected row. The ⌖ row button tooltip becomes "Show in tree (Shift+Enter)" (always, it is a tooltip).
+- **Header:** `n` in Open next, `t` in Triage, on hold. The Find header button no longer exists (#94), so ⌘K has no header surface.
+- **Focused row:** `o Details · s Send` on the thread row whose stop has keyboard focus, on hold.
+- **Focus slots:** `1`, `2`, `3` next to the Open button of each filled slot, on hold.
+- **Look:** shadcn `Kbd`, small (`h-4`/`h-5`, 10–12 px) and muted (`bg-muted`, `text-muted-foreground`). Readable in light and dark in the prototype.
+- **Touch:** no hints when `(hover: none), (pointer: coarse)`. Below 720 px the header hints hide with the button labels.
+- **Switch:** "Show key hints", on by default. Off turns the hold off too: no key hint shows at all.
+- No surface is dropped.
