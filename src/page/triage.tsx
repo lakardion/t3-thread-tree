@@ -33,6 +33,7 @@ import { AsksLabel, NoAsk } from "./catch-up-line.tsx";
 import { FOCUS_FULL } from "./focus.ts";
 import { Focus } from "./focus.tsx";
 import { ago, stripKey } from "./format.ts";
+import { Hint } from "./key-hints.tsx";
 import { CliGate, LastMessage, SendErrorAlert, useLastMessage } from "./send-dialog.tsx";
 import { postSend, postSettle, postSnooze, type Result } from "./send.ts";
 import { STATUS, StatusIcon } from "./status-icon.tsx";
@@ -50,8 +51,10 @@ import {
 } from "./triage.ts";
 import { SECTIONS } from "./view.ts";
 
-const Kbd = ({ children }: { children: string }) => (
-  <kbd className="font-mono text-[11px] text-muted-foreground">{children}</kbd>
+const Cap = ({ children }: { children: string }) => (
+  <Hint surface="triage" className="-top-2 -right-2">
+    {children}
+  </Hint>
 );
 
 /** The header button: the queue count, the key `t`. It opens even with an empty queue, where the card says so. */
@@ -70,6 +73,9 @@ export function TriageButton({ count, open, toggle }: { count: number; open: boo
         >
           <Inbox />
           <span className="max-[720px]:hidden">Triage</span>
+          <Hint surface="header" className="-top-2 -right-2">
+            t
+          </Hint>
           {count > 0 && (
             <span className="rounded-[4px] bg-status-needs-input px-1 text-[11px] text-white tabular-nums">
               {count}
@@ -214,7 +220,7 @@ function Card({ t, gone, pos, total, fresh, now, t3cli, upcoming, onSkip, onFini
   const since = t.since ? ago(t.since, now) : "";
   const toFocus = (
     <Button variant="ghost" size="xs" disabled={inFocus || focus.full} onClick={addFocus}>
-      <Crosshair /> {inFocus ? "In Focus" : "Focus"} <Kbd>f</Kbd>
+      <Crosshair /> {inFocus ? "In Focus" : "Focus"} <Cap>f</Cap>
     </Button>
   );
   return (
@@ -253,7 +259,7 @@ function Card({ t, gone, pos, total, fresh, now, t3cli, upcoming, onSkip, onFini
             className="self-start text-xs text-muted-foreground hover:underline"
             onClick={() => setMore((m) => !m)}
           >
-            {more ? "Hide" : "Show"} last message <Kbd>space</Kbd>
+            {more ? "Hide" : "Show"} last message <Cap>space</Cap>
           </button>
           {more && <Last t={t} />}
           <fieldset disabled={busy} className="m-0 flex min-w-0 flex-col gap-2.5 border-0 p-0">
@@ -261,7 +267,7 @@ function Card({ t, gone, pos, total, fresh, now, t3cli, upcoming, onSkip, onFini
               <div className="flex flex-col gap-2 rounded-md bg-muted p-2 text-sm">
                 T3 does not take an approval as a message. Approve it in T3.
                 <Button size="sm" className="self-start" onClick={open}>
-                  <ExternalLink /> Open in T3 <Kbd>o</Kbd>
+                  <ExternalLink /> Open in T3 <Cap>o</Cap>
                 </Button>
               </div>
             ) : (
@@ -276,7 +282,7 @@ function Card({ t, gone, pos, total, fresh, now, t3cli, upcoming, onSkip, onFini
                         title={c.text}
                         onClick={() => fill(c.text)}
                       >
-                        <Kbd>{String(i + 1)}</Kbd> {c.label}
+                        <Cap>{String(i + 1)}</Cap> {c.label}
                       </Button>
                     ))}
                   </div>
@@ -308,12 +314,12 @@ function Card({ t, gone, pos, total, fresh, now, t3cli, upcoming, onSkip, onFini
             {err && <SendErrorAlert err={err} />}
             <div className="flex flex-wrap items-center gap-1">
               <Button variant="ghost" size="xs" onClick={settle}>
-                <CircleCheckBig /> Settle <Kbd>e</Kbd>
+                <CircleCheckBig /> Settle <Cap>e</Cap>
               </Button>
               <DropdownMenu open={menu} onOpenChange={setMenu}>
                 <DropdownMenuTrigger asChild>
                   <Button variant="ghost" size="xs">
-                    <Moon /> Snooze <Kbd>z</Kbd>
+                    <Moon /> Snooze <Cap>z</Cap>
                   </Button>
                 </DropdownMenuTrigger>
                 <DropdownMenuContent align="start">
@@ -337,11 +343,11 @@ function Card({ t, gone, pos, total, fresh, now, t3cli, upcoming, onSkip, onFini
               )}
               {!approval && (
                 <Button variant="ghost" size="xs" onClick={open}>
-                  <ExternalLink /> Open in T3 <Kbd>o</Kbd>
+                  <ExternalLink /> Open in T3 <Cap>o</Cap>
                 </Button>
               )}
               <Button variant="ghost" size="xs" className="ml-auto" onClick={onSkip}>
-                Skip <Kbd>j</Kbd> <ArrowRight />
+                Skip <Cap>j</Cap> <ArrowRight />
               </Button>
             </div>
           </fieldset>

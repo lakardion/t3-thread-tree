@@ -11,6 +11,7 @@ import type { ThreadNode } from "../shared/tree.ts";
 import { needsYou } from "./attention.ts";
 import { FOCUS_MAX } from "./focus.ts";
 import { ago } from "./format.ts";
+import { Hint } from "./key-hints.tsx";
 import { STATUS, StatusIcon } from "./status-icon.tsx";
 
 /** The Focus list for the add buttons of rows. */
@@ -142,11 +143,13 @@ function Confirm({ title, replace, cancel }: { title: string; replace: () => voi
 }
 
 function FocusCard({
+  slot,
   t,
   now,
   remove,
   confirm,
 }: {
+  slot: number;
   t: ThreadNode;
   now: number;
   remove: () => void;
@@ -161,6 +164,9 @@ function FocusCard({
   }, [hidden]);
   return (
     <div data-card className="flex h-full flex-col gap-1.5 rounded-[12px] border bg-card px-3 py-2.5">
+      <Hint surface="slot" className="-top-2 left-1">
+        {slot + 1}
+      </Hint>
       <div className="flex items-center gap-1.5">
         <StatusIcon t={t} now={now} />
         <span className={cn(STATUS[t.status].shape, "truncate text-[12px] font-medium tabular-nums")}>
@@ -253,6 +259,7 @@ export function FocusStrip({
                 </div>
               ) : t ? (
                 <FocusCard
+                  slot={i}
                   key={id}
                   t={t}
                   now={now}
