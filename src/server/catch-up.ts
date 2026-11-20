@@ -32,6 +32,9 @@ const AnswerSchema = v.object({
 
 const cut = (s: string, max: number) => (s.length > max ? `${s.slice(0, max - 1).trimEnd()}…` : s);
 
+/** A small model may write `"null"` or `""` in place of a real `null`. */
+const nullish = (s: string) => /^(null)?$/i.test(s.trim());
+
 /** The validated answer with its cuts applied, or `null` when the shape is wrong. */
 export function parseAnswer(answer: unknown): Required<Pick<CatchUp, "did" | "ask" | "options" | "doneLike">> | null {
   const r = v.safeParse(AnswerSchema, answer);
@@ -39,8 +42,11 @@ export function parseAnswer(answer: unknown): Required<Pick<CatchUp, "did" | "as
   const { did, ask, options, doneLike } = r.output;
   return {
     did: cut(did, 140),
-    ask: ask === null ? null : cut(ask, 120),
-    options: options.slice(0, 4).map((o) => cut(o, 60)),
+    ask: ask === null || nullish(ask) ? null : cut(ask, 120),
+    options: options
+      .filter((o) => !nullish(o))
+      .slice(0, 4)
+      .map((o) => cut(o, 60)),
     doneLike,
   };
 }
