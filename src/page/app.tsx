@@ -179,6 +179,7 @@ import { postSettle } from "./send.ts";
 import { LEGEND, LegendIcon, STATUS, StatusIcon } from "./status-icon.tsx";
 import { nextStop, refocusIndex, stopsIn } from "./stops.ts";
 import { Swap, useChanges } from "./swap.tsx";
+import { TriageButton, TriageCard } from "./triage.tsx";
 import {
   closedCounts,
   FLAT,
@@ -2440,6 +2441,7 @@ const KEYS: [keys: string, action: string][] = [
   ["l h", "Expand, collapse"],
   ["s", "Send"],
   ["n", "Open next"],
+  ["t", "Triage"],
   [FIND_KEY, "Find"],
   ["1–3", "Open a Focus slot"],
 ];
@@ -2640,6 +2642,8 @@ function App() {
   const [focusShow, setFocusShow] = useState(load(FOCUS_SHOW_KEY) === "1");
   const [pending, setPending] = useState<Pending | null>(null);
   const [findOpen, setFindOpen] = useState(false);
+  const [triage, setTriage] = useState(false);
+  const triageRef = useRef(triage);
   /** A new key remounts the tree list, which drops the row moves that dnd-kit made during a drag onto the strip. */
   const [listKey, setListKey] = useState(0);
   /** The page setting wins over the server's `.env` config. */
@@ -2701,6 +2705,7 @@ function App() {
     openNextRef.current = openNext;
     openThreadRef.current = openThread;
     settingsOpenRef.current = settingsOpen;
+    triageRef.current = triage;
   });
 
   const sentOpenNext = useRef<string | null | undefined>(undefined);
@@ -2976,11 +2981,12 @@ function App() {
               ? "menu"
               : null,
       });
-      if (action === null) return;
+      if (action === null || (triageRef.current && action !== "find")) return;
       if (action === "find") {
         e.preventDefault();
         setFindOpen((o) => !o);
       } else if (action === "next") openNextRef.current();
+      else if (action === "triage") setTriage(true);
       else if (action === "down" || action === "up") {
         const root = listRef.current;
         if (!root) return;
@@ -3229,6 +3235,7 @@ function App() {
         </ToggleGroup>
         <OpenNextButton target={target} title={openNextTitle} now={now} open={openNext} />
         <FocusButton count={focus.length} shown={focusShow} setShown={setFocusShow} />
+        <TriageButton count={queue.length} open={triage} toggle={() => setTriage((o) => !o)} />
         <div className="ml-auto flex items-center gap-1">
           <div className="min-[720px]:hidden">
             <ViewMenu
@@ -3312,6 +3319,7 @@ function App() {
             </Alert>
           )}
           <DragDropProvider plugins={plugins} onDragStart={dragStart} onDragEnd={dragEnd}>
+            {triage && <TriageCard queue={queue} live={live} now={now} t3cli={t3cli} close={() => setTriage(false)} />}
             {focusShow && (
               <FocusStrip
                 ids={focus}

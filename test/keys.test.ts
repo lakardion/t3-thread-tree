@@ -28,6 +28,11 @@ describe("plain keys", () => {
     expect(pageKey(ev("2"), ctx())).toBe(1);
     expect(pageKey(ev("3"), ctx())).toBe(2);
   });
+  test("t opens Triage", () => {
+    expect(pageKey(ev("t"), ctx())).toBe("triage");
+    expect(pageKey(ev("t"), ctx({ stop: "thread" }))).toBe("triage");
+    expect(pageKey(ev("t", { repeat: true }), ctx())).toBeNull();
+  });
   test("4 and other keys do nothing", () => {
     expect(pageKey(ev("4"), ctx())).toBeNull();
     expect(pageKey(ev("/"), ctx())).toBeNull();
@@ -42,11 +47,13 @@ describe("plain keys", () => {
     ]) {
       expect(pageKey(ev("n"), c)).toBeNull();
       expect(pageKey(ev("1"), c)).toBeNull();
+      expect(pageKey(ev("t"), c)).toBeNull();
     }
   });
   test("do nothing with a modifier, on repeat, or when handled", () => {
     for (const m of [{ metaKey: true }, { ctrlKey: true }, { altKey: true }, { shiftKey: true }]) {
       expect(pageKey(ev("n", m), ctx())).toBeNull();
+      expect(pageKey(ev("t", m), ctx())).toBeNull();
     }
     expect(pageKey(ev("n", { repeat: true }), ctx())).toBeNull();
     expect(pageKey(ev("o", { repeat: true }), ctx({ stop: "thread" }))).toBeNull();
