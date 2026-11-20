@@ -44,4 +44,5 @@ Decided by the user on the prototype: [`prototype/key-hints-look`](https://githu
 - **Look:** shadcn `Kbd`, small (`h-4`/`h-5`, 10–12 px) and muted (`bg-muted`, `text-muted-foreground`). Readable in light and dark in the prototype.
 - **Touch:** no hints when `(hover: none), (pointer: coarse)`. Below 720 px the header hints hide with the button labels.
 - **Switch:** "Show key hints", on by default. Off turns the hold off too: no key hint shows at all.
+- **Triage card:** its key caps (`space` last message, `e` Settle, `z` Snooze, `f` Focus, `o` Open in T3, `1`–`n` choices, `j` Skip) were always on. They become key hints: shown only on hold, floating on the top-right corner of their control. Scan of the page: no other in-page key cap exists. The tooltips and the Keys legend in Settings stay as they are (charting decision).
 - No surface is dropped.

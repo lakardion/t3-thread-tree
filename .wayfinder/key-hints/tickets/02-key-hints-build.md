@@ -25,6 +25,7 @@ From [the key hints look](01-key-hints-look.md). Reference code (throwaway, rewr
   - Find: a bar that floats over the bottom of the result list: `↑↓ Move · ↵ Open · ⇧↵ Show in tree · esc Close`.
   - Header: `n` on the top-right corner of the Open next button, `t` on the Triage button. Hidden below 720 px, like the labels.
   - Focused row: one pill `o Details · s Send` above the right side of the thread row whose `data-stop` has keyboard focus. `s` only when Send is available on that row.
+  - Triage card: the existing always-on key caps (`Kbd` in `src/page/triage.tsx`: `space`, `e`, `z`, `f`, `o`, `1`–`n`, `j`) become key hints, on the top-right corner of their control. Nothing in the card shows a key cap without the hold.
   - Focus slots: the slot number (`1`–`3`) on the top-left corner of each filled slot card.
 - **Always (not a hint):** the ⌖ button in a Find row gets the tooltip "Show in tree (Shift+Enter)".
 - **Look.** `Kbd` small and muted: about `h-4`–`h-5`, 10–12 px text, `bg-muted`, `text-muted-foreground`. Check light and dark.
@@ -36,6 +37,7 @@ From [the key hints look](01-key-hints-look.md). Reference code (throwaway, rewr
 
 - With the switch on, no key hint is visible until Alt/Option is held for 300 ms; then the Find bar (if Find is open), the header caps, the focused-row hints and the slot numbers show; on release they hide.
 - A quick Alt tap, an Option+letter typed in a field, and Alt with Cmd/Ctrl/Shift show no hints and do not break typing.
+- The Triage card shows no key cap until the hold.
 - Showing or hiding the hints moves no other element on the page (no layout shift).
 - With the switch off, holding Alt/Option shows nothing.
 - The Find ⌖ tooltip reads "Show in tree (Shift+Enter)".
