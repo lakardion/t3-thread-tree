@@ -1,9 +1,11 @@
 import { afterAll, beforeEach, describe, expect, test } from "bun:test";
-import { mkdtempSync, rmSync } from "node:fs";
+import { chmodSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 
+import { SCHEMA } from "../src/server/catch-up.ts";
 import {
+  appleSchema,
   createModels,
   localModelRoutes,
   parseOutput,
@@ -68,6 +70,7 @@ describe("pick file", () => {
   const file = join(dir, "model-pick");
   const save = (c: object) => writeToken(file, JSON.stringify(c));
   let saves = 0;
+  const defaultOff = new Set(["local", "apple"]);
   const routes = pickRoutes(file, () => saves++)["/model-pick"];
   const put = (body: string, type = "application/json") =>
     routes.PUT(new Request("http://x/model-pick", { method: "PUT", body, headers: { "content-type": type } }));
@@ -83,22 +86,18 @@ describe("pick file", () => {
     save({ pick: "gpt" });
     expect(readPickFile(file)).toEqual({ pick: null, catchUp: false });
   });
-  test("the switch defaults to on for claude and codex, off for local", () => {
-    for (const [pick, catchUp] of [
-      ["claude", true],
-      ["codex", true],
-      ["local", false],
-    ] as const) {
+  test("the switch defaults to on for claude and codex, off for local and apple", () => {
+    for (const pick of ["claude", "codex", "local", "apple"] as const) {
       save({ pick });
-      expect(readPickFile(file)).toEqual({ pick, catchUp });
+      expect(readPickFile(file)).toEqual({ pick, catchUp: !defaultOff.has(pick) });
     }
   });
   test("a stored switch wins for every pick", () => {
-    for (const pick of ["claude", "codex", "local"]) {
-      save({ pick, catchUp: pick === "local" });
-      expect(readPickFile(file).catchUp).toBe(pick === "local");
-      save({ pick, catchUp: pick !== "local" });
-      expect(readPickFile(file).catchUp).toBe(pick !== "local");
+    for (const pick of ["claude", "codex", "local", "apple"] as const) {
+      save({ pick, catchUp: defaultOff.has(pick) });
+      expect(readPickFile(file).catchUp).toBe(defaultOff.has(pick));
+      save({ pick, catchUp: !defaultOff.has(pick) });
+      expect(readPickFile(file).catchUp).toBe(!defaultOff.has(pick));
     }
   });
   test("PUT merges into the stored fields, saves and answers like GET", async () => {
@@ -110,8 +109,10 @@ describe("pick file", () => {
     expect(await routes.GET().json()).toEqual({ pick: "claude", catchUp: false });
     expect(saves).toBe(2);
   });
-  test("PUT of local with no stored switch resolves to off", async () => {
+  test("PUT of local or apple with no stored switch resolves to off", async () => {
     expect(await (await put(JSON.stringify({ pick: "local" }))).json()).toEqual({ pick: "local", catchUp: false });
+    rmSync(file, { force: true });
+    expect(await (await put(JSON.stringify({ pick: "apple" }))).json()).toEqual({ pick: "apple", catchUp: false });
   });
   test("400 on a bad body, 415 on a non-JSON body", async () => {
     expect((await put(JSON.stringify({ pick: "gpt" }))).status).toBe(400);
@@ -138,7 +139,8 @@ describe("Local model", () => {
   const config = { baseUrl, model: "m1" };
   const save = (c: object) => writeToken(file, JSON.stringify(c));
   const job = { guide: "G", input: "in", schema: { type: "object" } };
-  const models = (timeoutMs?: number) => createModels({ localConfig: () => readLocalConfig(file), timeoutMs });
+  const models = (timeoutMs?: number) =>
+    createModels({ localConfig: () => readLocalConfig(file), appleHelper: null, timeoutMs });
   const reply = (content: string, finish_reason = "stop") =>
     Response.json({ choices: [{ message: { content }, finish_reason }] });
   const put = (body: string, type = "application/json") =>
@@ -270,6 +272,171 @@ describe("Local model", () => {
       handler = async () => (await Bun.sleep(500), reply("{}"));
       const r = models().run("local", job);
       await Bun.sleep(20);
+      r.cancel();
+      expect(await r.done).toBeNull();
+    });
+  });
+});
+
+describe("appleSchema", () => {
+  test("turns the Catch-up schema into the helper schema", () => {
+    expect(appleSchema(SCHEMA)).toEqual({
+      type: "object",
+      title: "Answer",
+      "x-order": ["did", "ask", "options", "doneLike"],
+      additionalProperties: false,
+      required: ["did", "options", "doneLike"],
+      properties: {
+        did: { type: "string" },
+        ask: { type: "string" },
+        options: { type: "array", items: { type: "string" } },
+        doneLike: { type: "boolean" },
+      },
+    });
+  });
+  test("does not change its input", () => {
+    const before = JSON.stringify(SCHEMA);
+    appleSchema(SCHEMA);
+    expect(JSON.stringify(SCHEMA)).toBe(before);
+  });
+  test("a nested object takes its key as title", () => {
+    const out = appleSchema({
+      type: "object",
+      properties: { a: { type: "object", properties: { b: { type: "string" } } } },
+    }) as { properties: { a: { title: string; "x-order": string[] } } };
+    expect(out.properties.a.title).toBe("a");
+    expect(out.properties.a["x-order"]).toEqual(["b"]);
+  });
+});
+
+describe("Apple model", () => {
+  const dir = mkdtempSync(join(tmpdir(), "apple-model-"));
+  const helper = join(dir, "apple-model");
+  const stdinFile = join(dir, "stdin");
+  const fake = (body: string) => {
+    writeFileSync(helper, `#!/bin/sh\n${body}\n`);
+    chmodSync(helper, 0o755);
+  };
+  const check = (json: string, code = 0) => `[ "$1" = check ] && { echo '${json}'; exit ${code}; }`;
+  const runs = (json: string, code = 0, pre = `cat > ${stdinFile}`) =>
+    `${pre}\n[ "$1" = run ] && { echo '${json}'; exit ${code}; }`;
+  const models = (appleHelper: string | null = helper, timeoutMs?: number) =>
+    createModels({ localConfig: () => ({ baseUrl: "http://x/v1", model: "m1" }), appleHelper, timeoutMs });
+  const ids = async (m = models()) => (await m.offered()).map((o) => o.id);
+  const job = { guide: "G", input: "in", schema: SCHEMA };
+  const run = (m = models()) => m.run("apple", job).done;
+
+  afterAll(() => rmSync(dir, { recursive: true, force: true }));
+
+  describe("offered", () => {
+    test("available gives apple after the CLIs and before local", async () => {
+      fake(check('{"available":true,"contextSize":4096}'));
+      const all = await models().offered();
+      const i = all.findIndex((o) => o.id === "apple");
+      expect(all[i]).toEqual({ id: "apple", label: "Apple model" });
+      expect(all.slice(0, i).every((o) => o.id === "claude" || o.id === "codex")).toBe(true);
+      expect(all.slice(i + 1).map((o) => o.id)).toEqual(["local"]);
+    });
+    test.each(["deviceNotEligible", "appleIntelligenceNotEnabled", "modelNotReady", "other"])(
+      "%s hides apple",
+      async (reason) => {
+        fake(check(`{"available":false,"reason":"${reason}"}`));
+        expect(await ids()).not.toContain("apple");
+      },
+    );
+    test("a non-zero exit hides apple", async () => {
+      fake(check('{"available":true}', 2));
+      expect(await ids()).not.toContain("apple");
+    });
+    test("bad output hides apple", async () => {
+      fake(check("nope"));
+      expect(await ids()).not.toContain("apple");
+    });
+    test("a missing file hides apple", async () => {
+      expect(await ids(models(join(dir, "gone")))).not.toContain("apple");
+    });
+    test("a null helper hides apple", async () => {
+      expect(await ids(models(null))).not.toContain("apple");
+    });
+    test("the check runs on each call", async () => {
+      const m = models();
+      fake(check('{"available":false,"reason":"modelNotReady"}'));
+      expect(await ids(m)).not.toContain("apple");
+      fake(check('{"available":true}'));
+      expect(await ids(m)).toContain("apple");
+    });
+  });
+
+  describe("run", () => {
+    test("sends the guide, input and transformed schema on stdin", async () => {
+      fake(runs('{"answer":{"did":"d","ask":"a","options":[],"doneLike":false}}'));
+      await run();
+      expect(JSON.parse(await Bun.file(stdinFile).text())).toEqual({
+        guide: "G",
+        input: "in",
+        schema: appleSchema(SCHEMA),
+      });
+    });
+    test("an answer without ask gets ask null, and a given ask stays", async () => {
+      fake(runs('{"answer":{"did":"d","options":[],"doneLike":false}}'));
+      expect(await run()).toEqual({ answer: { did: "d", options: [], doneLike: false, ask: null } });
+      fake(runs('{"answer":{"did":"d","ask":"a","options":[],"doneLike":false}}'));
+      expect(await run()).toMatchObject({ answer: { ask: "a" } });
+    });
+    test("a non-object answer is kept", async () => {
+      fake(runs('{"answer":5}'));
+      expect(await run()).toEqual({ answer: 5 });
+    });
+    test("unparseable stdout on exit 0 gives no valid answer", async () => {
+      fake(runs("nope"));
+      expect(await run()).toMatchObject({ error: "The Apple model gave no valid answer." });
+    });
+    test.each([
+      [
+        '{"error":"overflow","tokens":12345,"limit":3496}',
+        "The thread is too long for the Apple model: 12,345 of 3,496 tokens.",
+      ],
+      ['{"error":"overflow"}', "The Apple model helper exited with code 1."],
+      ['{"error":"contextWindow"}', "The thread did not fit in the Apple model's window."],
+      ['{"error":"unavailable","reason":"deviceNotEligible"}', "This Mac cannot run the Apple model."],
+      [
+        '{"error":"unavailable","reason":"appleIntelligenceNotEnabled"}',
+        "Turn on Apple Intelligence in System Settings to use the Apple model.",
+      ],
+      ['{"error":"unavailable","reason":"modelNotReady"}', "The Apple model is not ready yet. Try again later."],
+      ['{"error":"unavailable","reason":"assetsUnavailable"}', "The Apple model is not ready yet. Try again later."],
+      ['{"error":"unavailable","reason":"zzz"}', "The Apple model helper exited with code 1."],
+      ['{"error":"refusal"}', "The Apple model refused the input."],
+      ['{"error":"guardrail"}', "The Apple model refused the input."],
+      ['{"error":"decoding"}', "The Apple model gave no valid answer."],
+      ['{"error":"busy"}', "The Apple model is busy. Try again."],
+      ['{"error":"locale"}', "The Apple model does not support this language."],
+      ['{"error":"zzz"}', "The Apple model helper exited with code 1."],
+      ['{"error":"constructor"}', "The Apple model helper exited with code 1."],
+    ])("exit 1 with %s", async (json, text) => {
+      fake(runs(json, 1));
+      expect(await run()).toMatchObject({ error: text });
+    });
+    test("exit 1 with no parseable object gives the other-exit text", async () => {
+      fake(runs("nope", 1));
+      expect(await run()).toMatchObject({ error: "The Apple model helper exited with code 1." });
+    });
+    test("a crash gives the exit code and the stderr tail", async () => {
+      fake(runs("", 2, "cat > /dev/null; echo boom >&2"));
+      expect(await run()).toMatchObject({ error: "The Apple model helper exited with code 2.", detail: "boom\n" });
+    });
+    test("a missing helper gives the spawn error", async () => {
+      expect(await run(models(join(dir, "gone")))).toMatchObject({ error: "Cannot start the Apple model helper." });
+      expect(await run(models(null))).toMatchObject({ error: "Cannot start the Apple model helper." });
+    });
+    test("timeout", async () => {
+      fake("exec sleep 5");
+      expect(await run(models(helper, 50))).toMatchObject({ error: "timed out" });
+    });
+    test("cancel gives null", async () => {
+      fake("exec sleep 5");
+      const r = models().run("apple", job);
+      await Bun.sleep(50);
       r.cancel();
       expect(await r.done).toBeNull();
     });

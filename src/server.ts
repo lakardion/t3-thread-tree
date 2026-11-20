@@ -11,7 +11,14 @@ import { lastMessageRoutes } from "./server/last-message.ts";
 import { mayBeLaunched, needsScan, openLineage } from "./server/lineage.ts";
 import { fetchLinear } from "./server/linear-api.ts";
 import { linearStore } from "./server/linear.ts";
-import { createModels, localModelRoutes, pickRoutes, readLocalConfig, readPickFile } from "./server/model.ts";
+import {
+  appleHelperPath,
+  createModels,
+  localModelRoutes,
+  pickRoutes,
+  readLocalConfig,
+  readPickFile,
+} from "./server/model.ts";
 import { checkCli, cliPath, sendService } from "./server/send.ts";
 import { settleRoutes } from "./server/settle.ts";
 import { settledPage, settledRoutes, settledSignature } from "./server/settled.ts";
@@ -215,7 +222,7 @@ const shell = connectShell({
 
 /** `PUT /local-model` saves the Local model config here. */
 const localModelFile = process.env.LOCAL_MODEL_FILE ?? join(homedir(), ".config", "t3-thread-tree", "local-model");
-const models = createModels({ localConfig: () => readLocalConfig(localModelFile) });
+const models = createModels({ localConfig: () => readLocalConfig(localModelFile), appleHelper: appleHelperPath() });
 /** `PUT /model-pick` saves the pick and the Catch-up switch here. */
 const pickFile = process.env.MODEL_PICK_FILE ?? join(homedir(), ".config", "t3-thread-tree", "model-pick");
 const catchUp = catchUpService({
