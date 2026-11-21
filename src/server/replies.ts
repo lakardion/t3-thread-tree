@@ -21,7 +21,10 @@ const CUES: Record<(typeof REPLY_POOL)[number]["id"], (t: string) => boolean> = 
   /** T3 writes an API error as the whole message, so the cue is anchored at the start. */
   retry: (t) => /^\s*(?:API|network|connection) error\b/i.test(t) && !/\b(?:usage|rate) limit/i.test(t),
   "agree-all": (t) => /❓\s*\**\s*Q\d+/iu.test(t) && /➡️?/u.test(t),
-  merged: (t) => /\b(?:tell|let) me (?:know )?(?:when|once|after)\b[^.?!\n]*\bmerged\b/i.test(t),
+  merged: (t) =>
+    /\b(?:tell|let) me (?:know )?(?:when|once|after)\b[^.?!\n]*\bmerged\b|\bafter you merge\b[^.?!\n]*\b(?:tell|let) me\b/i.test(
+      t,
+    ),
   "refresh-pr": (t) =>
     /\bPR (?:body|description)(?: (?:is|looks|seems|may be|now|still))* (?:stale|out of date|outdated)\b/i.test(t),
 };

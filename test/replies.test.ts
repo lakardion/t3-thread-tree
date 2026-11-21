@@ -1,40 +1,40 @@
 import { describe, expect, test } from "bun:test";
 
 import { suggestedReplies } from "../src/server/replies.ts";
-import { REPLY_POOL } from "../src/shared/replies.ts";
+import { REPLY_POOL, chipsOf } from "../src/shared/replies.ts";
 
-/** Short, anonymized cuts of real assistant messages. Each intent has a match and a miss. */
+/** Short, anonymized cuts of real assistant messages: paths, links and names removed. Each intent has a match and a miss. */
 const SAMPLES: Record<string, { match: string; miss: string }> = {
   "run-app": {
     match:
-      "The chip row is in `src/page/send-dialog.tsx`. Typecheck and tests pass. I did not commit it, so you can check the page first.",
-    miss: "The parser change is in `src/server/replies.ts`. Tests pass. I did not commit it.",
+      'The demo is running at <http://127.0.0.1:4774>. The page loads.\n\nThe demo had no "No project" project, so I added one to `demo.ts` with one thread. This change is not committed yet.',
+    miss: "I updated CONTEXT.md to say that cue words pick the chip. I did not commit it.",
   },
   ship: {
     match: "I updated CONTEXT.md to say that cue words pick the chip. I did not commit it.",
-    miss: "The fix is not committed yet, because 2 tests still fail on main.",
+    miss: "The best trigger is an agent message that says the work is not committed and has no failure words.",
   },
   push: {
     match: "This commit is on your local `main`, which now has 9 commits that are not pushed.",
     miss: "**Wiki:** I marked the issue as merged, then committed and pushed the wiki.",
   },
   handoff: {
-    match: "All tickets before it are closed. The next ticket is 05, the spec section. Send `/t3-handoff` to start it.",
-    miss: "Ticket 04 is closed and has its line in the map's Decisions so far.",
+    match: "**Handoff:** I sent `/t3-handoff` to [Next thread](t3-thread://x), and that thread has started.",
+    miss: 'Ticket 06 is closed and has its line in "Decisions so far". All 6 tickets are closed, so I closed the map too.',
   },
   retry: {
     match: "API Error: Can't reach the API server — check your internet or DNS (ENOTFOUND)",
-    miss: "API Error: You've hit your usage limit · resets 3pm",
+    miss: "4. **Exact-cue replies (highest precision):** `retry` after `API Error` / `ENOTFOUND` (4/4).",
   },
   "agree-all": {
     match:
-      "❓ **Q3** - **Do `run-app` and `ship` merge?** Both use the same cue.\n\n➡️ Keep them as 2 separate intents that show together.",
-    miss: "Answers to numbered questions follow ❓ in 29 of 96 cases.",
+      "❓ **Q3** - **Do `run-app` and `ship` merge, or always show together?** Both use the same cue.\n\n➡️ Keep them as 2 separate intents that show together.",
+    miss: "Answers to numbered questions follow `❓`/`➡️` in 29 of 96 cases.",
   },
   merged: {
     match:
-      "I assigned the ticket to you, and it stays open. Tell me when PR #53 is merged. Then I will close the ticket.",
-    miss: "Both issue notes say merged, and the change is pushed.",
+      "I assigned the ticket to you, and it stays open. Tell me when PR #53 is merged. Then I will post the resolution comment.",
+    miss: "**Wiki:** both issue notes say merged, and the change is pushed.",
   },
   "refresh-pr": {
     match:
@@ -61,6 +61,18 @@ describe("cue samples", () => {
 });
 
 describe("rules", () => {
+  test("an API error that is a usage limit gives no retry", () => {
+    expect(suggestedReplies("API Error: You've hit your usage limit · resets 3pm")).not.toContain("retry");
+  });
+
+  test("merged also matches the after-you-merge order", () => {
+    expect(suggestedReplies("After you merge the PR, tell me and I will close the ticket.")).toContain("merged");
+  });
+
+  test("an unknown id gives no chip", () => {
+    expect(chipsOf(["ship", "nope", "merged"])).toEqual(["commit push", "commit push pr", "merged"]);
+  });
+
   test("run-app needs the ship cue", () => {
     expect(suggestedReplies("I changed the page in `app.tsx` and committed it.")).not.toContain("run-app");
   });
