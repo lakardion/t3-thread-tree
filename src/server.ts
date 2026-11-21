@@ -120,6 +120,7 @@ const treeFor = (settled: boolean, nest = false, labels: string[] = [], wantsLin
     labelsOf: store.labelsOf,
     linearOf: wantsLinear ? linearSource.of : undefined,
     catchUpOf: (id) => catchUp.of(id),
+    lastMessagesOf: lineage.lastMessages,
   }),
 });
 

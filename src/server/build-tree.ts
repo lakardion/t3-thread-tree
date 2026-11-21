@@ -16,6 +16,8 @@ import {
   type Status,
   type ThreadNode,
 } from "../shared/tree.ts";
+import { waiting } from "./catch-up.ts";
+import { suggestedReplies } from "./replies.ts";
 import type { Project, Thread } from "./t3.ts";
 
 /** Review threads sit in Reviews, whatever their key. */
@@ -74,6 +76,8 @@ export type BuildInput = {
   linearOf?: (key: string) => LinearIssue | undefined;
   /** The Catch-up of a thread. Unset: no node gets one. */
   catchUpOf?: (id: string) => CatchUp | undefined;
+  /** The newest complete assistant text of threads. Unset: no node gets Suggested replies. */
+  lastMessagesOf?: (ids: string[]) => Map<string, string | null>;
 };
 
 type Node = ThreadNode & { t: Thread; first: string };
@@ -233,6 +237,15 @@ function prepare(input: BuildInput) {
       ...(catchUp && { catchUp }),
       first: creationKey(t),
     });
+  }
+
+  if (input.lastMessagesOf) {
+    const asks = waiting([...nodes.values()]).filter((n) => !(n.status === "needs-input" && n.phrase === "Approval"));
+    const texts = input.lastMessagesOf(asks.map((n) => n.id));
+    for (const n of asks) {
+      const text = texts.get(n.id);
+      if (text) n.suggestedReplies = suggestedReplies(text);
+    }
   }
 
   const visibleSpawner = (id: string): string | null => {
@@ -486,8 +499,8 @@ const reviewGroups = (nodes: Node[], id: string): Branch[] => {
   return [...byKey].map(([k, ns]) => ({ id: `${id}:${k}`, label: k, branches: [], threads: ns.map(clean) }));
 };
 
-/** Strips the build-only fields before the node goes on the wire. */
+/** Strips the build-only fields before the node goes on the wire. Nested subthreads get no Suggested replies. */
 const clean = ({ t: _t, first: _f, children, ...n }: Node): ThreadNode => ({
   ...n,
-  children: (children as Node[]).map(clean),
+  children: (children as Node[]).map(({ suggestedReplies: _s, ...c }) => clean(c as Node)),
 });

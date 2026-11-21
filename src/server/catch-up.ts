@@ -52,7 +52,8 @@ export function parseAnswer(answer: unknown): Required<Pick<CatchUp, "did" | "as
 }
 
 /** The threads that wait on the user: not snoozed, not settled. A snoozed thread keeps its status when a request is pending. */
-const waiting = (nodes: ThreadNode[]) => nodes.filter((n) => WAITING.has(n.status) && !n.settled && !n.snoozedUntil);
+export const waiting = <T extends ThreadNode>(nodes: T[]): T[] =>
+  nodes.filter((n) => WAITING.has(n.status) && !n.settled && !n.snoozedUntil);
 
 /** `at` is the Wait start, or `updatedAt` when the thread has none. It orders the queue. */
 type Seen = { key: string; at: string; input: string; question: string | null };

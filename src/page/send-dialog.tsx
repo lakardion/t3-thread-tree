@@ -1,5 +1,5 @@
 import { LoaderCircle, Send } from "lucide-react";
-import { createContext, useContext, useEffect, useState, type ReactNode } from "react";
+import { createContext, useContext, useEffect, useRef, useState, type ReactNode } from "react";
 
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { Button } from "@/components/ui/button";
@@ -15,6 +15,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Textarea } from "@/components/ui/textarea";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 
+import { chipsOf } from "../shared/replies.ts";
 import type { CliStatus, SendError } from "../shared/send.ts";
 import type { ThreadNode } from "../shared/tree.ts";
 import { isBusy, postSend, type Result } from "./send.ts";
@@ -172,6 +173,8 @@ function SendForm({ threadIds, live, titles, message, notes, fixed, onSent }: Pr
   });
   const selected = live.get(target);
   const last = useLastMessage(target, selected?.updatedAt ?? null);
+  const chips = selected?.suggestedReplies ? chipsOf(selected.suggestedReplies) : [];
+  const box = useRef<HTMLTextAreaElement>(null);
 
   return (
     <ActionForm
@@ -242,7 +245,27 @@ function SendForm({ threadIds, live, titles, message, notes, fixed, onSent }: Pr
           {n}
         </p>
       ))}
+      {chips.length > 0 && (
+        <div className="flex flex-wrap gap-1.5" aria-label="Suggested replies">
+          {chips.map((c) => (
+            <Button
+              key={c}
+              variant="outline"
+              size="xs"
+              onClick={() => {
+                setDraft(c);
+                box.current?.focus();
+              }}
+            >
+              {c}
+            </Button>
+          ))}
+        </div>
+      )}
       <Textarea
+        ref={box}
+        /* oxlint-disable-next-line jsx-a11y/no-autofocus -- the chips sit before the textarea, so the dialog's first-field focus would land on a chip */
+        autoFocus={fixed}
         aria-label="Message"
         className="max-h-60 min-h-32"
         value={draft}
