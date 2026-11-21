@@ -103,6 +103,14 @@ _Avoid_: Apple Intelligence, FoundationModels, on-device AI, local model
 One line, written by the **Model pick**, that says what a waiting thread did and what it asks of the user. The server makes it once for each waiting thread message and request, and keeps it in memory.
 _Avoid_: summary, brief
 
+**Suggested reply**:
+A reply from a fixed pool, such as "commit push", that the page offers for a waiting top-level thread. Cue words in the thread's last agent message pick it. When no cue matches, the page offers a fixed default set. It shows as a chip in the send dialog. A click puts its text in the message, and the user still confirms the **Send**. It is not a **Catch-up** option, which answers the thread's own question.
+_Avoid_: quick reply, canned reply, suggestion chip
+
+**Reply intent**:
+One entry of the **Suggested reply** pool: an id such as `ship`, its chip text, and the cue that picks it.
+_Avoid_: reply type, reply category
+
 **Send**:
 One message from the page to one thread, through the `t3` CLI, after the user confirms it in the send dialog. A busy thread gets it as its next turn. Nothing is interrupted.
 _Avoid_: post, push, dispatch

@@ -474,6 +474,7 @@ One reusable component on the shadcn Dialog (Radix).
 - **Busy note:** when the target status is `working`, `starting` or `waiting`, a muted line under the target says "This thread is working. The message waits for its next turn." Other statuses show no note.
 - **Last message:** a muted box above the textarea, with the label "Last message". It shows the end of the last message of the target thread, in a box of at most 10 rem with scroll. It loads when the dialog opens and again when the target changes. It shows nothing while it loads or when the thread has no message.
 - **Approval note:** when the target status is `needs-input` and its phrase is "Approval", a muted line says "This thread waits for an approval. A message does not approve the request. Approve it in T3."
+- **Suggested replies:** a chip row between "Last message" and the textarea (see "Suggested replies").
 - **Buttons:** Cancel and Confirm send.
 - **Keys:** Cmd/Ctrl+Enter sends, Escape cancels, and Enter makes a new line.
 - **In flight:** Confirm send shows a spinner. Until the request ends, the fields, Cancel, Escape and the outside click do nothing. Thus a cancel never hides a message that was sent.
@@ -505,6 +506,57 @@ Tickets 02 and 05 each run one smoke test against the real T3, with `bun start`:
 ### README
 
 [Ticket 02](.wayfinder/send-message/tickets/02-send-endpoints.md) adds `T3_BIN` to Setup in `README.md` and the demo knobs to Run.
+
+## Suggested replies
+
+Source: wayfinder map `suggested-replies` in the wiki (`t3-thread-tree/issues/suggested-replies/`). Ticket 01 mines the replies, ticket 02 fixes the pool, ticket 04 fixes the place and the click, and ticket 06 picks cue rules over the Local model.
+
+When a thread waits for the user, the send dialog offers **Suggested replies**: chips with fixed text from a pool. Cue rules on the last agent message pick them. When no cue matches, the dialog offers a fixed fallback row. No model runs, and the page never sends a chip by itself.
+
+### Pool
+
+Each **Reply intent** has an id, one or two chip texts and a cue. The chip label and the sent text are the same string. The table order is the pool order.
+
+| Intent id    | Chip text                              | Cue on the last agent message                                                                                |
+| ------------ | -------------------------------------- | ------------------------------------------------------------------------------------------------------------ |
+| `run-app`    | `run the app and tell me what to test` | The `ship` cue, and a UI sign: it names a `.tsx`, `.css` or `.html` file, or says "UI", "page" or "browser". |
+| `ship`       | `commit push`, then `commit push pr`   | The work is not committed. The message has no `fail`, `error` or "not tested".                               |
+| `push`       | `push`                                 | The commit is local or not pushed.                                                                           |
+| `handoff`    | `$t3-handoff`                          | It names a next ticket, or writes `/t3-handoff`.                                                             |
+| `retry`      | `retry`                                | An API or network error, not a usage limit.                                                                  |
+| `agree-all`  | `agreed to all`                        | A grill round with `❓ Q<N>` and `➡️` lines.                                                                 |
+| `merged`     | `merged`                               | It asks the user to say when the PR is merged.                                                               |
+| `refresh-pr` | `$refresh-pr`                          | It says the PR body is stale.                                                                                |
+
+`ship` is one intent with two chips, because the text cannot tell `commit push` from `commit push pr`.
+
+### Cue rules
+
+- **Input:** the text of the newest complete assistant message of the thread. Row signals (PR state, `lastError`) do not gate any intent.
+- **Match:** a case-insensitive regex for each cue. The build writes the regexes from the cue column. A unit test holds real message samples for each intent, with a match and a miss.
+- **Cue chips:** when 1 or more cues match, the matched intents give the chips, in pool order. The fallback row does not show.
+- **Fallback row:** when no cue matches, the intents are `ship` and `handoff`: `commit push`, `commit push pr`, `$t3-handoff`. `merged` shows only from its cue.
+- **Cap:** at most 4 chips. The server walks the matched intents in pool order and adds an intent only when all its chips fit in the cap. So `ship` never shows only one of its two chips.
+
+### Field
+
+The server sets `suggestedReplies?: string[]` on each thread node, next to `catchUp`: the intent ids, in pool order, after the cap. A pure function of the message text makes it in the debounced tree push. It has no queue, no cache, no debounce timer and no failure state, and it does not depend on the Catch-up switch or the Model pick.
+
+The server sets the field only when all of these are true. Else the field is absent.
+
+- The thread is top-level. Subthreads get no chips.
+- The thread waits: its status is needs input, plan ready, your turn or failed, and it is not snoozed and not settled.
+- A needs-input thread does not have the phrase "Approval".
+- The thread has a complete assistant message.
+
+### Chips
+
+- **Place:** only in the send dialog, in one row between "Last message" and the textarea. The thread row, the Up next window and the notifications show no chips.
+- **Look:** small outline chips with the chip text, in the order of `suggestedReplies`. The page maps each id to its chip texts. An unknown id gives no chip. With no field, the row does not show.
+- **Click:** the chip text replaces the textarea text, and the textarea gets focus. Nothing is sent. The user can edit the text, then presses Confirm send.
+- **In flight:** the chips are disabled with the other fields.
+- **Live:** the row follows the field on the target node, so a new agent message changes the chips while the dialog is open. The draft does not change.
+- **Not Catch-up:** the Catch-up `options` answer the thread's own question. They stay a separate set, and they stay non-interactive.
 
 ## Desktop app
 
