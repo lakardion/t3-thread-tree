@@ -90,6 +90,8 @@ export type ThreadNode = {
   children: ThreadNode[];
   /** Set while the server holds a Catch-up for the thread's newest message and request. */
   catchUp?: CatchUp;
+  /** Reply intent ids for the send dialog chips, in pool order. Set only on a waiting top-level thread with a complete assistant message. */
+  suggestedReplies?: string[];
   /** The T3 project. Set only in the Linear tree. */
   t3Project?: { id: string; label: string };
 };

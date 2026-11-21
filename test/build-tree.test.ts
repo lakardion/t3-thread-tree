@@ -9,6 +9,7 @@ import {
   NO_KEY,
   NO_MILESTONE,
   NO_PROJECT,
+  allThreads,
   isFallback,
   type Branch,
   type LinearIssue,
@@ -1079,5 +1080,64 @@ describe("buildLinearTree", () => {
     const tree = build([shell("a", "SHOP-1 x")], {}, { linearOf: () => issue("x") });
     expect(tree[0].linear).toBeUndefined();
     expect(tree[0].branches[0].threads[0].t3Project).toBeUndefined();
+  });
+});
+
+describe("suggested replies", () => {
+  const DONE_AT = { status: "completed", latestRunCompletedAt: "2026-11-12T10:00:00.000Z" };
+  const req = (kind: string) => ({ pendingRuntimeRequest: { id: "r", kind, createdAt: "2026-11-12T09:00:00.000Z" } });
+  const MSG = "Tell me when PR #53 is merged.";
+  const all = (b: Branch[]): ThreadNode[] => b.flatMap(allThreads);
+  const repliesOf = (raws: object[], over: Partial<BuildInput> = {}, spawners: Record<string, string> = {}) => {
+    const asked: string[][] = [];
+    const tree = build(raws, spawners, {
+      lastMessagesOf: (ids) => (asked.push(ids), new Map(ids.map((id) => [id, id === "none" ? null : MSG]))),
+      ...over,
+    });
+    return { asked, by: Object.fromEntries(all(tree).map((t) => [t.id, t.suggestedReplies])) };
+  };
+
+  test("set on waiting threads from the last message, in one batch read", () => {
+    const { asked, by } = repliesOf([
+      shell("turn", "your turn", DONE_AT),
+      shell("q", "question", req("user_input")),
+      shell("plan", "plan", { status: "completed", interactionMode: "plan", hasActionableProposedPlan: true }),
+      shell("fail", "failed", { status: "failed" }),
+    ]);
+    expect(by).toEqual({ turn: ["merged"], q: ["merged"], plan: ["merged"], fail: ["merged"] });
+    expect(asked).toHaveLength(1);
+  });
+
+  test("absent when the thread does not wait, is snoozed, settled, waits for an Approval or has no message", () => {
+    const { by } = repliesOf(
+      [
+        shell("work", "working", { status: "running" }),
+        shell("done", "done", { status: "completed" }),
+        shell("snz", "snoozed", { ...DONE_AT, ...req("user_input"), snoozedUntil: "2026-11-13T00:00:00.000Z" }),
+        shell("set", "settled", { ...DONE_AT, settledAt: "2026-11-12T11:00:00.000Z" }),
+        shell("appr", "approval", req("command")),
+        shell("none", "no message", DONE_AT),
+      ],
+      { settled: true },
+    );
+    expect(by).toEqual({
+      work: undefined,
+      done: undefined,
+      snz: undefined,
+      set: undefined,
+      appr: undefined,
+      none: undefined,
+    });
+  });
+
+  test("a nested subthread gets none; with nesting off it is top-level and gets them", () => {
+    const raws = [shell("map", "Wayfinder map", DONE_AT), shell("mcp:t1", "ticket 001", DONE_AT)];
+    const spawners = { "mcp:t1": "map" };
+    expect(repliesOf(raws, {}, spawners).by).toEqual({ map: ["merged"], "mcp:t1": undefined });
+    expect(repliesOf(raws, { nest: false }, spawners).by).toEqual({ map: ["merged"], "mcp:t1": ["merged"] });
+  });
+
+  test("no reader gives no field", () => {
+    expect(all(build([shell("turn", "your turn", DONE_AT)]))[0].suggestedReplies).toBeUndefined();
   });
 });

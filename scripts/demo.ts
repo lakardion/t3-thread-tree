@@ -325,6 +325,7 @@ const projectsFor = (settled: boolean, nest = false, labels: string[] = [], want
     labels,
     labelsOf: (p) => LABELS[p.n],
     catchUpOf: (id) => CATCH_UP[id],
+    lastMessagesOf: (ids) => new Map(ids.map((id) => [id, lastMessage(id)])),
     linearOf: wantsLinear ? (key) => LINEAR[key] : undefined,
   });
 const treeFor = (nest: boolean, labels: string[], wantsLinear: boolean) =>
@@ -386,6 +387,7 @@ const MESSAGES: Record<string, string> = {
     "The saved cards list works. One open point: should a new card become the default at once, or only when the user picks it?",
   "demo-15":
     "The retry queue needs a new table. I will run the migration next:\n\nbun run db:migrate --name retry_queue\n\nApprove the command to continue.",
+  m2: "Dialog now uses the new tokens in `dialog.tsx`. Typecheck passes. I did not commit it yet.",
   "demo-21": "The retry policy change is ready. I need to run the load test script before I confirm the numbers.",
 };
 const NO_MESSAGE = new Set(["demo-5", "map", "demo-16", "launched"]);

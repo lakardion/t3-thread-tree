@@ -47,6 +47,7 @@ _Screenshots use made-up data from `bun run demo`._
   ![The Looks done dialog with two threads checked](docs/looks-done.png)
 
 - **Settle and send from a row.** The icons at the end of a row settle the thread in one click, or open a dialog to send it a message. Settled threads show on demand in a list below the tree.
+- **Suggested replies.** When a thread waits for you, the send dialog shows reply chips, such as `commit push` or `merged`. Cue words in the last agent message pick them, and a fixed set shows when no cue matches. A click puts the text in the message. Nothing is sent until you confirm.
 - **Keys.** `j`/`k` move between rows, Enter opens, `o` opens the details, `s` opens Send. Hold Alt/Option for a moment to see the keys on the page, next to the controls they work. "Show key hints" in Settings turns this off. The "Keys" fold in Settings lists all keys.
 
 ### Mac app
