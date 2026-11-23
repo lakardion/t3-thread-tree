@@ -181,6 +181,7 @@ import {
 import { Presence, useMotion } from "./presence.tsx";
 import { ProjectIcon, projectHex } from "./project-icon.tsx";
 import { ProviderIcon } from "./provider-icon.tsx";
+import { RunRowsPrototype, RunRowSwitcher } from "./run-row.prototype.tsx";
 import { CliGate, LastMessage, SendDialog, useLastMessage } from "./send-dialog.tsx";
 import { postSettle } from "./send.ts";
 import { LEGEND, LegendIcon, STATUS, StatusIcon } from "./status-icon.tsx";
@@ -3429,6 +3430,7 @@ function App() {
                               <Card className="gap-0 overflow-clip rounded-[12px] px-2 py-0 shadow-none">
                                 <ul key={listKey} className={cn("m-0 list-none p-0", layout === "flat" && "p-1")}>
                                   <SendTo value={sendToApi}>
+                                    <RunRowsPrototype Row={ThreadRow} projects={projects} />
                                     {layout === "flat" ? (
                                       <Presence key="flat" items={view.flat ?? []} keyOf={(i) => i.id}>
                                         {(i) => (
@@ -3540,6 +3542,7 @@ function App() {
           if (settledIds.length > 0) setUndoIds((u) => [...(u ?? []), ...settledIds]);
         }}
       />
+      <RunRowSwitcher />
       {undoIds && <UndoToast key={undoIds.join()} ids={undoIds} onClose={() => setUndoIds(null)} />}
       <SendDialog
         fixed
