@@ -1,10 +1,10 @@
 import type { SendError } from "../shared/send.ts";
 
-const fail = (status: number, error: string) =>
+export const fail = (status: number, error: string) =>
   Response.json({ error, exitCode: null, stderrTail: "" } satisfies SendError, { status });
 
 /** The 502 for a failed dispatch. A scope failure names the fix: `verb` is what the token cannot do. */
-const dispatchFail = (e: unknown, verb: string) => {
+export const dispatchFail = (e: unknown, verb: string) => {
   const msg = e instanceof Error ? e.message : String(e);
   return fail(
     502,

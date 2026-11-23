@@ -50,6 +50,37 @@ Source: [How can a local process read T3 thread data live?](.wayfinder/tickets/0
 - While T3 is down, the page keeps the last tree, greyed, with the banner "T3 not running: last update HH:MM".
 - Each new connection takes a fresh snapshot, and its first `snapshot` item replaces the whole thread map. Do not use `afterSequence`.
 
+## Run questions
+
+A **Run question** and a **Paused run** wait for the user, as threads do (see CONTEXT.md). The app shows them with the threads that need the user. It adds no row to the tree.
+
+### Data
+
+- The client sends a second request on the socket: `workflows.subscribe`, request id `"w"`, payload `{}`. Each chunk of it holds full `WorkflowRunsSnapshot` values. The newest one replaces the state. No merge.
+- The client sends each chunk's `Ack` with the chunk's own `requestId`. The shell stream keeps id `"1"`. An `Exit` for `"w"` (an old T3 with no workflows) is logged and keeps the socket open. The runs list then stays empty. Only an `Exit` of `"1"` closes the socket.
+- `runItems` makes the items. Each entry of `questions` gives a **Run question**. A run with `status` `paused` and `resumesAt` null gives a **Paused run**. Other runs, `skipped` runs and ended runs give nothing.
+- A **Run question** has the id `q:<runId>:<name>`, the question title, the choices, its Wait from `askedAt`, and `threadHref` (`t3code://threads/<environmentId>/<threadId>` of the run's latest agent thread, or null). A null `environmentId` means this environment. The workflow name and run title come from the run in the same snapshot; with no run they are the run id.
+- A **Paused run** has the id `p:<runId>`, the run title, `detail`, `retired`, and its Wait from `updatedAt`.
+- The **Catch-up line** is the question title, or the first line of `detail`. No model call.
+- The tree has `runs`: the list of items, or null until the first workflows snapshot. The page sets its notification baseline from the first list that is not null.
+- **Open in T3.** The link is `<T3 origin>/workflows?run=<runId>`. The T3 desktop app opens only `t3code://new` and `t3code://threads/…`, so a `t3code://workflows` link would do nothing. The page opens it in a new window; the desktop app hands it to the system browser.
+
+### Routes
+
+All three take JSON only (415 for another content type, 400 for a bad body) and answer 204. A failure answers 502 with the T3 message; a missing scope names the fix, as for settle.
+
+- `POST /t3/workflows/answer` with `{ runId, name, choice, reason? }` calls `workflows.answer`. The server sends `reason` only when it is not blank.
+- `POST /t3/workflows/resume` with `{ runId }` calls `workflows.resume`.
+- `POST /t3/workflows/cancel` with `{ runId }` calls `workflows.cancel`. T3 can take 30 s to cancel. A call that times out answers 202: the next snapshot settles it.
+
+### Where they show
+
+- **Needs you.** Each item counts in the Needs-you badge, the tab title, the Dock badge and the menu-bar list. The "Needs you" filter and the tree do not change.
+- **Open next queue.** Items and threads mix, oldest Wait first. The skip memory keys an item by `id` and `since`: `runId` + `name` + `askedAt` for a question, `runId` + `updatedAt` for a paused run. Open next opens the run page.
+- **Triage card, Run question.** It has the layout of the thread card. The header has the `Workflow` icon and "Run question" in the plan color, "· <workflow>", the Wait, the count and Close. Then the question title and, in muted text, the run title. The choices show as numbered chips. A click or the keys `1` to `9` select one; it does not answer. The field "Reason (optional)…" is the reason. "Answer" and Cmd/Ctrl+Enter send the choice and the reason, and stay off until a choice is selected. On success, the card goes to the next one. On a failure, the card shows the error and stays. With no choices, a box says that T3 takes only a choice and offers "Open run in T3". The footer has "Talk it through" (only when `threadHref` is set; it opens that thread), "Open run in T3" (`o`) and Skip (`j`).
+- **Triage card, Paused run.** The header has the `CirclePause` icon and "Paused run" in the failed color. Under the run title, a muted line says "Waits for you", or "Its workflow version is gone. It cannot resume." for a retired run. The `detail` shows clamped to 3 lines; "Show detail" (`space`) shows all. "Resume" is hidden for a retired run. "Cancel" shows the confirm "Cancel run <title>?" with "Cancel run" and "Keep"; while the call runs, the card says "Cancelling…". "Open run in T3" is there too.
+- **No other actions.** A run card has no Settle, Snooze, Focus or Send. The end counts add "answered", "resumed" and "cancelled" when they are not 0.
+
 ## Launched-thread lineage
 
 Source: [Can the spawner of a launched thread be recovered?](.wayfinder/tickets/002-recover-launched-lineage.md), [Standalone webapp or a view inside T3 Code?](.wayfinder/tickets/003-standalone-or-in-t3.md), research on branch `research/launched-lineage`.
@@ -107,11 +138,11 @@ The sort menu keeps its choice in `localStorage` under `thread-tree:sort`. "Last
 
 The flat view lists all threads of all projects in one list. The switch keeps its choice in `localStorage` under `thread-tree:layout`, and "Group by" under `thread-tree:group`. With "Group by Status", each section header is a fold button. A closed section keeps its header and its count, and shows no rows, so its rows have no drag. The closed sections are saved as a JSON list of section keys under `thread-tree:sections`. With no saved list, "Idle and snoozed" and "Done" are closed. A new thread does not open a closed section. The "Needs you" filter and the sort keep the folds. "Group by None" has no folds. The flat list has no fold-all button. Drag works with "Manual" sort and is off in "Last updated". The flat list keeps its own order in the stored orders (`thread-tree:order`, list key `flat`), so "Reset order" clears it. It starts as the tree order, flattened, and a new thread goes last. A flat drag never changes the tree order, and the reverse. With "Group by Status", a row drags only inside its section; all sections share the one flat order. A stack run is one block, and subthreads stay under their parent. "Manual" keeps the tree order, flattened. "Last updated" sorts the whole list. "Group by Linear project" makes sections from the Linear tree (see "Linear grouping"). "Group by Status" makes sections in this order: Needs input, Plan ready, Your turn, Failed (`failed`, `interrupted`), Working (`working`, `starting`, `waiting`), Idle and snoozed, Done. A section with no thread is hidden. A unit (a thread or a stack) goes to the section of its most urgent thread, subthreads included. Settled threads do not pull; a unit with only settled threads goes by all of them. With "Group by Status", Needs input, Plan ready and Your turn sort by Wait, oldest first, with both sort choices. A row with no Wait goes last, and a unit sorts by the oldest Wait of its threads in the section, subthreads included, settled threads left out. Drag is off there. The stored flat order does not change, so a row that stops waiting goes back to its place. A **context row** is a thread row in a section whose status is not one of the section's statuses, or that is settled. A section header counts the threads that match the section, subthreads included, settled threads left out. A context row shows muted title text. In a PR stack, a row folds when it and all its subthreads are context rows. The rail header then shows a "+N other threads" button that shows and hides them. The open state is not saved. Saved tree folds stay unchanged.
 
-**Open next** opens in T3 the thread that has waited longest. The page owns the target and the skip memory; the button, the key `n` and the menu-bar item share them.
+**Open next** opens in T3 the thread, Run question or Paused run that has waited longest. The page owns the target and the skip memory; the button, the key `n` and the menu-bar item share them.
 
 - **Target.** The queue holds all threads of the server's tree, subthreads included, with status `needs-input`, `plan-ready` or `your-turn`, not settled. The filter, "Show settled", folds, layout and sort do not change it. The queue sorts by `since`, oldest first, no `since` last. Ties keep the server's tree order, not a saved manual order.
 - **Skip memory.** The page keeps, in memory, the threads it opened, keyed by thread id plus `since`. The target is the first thread of the queue that is not in the memory. A new Wait of a thread (a new `since`) makes it a target again. When all threads were opened, the target is the top thread, and the memory starts again with that thread only.
-- **Button.** It sits after the filter, with an icon and "Open next". At phone width it shows the icon only, with an `aria-label`. The tooltip is "<phrase> · <title> · <Wait>"; the Wait part is left out when `since` is null. With no target, the button is disabled and the tooltip is "Nothing waits".
+- **Button.** It sits after the filter, with an icon and "Open next". At phone width it shows the icon only, with an `aria-label`. The tooltip is "<phrase> · <title> · <Wait>" ("Run question" or "Paused run" as the phrase of a run item); the Wait part is left out when `since` is null. With no target, the button is disabled and the tooltip is "Nothing waits".
 - **Key `n`.** It is a page key (see **Page keys**). It does nothing with no target.
 - **Opens.** It goes to `t3code://threads/<environmentId>/<threadId>`, the same URL as the row link. It writes nothing to T3.
 
@@ -123,7 +154,7 @@ The flat view lists all threads of all projects in one list. The switch keeps it
 - **Show in tree.** It first unfolds the path to the row and stores the folds: in the tree, the project, the groups and the PR stack on the path; in the flat view with "Group by Status" or "Group by Linear project", the shut section that holds the thread. It then scrolls to the row (instant with reduced motion), and the row flashes for about 1.5 s. When the row is still not visible (the "Needs you" filter, hidden snoozed threads, or a row behind the "+N other threads" button of a flat PR stack, whose open state is local and not saved), the button reads "Hidden in the tree" for a few seconds.
 - **Row buttons.** All row buttons show a pointer cursor; a disabled one keeps the default cursor.
 
-**Triage mode.** A card at the top of the list walks the Open next queue one thread at a time. The queue is the Open next queue.
+**Triage mode.** A card at the top of the list walks the Open next queue one item at a time. The queue is the Open next queue. A Run question or a Paused run has its own card (see "Run questions").
 
 - **Button.** A "Triage" button after "Focus" shows the queue count. The key `t` and the button open and close it. At phone width, the button shows its icon only. With an empty queue it still opens and says "Nothing waits".
 - **Round.** Each open starts a round. The card in hand stays until the user acts, also when the queue changes. A thread that leaves the queue while its card shows gets a dashed "No longer waits" note with a "Next" link. A thread that joins the queue shows as "+K new". "Skip" sends the thread out of the round. Sent, settled and snoozed threads count as done.
@@ -632,11 +663,11 @@ Main checks each payload by hand (types, sizes, a `t3code:`, `https:` or `http:`
 
 ### Needs you
 
-The **Needs you** set is the visible top-level threads with status `needs-input` or `plan-ready`. Settled threads do not count. The page computes it from each tree it gets (the same count as the Needs-you badge in the header) and calls `setNeedsYou`. `since` is the start of the wait, for the menu order: the request time for `needs-input`, and `latestRunCompletedAt` for `plan-ready`.
+The **Needs you** set is the visible top-level threads with status `needs-input` or `plan-ready`, and the **Run questions** and **Paused runs** (see "Run questions"). Settled threads do not count. A run item has `url` (its run page) in place of an environment id, and a `status` of `run-question` or `paused-run`. Its title is the run title, and its Catch-up line is the question title or the first line of the failure. The page computes it from each tree it gets (the same count as the Needs-you badge in the header) and calls `setNeedsYou`. `since` is the start of the wait, for the menu order: the request time for `needs-input`, `latestRunCompletedAt` for `plan-ready`, `askedAt` for a question, and `updatedAt` for a paused run.
 
 ### Up next window
 
-The **Up next window** is a small always-on-top window with the **Open next queue**: one row for each thread, with its Wait, and an "Open next" button. Its title, its top bar and both menu items say "Up next".
+The **Up next window** is a small always-on-top window with the **Open next queue**: one row for each thread, Run question and Paused run, with its Wait, and an "Open next" button. Its title, its top bar and both menu items say "Up next".
 
 - **Page:** `/up-next` on the same server, with its own preload (`up-next-preload.ts`, `window.upNextBridge`). It has no SSE stream, no tree logic and no skip memory.
 - **Data path:** the main page owns the queue, the target and the skip memory. It sends them to main with `setUpNext({ rows, targetId })`. A row holds the id, title, status, phrase, raw status, `since`, project label, issue key, Linear URL and, when the thread has one, its Catch-up (`state`, `did`, `ask`, `options`, `question`). Main checks the payload by hand, stores the last one and sends it to the Up next window. When the window loads, it asks main for the stored list, so it never opens empty while threads wait.
@@ -648,7 +679,7 @@ The **Up next window** is a small always-on-top window with the **Open next queu
 - **On top:** `type: "panel"`, the floating level, on all Spaces and over full-screen apps. It has no Dock or Cmd-Tab entry, and it does not take focus when it shows.
 - **Size and place:** 360×480 at first, resizable, at least 280×160. Main saves them in `up-next.json` and restores them with the same off-screen check as `window.json`. With no saved place, the window sits at the top right of the work area of the screen that holds the cursor.
 - **Close:** the close button hides the window and clears the check in both menus. Cmd-Q quits the app.
-- **Look:** a top bar with "Up next", the count and an "Open next" button (disabled with no target), then one row for each thread: a 28 px top line with the status icon, project icon, issue key, title and Wait. A row with a Catch-up has a second line: "Asks: <ask>", else what the thread did; a skeleton while the call runs; a dashed tag and the raw question when there is no clear ask or the call failed (see DESIGN-SPEC.md › "Up next second line"). The target row has an amber left mark and a tint. With no thread, the list shows "Nothing waits" and "Threads that need you show here." The theme follows the app theme.
+- **Look:** a top bar with "Up next", the count and an "Open next" button (disabled with no target), then one row for each thread: a 28 px top line with the status icon, project icon, issue key, title and Wait. A row with a Catch-up has a second line: "Asks: <ask>", else what the thread did; a skeleton while the call runs; a dashed tag and the raw question when there is no clear ask or the call failed (see DESIGN-SPEC.md › "Up next second line"). A row of a Run question or a Paused run shows a `Workflow` icon (plan color) or a `CirclePause` icon (failed color) in place of the status icon, the workflow name in place of the project icon, the title and the Wait. Its second line is the question title with "Asks: ", or the first line of the failure. A click opens the run page. The target row has an amber left mark and a tint. With no thread, the list shows "Nothing waits" and "Threads that need you show here." The theme follows the app theme.
 
 ### Dock badge
 
@@ -659,12 +690,13 @@ The **Up next window** is a small always-on-top window with the **Open next queu
 
 The page owns the rules. Main shows them, so the mute switch stays in main.
 
-- **Trigger:** a thread enters `needs-input`, `plan-ready` or `failed`. "Enters" means its status in this tree differs from its status in the last tree. A thread that is new in the tree with one of these statuses also enters. No notification for your turn or for PR checks.
+- **Trigger:** a Run question opens, or a run becomes a Paused run: its item key (`id` + `since`) is new in the list. Items have their own baseline: the first tree with a workflows snapshot sends nothing. A paused run that pauses again, or a question asked again, has a new key and notifies again. A thread enters `needs-input`, `plan-ready` or `failed`. "Enters" means its status in this tree differs from its status in the last tree. A thread that is new in the tree with one of these statuses also enters. No notification for your turn or for PR checks.
 - **Baseline:** the first tree after the page loads sends nothing. A tree with `conn` not `up` sends nothing and does not move the baseline.
-- **Grouping:** 1 or 2 threads enter in one tree: one notification per thread. 3 or more: one summary, "N threads need you".
+- **Grouping:** 1 or 2 threads enter in one tree: one notification per thread. 3 or more: one summary, "N need you". Threads and run items count together.
 - **Hold:** when the Catch-up switch is on, the page holds a thread notification until the Catch-up of the thread is `done` or `failed`, for 15 s at most. Then it sends the notification with the Catch-up, or as it is after 15 s. A held notification drops when its thread changes status, settles or leaves the tree. A tree with `conn` not `up` keeps it. A new notification for the same thread replaces the held one. The summary and all notifications with the switch off go out at once. The page reads the switch from `GET /model-pick` and from the answer of `PUT /model-pick`; it holds until the first answer, and a failed read sets the switch off.
 - **Text:** with no Catch-up, title "Needs input", "Plan ready" or "Failed"; body the thread title. With a `done` Catch-up that has an ask, title "<status> · <thread title>"; body "Asks: <ask>" (options as "A or B?"), then what the thread did on a second line. With no clear ask or a `failed` call, the body is the raw question, else what the thread did, else the thread title. The body is plain text.
-- **Replace:** a new notification for a thread closes the earlier one for that thread.
+- **Run text:** title "Run question" or "Run paused"; body the question title or the run title. No Catch-up hold. A click opens the run page.
+- **Replace:** a new notification for a thread closes the earlier one for that thread. A run item has the same rule by its id.
 - **Click:** a thread notification opens `t3code://threads/<environmentId>/<threadId>`. The summary shows and focuses the window.
 - **Mute:** "Mute Notifications" in the app menu and in the menu-bar menu. Off by default, saved in `settings.json`. It stops notifications only, not the badge or the menu. macOS Focus covers Do Not Disturb.
 - Main uses Electron `Notification`, silent off. No per-status or per-project rules.
@@ -674,7 +706,7 @@ The page owns the rules. Main shows them, so the mute switch stays in main.
 - A `Tray` with a template icon and the Needs-you count as its title. No title when the count is 0.
 - A click opens a native menu:
   1. "Open next · <title>" and a separator, only when the page has an Open next target. A click asks the page to open that target, so the item and the page button open the same thread. The page sends the title with `setOpenNext`; `null` hides the item.
-  2. Up to 10 Needs-you threads, the longest wait first (oldest `since`; `null` last). Each item shows the status and the title, and, for a `done` Catch-up with an ask, " — <ask>" (options as "A or B?"). A click opens the thread in T3 Code.
+  2. Up to 10 Needs-you threads, the longest wait first (oldest `since`; `null` last). Each item shows the status ("Run question" or "Run paused" for a run item) and the title, and, for a `done` Catch-up with an ask, " — <ask>" (options as "A or B?"). A click opens the thread in T3 Code, and a run item on its run page.
   3. "+N more… (open tree)" when more than 10, which shows the window.
   4. "Open tree", "Up next" (a check item), "Mute Notifications", "Update available: vX.Y.Z…" when one exists, "Quit".
 - Main builds the menu again on each `setNeedsYou` and each `setOpenNext`.

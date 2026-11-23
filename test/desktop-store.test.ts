@@ -42,6 +42,18 @@ describe("parseNotify", () => {
     ).toEqual([thread, { kind: "summary", count: 3 }]);
     expect(parseNotify([])).toEqual([]);
   });
+  test("round-trips a run event", () => {
+    const run = {
+      kind: "run",
+      id: "q:r:n",
+      status: "run-question",
+      title: "Q",
+      url: "http://t3/workflows?run=r",
+    } as const;
+    expect(parseNotify([{ ...run, extra: 1 }])).toEqual([run]);
+    expect(parseNotify([{ ...run, status: "failed" }])).toBeNull();
+    expect(parseNotify([{ ...run, url: undefined }])).toBeNull();
+  });
   test("rejects bad input", () => {
     const bad: unknown[] = [
       "x",
@@ -117,6 +129,10 @@ describe("parseNeedsYou", () => {
         { ...item, since: null },
       ]),
     ).toEqual([item, { ...item, since: null }]);
+  });
+  test("accepts a run item with its URL", () => {
+    const run = { ...item, status: "paused-run" as const, url: "http://t3/workflows?run=r" };
+    expect(parseNeedsYou([run])).toEqual([run]);
   });
   test("accepts 500 items and rejects 501", () => {
     expect(parseNeedsYou(Array.from({ length: 500 }, () => item))).toHaveLength(500);

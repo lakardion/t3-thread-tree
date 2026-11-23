@@ -106,6 +106,22 @@ describe("trayItems", () => {
     expect(label({ state: "failed" })).toBe("Needs input · a");
     expect(label({ state: "running" })).toBe("Needs input · a");
   });
+  test("a run item uses its own URL and its status title", () => {
+    expect(
+      trayItems([
+        {
+          ...th("Run 1", null, "run-question"),
+          environmentId: "",
+          url: "http://t3/workflows?run=r1",
+          catchUp: { state: "done", ask: "Approve?" },
+        },
+        { ...th("Run 2", null, "paused-run"), environmentId: "", url: "http://t3/workflows?run=r2" },
+      ]),
+    ).toEqual([
+      { label: "Run question · Run 1 — Approve?", url: "http://t3/workflows?run=r1" },
+      { label: "Run paused · Run 2", url: "http://t3/workflows?run=r2" },
+    ]);
+  });
   test("10 threads have no more item, 13 add one that shows the window", () => {
     const many = (n: number) => Array.from({ length: n }, (_, i) => th(String(i), null));
     expect(trayItems(many(10))).toHaveLength(10);

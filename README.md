@@ -30,6 +30,7 @@ _Screenshots use made-up data from `bun run demo`._
 
 - **Catch-up line.** When the Catch-up is on, a row that waits for you or failed shows a line under its title: what the thread did and what it asks, with the options as chips. A thread with no clear ask shows its last question.
 - **Needs you.** The "Needs you" filter keeps only the threads that wait for you, with a count. The browser tab title and the Dock badge show the same count.
+- **Run questions and Paused runs.** A question that a T3 workflow asks you, and a workflow run that a failed step paused, count as Needs you. They show in the Needs-you count, Open next, Triage, the Up next window, the menu-bar list and notifications.
 - **Open next.** The "Open next" button, or the key `n`, opens the thread that has waited longest. Press it again for the next one.
 - **Focus list.** Pin up to three threads to a strip above the tree. The keys `1` to `3` open them.
 - **Find.** Cmd+K (Ctrl+K off macOS) searches all threads by title, issue key, project, branch or PR number.
@@ -42,6 +43,8 @@ _Screenshots use made-up data from `bun run demo`._
 
   <img src="docs/triage-phone.png" alt="Triage mode at phone width" width="300">
 
+- **Answer a Run question in Triage.** The card shows the question and its choices. Pick a choice (click, or the keys `1` to `9`), add a reason if you want, and press Answer. "Talk it through" opens the run's thread. A question with no choices opens in T3.
+- **Resume or cancel a Paused run.** The card shows why the run stopped. Press Resume to run the failed step again. Cancel asks you to confirm first. "Open run in T3" opens the run page.
 - **Looks done.** The "N look done" button shows when threads look finished: no recent run, and all PRs merged or closed, or a Catch-up that says it is done. It opens a list with a checkbox for each thread and the reason. "Settle N" settles the checked threads. A toast lets you undo for 10 seconds.
 
   ![The Looks done dialog with two threads checked](docs/looks-done.png)

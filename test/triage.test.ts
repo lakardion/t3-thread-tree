@@ -33,6 +33,14 @@ describe("cardOf", () => {
     expect(r.done.get("a")).toBe("sent");
   });
 
+  test("a round over mixed ids keeps the run outcomes", () => {
+    const queue = q("t", "q:r:n", "p:r");
+    let r = finish(newRound(queue), "q:r:n", "answered");
+    r = finish(r, "p:r", "cancelled");
+    expect(cardOf(q("t"), r)).toMatchObject({ id: "t", pos: 3, total: 3 });
+    expect([...r.done.values()]).toEqual(["answered", "cancelled"]);
+  });
+
   test("an empty queue is the end", () => {
     expect(cardOf([], newRound([])).id).toBeNull();
   });

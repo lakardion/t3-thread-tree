@@ -6,6 +6,7 @@ import {
   catchUpLines,
   type NeedsYouThread,
   type NotifyStatus,
+  type RunNotifyEvent,
   type ThreadNotifyEvent,
   type UpdateState,
 } from "../shared/desktop.ts";
@@ -44,6 +45,14 @@ export const STATUS_TITLE: Record<NotifyStatus, string> = {
   failed: "Failed",
 };
 
+/** The title of each Needs-you status in the menu bar and in a run notification. */
+const NEEDS_YOU_TITLE: Record<NeedsYouThread["status"], string> = {
+  "needs-input": STATUS_TITLE["needs-input"],
+  "plan-ready": STATUS_TITLE["plan-ready"],
+  "run-question": "Run question",
+  "paused-run": "Run paused",
+};
+
 export const threadUrl = (environmentId: string, id: string) =>
   `t3code://threads/${encodeURIComponent(environmentId)}/${encodeURIComponent(id)}`;
 
@@ -57,6 +66,12 @@ export function notificationText(e: ThreadNotifyEvent): { title: string; body: s
   return { title: `${STATUS_TITLE[e.status]} · ${e.title}`, body };
 }
 
+/** The title and body of a run notification. */
+export const runNotificationText = (e: RunNotifyEvent): { title: string; body: string } => ({
+  title: NEEDS_YOU_TITLE[e.status],
+  body: e.title,
+});
+
 const TRAY_MAX = 10;
 
 /** The menu-bar thread items, longest wait first. `url: null` means "show the window". */
@@ -65,8 +80,8 @@ export function trayItems(threads: NeedsYouThread[]): { label: string; url: stri
   const items: { label: string; url: string | null }[] = sorted.slice(0, TRAY_MAX).map((t) => {
     const ask = catchUpLines(t.catchUp)?.ask;
     return {
-      label: `${STATUS_TITLE[t.status]} · ${t.title}${ask ? ` — ${ask}` : ""}`,
-      url: threadUrl(t.environmentId, t.id),
+      label: `${NEEDS_YOU_TITLE[t.status]} · ${t.title}${ask ? ` — ${ask}` : ""}`,
+      url: t.url ?? threadUrl(t.environmentId, t.id),
     };
   });
   if (sorted.length > TRAY_MAX) items.push({ label: `+${sorted.length - TRAY_MAX} more… (open tree)`, url: null });

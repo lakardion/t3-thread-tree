@@ -1,7 +1,7 @@
 import { prRule } from "../shared/pr-rule.ts";
 import type { ThreadNode } from "../shared/tree.ts";
 
-export type Outcome = "sent" | "settled" | "snoozed";
+export type Outcome = "sent" | "settled" | "snoozed" | "answered" | "resumed" | "cancelled";
 
 /** One walk through the queue. `pinned` is the card in hand. `seen` holds the queue ids at the start. */
 export type Round = { pinned: string | null; skipped: string[]; done: Map<string, Outcome>; seen: Set<string> };

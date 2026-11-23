@@ -75,6 +75,28 @@ export type Thread = {
 
 export type Project = { title: string; repo: string | null };
 
+/** The fields of `WorkflowRunsSnapshot` that the app reads. */
+export type RunsSnapshot = {
+  runs: {
+    runId: string;
+    workflow: string;
+    title: string;
+    status: string;
+    detail: string | null;
+    retired: boolean;
+    resumesAt: string | null;
+    updatedAt: string;
+  }[];
+  questions: {
+    runId: string;
+    name: string;
+    title: string;
+    choices: string[];
+    askedAt: string;
+    thread: { threadId: string; environmentId: string | null } | null;
+  }[];
+};
+
 export type StreamEvent =
   /** `fresh` marks the first snapshot of a connection, which replaces all state. Later snapshot items carry project metadata only. */
   | { kind: "snapshot"; fresh: boolean; threads: Thread[]; projects: [string, Project][] }
@@ -232,6 +254,53 @@ export function decodeItem(raw: unknown): StreamEvent | null {
   return null;
 }
 
+const list = (v: unknown): unknown[] => (Array.isArray(v) ? v : []);
+
+/** Lenient decode of a `workflows.subscribe` snapshot. Entries without their key fields drop out. */
+export function decodeRunsSnapshot(raw: unknown): RunsSnapshot {
+  const s = obj(raw);
+  return {
+    runs: list(s.runs).flatMap((r) => {
+      const o = obj(r);
+      const runId = str(o.runId);
+      return runId
+        ? [
+            {
+              runId,
+              workflow: str(o.workflow) ?? "",
+              title: str(o.title) ?? "",
+              status: str(o.status) ?? "",
+              detail: str(o.detail),
+              retired: o.retired === true,
+              resumesAt: str(o.resumesAt),
+              updatedAt: str(o.updatedAt) ?? "",
+            },
+          ]
+        : [];
+    }),
+    questions: list(s.questions).flatMap((q) => {
+      const o = obj(q);
+      const runId = str(o.runId);
+      const name = str(o.name);
+      const askedAt = str(o.askedAt);
+      if (!runId || !name || !askedAt) return [];
+      const request = obj(o.request);
+      const thread = obj(o.thread);
+      const threadId = str(thread.threadId);
+      return [
+        {
+          runId,
+          name,
+          title: str(request.title) ?? name,
+          choices: list(request.choices).filter((c): c is string => typeof c === "string"),
+          askedAt,
+          thread: threadId ? { threadId, environmentId: str(thread.environmentId) } : null,
+        },
+      ];
+    }),
+  };
+}
+
 export const readEnvironmentId = async (): Promise<string> =>
   (await Bun.file(join(USERDATA, "environment-id")).text()).trim();
 
@@ -250,14 +319,19 @@ function failureText(frame: Obj): string {
   return message ?? JSON.stringify(frame).slice(0, 300);
 }
 
+/** Id of the `workflows.subscribe` request. The unary calls count up from 2. */
+const RUNS_ID = "w";
+
 /**
- * Holds the shell stream. Retries every 3 s while T3 is down or the token is rejected.
+ * Holds the shell stream and the workflows stream. Retries every 3 s while T3 is down or the token is rejected.
  * Each new connection starts with a fresh snapshot.
  */
 export function connectShell(opts: {
   token: () => string | undefined;
   onEvent: (e: StreamEvent) => void;
   onConn: (c: Conn) => void;
+  /** A full workflows snapshot, with the T3 origin. An empty one when the stream ends. */
+  onRuns: (snapshot: RunsSnapshot, origin: string) => void;
 }) {
   let ws: WebSocket | null = null;
   let seq = 1;
@@ -307,23 +381,34 @@ export function connectShell(opts: {
         payload: { omitIdleSubagents: false, omitOlderSettled: false },
         headers: [],
       });
+      send({ _tag: "Request", id: RUNS_ID, tag: "workflows.subscribe", payload: {}, headers: [] });
       ping = setInterval(() => send({ _tag: "Ping" }), 5000);
     };
     sock.onmessage = (ev) => {
       const parsed: unknown = JSON.parse(String(ev.data));
       for (const m of (Array.isArray(parsed) ? parsed : [parsed]).map(obj)) {
         if (m._tag === "Chunk") {
-          report("up", g);
-          for (const v of Array.isArray(m.values) ? m.values : []) {
-            const e = decodeItem(v);
-            if (e?.kind === "snapshot") {
-              e.fresh = fresh;
-              fresh = false;
+          const values = Array.isArray(m.values) ? m.values : [];
+          if (m.requestId === RUNS_ID) {
+            /** Each value is a full snapshot, so the last one wins. */
+            if (values.length > 0) opts.onRuns(decodeRunsSnapshot(values.at(-1)), origin);
+          } else {
+            report("up", g);
+            for (const v of values) {
+              const e = decodeItem(v);
+              if (e?.kind === "snapshot") {
+                e.fresh = fresh;
+                fresh = false;
+              }
+              if (e) opts.onEvent(e);
             }
-            if (e) opts.onEvent(e);
           }
           /** The server sends the next chunk only after an Ack. */
           send({ _tag: "Ack", requestId: m.requestId });
+        } else if (m._tag === "Exit" && m.requestId === RUNS_ID) {
+          /** An older T3 has no workflows. The shell stream goes on. */
+          console.error("[t3] workflows stream ended:", JSON.stringify(m).slice(0, 500));
+          opts.onRuns({ runs: [], questions: [] }, origin);
         } else if (m._tag === "Exit" && typeof m.requestId === "string" && pending.has(m.requestId)) {
           const call = pending.get(m.requestId)!;
           pending.delete(m.requestId);
@@ -375,6 +460,8 @@ export function connectShell(opts: {
   };
 
   return {
+    /** One `workflows.answer`, `workflows.resume` or `workflows.cancel` call. */
+    workflow: (tag: string, payload: unknown): Promise<unknown> => request(tag, payload),
     /** Sends one orchestration command and resolves when T3 accepts it. */
     dispatch: (command: Record<string, unknown>): Promise<void> =>
       request("orchestration.dispatchCommand", { ...command, commandId: crypto.randomUUID() }).then(() => {}),

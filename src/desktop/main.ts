@@ -29,6 +29,7 @@ import {
   fallbackPath,
   installing,
   notificationText,
+  runNotificationText,
   parseRelease,
   pickPort,
   RESET_AFTER_MS,
@@ -160,7 +161,7 @@ const showWindow = () => {
 };
 
 /**
- * The shown notifications by thread id, "" for the summary. The reference keeps the click handler alive.
+ * The shown notifications by thread or run id, "" for the summary. The reference keeps the click handler alive.
  * ponytail: never pruned; holds at most one entry per thread that notified.
  */
 const shown = new Map<string, Notification>();
@@ -172,9 +173,13 @@ function showNotification(e: NotifyEvent) {
     key = e.threadId;
     n = new Notification({ ...notificationText(e), silent: false });
     n.on("click", () => openOutside(threadUrl(e.environmentId, e.threadId)));
+  } else if (e.kind === "run") {
+    key = e.id;
+    n = new Notification({ ...runNotificationText(e), silent: false });
+    n.on("click", () => openOutside(e.url));
   } else {
     key = "";
-    n = new Notification({ title: `${e.count} threads need you`, silent: false });
+    n = new Notification({ title: `${e.count} need you`, silent: false });
     n.on("click", showWindow);
   }
   shown.get(key)?.close();

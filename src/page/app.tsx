@@ -84,6 +84,7 @@ import appIcon from "../../assets/icon.svg" with { type: "text" };
 import type { UpdateState } from "../shared/desktop.ts";
 import { hits } from "../shared/find.ts";
 import type { LocalConfig, LocalState, ModelPick, Offered } from "../shared/model.ts";
+import { isRun, type RunItem } from "../shared/runs.ts";
 import type { CliStatus } from "../shared/send.ts";
 import {
   allThreads,
@@ -109,13 +110,15 @@ import {
   needsYouThreads,
   needsYouTip,
   nextTarget,
+  noMemory,
   notifyEvents,
+  type NotifyMemory,
   onlyNeedsYou,
   openNextQueue,
   releaseHeld,
   remember,
+  runPhrase,
   tabTitle,
-  type Statuses,
   upNextList,
   waits,
   withoutSnoozed,
@@ -848,7 +851,7 @@ function OpenNextButton({
   now,
   open,
 }: {
-  target: ThreadNode | null;
+  target: ThreadNode | RunItem | null;
   title: string | null;
   now: number;
   open: () => void;
@@ -874,7 +877,9 @@ function OpenNextButton({
       </TooltipTrigger>
       <TooltipContent>
         {target
-          ? [target.phrase, title, target.since && ago(target.since, now)].filter(Boolean).join(" · ")
+          ? [isRun(target) ? runPhrase(target) : target.phrase, title, target.since && ago(target.since, now)]
+              .filter(Boolean)
+              .join(" · ")
           : "Nothing waits"}
       </TooltipContent>
     </Tooltip>
@@ -2733,11 +2738,14 @@ function App() {
   };
   const [freeze, setFreeze] = useState<Freeze>();
   const sentNeedsYou = useRef("");
-  const queue = openNextQueue(tree?.projects ?? []);
+  const runs = tree?.runs ?? [];
+  const queue = openNextQueue(tree?.projects ?? [], runs);
   const target = nextTarget(queue, seen);
-  const openQueued = (t: ThreadNode) => {
+  const openQueued = (t: ThreadNode | RunItem) => {
     setSeen(remember(queue, seen, t));
-    location.assign(t.href);
+    /** The desktop window hands a new-window open to the system browser. */
+    if (isRun(t)) window.open(t.href, "_blank", "noopener");
+    else location.assign(t.href);
   };
   const openNext = () => target && openQueued(target);
   const openNextRef = useRef(openNext);
@@ -2776,7 +2784,7 @@ function App() {
 
   useEffect(() => {
     if (!window.desktopBridge || !tree) return;
-    const list = needsYouThreads(tree.projects);
+    const list = needsYouThreads(tree.projects, tree.runs ?? []);
     const key = JSON.stringify(list);
     if (key === sentNeedsYou.current) return;
     sentNeedsYou.current = key;
@@ -2784,18 +2792,18 @@ function App() {
   }, [tree]);
 
   useEffect(() => {
-    const n = tree ? needsYouThreads(tree.projects).length : 0;
+    const n = tree ? needsYouThreads(tree.projects, tree.runs ?? []).length : 0;
     document.title = tabTitle(n);
     iconLink.href = favicon(appIcon, n);
   }, [tree]);
 
-  const lastStatuses = useRef<Statuses | null>(null);
+  const lastNotified = useRef<NotifyMemory>(noMemory);
   const held = useRef<Held>(new Map());
   useEffect(() => {
     if (!window.desktopBridge || !tree) return;
     const bridge = window.desktopBridge;
-    const { events, nextStatuses } = notifyEvents(lastStatuses.current, tree);
-    lastStatuses.current = nextStatuses;
+    const { events, next: memory } = notifyEvents(lastNotified.current, tree);
+    lastNotified.current = memory;
     const started = Date.now();
     const sendNow: typeof events = [];
     for (const e of events) {
@@ -2961,6 +2969,8 @@ function App() {
     void putPick(body).then((saved) => saved !== null && setCatchUpOn(saved));
   };
   const live = new Map((tree?.projects ?? []).flatMap(allThreads).map((t) => [t.id, t]));
+  /** Threads and run items, for Triage. Focus, Skip and Send use `live`, which holds threads only. */
+  const triageLive = new Map<string, ThreadNode | RunItem>([...live, ...runs.map((r) => [r.id, r] as const)]);
   const kept = tree ? pruneFocus(focus, live, tree.conn) : focus;
   if (kept !== focus) setFocus(kept);
   const keptSkip = tree ? pruneSkip(skip, live, tree.conn) : skip;
@@ -2995,7 +3005,7 @@ function App() {
     remove: (id: string) => setFocus((ids) => removeFocus(ids, id)),
   };
   const cancelReplace = useCallback(() => setPending(null), []);
-  const counts = countAttention(tree?.projects ?? []);
+  const counts = countAttention(tree?.projects ?? [], runs);
   const needsTip = needsYouTip(counts);
   const connecting = !tree || tree.conn === "connecting";
   const cfg: Cfg = {
@@ -3236,7 +3246,7 @@ function App() {
   const groupValue = layout === "flat" ? flatMode : treeMode;
   const pickGroupBy = (v: string) => (layout === "flat" ? pickGroup(v as GroupBy) : pickTreeGroup(v as TreeGroup));
   const inner = projects?.flatMap((p) => [p.id, ...foldIds(p)]) ?? [];
-  const tabCount = tree ? needsYouThreads(tree.projects).length : 0;
+  const tabCount = tree ? needsYouThreads(tree.projects, runs).length : 0;
 
   return (
     /** A tooltip covers the row above, so a hoverable one stays open while the pointer moves up. */
@@ -3380,7 +3390,7 @@ function App() {
             {triage && (
               <TriageCard
                 queue={queue}
-                live={live}
+                live={triageLive}
                 now={now}
                 t3cli={t3cli}
                 close={() => setTriage(false)}
