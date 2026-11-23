@@ -15,6 +15,7 @@
     "build:sidecar": "bun run scripts/build-sidecar.ts",
     "build:apple-helper": "mkdir -p dist/sidecar && swiftc -O -target arm64-apple-macos26.4 src/apple-model/main.swift -o dist/sidecar/apple-model",
     "demo": "bun run scripts/demo.ts",
+    "workflows:install": "bun run scripts/install-workflows.ts",
     "lint": "oxlint --deny-warnings --disable-nested-config",
     "fmt": "oxfmt --disable-nested-config",
     "fmt:check": "oxfmt --check --disable-nested-config",

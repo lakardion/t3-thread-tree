@@ -1234,6 +1234,17 @@ The page owns the rules. Main shows them, so the mute switch stays in main.
 
 Each build ticket updates the README for its own part: the "What you get" entry, and Requirements, Setup, Run and "How it works" when they change. Ticket 13 adds the install paths.
 
+## Workflows
+
+- The repo folder `workflows/` holds general workflows: they need only T3, git and `gh`. Each file has one workflow, as `export default workflow(...)`.
+- `bun run workflows:install` installs them in the T3 workflows folder: `T3CODE_WORKFLOWS`, else `~/.t3/workflows/`. It stops when that path is a file.
+  - It links `workflows/` as the subfolder `t3-thread-tree`. T3 does not load a subfolder by itself. A link to another checkout moves to this one. A real folder with that name stops the command.
+  - For each repo file with a name that T3 loads (`/^[A-Za-z0-9_][\w.-]*\.(ts|mts|js|mjs)$/`), it writes a top-level entry file with the same name: one marker comment and `export { default } from "./t3-thread-tree/<name>";`.
+  - It writes no entry when a top-level file with that name exists and is not an exact entry file, or when another top-level file imports `./t3-thread-tree/<name>`. The same workflow in two top-level files is a clash that T3 holds back.
+  - It removes an entry file whose repo file is gone, and a top-level symlink that points into the repo.
+  - A second run changes nothing.
+- T3 reloads only top-level files. After an edit to a repo workflow, the user restarts the T3 server.
+
 ## Check at build
 
 These facts are not confirmed against a real stream. The research used the MCP thread list and SQLite.
