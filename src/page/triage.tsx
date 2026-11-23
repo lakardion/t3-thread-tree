@@ -26,6 +26,7 @@ import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip
 import { cn } from "@/lib/utils";
 
 import { catchUpLines } from "../shared/desktop.ts";
+import { isRun, type RunItem } from "../shared/runs.ts";
 import type { CliStatus, SendError } from "../shared/send.ts";
 import type { ThreadNode } from "../shared/tree.ts";
 import { hasCatchUpLine } from "./attention.ts";
@@ -34,9 +35,11 @@ import { FOCUS_FULL } from "./focus.ts";
 import { Focus } from "./focus.tsx";
 import { ago, stripKey } from "./format.ts";
 import { Hint } from "./key-hints.tsx";
+import { RunCard } from "./run-card.tsx";
 import { CliGate, LastMessage, SendErrorAlert, useLastMessage } from "./send-dialog.tsx";
 import { postSend, postSettle, postSnooze, type Result } from "./send.ts";
 import { STATUS, StatusIcon } from "./status-icon.tsx";
+import { Cap, useTriageKeys } from "./triage-keys.tsx";
 import {
   cardOf,
   chips,
@@ -50,12 +53,6 @@ import {
   type Outcome,
 } from "./triage.ts";
 import { SECTIONS } from "./view.ts";
-
-const Cap = ({ children }: { children: string }) => (
-  <Hint surface="triage" className="-top-2 -right-2">
-    {children}
-  </Hint>
-);
 
 /** The header button: the queue count, the key `t`. It opens even with an empty queue, where the card says so. */
 export function TriageButton({ count, open, toggle }: { count: number; open: boolean; toggle: () => void }) {
@@ -86,26 +83,6 @@ export function TriageButton({ count, open, toggle }: { count: number; open: boo
       <TooltipContent>{count > 0 ? "Go through what waits, one by one" : "Nothing waits"} · t</TooltipContent>
     </Tooltip>
   );
-}
-
-/** Runs `on` for each plain key press while mounted. Pauses with a dialog, menu or Find open, and with a modifier down. */
-function useTriageKeys(on: (e: KeyboardEvent, inField: boolean) => void) {
-  const latest = useRef(on);
-  useEffect(() => {
-    latest.current = on;
-  });
-  useEffect(() => {
-    const onKey = (e: KeyboardEvent) => {
-      if (e.metaKey || e.ctrlKey || e.altKey || e.shiftKey || e.repeat) return;
-      if (document.querySelector("[data-find], [role=dialog], [role=alertdialog], [role=menu], [role=listbox]")) return;
-      const inField =
-        e.target instanceof HTMLElement &&
-        !!e.target.closest("input, textarea, [contenteditable]:not([contenteditable=false])");
-      latest.current(e, inField);
-    };
-    addEventListener("keydown", onKey);
-    return () => removeEventListener("keydown", onKey);
-  }, []);
 }
 
 /** The raw last message. It mounts only while shown, so a card fetches nothing on its own. */
@@ -381,7 +358,12 @@ function End({
       <CheckCheck className="size-5 text-status-done" />
       <span className="text-sm font-semibold">Nothing waits</span>
       <span className="text-xs text-muted-foreground">
-        {n("sent")} sent · {n("settled")} settled · {n("snoozed")} snoozed
+        {[
+          `${n("sent")} sent`,
+          `${n("settled")} settled`,
+          `${n("snoozed")} snoozed`,
+          ...(["answered", "resumed", "cancelled"] as const).flatMap((o) => (n(o) > 0 ? [`${n(o)} ${o}`] : [])),
+        ].join(" · ")}
       </span>
       <div data-slot="triage-end-extra">{extra}</div>
       <div className="flex gap-2">
@@ -407,8 +389,8 @@ export function TriageCard({
   close,
   endExtra,
 }: {
-  queue: ThreadNode[];
-  live: Map<string, ThreadNode>;
+  queue: (ThreadNode | RunItem)[];
+  live: Map<string, ThreadNode | RunItem>;
   now: number;
   t3cli: CliStatus | null;
   close: () => void;
@@ -424,34 +406,51 @@ export function TriageCard({
   if (pinned !== round) setRound(pinned);
   const card = cardOf(queue, round);
   /** A thread that left the tree keeps its last node, so its card can say it no longer waits. */
-  const [kept, setKept] = useState<ThreadNode>();
+  const [kept, setKept] = useState<ThreadNode | RunItem>();
   const node = card.id ? live.get(card.id) : undefined;
   if (node && node !== kept) setKept(node);
   const t = node ?? (kept?.id === card.id ? kept : undefined);
+  const onRun = !!t && isRun(t);
   useEffect(() => {
     const id = card.id;
     /** `reveal` flushes a render, which React forbids inside an effect. */
-    if (id) queueMicrotask(() => void revealRef.current(id));
-  }, [card.id]);
+    if (id && !onRun) queueMicrotask(() => void revealRef.current(id));
+  }, [card.id, onRun]);
 
   return (
     <section aria-label="Triage" className="sticky top-0 z-30 mb-3 bg-background">
       <div className="rounded-lg border bg-card p-3 shadow-sm">
         {card.id && t ? (
-          <Card
-            key={t.id}
-            t={t}
-            gone={card.gone}
-            pos={card.pos}
-            total={card.total}
-            fresh={card.fresh}
-            now={now}
-            t3cli={t3cli}
-            upcoming={card.upcoming.map((id) => live.get(id)?.title || id)}
-            onSkip={() => setRound((r) => skip(r, t.id))}
-            onFinish={(o) => setRound((r) => finish(r, t.id, o))}
-            close={close}
-          />
+          isRun(t) ? (
+            <RunCard
+              key={t.id}
+              r={t}
+              gone={card.gone}
+              pos={card.pos}
+              total={card.total}
+              fresh={card.fresh}
+              now={now}
+              upcoming={card.upcoming.map((id) => live.get(id)?.title || id)}
+              onSkip={() => setRound((r) => skip(r, t.id))}
+              onFinish={(o) => setRound((r) => finish(r, t.id, o))}
+              close={close}
+            />
+          ) : (
+            <Card
+              key={t.id}
+              t={t}
+              gone={card.gone}
+              pos={card.pos}
+              total={card.total}
+              fresh={card.fresh}
+              now={now}
+              t3cli={t3cli}
+              upcoming={card.upcoming.map((id) => live.get(id)?.title || id)}
+              onSkip={() => setRound((r) => skip(r, t.id))}
+              onFinish={(o) => setRound((r) => finish(r, t.id, o))}
+              close={close}
+            />
+          )
         ) : (
           <End
             done={round.done}

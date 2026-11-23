@@ -6,6 +6,7 @@ import type {
   ThreadNotifyEvent,
   UpNext,
 } from "../shared/desktop.ts";
+import { isRun, type RunItem } from "../shared/runs.ts";
 import { allThreads, bySince, type Branch, type Status, type ThreadNode, type Tree } from "../shared/tree.ts";
 import { linearHref } from "./format.ts";
 
@@ -23,9 +24,9 @@ export const hasCatchUpLine = (t: Pick<ThreadNode, "status" | "catchUp">) =>
 export const needsYouTip = (c: Counts): string =>
   [c.needYou > 0 && `${c.needYou} need you`, c.yourTurn > 0 && `${c.yourTurn} your turn`].filter(Boolean).join(", ");
 
-/** The summary counts over all threads of the tree, nested threads included. */
-export function countAttention(projects: Branch[]): Counts {
-  const c: Counts = { needYou: 0, working: 0, yourTurn: 0, stopped: 0 };
+/** The summary counts over all threads of the tree, nested threads included. Each run item needs the user. */
+export function countAttention(projects: Branch[], runs: RunItem[] = []): Counts {
+  const c: Counts = { needYou: runs.length, working: 0, yourTurn: 0, stopped: 0 };
   for (const { status } of projects.flatMap(allThreads)) {
     if (status === "needs-input" || status === "plan-ready") c.needYou++;
     else if (status === "working" || status === "starting" || status === "waiting") c.working++;
@@ -70,64 +71,102 @@ const waiting = (t: ThreadNode): t is ThreadNode & { status: "needs-input" | "pl
 /** True when a thread under `b` waits for the user (needs input or plan ready), settled ones left out. */
 export const waits = (b: Branch): boolean => allThreads(b).some(waiting);
 
-/** The visible threads that wait for the user (needs input or plan ready), settled ones left out. */
-export const needsYouThreads = (projects: Branch[]): NeedsYouThread[] =>
-  projects
+const runStatus = (r: RunItem): "run-question" | "paused-run" =>
+  r.kind === "question" ? "run-question" : "paused-run";
+
+/** What a run item shows as its status phrase. */
+export const runPhrase = (r: RunItem) => (r.kind === "question" ? "Run question" : "Paused run");
+
+/** The Catch-up line of a run item: its `line`, with no model call. */
+const runLine = (r: RunItem): { catchUp?: CatchUpLineData } => ({ catchUp: { state: "done", ask: r.line } });
+
+/** The visible threads that wait for the user (needs input or plan ready), settled ones left out, then the run items. */
+export const needsYouThreads = (projects: Branch[], runs: RunItem[] = []): NeedsYouThread[] => [
+  ...projects
     .flatMap(allThreads)
     .flatMap((t) =>
       waiting(t)
         ? [{ id: t.id, title: t.title, environmentId: envOf(t), since: t.since, status: t.status, ...lineOf(t) }]
         : [],
-    );
+    ),
+  ...runs.map((r) => ({
+    id: r.id,
+    title: r.runTitle,
+    environmentId: "",
+    since: r.since,
+    status: runStatus(r),
+    url: r.href,
+    ...runLine(r),
+  })),
+];
 
-/** The threads "Open next" can open: needs input, plan ready or your turn, not settled, subthreads included. Oldest `since` first, no `since` last, ties in tree order. */
-export const openNextQueue = (projects: Branch[]): ThreadNode[] =>
-  projects
-    .flatMap(allThreads)
-    .filter((t) => !t.settled && needsYou(t.status))
-    .toSorted((a, b) => bySince(a.since, b.since));
+/** The items "Open next" can open: threads that need input, have a plan ready or are your turn (not settled, subthreads included), and run items. Oldest `since` first, no `since` last, ties in tree order. */
+export const openNextQueue = (projects: Branch[], runs: RunItem[] = []): (ThreadNode | RunItem)[] =>
+  [...projects.flatMap(allThreads).filter((t) => !t.settled && needsYou(t.status)), ...runs].toSorted((a, b) =>
+    bySince(a.since, b.since),
+  );
 
 /** The Up next window payload: the queue in order, each row with its project label and Linear URL. */
 export const upNextList = (
   projects: Branch[],
-  queue: ThreadNode[],
-  target: ThreadNode | null,
+  queue: (ThreadNode | RunItem)[],
+  target: ThreadNode | RunItem | null,
   linear: Tree["linear"],
 ): UpNext => {
   const projectOf = new Map(projects.flatMap((p) => allThreads(p).map((t) => [t.id, p.label] as const)));
   return {
-    rows: queue.flatMap((t) =>
-      needsYou(t.status)
+    rows: queue.flatMap((t): UpNext["rows"] =>
+      isRun(t)
         ? [
             {
               id: t.id,
               title: t.title,
-              status: t.status,
-              phrase: t.phrase,
-              raw: t.raw,
+              status: runStatus(t),
+              phrase: runPhrase(t),
+              raw: "",
               since: t.since,
-              project: t.t3Project?.label ?? projectOf.get(t.id) ?? "",
-              key: t.key,
-              linearUrl: t.key ? linearHref(t.key, linear) : null,
-              ...lineOf(t),
+              project: t.workflow,
+              key: null,
+              linearUrl: null,
+              ...runLine(t),
             },
           ]
-        : [],
+        : needsYou(t.status)
+          ? [
+              {
+                id: t.id,
+                title: t.title,
+                status: t.status,
+                phrase: t.phrase,
+                raw: t.raw,
+                since: t.since,
+                project: t.t3Project?.label ?? projectOf.get(t.id) ?? "",
+                key: t.key,
+                linearUrl: t.key ? linearHref(t.key, linear) : null,
+                ...lineOf(t),
+              },
+            ]
+          : [],
     ),
     targetId: target?.id ?? null,
   };
 };
 
-/** A thread stays skipped until its Wait starts again. */
-const seenKey = (t: ThreadNode) => `${t.id} ${t.since}`;
+/** An item stays skipped until its Wait starts again. */
+const seenKey = (t: { id: string; since: string | null }) => `${t.id} ${t.since}`;
 
-/** The first thread not opened yet; when all were opened, the top thread. Null with an empty queue. */
-export const nextTarget = (queue: ThreadNode[], seen: ReadonlySet<string>): ThreadNode | null =>
-  queue.find((t) => !seen.has(seenKey(t))) ?? queue[0] ?? null;
+/** The first item not opened yet; when all were opened, the top item. Null with an empty queue. */
+export const nextTarget = <T extends { id: string; since: string | null }>(
+  queue: T[],
+  seen: ReadonlySet<string>,
+): T | null => queue.find((t) => !seen.has(seenKey(t))) ?? queue[0] ?? null;
 
-/** The memory after opening `t`. When every thread was skipped, the memory starts again with `t` only. */
-export const remember = (queue: ThreadNode[], seen: ReadonlySet<string>, t: ThreadNode): Set<string> =>
-  queue.every((q) => seen.has(seenKey(q))) ? new Set([seenKey(t)]) : new Set(seen).add(seenKey(t));
+/** The memory after opening `t`. When every item was skipped, the memory starts again with `t` only. */
+export const remember = <T extends { id: string; since: string | null }>(
+  queue: T[],
+  seen: ReadonlySet<string>,
+  t: T,
+): Set<string> => (queue.every((q) => seen.has(seenKey(q))) ? new Set([seenKey(t)]) : new Set(seen).add(seenKey(t)));
 
 /** The tab title, with the count of threads that need the user when it is not 0. */
 export const tabTitle = (n: number): string => (n > 0 ? `(${n}) Thread tree` : "Thread tree");
@@ -141,34 +180,55 @@ export const favicon = (svg: string, n: number): string => {
 
 export type Statuses = Map<string, Status>;
 
+/** What the notification rule remembers. `threads`: the last status of each thread. `runs`: the keys of the run items. Each is null until its baseline. */
+export type NotifyMemory = { threads: Statuses | null; runs: Set<string> | null };
+
+export const noMemory: NotifyMemory = { threads: null, runs: null };
+
 const notifies = (s: Status): s is NotifyStatus => s === "needs-input" || s === "plan-ready" || s === "failed";
 
 /**
- * The notifications for the threads that entered needs-input, plan-ready or failed since `last`.
- * The first live tree is the baseline and sends nothing. Settled threads never notify. Three or more threads give one summary.
+ * The notifications for the threads that entered needs-input, plan-ready or failed since `last`,
+ * and for the run items whose key (`id` + `since`) is new. Threads and runs each have a baseline:
+ * the first live tree for threads, the first tree with a workflows snapshot for runs. A baseline sends nothing.
+ * Settled threads never notify. Three or more items give one summary.
  */
-export function notifyEvents(
-  last: Statuses | null,
-  tree: Tree,
-): { events: NotifyEvent[]; nextStatuses: Statuses | null } {
-  if (tree.conn !== "up") return { events: [], nextStatuses: last };
+export function notifyEvents(last: NotifyMemory, tree: Tree): { events: NotifyEvent[]; next: NotifyMemory } {
+  if (tree.conn !== "up") return { events: [], next: last };
   const threads = tree.projects.flatMap(allThreads);
-  const nextStatuses: Statuses = new Map(last ?? []);
-  for (const t of threads) nextStatuses.set(t.id, t.status);
-  if (!last) return { events: [], nextStatuses };
-  const entered = threads.filter(
-    (t): t is ThreadNode & { status: NotifyStatus } => !t.settled && notifies(t.status) && last.get(t.id) !== t.status,
-  );
-  if (entered.length >= 3) return { events: [{ kind: "summary", count: entered.length }], nextStatuses };
-  const events = entered.map((t) => ({
-    kind: "thread" as const,
-    threadId: t.id,
-    environmentId: envOf(t),
-    title: t.title,
-    status: t.status,
-    ...lineOf(t),
-  }));
-  return { events, nextStatuses };
+  const statuses: Statuses = new Map(last.threads ?? []);
+  for (const t of threads) statuses.set(t.id, t.status);
+  const next: NotifyMemory = {
+    threads: statuses,
+    runs: tree.runs ? new Set(tree.runs.map(seenKey)) : last.runs,
+  };
+  const entered = last.threads
+    ? threads.filter(
+        (t): t is ThreadNode & { status: NotifyStatus } =>
+          !t.settled && notifies(t.status) && last.threads?.get(t.id) !== t.status,
+      )
+    : [];
+  const fresh = last.runs && tree.runs ? tree.runs.filter((r) => !last.runs?.has(seenKey(r))) : [];
+  if (entered.length + fresh.length >= 3)
+    return { events: [{ kind: "summary", count: entered.length + fresh.length }], next };
+  const events: NotifyEvent[] = [
+    ...entered.map((t) => ({
+      kind: "thread" as const,
+      threadId: t.id,
+      environmentId: envOf(t),
+      title: t.title,
+      status: t.status,
+      ...lineOf(t),
+    })),
+    ...fresh.map((r) => ({
+      kind: "run" as const,
+      id: r.id,
+      status: runStatus(r),
+      title: r.title,
+      url: r.href,
+    })),
+  ];
+  return { events, next };
 }
 
 /** Thread events held for their Catch-up, by thread id, with the time each one started to wait. */

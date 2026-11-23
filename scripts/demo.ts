@@ -4,10 +4,12 @@ import upNext from "../src/page/up-next.html";
 import { buildLinearTree, buildTree } from "../src/server/build-tree.ts";
 import { findRoutes } from "../src/server/find.ts";
 import { lastMessageRoutes } from "../src/server/last-message.ts";
+import { runItems } from "../src/server/runs.ts";
 import { cliPath, type CliRun, sendService } from "../src/server/send.ts";
 import { settleRoutes } from "../src/server/settle.ts";
 import { settledPage, settledRoutes, settledSignature } from "../src/server/settled.ts";
-import type { Pr, Project, Thread } from "../src/server/t3.ts";
+import type { Pr, Project, RunsSnapshot, Thread } from "../src/server/t3.ts";
+import { workflowRoutes } from "../src/server/workflows.ts";
 import type { LocalConfig, LocalState, ModelPick } from "../src/shared/model.ts";
 import { type CatchUp, parseLabels, type LinearIssue } from "../src/shared/tree.ts";
 
@@ -328,6 +330,77 @@ const projectsFor = (settled: boolean, nest = false, labels: string[] = [], want
     lastMessagesOf: (ids) => new Map(ids.map((id) => [id, lastMessage(id)])),
     linearOf: wantsLinear ? (key) => LINEAR[key] : undefined,
   });
+/** A fake `workflows.subscribe` snapshot: questions with and without choices, and paused runs that wait, that resume alone and that are retired. */
+const LONG_FAIL =
+  "Step `open-pr` failed after 3 attempts: gh: GraphQL: Resource not accessible by integration (createPullRequest).\nThe token in GH_TOKEN lacks the `pull_requests: write` permission for acme/storefront. Retry with a token that has that scope, or open the PR by hand and resume the run so it picks up the existing PR from the branch shop-412-payment-route.";
+const wfRun = (
+  runId: string,
+  title: string,
+  over: Partial<RunsSnapshot["runs"][number]> = {},
+): RunsSnapshot["runs"][number] => ({
+  runId,
+  workflow: "ship-issue",
+  title,
+  status: "waiting",
+  detail: null,
+  retired: false,
+  resumesAt: null,
+  updatedAt: ago(30),
+  ...over,
+});
+const wfAsk = (runId: string, over: Partial<RunsSnapshot["questions"][number]>): RunsSnapshot["questions"][number] => ({
+  runId,
+  name: "approve",
+  title: "Approve?",
+  choices: [],
+  askedAt: ago(20),
+  thread: null,
+  ...over,
+});
+const workflows: RunsSnapshot = {
+  runs: [
+    wfRun("run-1", "Ship SHOP-412 Split the payment step"),
+    wfRun("run-2", "Review PR #2107 Saved cards list", { workflow: "review-pr" }),
+    wfRun("run-3", "Nightly deps bump", { workflow: "nightly-deps" }),
+    wfRun("run-4", "Ship SHOP-420 Apple Pay button", { status: "paused", detail: LONG_FAIL, updatedAt: ago(45) }),
+    wfRun("run-5", "Review PR #2088 Coupon field", {
+      workflow: "review-pr",
+      status: "paused",
+      detail: "Step `review` failed: the agent hit its usage limit.",
+      resumesAt: later(1),
+    }),
+    wfRun("run-6", "Triage bugs from Sentry", {
+      workflow: "triage-bugs",
+      status: "paused",
+      detail: "Step `label` failed: unknown label `p2`.",
+      retired: true,
+      updatedAt: ago(75),
+    }),
+    wfRun("run-7", "Release 4.2", { workflow: "release", status: "completed" }),
+  ],
+  questions: [
+    wfAsk("run-1", {
+      title: "Approve the plan for SHOP-412?",
+      choices: ["Approve", "Revise", "Stop"],
+      askedAt: ago(14),
+      thread: { threadId: "demo-1", environmentId: null },
+    }),
+    wfAsk("run-2", {
+      name: "pick-fixes",
+      title:
+        "The review found 4 problems in PR #2107. Two are in code that the PR did not touch. Which fixes do you want the agent to make before it asks for a re-review?",
+      choices: [
+        "Fix all 4",
+        "Fix only the 2 in this PR",
+        "Fix the null check in SavedCards and skip the rest",
+        "None, request re-review now",
+        "Close the PR",
+      ],
+      askedAt: ago(52),
+    }),
+    wfAsk("run-3", { name: "confirm", title: "Bump react to 19.3?", askedAt: ago(3) }),
+  ],
+};
 const treeFor = (nest: boolean, labels: string[], wantsLinear: boolean) =>
   JSON.stringify({
     conn: process.env.CONN ?? "up",
@@ -336,6 +409,7 @@ const treeFor = (nest: boolean, labels: string[], wantsLinear: boolean) =>
     linearKey: process.env.LINEAR_KEY ?? "ok",
     settled: settledSignature(threads),
     projects: projectsFor(false, nest, labels, wantsLinear),
+    runs: runItems(workflows, "http://127.0.0.1:3773", "demo-env"),
   });
 
 /** In-memory Local model config. `LOCAL` seeds it with that state; unset starts empty. */
@@ -472,6 +546,18 @@ const server = Bun.serve({
         else if (c.type === "thread.unsettle") touch(id, { settledAt: null });
         else touch(id, { snoozedUntil: c.snoozedUntil as string });
         pushes.forEach((push) => push());
+      },
+    }),
+    ...workflowRoutes({
+      call: async (tag, payload) => {
+        const { runId, name } = payload as { runId: string; name?: string };
+        if (tag === "workflows.cancel" && process.env.CANCEL_SLOW === "1") await Bun.sleep(31_000);
+        const run = workflows.runs.find((r) => r.runId === runId);
+        if (tag === "workflows.answer")
+          workflows.questions = workflows.questions.filter((q) => q.runId !== runId || q.name !== name);
+        else if (run) run.status = tag === "workflows.resume" ? "running" : "cancelled";
+        pushes.forEach((push) => push());
+        if (tag === "workflows.cancel" && process.env.CANCEL_SLOW === "1") throw new Error("timed out");
       },
     }),
     ...settledRoutes({

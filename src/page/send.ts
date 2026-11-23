@@ -32,3 +32,11 @@ export const postSend = (threadId: string, message: string) => post("/t3/send", 
 export const postSettle = (threadId: string, settled: boolean) => post("/t3/settle", { threadId, settled });
 
 export const postSnooze = (threadId: string, snoozedUntil: string) => post("/t3/snooze", { threadId, snoozedUntil });
+
+export const postAnswer = (runId: string, name: string, choice: string, reason: string) =>
+  post("/t3/workflows/answer", { runId, name, choice, reason });
+
+export const postResume = (runId: string) => post("/t3/workflows/resume", { runId });
+
+/** A 202 (T3 has not confirmed yet) is `ok`: the next snapshot settles it. */
+export const postCancel = (runId: string) => post("/t3/workflows/cancel", { runId });

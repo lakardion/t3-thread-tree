@@ -46,7 +46,9 @@ export const NeedsYouList = v.pipe(
       title: v.string(),
       environmentId: v.string(),
       since: v.nullable(v.string()),
-      status: v.picklist(["needs-input", "plan-ready"]),
+      status: v.picklist(["needs-input", "plan-ready", "run-question", "paused-run"]),
+      /** The page to open from the menu bar, for a run. A thread opens by `environmentId` and `id`. */
+      url: v.optional(v.string()),
       catchUp: CatchUpLine,
     }),
   ),
@@ -65,7 +67,7 @@ export const UpNextList = v.object({
       v.object({
         id: v.string(),
         title: v.string(),
-        status: v.picklist(["needs-input", "plan-ready", "your-turn"]),
+        status: v.picklist(["needs-input", "plan-ready", "your-turn", "run-question", "paused-run"]),
         phrase: v.string(),
         raw: v.string(),
         since: v.nullable(v.string()),
@@ -95,6 +97,13 @@ export const NotifyList = v.pipe(
         status: v.picklist(["needs-input", "plan-ready", "failed"]),
         catchUp: CatchUpLine,
       }),
+      v.object({
+        kind: v.literal("run"),
+        id: v.string(),
+        status: v.picklist(["run-question", "paused-run"]),
+        title: v.string(),
+        url: v.string(),
+      }),
       v.object({ kind: v.literal("summary"), count: v.pipe(v.number(), v.integer(), v.minValue(1)) }),
     ]),
   ),
@@ -103,6 +112,7 @@ export const NotifyList = v.pipe(
 
 export type NotifyEvent = v.InferOutput<typeof NotifyList>[number];
 export type ThreadNotifyEvent = Extract<NotifyEvent, { kind: "thread" }>;
+export type RunNotifyEvent = Extract<NotifyEvent, { kind: "run" }>;
 export type NotifyStatus = ThreadNotifyEvent["status"];
 
 /** The update state the main process keeps and sends to the page. */

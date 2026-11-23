@@ -37,7 +37,7 @@ A T3 Code project, usually one repo.
 An unsettled top-level thread (any status, snoozed included), or a subagent whose top-level ancestor is active. The default view shows only active threads.
 
 **Needs you**:
-The threads that wait on the user: status needs input or plan ready. The Dock badge, the Needs-you badge in the header and the menu-bar list show this set. A notification fires when a thread enters this set, or fails. The "Needs you" filter also keeps your-turn threads, and the header shows their count next to the Needs-you count.
+The threads, **Run questions** and **Paused runs** that wait on the user. A thread is in the set when its status is needs input or plan ready. The Dock badge, the Needs-you badge in the header and the menu-bar list show this set. A notification fires when a thread enters this set, or fails. The "Needs you" filter also keeps your-turn threads, and the header shows their count next to the Needs-you count.
 _Avoid_: attention, unread
 
 **Context row**:
@@ -48,7 +48,7 @@ A group of the flat view, with "Group by Status", that holds the threads of one 
 _Avoid_: status group, bucket
 
 **Wait**:
-The time since a thread started to wait on the user. It counts from the request for needs input, and from the run completion for plan ready and your turn. A row that waits on the user shows it beside the phrase.
+The time since a thread started to wait on the user. It counts from the request for needs input, and from the run completion for plan ready and your turn. For a **Run question**, it counts from the time the run asked; for a **Paused run**, from the time it paused. A row that waits on the user shows it beside the phrase.
 _Avoid_: age (age is the time since the last update)
 
 **Desktop app**:
@@ -56,7 +56,7 @@ The tree in its own macOS window, with a Dock icon, a Dock badge, notifications 
 _Avoid_: native app, Electron app
 
 **Open next queue**:
-The threads that "Open next" can open: needs input, plan ready or your turn, not settled, subthreads included, oldest **Wait** first. It is wider than **Needs you**, because it has your-turn threads too.
+The items that "Open next" can open: threads with needs input, plan ready or your turn, not settled, subthreads included, plus **Run questions** and **Paused runs**, oldest **Wait** first. It is wider than **Needs you**, because it has your-turn threads too.
 _Avoid_: waiting list, Needs-you list
 
 **Up next window**:
@@ -126,6 +126,26 @@ _Avoid_: tracked label, filter label
 **Label pill**:
 A small mark in a thread row that shows a **Watched label** on one of the row's PRs, for example `ready-for-review`.
 _Avoid_: label tag, label chip
+
+**Workflow**:
+A T3 Code script that chains agent steps, code steps and questions to the user into one durable job. The T3 server loads it from its workflows folder.
+_Avoid_: pipeline, automation, bot
+
+**Run**:
+One execution of a **Workflow**, started from the CLI, a trigger or the page. Its agent steps run in threads that T3 leaves out of its thread lists.
+_Avoid_: job, execution, instance
+
+**Run question**:
+An open question that a **Run** asks the user, with a title and choices. The user answers with one choice and an optional reason. It counts toward **Needs you**.
+_Avoid_: workflow prompt, ask, approval
+
+**Paused run**:
+A **Run** that a failed step stopped and that waits for a person to resume or cancel it. It counts toward **Needs you**. A run that T3 will resume by itself is not a paused run here.
+_Avoid_: failed run, stuck run
+
+**Triage**:
+The card that walks the **Open next queue** one item at a time, where the user acts on each one.
+_Avoid_: inbox, review mode
 
 ## Relationships
 

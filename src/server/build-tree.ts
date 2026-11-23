@@ -102,7 +102,8 @@ const prNode = (p: Thread["prs"][number], labels: Label[]): PrNode => ({
   changedFiles: p.changedFiles,
   labels,
 });
-const hrefOf = (environmentId: string, id: string) =>
+/** The `t3code://` link of a thread. */
+export const hrefOf = (environmentId: string, id: string) =>
   `t3code://threads/${encodeURIComponent(environmentId)}/${encodeURIComponent(id)}`;
 
 /** The details of a thread, without the spawner link, which needs the placement. */

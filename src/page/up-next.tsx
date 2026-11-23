@@ -1,4 +1,4 @@
-import { SkipForward } from "lucide-react";
+import { CirclePause, SkipForward, Workflow } from "lucide-react";
 import { useEffect, useState } from "react";
 import { createRoot } from "react-dom/client";
 
@@ -56,7 +56,8 @@ function SecondLine({ row }: { row: UpNextRow }) {
   const lines = catchUpLines(catchUp);
   let line;
   if (!lines) line = <Skeleton className="h-2.5 w-40" />;
-  else if (lines.ask) line = <span className="truncate">{`Asks: ${lines.ask}`}</span>;
+  else if (lines.ask)
+    line = <span className="truncate">{row.status === "paused-run" ? lines.ask : `Asks: ${lines.ask}`}</span>;
   else
     line = (
       <>
@@ -72,7 +73,7 @@ function SecondLine({ row }: { row: UpNextRow }) {
 function Row({ row, target, now }: { row: UpNextRow; target: boolean; now: number }) {
   const bridge = window.upNextBridge;
   const open = () => bridge?.openThread(row.id);
-  const { linearUrl } = row;
+  const { linearUrl, status } = row;
   return (
     <div
       role="button"
@@ -87,10 +88,20 @@ function Row({ row, target, now }: { row: UpNextRow; target: boolean; now: numbe
       )}
     >
       <div className="flex h-7 min-w-0 items-center gap-1.5">
-        <StatusIcon t={row} now={now} />
-        <span className="flex-none" aria-label={row.project}>
-          <ProjectIcon name={row.project} />
-        </span>
+        {status === "run-question" ? (
+          <Workflow className="size-3 flex-none text-status-plan" aria-label={row.phrase} />
+        ) : status === "paused-run" ? (
+          <CirclePause className="size-3 flex-none text-status-failed" aria-label={row.phrase} />
+        ) : (
+          <StatusIcon t={{ ...row, status }} now={now} />
+        )}
+        {status === "run-question" || status === "paused-run" ? (
+          <span className="max-w-24 flex-none truncate text-[11px] text-muted-foreground">{row.project}</span>
+        ) : (
+          <span className="flex-none" aria-label={row.project}>
+            <ProjectIcon name={row.project} />
+          </span>
+        )}
         {row.key &&
           (linearUrl ? (
             <a
@@ -110,7 +121,16 @@ function Row({ row, target, now }: { row: UpNextRow; target: boolean; now: numbe
         <span className="min-w-0 flex-1 truncate">
           {(row.key ? stripKey(row.title, row.key) : row.title) || row.id}
         </span>
-        <span className={cn(STATUS[row.status].shape, "font-mono text-[12px] tabular-nums")}>
+        <span
+          className={cn(
+            status === "run-question"
+              ? "text-status-plan"
+              : status === "paused-run"
+                ? "text-status-failed"
+                : STATUS[status].shape,
+            "font-mono text-[12px] tabular-nums",
+          )}
+        >
           {row.since ? ago(row.since, now) : ""}
         </span>
       </div>

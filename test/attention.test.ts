@@ -8,6 +8,8 @@ import {
   needsYouTip,
   needsYouThreads,
   type Held,
+  noMemory,
+  type NotifyMemory,
   releaseHeld,
   nextTarget,
   notifyEvents,
@@ -15,11 +17,11 @@ import {
   openNextQueue,
   remember,
   tabTitle,
-  type Statuses,
   upNextList,
   waits,
   withoutSnoozed,
 } from "../src/page/attention.ts";
+import type { RunItem } from "../src/shared/runs.ts";
 import type { Branch, Conn, Status, ThreadNode, Tree } from "../src/shared/tree.ts";
 
 const thread = (id: string, status: Status, children: ThreadNode[] = []): ThreadNode => ({
@@ -48,7 +50,34 @@ const branch = (id: string, threads: ThreadNode[], branches: Branch[] = []): Bra
   branches,
   threads,
 });
-const ids = (ts: ThreadNode[]) => ts.map((t) => t.id);
+const ids = (ts: { id: string }[]) => ts.map((t) => t.id);
+const base0 = { workflow: "flow", runTitle: "Run", href: "http://t3/x" };
+const question = (id: string, since = "2026-11-12T10:00:00.000Z"): RunItem => ({
+  ...base0,
+  kind: "question",
+  id: `q:${id}:ask`,
+  runId: id,
+  title: `Question ${id}`,
+  line: `Question ${id}`,
+  since,
+  href: `http://t3/${id}`,
+  name: "ask",
+  choices: ["Yes", "No"],
+  threadHref: null,
+});
+const paused = (id: string, since = "2026-11-12T10:00:00.000Z"): RunItem => ({
+  ...base0,
+  kind: "paused",
+  id: `p:${id}`,
+  runId: id,
+  runTitle: `Run ${id}`,
+  title: `Run ${id}`,
+  line: "boom",
+  since,
+  href: `http://t3/${id}`,
+  detail: "boom\nmore",
+  retired: false,
+});
 
 describe("countAttention", () => {
   test("buckets the eleven statuses, nested threads included", () => {
@@ -206,16 +235,20 @@ describe("notifyEvents", () => {
     linear: null,
     settled: "",
     projects: [branch("p", threads)],
+    runs: null,
   });
-  const base = (...pairs: [string, Status][]): Statuses => new Map(pairs);
+  const base = (...pairs: [string, Status][]): NotifyMemory => ({
+    threads: new Map<string, Status>(pairs),
+    runs: null,
+  });
 
   test("the first live tree is the baseline, settled threads included", () => {
-    const { events, nextStatuses } = notifyEvents(
-      null,
+    const { events, next } = notifyEvents(
+      noMemory,
       tree("up", [mk("a", "needs-input"), mk("b", "failed", { settled: true })]),
     );
     expect(events).toEqual([]);
-    expect([...(nextStatuses ?? [])]).toEqual([
+    expect([...(next.threads ?? [])]).toEqual([
       ["a", "needs-input"],
       ["b", "failed"],
     ]);
@@ -226,7 +259,7 @@ describe("notifyEvents", () => {
     for (const conn of ["down", "connecting", "no-token", "unauthorized"] as const) {
       const r = notifyEvents(last, tree(conn, [mk("a", "needs-input")]));
       expect(r.events).toEqual([]);
-      expect(r.nextStatuses).toBe(last);
+      expect(r.next).toBe(last);
     }
   });
 
@@ -277,8 +310,50 @@ describe("notifyEvents", () => {
   test("an id that left the tree stays in the baseline", () => {
     const last = base(["a", "failed"]);
     const gone = notifyEvents(last, tree("up", []));
-    expect(gone.nextStatuses?.get("a")).toBe("failed");
-    expect(notifyEvents(gone.nextStatuses, tree("up", [mk("a", "failed")])).events).toEqual([]);
+    expect(gone.next.threads?.get("a")).toBe("failed");
+    expect(notifyEvents(gone.next, tree("up", [mk("a", "failed")])).events).toEqual([]);
+  });
+
+  describe("run items", () => {
+    const withRuns = (runs: RunItem[] | null, threads: ThreadNode[] = []): Tree => ({ ...tree("up", threads), runs });
+
+    test("the first runs snapshot is the baseline, not a burst of events", () => {
+      const first = notifyEvents(noMemory, tree("up", [mk("a", "working")]));
+      const loading = notifyEvents(first.next, withRuns(null, [mk("a", "working")]));
+      expect(loading.events).toEqual([]);
+      expect(loading.next.runs).toBeNull();
+      const loaded = notifyEvents(loading.next, withRuns([question("q1"), paused("p1")], [mk("a", "working")]));
+      expect(loaded.events).toEqual([]);
+      expect(loaded.next.runs?.size).toBe(2);
+    });
+
+    test("a new run item sends one event, the same item again sends none", () => {
+      const last = notifyEvents(noMemory, withRuns([question("q1")])).next;
+      const r = notifyEvents(last, withRuns([question("q1"), paused("p1")]));
+      expect(r.events).toEqual([
+        { kind: "run", id: "p:p1", status: "paused-run", title: "Run p1", url: "http://t3/p1" },
+      ]);
+      expect(notifyEvents(r.next, withRuns([question("q1"), paused("p1")])).events).toEqual([]);
+    });
+
+    test("an item that leaves and returns with a new Wait notifies again", () => {
+      const last = notifyEvents(noMemory, withRuns([paused("p1")])).next;
+      const gone = notifyEvents(last, withRuns([]));
+      const back = notifyEvents(gone.next, withRuns([{ ...paused("p1"), since: "2026-11-12T11:00:00.000Z" }]));
+      expect(back.events).toHaveLength(1);
+    });
+
+    test("a question event carries the question title", () => {
+      const last = notifyEvents(noMemory, withRuns([])).next;
+      const [e] = notifyEvents(last, withRuns([question("q1")])).events;
+      expect(e).toMatchObject({ kind: "run", status: "run-question", title: "Question q1" });
+    });
+
+    test("threads and run items together give one summary at three", () => {
+      const last = notifyEvents(noMemory, withRuns([], [mk("a", "working")])).next;
+      const r = notifyEvents(last, withRuns([question("q1"), paused("p1")], [mk("a", "failed")]));
+      expect(r.events).toEqual([{ kind: "summary", count: 3 }]);
+    });
   });
 });
 
@@ -345,6 +420,50 @@ describe("nextTarget and remember", () => {
   });
   test("is null for an empty queue", () => {
     expect(nextTarget([], new Set())).toBeNull();
+  });
+});
+
+describe("run items", () => {
+  const runs = [paused("p1", "2026-11-12T09:00:00.000Z"), question("q1", "2026-11-12T11:00:00.000Z")];
+  const th = { ...thread("a", "needs-input"), since: "2026-11-12T10:00:00.000Z" };
+
+  test("count in the Needs-you count", () => {
+    expect(countAttention([branch("p", [th])], runs).needYou).toBe(3);
+    expect(countAttention([], runs).needYou).toBe(2);
+  });
+
+  test("needsYouThreads lists them with the run page and the Catch-up line", () => {
+    const [p1, q1] = needsYouThreads([], runs);
+    expect(p1).toEqual({
+      id: "p:p1",
+      title: "Run p1",
+      environmentId: "",
+      since: "2026-11-12T09:00:00.000Z",
+      status: "paused-run",
+      url: "http://t3/p1",
+      catchUp: { state: "done", ask: "boom" },
+    });
+    expect(q1).toMatchObject({ status: "run-question", catchUp: { state: "done", ask: "Question q1" } });
+  });
+
+  test("the queue mixes them with threads by Wait", () => {
+    expect(ids(openNextQueue([branch("p", [th])], runs))).toEqual(["p:p1", "a", "q:q1:ask"]);
+  });
+
+  test("the Up next rows name the workflow and have no Linear key", () => {
+    const rows = upNextList([], openNextQueue([], runs), null, null).rows;
+    expect(rows.map((r) => [r.status, r.phrase, r.project, r.key])).toEqual([
+      ["paused-run", "Paused run", "flow", null],
+      ["run-question", "Run question", "flow", null],
+    ]);
+  });
+
+  test("the skip memory keys an item by id and since", () => {
+    const queue = openNextQueue([], runs);
+    const seen = remember(queue, new Set(), queue[0]);
+    expect(nextTarget(queue, seen)?.id).toBe("q:q1:ask");
+    const moved = [{ ...queue[0], since: "2026-11-13T00:00:00.000Z" }, queue[1]];
+    expect(nextTarget(moved, seen)?.id).toBe("p:p1");
   });
 });
 
@@ -447,8 +566,16 @@ describe("Catch-up on the payloads", () => {
     const tree = [branch("p", [w({ catchUp })])];
     expect(needsYouThreads(tree)[0].catchUp).toEqual(line);
     expect(upNextList(tree, openNextQueue(tree), null, null).rows[0].catchUp).toEqual(line);
-    const live: Tree = { conn: "up", lastUpdate: null, linearKey: "ok", linear: null, settled: "", projects: tree };
-    const [e] = notifyEvents(new Map([["a", "working"]]), live).events;
+    const live: Tree = {
+      conn: "up",
+      lastUpdate: null,
+      linearKey: "ok",
+      linear: null,
+      settled: "",
+      projects: tree,
+      runs: null,
+    };
+    const [e] = notifyEvents({ threads: new Map([["a", "working"]]), runs: null }, live).events;
     expect(e.kind === "thread" && e.catchUp).toEqual(line);
   });
   test("a node with no Catch-up gives no key", () => {
@@ -474,6 +601,7 @@ describe("releaseHeld", () => {
     linear: null,
     settled: "",
     projects: [branch("p", t)],
+    runs: null,
   });
   const node = (over: Partial<ThreadNode> = {}) => ({ ...thread("a", "needs-input"), ...over });
   const cu = (state: "queued" | "running" | "done" | "failed") => ({ state, pick: "claude" as const, did: "d" });

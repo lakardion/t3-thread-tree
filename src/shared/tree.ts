@@ -1,5 +1,6 @@
 /** The placed tree that the backend pushes and the page renders. */
 import type { ModelPick } from "./model.ts";
+import type { RunItem } from "./runs.ts";
 
 export type Status =
   | "needs-input"
@@ -137,6 +138,8 @@ export type Tree = {
   /** Changes when the settled threads change, so the page refetches its Settled list. Empty with none. */
   settled: string;
   projects: Branch[];
+  /** Run questions and Paused runs. Null until the first workflows snapshot, so the page takes no empty list as its baseline. */
+  runs: RunItem[] | null;
 };
 
 export type Linear = { workspace: string; teams: string[] };

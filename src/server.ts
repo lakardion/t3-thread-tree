@@ -19,15 +19,19 @@ import {
   readLocalConfig,
   readPickFile,
 } from "./server/model.ts";
+import { runItems } from "./server/runs.ts";
 import { checkCli, cliPath, sendService } from "./server/send.ts";
 import { settleRoutes } from "./server/settle.ts";
 import { settledPage, settledRoutes, settledSignature } from "./server/settled.ts";
 import { connectShell, readEnvironmentId, type Project, type Thread } from "./server/t3.ts";
 import { parseToken, readToken, tokenResponse, writeToken } from "./server/token.ts";
+import { workflowRoutes } from "./server/workflows.ts";
+import type { RunItem } from "./shared/runs.ts";
 import { allThreads, parseLabels, parseLinear, type Conn, type Tree } from "./shared/tree.ts";
 
 const threads = new Map<string, Thread>();
 const projects = new Map<string, Project>();
+let runs: RunItem[] | null = null;
 let conn: Conn = "connecting";
 let lastUpdate: string | null = null;
 const environmentId = await readEnvironmentId();
@@ -108,6 +112,7 @@ const treeFor = (settled: boolean, nest = false, labels: string[] = [], wantsLin
   linear,
   linearKey: linearSource.state(),
   settled: settledSignature(threads.values()),
+  runs,
   projects: (wantsLinear ? buildLinearTree : buildTree)({
     threads: threads.values(),
     projects,
@@ -188,6 +193,10 @@ const shell = connectShell({
     }
     checkReady();
   },
+  onRuns: (snapshot, origin) => {
+    runs = runItems(snapshot, origin, environmentId);
+    changed();
+  },
   onEvent: (e) => {
     lastUpdate = new Date().toISOString();
     switch (e.kind) {
@@ -254,6 +263,7 @@ const server = Bun.serve({
       if (!readPickFile(pickFile).catchUp) catchUp.clear();
       changed();
     }),
+    ...workflowRoutes({ call: (tag, payload) => shell.workflow(tag, payload) }),
     ...settleRoutes({ dispatch: (c) => shell.dispatch(c), hasThread: (id) => threads.get(id)?.gone === false }),
     ...findRoutes(() => treeFor(true).projects),
     ...settledRoutes({
