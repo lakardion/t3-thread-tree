@@ -8,17 +8,18 @@ import { cn } from "@/lib/utils";
 import { catchUpLines } from "../shared/desktop.ts";
 import type { ThreadNode } from "../shared/tree.ts";
 import { hasCatchUpLine } from "./attention.ts";
+import { Markdown } from "./markdown.tsx";
 import { useLastMessage } from "./send-dialog.tsx";
 import { STATUS } from "./status-icon.tsx";
 
-/** The raw last message of the thread. It mounts only while the tooltip is open, so a row fetches nothing on its own. */
+/** Mounts only while the tooltip is open, so a row fetches nothing on its own. */
 function Source({ t }: { t: ThreadNode }) {
   const text = useLastMessage(t.id, t.updatedAt);
   return (
-    <span className="block max-w-sm text-xs whitespace-pre-wrap">
+    <div className="max-w-sm space-y-1 text-xs">
       <span className="block font-semibold opacity-70">Last message</span>
-      {text === undefined ? "Loading…" : (text ?? "No message.")}
-    </span>
+      {text == null ? text === undefined ? "Loading…" : "No message." : <Markdown text={text} />}
+    </div>
   );
 }
 

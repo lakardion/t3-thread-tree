@@ -628,7 +628,7 @@ A thread row in the tree and the flat list shows a **Catch-up line** under the t
 - **Done with an ask:** what the thread did, then "Asks:" in the status color, then the ask, then each option as a small chip.
 - **Queued or running:** a skeleton bar.
 - **No clear ask or failed call:** a dashed tag, "No clear ask" or "Catch-up failed", then the first line of the raw question in italic and quotes. With no raw question, what the thread did, else the tag alone.
-- **Trust:** a tooltip on the line shows the last message of the thread. The page loads it only when the tooltip opens.
+- **Trust:** a tooltip on the line shows the end of the last message as GitHub Flavored Markdown. The page loads it when the tooltip opens. It skips raw HTML and shows link labels and image descriptions as text.
 
 ## Send message
 
