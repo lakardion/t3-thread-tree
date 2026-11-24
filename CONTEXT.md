@@ -41,7 +41,7 @@ The threads, **Run questions** and **Paused runs** that wait on the user. A thre
 _Avoid_: attention, unread
 
 **Context row**:
-A row that shows only to give context. In a status section, it is a thread whose status is not one of the section's statuses, or a settled thread. In the "Needs you" filter, it is a kept spawner that does not match. A context row shows muted; in a PR stack in a status section, it folds behind "+N other threads". A section count leaves context rows out.
+A row that shows only to give context. In a status section, it is a thread whose status is not one of the section's statuses, or a settled thread. In the "Needs you" filter, it is a kept spawner that does not match. A context row shows muted; in a PR stack or a **Map group** in a status section, it folds behind "+N other threads". A section count leaves context rows out.
 
 **Status section**:
 A group of the flat view, with "Group by Status", that holds the threads of one or more statuses, most urgent first. Its header counts the threads that match it. It folds.
@@ -151,6 +151,26 @@ _Avoid_: failed run, stuck run
 One new **Run** of a **Workflow**, from the page, through the `t3` CLI, after the user confirms it in the start dialog. The page fills the input from where the user starts it: a thread, a PR, a PR stack or the checked threads of **Looks done**.
 _Avoid_: launch, trigger, kick off
 
+**Map key**:
+The folder of a wayfinder map, or its issue URL, read from the first message of a thread (`/wayfinder <map> …` and its other forms). It is internal and never shows.
+_Avoid_: map id, map slug
+
+**Map thread**:
+The thread that launched the topmost threads of a **Map key**, usually the thread that charted the map. It gets the `/t3-handoff` callbacks and heads the **Map group**.
+_Avoid_: charting thread, launcher, root thread
+
+**Map member**:
+A thread that belongs to a map: by its own **Map key**, else by the key of its nearest ancestor on the spawner chain. A thread belongs to one map at most. A **Step thread** is never a member.
+_Avoid_: map thread (that is the head), ticket thread
+
+**Map group**:
+The **Map members** of one map, shown under their **Map thread** on an amber rail. It is one unit in every view and drags as one block.
+_Avoid_: map stack, map section
+
+**Map header**:
+The row that heads a **Map group** when its **Map thread** is settled or missing, or when the map thread heads several maps. It shows the map name and the member count, and is not a thread.
+_Avoid_: map row, map title
+
 **Triage**:
 The card that walks the **Open next queue** one item at a time, where the user acts on each one.
 _Avoid_: inbox, review mode
@@ -160,7 +180,8 @@ _Avoid_: inbox, review mode
 - A **Project** holds many **Issue keys**; an **Issue key** holds one or more **Spawn lineage** trees.
 - A **Thread** has zero or one parent and zero or more **Subthreads**.
 - A **PR stack** can span threads of more than one **Issue key**.
-- A thread in a **PR stack** always shows in its stack block, whatever its **Issue key**, spawner or **Launch nesting**. Review threads are the exception: they stay in Reviews.
+- A thread in a **PR stack** always shows in its stack block, whatever its **Issue key**, spawner or **Launch nesting**. Review threads are the exception: they stay in Reviews. A **Map member** is the other exception: it shows in its **Map group**, with its stack mates in a stack rail inside the group.
+- A **Map thread** heads one **Map group** for each map it launched. A **Map group** can hold the **Map group** of a sub-map, at the place of its **Map thread**.
 - The keyless threads of one **PR stack** share one group, named after the bottom PR (`PR stack #61`).
 
 ## Example dialogue
