@@ -29,6 +29,9 @@ async function post<T extends object = object>(path: string, body: object): Prom
 
 export const postSend = (threadId: string, message: string) => post("/t3/send", { threadId, message });
 
+export const postStart = (projectId: string, title: string, message: string) =>
+  post<{ threadId: string }>("/t3/start", { projectId, title, message });
+
 export const postSettle = (threadId: string, settled: boolean) => post("/t3/settle", { threadId, settled });
 
 export const postMapThread = (id: string, marked: boolean) => post("/map-threads", { id, marked });

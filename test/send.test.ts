@@ -1,7 +1,15 @@
 import { describe, expect, test } from "bun:test";
 import { homedir } from "node:os";
 
-import { cliPath, type CliRun, sendArgs, sendService, startArgs, workflowStartArgs } from "../src/server/send.ts";
+import {
+  cliPath,
+  type CliRun,
+  projectChoices,
+  sendArgs,
+  sendService,
+  startArgs,
+  workflowStartArgs,
+} from "../src/server/send.ts";
 
 describe("argv", () => {
   test("send and start shapes", () => {
@@ -236,5 +244,27 @@ describe("sendService", () => {
       expect((await setup(undefined, false).call("/t3/workflows/start", WF)).status).toBe(503);
       expect((await setup(ok("{}")).call("/t3/workflows/start", WF)).status).toBe(502);
     });
+  });
+});
+
+describe("projects", () => {
+  test("GET /t3/projects serves projectList", async () => {
+    const list = [{ id: "P", label: "app" }];
+    const svc = sendService({
+      cli: Promise.resolve({ available: true, path: "/bin/t3" }),
+      hasThread: () => false,
+      hasProject: () => false,
+      projectList: () => list,
+    });
+    expect(await svc.routes["/t3/projects"].GET().json()).toEqual(list);
+  });
+
+  test("projectChoices sorts by label and puts the root project first", () => {
+    const projects = new Map([
+      ["b", { title: "beta" }],
+      ["z", { title: "zeta", path: "/repo" }],
+      ["a", { title: "alpha" }],
+    ]);
+    expect(projectChoices(projects, "/repo").map((p) => p.id)).toEqual(["z", "a", "b"]);
   });
 });

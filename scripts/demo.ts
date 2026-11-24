@@ -1,11 +1,13 @@
 /** Serves the page with made-up threads, run through the real tree rules. No T3 needed. */
+import { dirname } from "node:path";
+
 import index from "../src/page/index.html";
 import upNext from "../src/page/up-next.html";
 import { buildLinearTree, buildTree } from "../src/server/build-tree.ts";
 import { findRoutes } from "../src/server/find.ts";
 import { lastMessageRoutes } from "../src/server/last-message.ts";
 import { runItems } from "../src/server/runs.ts";
-import { cliPath, type CliRun, sendService } from "../src/server/send.ts";
+import { cliPath, type CliRun, projectChoices, sendService } from "../src/server/send.ts";
 import { settleRoutes } from "../src/server/settle.ts";
 import { settledPage, settledRoutes, settledSignature } from "../src/server/settled.ts";
 import type { Pr, Project, RunsSnapshot, Thread } from "../src/server/t3.ts";
@@ -572,6 +574,7 @@ const sender = sendService({
   cli: Promise.resolve({ available: process.env.T3CLI !== "0", path: cliPath() }),
   hasThread: (id) => threads.some((th) => th.id === id && !th.gone),
   hasProject: (id) => projects.has(id),
+  projectList: () => projectChoices(projects, dirname(import.meta.dir)),
   run: stubCli,
 });
 

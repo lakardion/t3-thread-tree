@@ -161,6 +161,7 @@ import {
 } from "./format.ts";
 import { Hint, useKeyHints } from "./key-hints.tsx";
 import { pageKey } from "./keys.ts";
+import { SetupDialog } from "./local-setup-dialog.tsx";
 import { looksDone, parseSkip, pruneSkip, SKIP_KEY } from "./looks-done.ts";
 import { LooksDoneButton, LooksDoneDialog, UndoToast } from "./looks-done.tsx";
 import { MapGroup } from "./map-group.tsx";
@@ -416,7 +417,16 @@ const LOCAL_FOLD: Record<LocalState, [string, Tone]> = {
 type LocalInfo = { config: LocalConfig | null; state: LocalState };
 
 /** Mounts after the first load, so the fields start from the saved config and the message survives a Save. */
-function LocalModelForm({ config, onSaved }: { config: LocalConfig | null; onSaved: (l: LocalInfo) => void }) {
+function LocalModelForm({
+  config,
+  t3cli,
+  onSaved,
+}: {
+  config: LocalConfig | null;
+  t3cli: CliStatus | null;
+  onSaved: (l: LocalInfo) => void;
+}) {
+  const [setupOpen, setSetupOpen] = useState(false);
   const [baseUrl, setBaseUrl] = useState(config?.baseUrl ?? LOCAL_BASE_URL);
   const [model, setModel] = useState(config?.model ?? "");
   const [saving, setSaving] = useState(false);
@@ -447,10 +457,22 @@ function LocalModelForm({ config, onSaved }: { config: LocalConfig | null; onSav
       }}
     >
       <p className={HINT}>
-        Runs the Catch-up on a model on this machine. Install the Ollama app build (
-        <code>brew install --cask ollama-app</code>), pull the model (<code>ollama pull &lt;model&gt;</code>), and start
-        Ollama.
+        Runs the Catch-up on a model on this machine. An agent thread can install and set it up for you.
       </p>
+      <div>
+        <CliGate t3cli={t3cli}>
+          <Button
+            type="button"
+            variant="outline"
+            size="sm"
+            disabled={t3cli?.available === false}
+            onClick={() => setSetupOpen(true)}
+          >
+            Set up with an agent
+          </Button>
+        </CliGate>
+        <SetupDialog open={setupOpen} onOpenChange={setSetupOpen} />
+      </div>
       <div className="grid gap-1.5">
         <Label htmlFor="local-base-url">Base URL</Label>
         <Input
@@ -1187,6 +1209,7 @@ type PanelProps = LinearProps &
     /** Reloads the offered Model picks. */
     reloadModels: () => void;
     clis: Offered | null;
+    t3cli: CliStatus | null;
     pick: ModelPick | undefined;
     catchUpOn: boolean | undefined;
     setPick: (c: ModelPick) => void;
@@ -1314,6 +1337,7 @@ function SettingsPanel(p: PanelProps) {
             {local && (
               <LocalModelForm
                 config={local.config}
+                t3cli={p.t3cli}
                 onSaved={(l) => {
                   setLocal(l);
                   p.reloadModels();
@@ -3676,6 +3700,7 @@ function App() {
           linearOpen={linearOpen}
           reloadModels={loadModels}
           clis={clis}
+          t3cli={t3cli}
           pick={pick}
           catchUpOn={catchUpOn}
           setPick={pickCli}

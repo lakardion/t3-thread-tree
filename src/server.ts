@@ -1,5 +1,5 @@
 import { homedir } from "node:os";
-import { join } from "node:path";
+import { dirname, join } from "node:path";
 
 import index from "./page/index.html";
 import upNext from "./page/up-next.html";
@@ -22,7 +22,7 @@ import {
   readPickFile,
 } from "./server/model.ts";
 import { runItems } from "./server/runs.ts";
-import { checkCli, cliPath, sendService } from "./server/send.ts";
+import { checkCli, cliPath, projectChoices, sendService } from "./server/send.ts";
 import { settleRoutes } from "./server/settle.ts";
 import { settledPage, settledRoutes, settledSignature } from "./server/settled.ts";
 import {
@@ -364,6 +364,7 @@ const send = sendService({
   cli: t3Cli,
   hasThread: (id) => threads.get(id)?.gone === false,
   hasProject: (id) => projects.has(id),
+  projectList: () => projectChoices(projects, dirname(import.meta.dir)),
 });
 
 const server = Bun.serve({

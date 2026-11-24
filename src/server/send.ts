@@ -76,11 +76,19 @@ const lastLine = (s: string) =>
 
 const field = (out: unknown, name: string) => (out as Record<string, unknown> | null)?.[name];
 
-/** The send routes. `hasThread` and `hasProject` check the live maps. */
+/** The projects a thread can start in, sorted by label. The project whose `path` is `root` comes first. */
+export const projectChoices = (projects: Map<string, { title: string; path?: string }>, root: string) =>
+  [...projects]
+    .map(([id, p]) => ({ id, label: p.title, own: p.path === root }))
+    .toSorted((a, b) => Number(b.own) - Number(a.own) || a.label.localeCompare(b.label))
+    .map(({ id, label }) => ({ id, label }));
+
+/** The send routes. `hasThread` and `hasProject` check the live maps. `projectList` feeds `GET /t3/projects`. */
 export function sendService(o: {
   cli: Promise<CliStatus>;
   hasThread: (id: string) => boolean;
   hasProject: (id: string) => boolean;
+  projectList?: () => { id: string; label: string }[];
   run?: CliRun;
 }) {
   const run = o.run ?? runCli;
@@ -173,6 +181,7 @@ export function sendService(o: {
   return {
     routes: {
       "/t3/cli": { GET: async () => Response.json(await o.cli) },
+      "/t3/projects": { GET: () => Response.json(o.projectList?.() ?? []) },
       "/t3/send": {
         POST: (req: Request) =>
           handle(req, {
