@@ -513,9 +513,17 @@ function prepare(input: BuildInput) {
       placed.push(header(key, `map:${key}`, oldest.t, undefined));
     }
 
-    /** The nearest member of the map above `id`, skipping the head of another map. */
+    /** The nearest member of the map above `id`, skipping the head of another map and the stack mates of `id`. */
     const ancestorIn = (id: string, key: string) =>
-      maps.ancestors(id).find((a) => members.has(a) && keyOf.get(a) === key && anchored(a).length === 0);
+      maps
+        .ancestors(id)
+        .find(
+          (a) =>
+            members.has(a) &&
+            keyOf.get(a) === key &&
+            anchored(a).length === 0 &&
+            (stackIdOf.get(id) === undefined || stackIdOf.get(a) !== stackIdOf.get(id)),
+        );
     const containerOf = (id: string, key: string) => {
       const a = ancestorIn(id, key);
       return a ? nodes.get(a)! : top.get(key)!;

@@ -1712,6 +1712,35 @@ describe("Map groups", () => {
     });
   });
 
+  describe("stack mates that spawned each other", () => {
+    const stack = (own: number) => [
+      pr(own, "created"),
+      ...[10, 11, 12].filter((n) => n !== own).map((n) => pr(n, "stack")),
+    ];
+    const threads = () => [
+      shell("chart", "Wayfinder"),
+      shell("s3", "s3", { pullRequests: stack(12) }),
+      shell("s1", "s1", { pullRequests: stack(10) }),
+      shell("s2", "s2", { pullRequests: stack(11) }),
+      shell("kid", "kid"),
+    ];
+    const spawners = { s1: "chart", s2: "s1", s3: "s2", kid: "s2" };
+    const check = (tree: Branch[]) => {
+      const [head] = loose(tree);
+      expect(titles(head.children)).toEqual(["s1", "s2", "s3"]);
+      expect(head.children.every((c) => c.rail)).toBe(true);
+      expect(titles(head.children[1].children)).toEqual(["kid"]);
+    };
+
+    test("a native key: the mates sit together in stack order, not nested", () => {
+      check(mapped(threads(), { s1: "/m/x", s2: "/m/x", s3: "/m/x" }, spawners));
+    });
+
+    test("a marked map thread: the mates sit together in stack order, not nested", () => {
+      check(build(threads(), spawners, { ...keys({}), marked: new Set(["chart"]) }));
+    });
+  });
+
   describe("marked map threads", () => {
     const marked = (...ids: string[]) => ({ ...keys({}), marked: new Set(ids) });
     const plan = shell("plan", "Plan Interview Mode Work Lanes");

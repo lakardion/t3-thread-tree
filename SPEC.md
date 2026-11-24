@@ -178,7 +178,7 @@ The threads of one wayfinder map show as one **Map group** under their **Map thr
 - A map group shows only while one or more members are visible.
 - **Stack mates.** A keyless non-member in a PR stack with a map member goes into that map's group, in stack order, next to the member. A keyed non-member stays in its key group. In a stack with members of two maps, each member stays in its own map, and keyless non-members go to the map of the lowest member.
 - **Other projects.** A member from another project than the head shows in the group, with the muted project chip, as a step thread does.
-- **Inside a group.** Members nest by spawner chain (a dispatch holds its `start-issue` threads), whatever the launch nesting setting. A settled member is hidden, and its visible children move up to the next visible ancestor. Each list sorts by `createdAt`, oldest first, and a tie goes to the id. Stack mates stay together in stack order.
+- **Inside a group.** Members nest by spawner chain (a dispatch holds its `start-issue` threads), whatever the launch nesting setting. A settled member is hidden, and its visible children move up to the next visible ancestor. Each list sorts by `createdAt`, oldest first, and a tie goes to the id. Stack mates stay together in stack order. Stack mates that spawned each other do not nest. They sit together where the topmost mate sits.
 - **Nested maps.** A sub-map's group nests in the parent's group, at the place of the sub-map's map thread, to any depth. If that map thread is settled, its map header takes that place.
 
 ### Order and drag
