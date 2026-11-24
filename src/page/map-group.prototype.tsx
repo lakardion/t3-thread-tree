@@ -1,24 +1,30 @@
 /**
  * PROTOTYPE, throwaway. How a map group looks in the T3 project tree.
  * One fake map with a stack inside, a dispatch with a member from another project, and a sub-map.
- * Switch with `?variant=A|B|C` and `?map=live|settled|none` (the floating bar, or ← →).
+ * Switch with `?variant=A|B|C`, `?map=live|settled|none` and `?stack=badges|rail|nodes` (the floating bar, or ← →).
+ *
+ * Stack inside the map: `badges` keeps the 1/2 badges on plain rows; `rail` boxes the stack mates in a small stack
+ * rail inside the group; `nodes` puts numbered PR nodes on the rows, with no box.
  *
  * A Stack box: a dashed box like the PR stack rail holds the map thread row and its members on a dashed line.
  * B Map rail: no box. A map node sits left of the map thread row, and a solid colored rail drops from it.
  * C Tab card: a tinted card with a map tab on its top edge. Members indent as subthreads, with no line.
  */
-import { ChevronDown, ChevronLeft, ChevronRight, ExternalLink, Map as MapIcon } from "lucide-react";
+import { ChevronDown, ChevronLeft, ChevronRight, ExternalLink, Layers, Map as MapIcon } from "lucide-react";
 import { useEffect, useState, useSyncExternalStore, type ComponentType, type ReactNode } from "react";
 
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
 
 import type { Branch, Status, ThreadNode } from "../shared/tree.ts";
+import { prTone } from "./format.ts";
 
 /* ---------- fake data ---------- */
 
 type MapState = "live" | "settled" | "none";
 const MAP_STATES: MapState[] = ["live", "settled", "none"];
+type StackLook = "badges" | "rail" | "nodes";
+const STACK_LOOKS: StackLook[] = ["badges", "rail", "nodes"];
 
 type Item = { kind: "thread"; t: ThreadNode } | { kind: "map"; m: FakeMap };
 type FakeMap = { name: string; folder: string; head: ThreadNode; items: Item[] };
@@ -72,7 +78,13 @@ function fixture(s: ThreadNode): FakeMap {
           prs: pr,
         }),
       },
-      { kind: "thread", t: node(s, "mate", "Rail colors follow-up", "working", { stack: { pos: 2, total: 2 } }) },
+      {
+        kind: "thread",
+        t: node(s, "mate", "Rail colors follow-up", "working", {
+          stack: { pos: 2, total: 2 },
+          prs: pr.map((p) => ({ ...p, n: p.n + 1, draft: true })),
+        }),
+      },
       {
         kind: "thread",
         t: node(s, "dispatch", "Implement map groups", "working", {
@@ -102,7 +114,7 @@ const count = (m: FakeMap): number =>
 const MAP_TONE = "text-amber-600 dark:text-amber-400";
 
 type Row = ComponentType<{ t: ThreadNode; chip?: string; inStack?: boolean; nested?: boolean }>;
-type Ctx = { Row: Row; state: MapState };
+type Ctx = { Row: Row; state: MapState; stack: StackLook };
 type Look = (p: { m: FakeMap; c: Ctx; depth: number }) => ReactNode;
 
 /** The head is the map thread row, unless the map thread is settled or missing. Only the top map takes `state`. */
@@ -155,14 +167,83 @@ const Header = ({
   </div>
 );
 
-const Members = ({ m, c, depth, Look }: { m: FakeMap; c: Ctx; depth: number; Look: Look }) =>
-  m.items.map((i) =>
-    i.kind === "thread" ? (
-      <c.Row key={i.t.id} t={i.t} nested />
-    ) : (
-      <Look key={i.m.folder} m={i.m} c={c} depth={depth + 1} />
-    ),
+/** A numbered PR node left of a stack mate row, colored by PR state. */
+const PrNode = ({ t, first, last }: { t: ThreadNode; first: boolean; last: boolean }) => {
+  const color = prTone(t.prs[0]);
+  const line = `color-mix(in oklch, ${color} 45%, transparent)`;
+  return (
+    <span aria-hidden className="pointer-events-none absolute inset-y-0 left-0 w-5">
+      {!first && <span className="absolute top-0 left-[9px] h-[18px] w-0.5" style={{ background: line }} />}
+      {!last && <span className="absolute top-[18px] bottom-0 left-[9px] w-0.5" style={{ background: line }} />}
+      <span
+        className="absolute top-[18px] left-px flex size-[18px] -translate-y-1/2 items-center justify-center rounded-full text-[9px] font-bold text-background"
+        style={{ background: color }}
+      >
+        {t.stack?.pos}
+      </span>
+    </span>
   );
+};
+
+const StackRows = ({ run, c }: { run: ThreadNode[]; c: Ctx }) => {
+  const rows = run.map((t, i) => (
+    <li key={t.id} className="relative list-none pl-6">
+      <PrNode t={t} first={i === 0} last={i === run.length - 1} />
+      <ul className="m-0 list-none p-0">
+        <c.Row t={t} inStack />
+      </ul>
+    </li>
+  ));
+  if (c.stack === "nodes") return rows;
+  return (
+    <li className="my-1 list-none rounded-[10px] border border-dashed border-border">
+      <div className="flex h-7 items-center gap-2 px-2 text-xs text-muted-foreground">
+        <Layers className="size-3.5" aria-label={`PR stack · ${run.length} PRs`} />
+        {run.map((t, i) => (
+          <span key={t.id} className="inline-flex items-center">
+            {i > 0 && <span className="h-0.5 w-4" style={{ background: prTone(t.prs[0]) }} />}
+            <span
+              className={cn(
+                "inline-flex items-center gap-1 rounded-full border px-1.5 py-px font-mono text-[11px]",
+                t.prs[0]?.draft && "border-dashed",
+              )}
+              style={{ borderColor: prTone(t.prs[0]) }}
+            >
+              <span className="size-1.5 rounded-full" style={{ background: prTone(t.prs[0]) }} />
+              {`${t.stack?.pos}/${t.stack?.total}`}
+              {t.prs[0] && ` · #${t.prs[0].n}`}
+            </span>
+          </span>
+        ))}
+      </div>
+      <ul className="m-0 list-none p-0 pb-1 pl-1">{rows}</ul>
+    </li>
+  );
+};
+
+function Members({ m, c, depth, Look }: { m: FakeMap; c: Ctx; depth: number; Look: Look }) {
+  const out: ReactNode[] = [];
+  for (let i = 0; i < m.items.length; i++) {
+    const it = m.items[i];
+    if (it.kind === "map") {
+      out.push(<Look key={it.m.folder} m={it.m} c={c} depth={depth + 1} />);
+      continue;
+    }
+    if (!it.t.stack || c.stack === "badges") {
+      out.push(<c.Row key={it.t.id} t={it.t} nested />);
+      continue;
+    }
+    const run: ThreadNode[] = [];
+    for (let j = i; j < m.items.length; j++) {
+      const x = m.items[j];
+      if (x.kind !== "thread" || !x.t.stack) break;
+      run.push(x.t);
+    }
+    i += run.length - 1;
+    out.push(<StackRows key={`stack:${run[0].id}`} run={run} c={c} />);
+  }
+  return out;
+}
 
 /* ---------- A: Stack box ---------- */
 
@@ -288,6 +369,10 @@ const useVariant = (): Variant => {
   const v = useSyncExternalStore(subscribe, () => param("variant"));
   return KEYS.includes(v as Variant) ? (v as Variant) : "A";
 };
+const useStackLook = (): StackLook => {
+  const v = useSyncExternalStore(subscribe, () => param("stack"));
+  return STACK_LOOKS.includes(v as StackLook) ? (v as StackLook) : "badges";
+};
 const useMapState = (): MapState => {
   const v = useSyncExternalStore(subscribe, () => param("map"));
   return MAP_STATES.includes(v as MapState) ? (v as MapState) : "live";
@@ -305,15 +390,17 @@ const firstThread = (bs: Branch[]): ThreadNode | undefined => {
 export function MapGroupPrototype({ Row, projects }: { Row: Row; projects: Branch[] }) {
   const variant = useVariant();
   const state = useMapState();
+  const stack = useStackLook();
   const sample = firstThread(projects);
   if (!sample) return null;
   const Look = LOOKS[variant];
-  return <Look key={`${variant}${state}`} m={fixture(sample)} c={{ Row, state }} depth={0} />;
+  return <Look key={`${variant}${state}${stack}`} m={fixture(sample)} c={{ Row, state, stack }} depth={0} />;
 }
 
 export function MapGroupSwitcher() {
   const variant = useVariant();
   const state = useMapState();
+  const stack = useStackLook();
   const go = (d: number) => setParam("variant", KEYS[(KEYS.indexOf(variant) + d + KEYS.length) % KEYS.length]);
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
@@ -344,6 +431,18 @@ export function MapGroupSwitcher() {
         <option value="live">map thread live</option>
         <option value="settled">map thread settled</option>
         <option value="none">no map thread</option>
+      </select>
+      <select
+        aria-label="Stack look"
+        className="rounded-full bg-background px-2 py-0.5 text-foreground"
+        value={stack}
+        onChange={(e) => setParam("stack", e.target.value)}
+      >
+        {STACK_LOOKS.map((k) => (
+          <option key={k} value={k}>
+            stack: {k}
+          </option>
+        ))}
       </select>
     </div>
   );
