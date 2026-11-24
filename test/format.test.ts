@@ -176,6 +176,11 @@ describe("foldIds", () => {
     expect(foldIds(p)).toEqual(["Reviews", "SHOP-1", "rail:s1", "No issue key"]);
     expect(groupIds(nested)).toEqual(["Reviews", "SHOP-1"]);
   });
+  test("a stack rail inside a group has its fold id", () => {
+    const m = b("lm:m", [], [b("WEB-1", [thread("WEB-1")], [], "s1"), b("WEB-2", [thread("WEB-2")], [], "s1")]);
+    expect(foldIds(b("lp:x", [], [m]))).toEqual(["lm:m", "rail:s1"]);
+    expect(groupIds(m)).toEqual(["lm:m", "rail:s1"]);
+  });
   test("a group that folds into one thread has no fold id", () => {
     expect(groupIds(b("SHOP-1", [thread("SHOP-1")]))).toEqual([]);
   });

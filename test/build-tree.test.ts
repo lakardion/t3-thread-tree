@@ -932,6 +932,9 @@ describe("buildLinearTree", () => {
     expect(ids(buildL([shell("a", "SHOP-1 alpha")], answers))).toEqual(["lp:alpha"]);
   });
 
+  /** The thread titles of a branch: its key groups first, then its own threads. */
+  const rows = (b: Branch) => [...b.branches.flatMap((g) => titles(g.threads)), ...titles(b.threads)];
+
   const stackRaws = () => [
     shell("s2", "WEB-2 two", { pullRequests: [pr(11, "created"), pr(10, "stack")] }),
     shell("o", "WEB-9 other"),
@@ -941,7 +944,25 @@ describe("buildLinearTree", () => {
   test("stack mates sit together in stack order inside a milestone", () => {
     const m = ms("m", "2026-12-04");
     const tree = buildL(stackRaws(), { "WEB-1": issue("x", m), "WEB-2": issue("x", m), "WEB-9": issue("x", m) });
-    expect(titles(tree[0].branches[0].threads)).toEqual(["WEB-1 one", "WEB-2 two", "WEB-9 other"]);
+    const [lm] = tree[0].branches;
+    expect(lm.branches.map((g) => [g.id, g.label, g.stack, titles(g.threads)])).toEqual([
+      ["lm:m:s10:WEB-1", "WEB-1", { id: "s10", total: 2, base: null }, ["WEB-1 one"]],
+      ["lm:m:s10:WEB-2", "WEB-2", { id: "s10", total: 2, base: null }, ["WEB-2 two"]],
+    ]);
+    expect(titles(lm.threads)).toEqual(["WEB-9 other"]);
+  });
+
+  test("a stack mate with no Linear project sits in No project, in a key group with the rail", () => {
+    const tree = buildL(stackRaws().slice(0, 1).concat(stackRaws().slice(2)), {
+      "WEB-1": issue(null),
+      "WEB-2": issue(null),
+    });
+    expect(ids(tree)).toEqual(["lf:none"]);
+    expect(tree[0].branches.map((g) => [g.id, g.stack?.id, titles(g.threads)])).toEqual([
+      ["lf:none:s10:WEB-1", "s10", ["WEB-1 one"]],
+      ["lf:none:s10:WEB-2", "s10", ["WEB-2 two"]],
+    ]);
+    expect(tree[0].threads).toEqual([]);
   });
 
   test("a stack stays whole in the milestone of its lowest member", () => {
@@ -951,7 +972,7 @@ describe("buildLinearTree", () => {
       "WEB-9": issue("x"),
     });
     expect(ids(tree)).toEqual(["lp:x"]);
-    expect(tree[0].branches.map((b) => titles(b.threads))).toEqual([["WEB-1 one", "WEB-2 two"], ["WEB-9 other"]]);
+    expect(tree[0].branches.map(rows)).toEqual([["WEB-1 one", "WEB-2 two"], ["WEB-9 other"]]);
   });
 
   test("a stack is placed by its lowest member that has a key", () => {
@@ -964,7 +985,7 @@ describe("buildLinearTree", () => {
       { "WEB-2": issue(null), "WEB-3": issue("x") },
     );
     expect(ids(tree)).toEqual(["lf:none"]);
-    expect(titles(tree[0].threads)).toEqual(["one", "WEB-2 two", "WEB-3 three"]);
+    expect(rows(tree[0])).toEqual(["one", "WEB-2 two", "WEB-3 three"]);
   });
 
   test("keyless stack threads sit together in the loose rows", () => {
@@ -973,7 +994,10 @@ describe("buildLinearTree", () => {
       shell("o", "other"),
       shell("s1", "one", { pullRequests: [pr(10, "created"), pr(11, "stack")] }),
     ]);
-    expect(titles(tree[0].threads)).toEqual(["one", "two", "other"]);
+    expect(tree[0].branches.map((g) => [g.label, g.stack?.id, titles(g.threads)])).toEqual([
+      ["PR stack #10", "s10", ["one", "two"]],
+    ]);
+    expect(titles(tree[0].threads)).toEqual(["other"]);
   });
 
   test("a keyless thread nests under a keyless spawner, not under a keyed one", () => {
@@ -1028,9 +1052,10 @@ describe("buildLinearTree", () => {
       {},
       { s1: "p" },
     );
-    expect(titles(tree[0].threads)).toEqual(["parent", "one", "two"]);
+    expect(titles(tree[0].threads)).toEqual(["parent"]);
+    expect(titles(tree[0].branches[0].threads)).toEqual(["one", "two"]);
     expect(tree[0].threads[0].children).toEqual([]);
-    expect(tree[0].threads[1].detail.launchedBy?.title).toBe("parent");
+    expect(tree[0].branches[0].threads[0].detail.launchedBy?.title).toBe("parent");
   });
 
   test("a keyless thread does not nest under a keyless review", () => {
@@ -1074,7 +1099,8 @@ describe("buildLinearTree", () => {
     ];
     const answers = Object.fromEntries(["WEB-8", "WEB-2", "WEB-9", "WEB-1", "WEB-7"].map((k) => [k, issue("x", m)]));
     const tree = buildL(raws, answers);
-    expect(titles(tree[0].branches[0].threads)).toEqual(["WEB-8 o0", "WEB-1 one", "WEB-2 two", "WEB-9 o1", "WEB-7 o2"]);
+    expect(rows(tree[0].branches[0])).toEqual(["WEB-1 one", "WEB-2 two", "WEB-8 o0", "WEB-9 o1", "WEB-7 o2"]);
+    expect(titles(tree[0].branches[0].threads)).toEqual(["WEB-8 o0", "WEB-9 o1", "WEB-7 o2"]);
   });
 
   test("the T3 tree stays free of Linear fields", () => {

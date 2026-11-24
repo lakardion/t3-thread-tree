@@ -36,14 +36,14 @@ const byNewest = <T>(items: T[], by: (t: T) => number): T[] =>
  * Sorts an arranged tree by recency. Projects keep their order. In a project, Reviews stays first and No issue key last;
  * the groups between them, and the threads in each group, sort newest first. A stack run moves as one block and keeps
  * its inner order. Subthreads keep their order. Ties keep the input order. The input is not changed.
- * A Linear tree keeps its project and milestone order and sorts only the threads of each group.
+ * A Linear tree keeps its project, milestone and PR stack order and sorts only the threads of each milestone and of the top-level group.
  */
 export function sortTree(projects: Branch[]): Branch[] {
   if (isLinear(projects))
     return projects.map((p) =>
       isLinearReviews(p)
         ? { ...p, branches: byNewest(p.branches.map(threadsSorted), newestRun) }
-        : { ...threadsSorted(p), branches: p.branches.map(threadsSorted) },
+        : { ...threadsSorted(p), branches: isFallback(p) ? p.branches : p.branches.map(threadsSorted) },
     );
   return projects.map((p) => {
     const keys = stackRuns(p.branches.filter((b) => !isPinned(b)));
@@ -83,6 +83,13 @@ export type FlatItem =
       date?: string | null;
     };
 
+const stackUnit = (run: Branch[], project: Branch): FlatUnit => ({
+  kind: "stack",
+  id: `stack:${project.id}:${run[0].stack!.id}`,
+  run,
+  project,
+});
+
 const threadUnit = (t: ThreadNode, project: Branch, review: boolean): FlatUnit => ({
   kind: "thread",
   id: `t:${t.id}`,
@@ -94,21 +101,24 @@ const threadUnit = (t: ThreadNode, project: Branch, review: boolean): FlatUnit =
 /**
  * The units of an arranged tree, in order: per project, the Reviews threads, then each stack run (one unit) or
  * group thread, then the No issue key threads. Subthreads stay in `t.children`.
- * A Linear top-level group lists the threads of each milestone (or Reviews key subgroup) in order, then its own
- * threads. Linear milestones carry no `stack`, so the Linear path does not use `stackRuns`.
+ * A Linear top-level group walks each branch in order: a stack run (one unit), other subgroups, then the branch's
+ * threads. Its own threads come last.
  */
 export function flatten(projects: Branch[]): FlatUnit[] {
   return projects.flatMap((p) => {
-    if (p.linear)
-      return [...p.branches.flatMap((b) => b.threads), ...p.threads].map((t) => threadUnit(t, p, isLinearReviews(p)));
+    if (p.linear) {
+      const walk = (b: Branch): FlatUnit[] => [
+        ...stackRuns(b.branches).flatMap((run): FlatUnit[] => (run[0].stack ? [stackUnit(run, p)] : run.flatMap(walk))),
+        ...b.threads.map((t) => threadUnit(t, p, isLinearReviews(p))),
+      ];
+      return walk(p);
+    }
     return [
       ...p.branches
         .filter((b) => b.label === REVIEWS)
         .flatMap((r) => r.branches.flatMap((g) => g.threads.map((t) => threadUnit(t, p, true)))),
       ...stackRuns(p.branches.filter((b) => !isPinned(b))).flatMap((run): FlatUnit[] =>
-        run[0].stack
-          ? [{ kind: "stack", id: `stack:${p.id}:${run[0].stack.id}`, run, project: p }]
-          : run.flatMap((g) => g.threads.map((t) => threadUnit(t, p, false))),
+        run[0].stack ? [stackUnit(run, p)] : run.flatMap((g) => g.threads.map((t) => threadUnit(t, p, false))),
       ),
       ...p.branches.filter((b) => b.label === NO_KEY).flatMap((g) => g.threads.map((t) => threadUnit(t, p, false))),
     ];
@@ -225,7 +235,7 @@ export function linearSections(projects: Branch[], units: FlatUnit[]): Section[]
         label,
         statuses: null,
         date,
-        units: units.filter((u) => u.kind === "thread" && held.has(u.t.id)),
+        units: units.filter((u) => placing(u).some((t) => held.has(t.id))),
       };
     })
     .filter((s) => s.units.length > 0);
