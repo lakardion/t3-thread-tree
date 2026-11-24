@@ -236,6 +236,9 @@ describe("notifyEvents", () => {
     settled: "",
     projects: [branch("p", threads)],
     runs: null,
+    workflows: null,
+    workflowScan: null,
+    t3Origin: null,
   });
   const base = (...pairs: [string, Status][]): NotifyMemory => ({
     threads: new Map<string, Status>(pairs),
@@ -574,6 +577,9 @@ describe("Catch-up on the payloads", () => {
       settled: "",
       projects: tree,
       runs: null,
+      workflows: null,
+      workflowScan: null,
+      t3Origin: null,
     };
     const [e] = notifyEvents({ threads: new Map([["a", "working"]]), runs: null }, live).events;
     expect(e.kind === "thread" && e.catchUp).toEqual(line);
@@ -602,6 +608,9 @@ describe("releaseHeld", () => {
     settled: "",
     projects: [branch("p", t)],
     runs: null,
+    workflows: null,
+    workflowScan: null,
+    t3Origin: null,
   });
   const node = (over: Partial<ThreadNode> = {}) => ({ ...thread("a", "needs-input"), ...over });
   const cu = (state: "queued" | "running" | "done" | "failed") => ({ state, pick: "claude" as const, did: "d" });

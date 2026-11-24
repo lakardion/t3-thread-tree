@@ -147,6 +147,10 @@ _Avoid_: workflow prompt, ask, approval
 A **Run** that a failed step stopped and that waits for a person to resume or cancel it. It counts toward **Needs you**. A run that T3 will resume by itself is not a paused run here.
 _Avoid_: failed run, stuck run
 
+**Start workflow**:
+One new **Run** of a **Workflow**, from the page, through the `t3` CLI, after the user confirms it in the start dialog. The page fills the input from where the user starts it: a thread, a PR, a PR stack or the checked threads of **Looks done**.
+_Avoid_: launch, trigger, kick off
+
 **Triage**:
 The card that walks the **Open next queue** one item at a time, where the user acts on each one.
 _Avoid_: inbox, review mode

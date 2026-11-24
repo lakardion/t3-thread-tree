@@ -1,6 +1,7 @@
 /** The placed tree that the backend pushes and the page renders. */
 import type { ModelPick } from "./model.ts";
 import type { RunItem } from "./runs.ts";
+import type { Workflow } from "./workflow-start.ts";
 
 export type Status =
   | "needs-input"
@@ -118,6 +119,8 @@ export type Branch = {
   label: string;
   /** Project branches only: `owner/name`. */
   repo?: string;
+  /** Project branches only: the workspace root. */
+  path?: string;
   /** Key groups in a PR stack. Adjacent groups with the same `id` share one rail. */
   stack?: { id: string; total: number; base: string | null };
   /** Top-level and milestone branches of the Linear tree. `url`: project link. `date`: milestone target date. */
@@ -156,6 +159,12 @@ export type Tree = {
   projects: Branch[];
   /** Run questions and Paused runs. Null until the first workflows snapshot, so the page takes no empty list as its baseline. */
   runs: RunItem[] | null;
+  /** The workflows that the server can start. Null until the first workflows snapshot. */
+  workflows: Workflow[] | null;
+  /** Why the server cannot read the workflow files. Null when it can, or has not tried. */
+  workflowScan: string | null;
+  /** The T3 web origin. Null until the first workflows snapshot. */
+  t3Origin: string | null;
 };
 
 export type Linear = { workspace: string; teams: string[] };

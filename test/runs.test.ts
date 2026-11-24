@@ -1,7 +1,7 @@
 import { describe, expect, test } from "bun:test";
 
 import { runItems } from "../src/server/runs.ts";
-import { decodeRunSteps, decodeRunsSnapshot, type RunsSnapshot } from "../src/server/t3.ts";
+import { decodeItem, decodeRunSteps, decodeRunsSnapshot, type RunsSnapshot } from "../src/server/t3.ts";
 import { isRun } from "../src/shared/runs.ts";
 
 const run = (runId: string, over: Partial<RunsSnapshot["runs"][number]> = {}): RunsSnapshot["runs"][number] => ({
@@ -167,6 +167,8 @@ describe("decodeRunsSnapshot", () => {
           thread: { threadId: "t", environmentId: null },
         },
       ],
+      workflows: [],
+      revision: null,
     });
   });
 
@@ -174,8 +176,27 @@ describe("decodeRunsSnapshot", () => {
     expect(decodeRunsSnapshot({ runs: [null, {}, { runId: 1 }], questions: [{ runId: "r" }, 5] })).toEqual({
       runs: [],
       questions: [],
+      workflows: [],
+      revision: null,
     });
-    expect(decodeRunsSnapshot("x")).toEqual({ runs: [], questions: [] });
+    expect(decodeRunsSnapshot("x")).toEqual({ runs: [], questions: [], workflows: [], revision: null });
+  });
+
+  test("reads the workflow summaries and the definition revision", () => {
+    const s = decodeRunsSnapshot({
+      workflows: [{ name: "w", version: 2, triggers: ["every 1h", 5] }, { version: 1 }, null],
+      definition: { revision: 7 },
+    });
+    expect(s.workflows).toEqual([{ name: "w", version: 2, triggers: ["every 1h"] }]);
+    expect(s.revision).toBe(7);
+  });
+
+  test("reads the workspace root of a project", () => {
+    expect(decodeItem({ kind: "project.updated", project: { id: "p", title: "P", workspaceRoot: "/w/p" } })).toEqual({
+      kind: "project",
+      id: "p",
+      project: { title: "P", repo: null, path: "/w/p" },
+    });
   });
 });
 

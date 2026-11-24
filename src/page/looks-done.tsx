@@ -17,6 +17,7 @@ import { reasonText, type Offer, type Skip } from "./looks-done.ts";
 import { ProjectIcon } from "./project-icon.tsx";
 import { postSettle } from "./send.ts";
 import { StatusIcon } from "./status-icon.tsx";
+import { StartMenu } from "./workflow-start.tsx";
 
 /** The header button that opens the dialog. Nothing shows at 0. */
 export function LooksDoneButton({ count, onOpen }: { count: number; onOpen: () => void }) {
@@ -115,6 +116,12 @@ function Body({
         ))}
       </ul>
       <DialogFooter>
+        <StartMenu
+          point={{ kind: "threads", ids: rows.flatMap((o) => (checked.has(o.thread.id) ? o.thread.id : [])) }}
+          label="Start a workflow"
+          disabled={n === 0 || busy}
+          onPick={close}
+        />
         <Button variant="ghost" disabled={busy} onClick={close}>
           Cancel
         </Button>

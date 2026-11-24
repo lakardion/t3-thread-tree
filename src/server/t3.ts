@@ -75,7 +75,8 @@ export type Thread = {
   workflowRun: { runId: string; workflow: string; step: string } | null;
 };
 
-export type Project = { title: string; repo: string | null };
+/** `path` is the project's workspace root. */
+export type Project = { title: string; repo: string | null; path?: string };
 
 /** The fields of `WorkflowRunsSnapshot` that the app reads. */
 export type RunsSnapshot = {
@@ -100,6 +101,10 @@ export type RunsSnapshot = {
     askedAt: string;
     thread: { threadId: string; environmentId: string | null } | null;
   }[];
+  /** The newest version of each registered workflow. */
+  workflows?: { name: string; version: number; triggers: string[] }[];
+  /** `definition.revision`: goes up when T3 loads the workflow files again. Null when the snapshot has none. */
+  revision?: number | null;
 };
 
 export type StreamEvent =
@@ -128,6 +133,11 @@ const repoOf = (p: Obj): string | null => {
   const owner = str(r.owner);
   const name = str(r.name);
   return owner && name ? `${owner}/${name}` : null;
+};
+
+const projectOf = (p: Obj, id: string): Project => {
+  const path = str(p.workspaceRoot);
+  return { title: str(p.title) ?? id, repo: repoOf(p), ...(path && { path }) };
 };
 
 /** Lenient decode: many shell fields are optional, and unknown fields are ignored. */
@@ -236,7 +246,7 @@ export function decodeItem(raw: unknown): StreamEvent | null {
       const projects = (Array.isArray(s.projects) ? s.projects : []).flatMap((p): [string, Project][] => {
         const o = obj(p);
         const id = str(o.id);
-        return id ? [[id, { title: str(o.title) ?? id, repo: repoOf(o) }]] : [];
+        return id ? [[id, projectOf(o, id)]] : [];
       });
       return { kind: "snapshot", fresh: false, threads, projects };
     }
@@ -252,7 +262,7 @@ export function decodeItem(raw: unknown): StreamEvent | null {
     case "project.updated": {
       const p = obj(it.project);
       const id = str(p.id);
-      return id ? { kind: "project", id, project: { title: str(p.title) ?? id, repo: repoOf(p) } } : null;
+      return id ? { kind: "project", id, project: projectOf(p, id) } : null;
     }
     case "project.removed": {
       const id = str(it.projectId);
@@ -309,8 +319,24 @@ export function decodeRunsSnapshot(raw: unknown): RunsSnapshot {
         },
       ];
     }),
+    workflows: list(s.workflows).flatMap((w) => {
+      const o = obj(w);
+      const name = str(o.name);
+      return name
+        ? [{ name, version: num(o.version) ?? 0, triggers: list(o.triggers).filter((x) => typeof x === "string") }]
+        : [];
+    }),
+    revision: num(obj(s.definition).revision),
   };
 }
+
+/** Lenient decode of a `workflows.getDefinition` result: the source of each file and the `name@version` of its workflows. */
+export const decodeDefinitionFiles = (raw: unknown): { source: string; workflows: string[] }[] =>
+  list(obj(raw).files).flatMap((f) => {
+    const o = obj(f);
+    const source = str(o.source);
+    return source === null ? [] : [{ source, workflows: list(o.workflows).filter((x) => typeof x === "string") }];
+  });
 
 /** Lenient decode of a `workflows.get` result: the steps in start order. Entries without a name drop out. */
 export type RunStepsRaw = { name: string; status: string; threadId: string | null }[];
@@ -428,7 +454,7 @@ export function connectShell(opts: {
         } else if (m._tag === "Exit" && m.requestId === RUNS_ID) {
           /** An older T3 has no workflows. The shell stream goes on. */
           console.error("[t3] workflows stream ended:", JSON.stringify(m).slice(0, 500));
-          opts.onRuns({ runs: [], questions: [] }, origin);
+          opts.onRuns({ runs: [], questions: [], workflows: [], revision: null }, origin);
         } else if (m._tag === "Exit" && typeof m.requestId === "string" && pending.has(m.requestId)) {
           const call = pending.get(m.requestId)!;
           pending.delete(m.requestId);

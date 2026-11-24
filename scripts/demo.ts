@@ -9,6 +9,7 @@ import { cliPath, type CliRun, sendService } from "../src/server/send.ts";
 import { settleRoutes } from "../src/server/settle.ts";
 import { settledPage, settledRoutes, settledSignature } from "../src/server/settled.ts";
 import type { Pr, Project, RunsSnapshot, Thread } from "../src/server/t3.ts";
+import { launchList, scanFields } from "../src/server/workflow-start.ts";
 import { workflowRoutes } from "../src/server/workflows.ts";
 import type { LocalConfig, LocalState, ModelPick } from "../src/shared/model.ts";
 import { type CatchUp, parseLabels, type LinearIssue } from "../src/shared/tree.ts";
@@ -410,6 +411,12 @@ const wfAsk = (runId: string, over: Partial<RunsSnapshot["questions"][number]>):
   ...over,
 });
 const workflows: RunsSnapshot = {
+  workflows: [
+    { name: "review-pr", version: 3, triggers: [] },
+    { name: "land-stack", version: 1, triggers: [] },
+    { name: "digest", version: 2, triggers: ["every 1h"] },
+    { name: "sentry-hook", version: 1, triggers: ["webhook sentry"] },
+  ],
   runs: [
     wfRun("run-1", "Ship SHOP-412 Split the payment step"),
     wfRun("run-2", "Review PR #2107 Saved cards list", { workflow: "review-pr" }),
@@ -469,6 +476,14 @@ const workflows: RunsSnapshot = {
     wfAsk("run-3", { name: "confirm", title: "Bump react to 19.3?", askedAt: ago(3) }),
   ],
 };
+/** The fake workflow files. `WF_SCAN=off` makes the read fail, as a token without the read scope does. */
+const DEFINITION = [
+  { source: "const payload = { pr: PR, text: Text }", workflows: ["review-pr@3"] },
+  { source: "const payload = { stack: Stack }", workflows: ["land-stack@1"] },
+  { source: "const payload = { threadIds: Ids, text: Text }", workflows: ["digest@2"] },
+  { source: "const payload = { project: Path }", workflows: ["sentry-hook@1"] },
+];
+const SCAN_ERROR = "The authenticated token is missing required scope: filesystem:read";
 const treeFor = (nest: boolean, labels: string[], wantsLinear: boolean) =>
   JSON.stringify({
     conn: process.env.CONN ?? "up",
@@ -478,6 +493,9 @@ const treeFor = (nest: boolean, labels: string[], wantsLinear: boolean) =>
     settled: settledSignature(threads),
     projects: projectsFor(false, nest, labels, wantsLinear),
     runs: runItems(workflows, "http://127.0.0.1:3773", "demo-env"),
+    workflows: launchList(workflows.workflows ?? [], process.env.WF_SCAN === "off" ? null : scanFields(DEFINITION)),
+    workflowScan: process.env.WF_SCAN === "off" ? SCAN_ERROR : null,
+    t3Origin: "http://127.0.0.1:3773",
   });
 
 /** In-memory Local model config. `LOCAL` seeds it with that state; unset starts empty. */
@@ -508,9 +526,25 @@ const offered = () =>
     ...(localConfig ? [{ id: "local" as const, label: `Local · ${localConfig.model}` }] : []),
   ]);
 
-/** Waits 1 s, then answers like the CLI. `SEND=failed` fails with the wrapper text. */
+/**
+ * Waits 1 s, then answers like the CLI. `SEND=failed` fails with the wrapper text. A workflow start fails when
+ * its input holds "fail", and `WF_OLD=1` makes it fail like a CLI without the command.
+ */
 const stubCli: CliRun = async (argv) => {
   await Bun.sleep(1000);
+  if (argv[1] === "workflow") {
+    const input = argv.find((a) => a.startsWith("--input="))!;
+    if (process.env.WF_OLD === "1")
+      return { code: 1, stdout: "", stderr: 'Unknown command "workflow"\n', timedOut: false };
+    if (input.includes("fail"))
+      return {
+        code: 1,
+        stdout: "",
+        stderr: `The payload does not fit workflow ${argv.at(-1)}: Expected a number, got "fail"\n`,
+        timedOut: false,
+      };
+    return { code: 0, stdout: JSON.stringify({ run: { runId: `wr_${Date.now()}` } }), stderr: "", timedOut: false };
+  }
   if (process.env.SEND === "failed")
     return { code: 1, stdout: "", stderr: "Sending the message.\nThread demo-1 is not reachable.\n", timedOut: false };
   const stdout = argv[2] === "send" ? '{"delivery":"queued"}' : '{"threadId":"demo-started"}';

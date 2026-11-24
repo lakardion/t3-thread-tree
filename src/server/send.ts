@@ -4,6 +4,7 @@ import { homedir } from "node:os";
 import { join } from "node:path";
 
 import { type CliStatus, DELIVERIES, type Delivery, type SendError } from "../shared/send.ts";
+import { oldCli } from "./workflow-start.ts";
 
 const TIMEOUT_MS = 30_000;
 const TAIL = 2048;
@@ -32,6 +33,17 @@ export const startArgs = (bin: string, projectId: string, title: string) => [
   `--title=${title}`,
   projectId,
   "-",
+];
+
+/** The input and the key are single argv items, so a value that starts with `-` is not read as a flag. */
+export const workflowStartArgs = (bin: string, name: string, input: object, key: string) => [
+  bin,
+  "workflow",
+  "start",
+  "--json",
+  `--input=${JSON.stringify(input)}`,
+  `--key=${key}`,
+  name,
 ];
 
 export type CliRun = (
@@ -73,7 +85,45 @@ export function sendService(o: {
 }) {
   const run = o.run ?? runCli;
 
-  /** Validate, check the id, run the CLI, and map the outcome to a response. `pick` reads the success field. */
+  /** Run the CLI and map the outcome to a response. `pick` reads the success field. `failText` may replace the stderr line. */
+  async function exec(
+    argv: (bin: string) => string[],
+    stdin: string,
+    pick: (out: unknown) => Record<string, string> | null,
+    failText?: (stderr: string) => string | undefined,
+  ) {
+    const { available, path } = await o.cli;
+    const missing = () => fail(503, `No t3 CLI at ${path}. Set T3_BIN in .env.`);
+    if (!available) return missing();
+    let r: Awaited<ReturnType<CliRun>>;
+    try {
+      r = await run(argv(path), stdin);
+    } catch (e) {
+      const code = (e as NodeJS.ErrnoException).code;
+      if (code === "ENOENT" || code === "EACCES") return missing();
+      throw e;
+    }
+    if (r.timedOut) return fail(502, "timed out", null, r.stderr);
+    if (r.code !== 0)
+      return fail(
+        502,
+        failText?.(r.stderr) ??
+          lastLine(r.stderr) ??
+          (r.code === null ? "t3 was killed by a signal" : `t3 exited with code ${r.code}`),
+        r.code,
+        r.stderr,
+      );
+    let out: unknown;
+    try {
+      out = JSON.parse(r.stdout);
+    } catch (e) {
+      return fail(502, `Cannot parse the CLI output: ${(e as Error).message}`, null, r.stderr);
+    }
+    const ok = pick(out);
+    return ok ? Response.json(ok) : fail(502, "The CLI output has no expected field.", null, r.stderr);
+  }
+
+  /** Validate the body and check the id, then run the CLI. */
   async function handle(
     req: Request,
     k: {
@@ -97,33 +147,27 @@ export function sendService(o: {
     for (const f of texts) if (!values[f].trim()) return fail(400, `Empty ${f}`);
     const id = values[k.idField];
     if (!k.has(id)) return fail(404, k.notFound);
-    const { available, path } = await o.cli;
-    const missing = () => fail(503, `No t3 CLI at ${path}. Set T3_BIN in .env.`);
-    if (!available) return missing();
-    let r: Awaited<ReturnType<CliRun>>;
-    try {
-      r = await run(k.argv(path, id, values.title?.trim() ?? ""), values.message);
-    } catch (e) {
-      const code = (e as NodeJS.ErrnoException).code;
-      if (code === "ENOENT" || code === "EACCES") return missing();
-      throw e;
-    }
-    if (r.timedOut) return fail(502, "timed out", null, r.stderr);
-    if (r.code !== 0)
-      return fail(
-        502,
-        lastLine(r.stderr) ?? (r.code === null ? "t3 was killed by a signal" : `t3 exited with code ${r.code}`),
-        r.code,
-        r.stderr,
-      );
-    let out: unknown;
-    try {
-      out = JSON.parse(r.stdout);
-    } catch (e) {
-      return fail(502, `Cannot parse the CLI output: ${(e as Error).message}`, null, r.stderr);
-    }
-    const ok = k.pick(out);
-    return ok ? Response.json(ok) : fail(502, "The CLI output has no expected field.", null, r.stderr);
+    return exec((bin) => k.argv(bin, id, values.title?.trim() ?? ""), values.message, k.pick);
+  }
+
+  /** `{ workflow, input, key }`: starts one run. The workflow name is checked by T3, not here. */
+  async function startWorkflow(req: Request) {
+    const body = (await req.json().catch(() => null)) as Record<string, unknown> | null;
+    if (!body || typeof body !== "object") return fail(400, "Invalid JSON");
+    const { workflow, input, key } = body;
+    if (typeof workflow !== "string" || !workflow.trim() || workflow.startsWith("-"))
+      return fail(400, "Missing workflow");
+    if (!input || typeof input !== "object" || Array.isArray(input)) return fail(400, "Missing input");
+    if (typeof key !== "string" || !key.trim()) return fail(400, "Missing key");
+    return exec(
+      (bin) => workflowStartArgs(bin, workflow, input, key),
+      "",
+      (out) => {
+        const runId = field(field(out, "run"), "runId");
+        return typeof runId === "string" ? { runId } : null;
+      },
+      (stderr) => (oldCli(stderr) ? "Update T3 Code to use workflows" : undefined),
+    );
   }
 
   return {
@@ -143,6 +187,7 @@ export function sendService(o: {
             },
           }),
       },
+      "/t3/workflows/start": { POST: startWorkflow },
       "/t3/start": {
         POST: (req: Request) =>
           handle(req, {

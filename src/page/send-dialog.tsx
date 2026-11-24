@@ -11,6 +11,7 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
+import { Kbd } from "@/components/ui/kbd";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Textarea } from "@/components/ui/textarea";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
@@ -27,7 +28,7 @@ type Frame = { busy: boolean; setBusy: (v: boolean) => void; close: () => void }
 const FrameContext = createContext<Frame>(null!);
 
 /** While an action runs, nothing closes the dialog. Children mount only while open. */
-function ActionDialog({
+export function ActionDialog({
   open,
   onOpenChange,
   children,
@@ -64,18 +65,24 @@ export const SendErrorAlert = ({ err }: { err: SendError }) => (
 );
 
 /** Header, fields, failure alert and buttons of an action dialog. A `<fieldset>` disables the fields while `run` is in flight. */
-function ActionForm({
+export function ActionForm({
   title,
   description,
   label,
+  busyLabel,
+  hint,
   icon,
   ready,
   run,
   children,
 }: {
-  title: string;
-  description: string;
+  title: ReactNode;
+  description: ReactNode;
   label: string;
+  /** Replaces `label` while the action runs. */
+  busyLabel?: string;
+  /** A key hint after the label. */
+  hint?: string;
   icon: ReactNode;
   ready: boolean;
   run: () => Promise<Result>;
@@ -119,7 +126,8 @@ function ActionForm({
           Cancel
         </Button>
         <Button disabled={!ready || busy} onClick={() => void submit()}>
-          {busy ? <LoaderCircle className="animate-spin" /> : icon} {label}
+          {busy ? <LoaderCircle className="animate-spin" /> : icon} {busy && busyLabel ? busyLabel : label}
+          {hint && !busy && <Kbd>{hint}</Kbd>}
         </Button>
       </DialogFooter>
     </>

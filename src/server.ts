@@ -25,6 +25,7 @@ import { settleRoutes } from "./server/settle.ts";
 import { settledPage, settledRoutes, settledSignature } from "./server/settled.ts";
 import {
   connectShell,
+  decodeDefinitionFiles,
   decodeRunSteps,
   readEnvironmentId,
   type Project,
@@ -33,15 +34,23 @@ import {
   type Thread,
 } from "./server/t3.ts";
 import { parseToken, readToken, tokenResponse, writeToken } from "./server/token.ts";
+import { launchList, scanFields } from "./server/workflow-start.ts";
 import { workflowRoutes } from "./server/workflows.ts";
 import type { RunItem } from "./shared/runs.ts";
 import { allRuns, allThreads, parseLabels, parseLinear, type Conn, type Tree } from "./shared/tree.ts";
+import type { Field } from "./shared/workflow-start.ts";
 
 const threads = new Map<string, Thread>();
 const projects = new Map<string, Project>();
 let runs: RunItem[] | null = null;
 let runsSnapshot: RunsSnapshot | null = null;
 let runsOrigin: string | undefined;
+/** The fields that the workflow files name, by workflow name. Null while unread or when the read failed. */
+let fieldScan: Map<string, Field[]> | null = null;
+let scanError: string | null = null;
+let readingFiles = false;
+let latestSnapshot: RunsSnapshot | null = null;
+let scannedRevision: number | null | undefined;
 /** The fetched steps of each run in the tree, with the run `updatedAt` they were fetched at. */
 const runSteps = new Map<string, { at: string; steps: RunStepsRaw }>();
 let conn: Conn = "connecting";
@@ -125,6 +134,9 @@ const treeFor = (settled: boolean, nest = false, labels: string[] = [], wantsLin
   linearKey: linearSource.state(),
   settled: settledSignature(threads.values()),
   runs,
+  workflows: runsSnapshot && launchList(runsSnapshot.workflows ?? [], fieldScan),
+  workflowScan: scanError,
+  t3Origin: runsOrigin ?? null,
   projects: (wantsLinear ? buildLinearTree : buildTree)({
     threads: threads.values(),
     projects,
@@ -191,6 +203,41 @@ function syncSteps(nodes: ReturnType<typeof allRuns>) {
   }
 }
 
+/** A failure of the connection, not of the read: the last scan stays and the next snapshot retries. */
+const TRANSIENT = /not connected|timed out/i;
+
+/**
+ * Reads the workflow files when `revision` changed. A transient failure keeps the last scan and retries on the next
+ * snapshot. Any other failure holds until the revision changes.
+ */
+function syncScan(snapshot: RunsSnapshot) {
+  latestSnapshot = snapshot;
+  const revision = snapshot.revision ?? null;
+  if (readingFiles || (snapshot.workflows ?? []).length === 0 || revision === scannedRevision) return;
+  readingFiles = true;
+  shell
+    .workflow("workflows.getDefinition", {})
+    .then(
+      (r) => {
+        fieldScan = scanFields(decodeDefinitionFiles(r));
+        scanError = null;
+        scannedRevision = revision;
+      },
+      (e: Error) => {
+        if (TRANSIENT.test(e.message)) return;
+        if (e.message !== scanError) log(`could not read the workflow files: ${e.message}`);
+        fieldScan = null;
+        scanError = e.message;
+        scannedRevision = revision;
+      },
+    )
+    .finally(() => {
+      readingFiles = false;
+      changed();
+      if (latestSnapshot && (latestSnapshot.revision ?? null) !== revision) syncScan(latestSnapshot);
+    });
+}
+
 let timer: ReturnType<typeof setTimeout> | undefined;
 function changed() {
   clearTimeout(timer);
@@ -239,6 +286,7 @@ const shell = connectShell({
     runs = runItems(snapshot, origin, environmentId);
     runsSnapshot = snapshot;
     runsOrigin = origin;
+    syncScan(snapshot);
     changed();
   },
   onEvent: (e) => {
@@ -327,6 +375,7 @@ const server = Bun.serve({
         if (!next) return new Response("Not a valid token", { status: 400 });
         writeToken(tokenFile, next);
         token = next;
+        scannedRevision = undefined;
         let waitTimer: ReturnType<typeof setTimeout> | undefined;
         const timeout = new Promise<"timeout">((r) => (waitTimer = setTimeout(() => r("timeout"), 15_000)));
         const c = await Promise.race([shell.reconnect(), timeout]);
