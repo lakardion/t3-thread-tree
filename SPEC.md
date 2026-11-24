@@ -122,6 +122,64 @@ A **Run** with a **Step thread** shows in the tree as a **run row**. The step th
 - **Link:** the run title, "Open run in T3" and the Find result open `<T3 origin>/workflows?run=<runId>` in a new window (see "Run questions").
 - **Theme:** only theme tokens, so light and dark both work.
 
+## Start workflow
+
+The user can start a **Workflow** from the page. The start opens a dialog, and nothing goes to T3 until the user clicks Start. The server runs `t3 workflow start` like a **Send** runs `t3 thread send`.
+
+### Data
+
+- The `workflows.subscribe` snapshot has `workflows`: `{ name, version, triggers }` for the newest version of each workflow. It also has `definition.revision`. The server reads both. The Exit of `"w"` gives an empty list.
+- T3 gives a workflow no title. The name is the title everywhere.
+- A project of the shell stream has `workspaceRoot`. The tree has it as `path` on a project branch.
+- The tree has `workflows` (null until the first workflows snapshot), `workflowScan` and `t3Origin`.
+
+### Fields scan
+
+- The page fills the payload fields `threadId`, `pr`, `stack`, `threadIds`, `project` and `text`. T3 drops the fields that a payload schema does not name.
+- The server calls `workflows.getDefinition` with `{}`. For each file, it looks for each field name as `<name>:` in `source`, not after a word character, `$` or `.`. Each workflow of `files[].workflows` (`name@version`) gets the fields of its file. The result is `fields` of the workflow in the tree.
+- The server reads the files again when `definition.revision` changes. A failed read is retried on the next snapshot, and logged once for each error text.
+- With no result, `fields` is null. This holds with no read scope, with a failed read, and for a workflow that no file names. A workflow with `fields` null shows in Find only.
+- `workflowScan` is the error text of the last failed read, else null. Settings shows it (see "Where it starts").
+- A workflow whose triggers are all `webhook …` has `webhookOnly`. Find leaves it out.
+
+### Route
+
+`POST /t3/workflows/start` with `{ workflow, input, key }`. `workflow` and `key` are non-empty strings, `workflow` does not start with `-`, and `input` is a JSON object. A bad body gives `400`.
+
+- The server runs `<bin> workflow start --json --input=<json> --key=<key> <workflow>` with no stdin. It reads `run.runId` from stdout and answers `200 { runId }`.
+- The CLI runs through the same path as send. The failures are the same: `503` for a missing CLI, `502` with the last stderr line and the tail for a non-zero exit, a timeout or output with no `run.runId`.
+- When stderr says that the `workflow` command is unknown, the error is "Update T3 Code to use workflows".
+
+### Where it starts
+
+Each start point lists only the workflows that fit it.
+
+- **Find.** The footer says "Type `>` to start a workflow". When the query starts with `>`, Find shows only the group "Start a workflow": every workflow that is not `webhookOnly`, filtered by the text after `>`. An item shows the `Workflow` icon, the name in mono, the version and the triggers. With no workflow, the text is "No workflows. Turn on Workflows in T3 Settings → Labs, or add a workflow file." A pick closes Find and opens the dialog with nothing filled.
+- **Thread row.** A `Workflow` icon button sits in the hover drawer, between Send and Focus. Its menu is labelled "Start a workflow". It lists the workflows with `threadId`, and the workflows with `pr` when the row has a PR. It fills `threadId`, `pr` (the newest open PR, else the newest PR) and `project` (the path of the row's project, when it has one).
+- **PR stack rail.** The same button in the rail header, for the workflows with `stack`. It fills `stack` with the repo and the PRs of the rail stops, bottom first.
+- **Looks done.** A "Start a workflow" button in the dialog footer, for the workflows with `threadIds`. It fills `threadIds` with the checked threads and closes the dialog. It is off when no thread is checked.
+- The button is disabled when the `t3` CLI is missing, as the send controls are.
+- **Settings.** When `workflowScan` is set, the T3 token fold says "Row menus show no workflows: the app cannot read the workflow files (<error>)." When the error names a scope or an authorization, it adds "Give the token the filesystem:read scope."
+
+### Dialog
+
+A modal like the Send dialog.
+
+- **Header.** The `Workflow` icon and the name. The description is "Starts v<version> on this server." A thread row adds a muted line "For <thread title>".
+- **Fields.** One field for each field of the workflow, or all of them when `fields` is null. `text` is a textarea. `pr` is a select of the row's PRs when the row has more than one, else a mono input `owner/name#123`. `stack` is a mono input `owner/name #1 #2`, bottom first. `threadIds` is a mono input, comma separated. A field that the start point filled shows "· from the row" after its label.
+- **Payload.** An empty field is left out. `pr` becomes `{ repo, number }`, `stack` becomes `{ repo, prs }` and `threadIds` becomes a list. A value that does not parse shows a line under the field and turns Start off.
+- **Advanced.** A fold with a JSON box. While the user has not typed in it, it shows the payload of the fields. After an edit, its text is the payload, and the fields are off. A JSON error or a non-object turns Start off and shows the error.
+- **Start.** Button with a key hint, `⌘↵` or `Ctrl+↵`, from any field. While the call runs, the fields are off, the button shows a spinner and "Starting", and the dialog cannot close. A failure shows the error alert above the footer, and the dialog stays open.
+- **Key.** `<workflow>/<context>/<ms>`. The context is `pr-<owner>-<repo>-<n>` (the row's newest PR, for a workflow with `pr`), `stack-<owner>-<repo>-<bottom>`, `thread-<id>`, `threads-<count>` or `none`. `<ms>` is the time at which the dialog opened. A second Start in the same dialog sends the same key, and T3 answers with the same run. A new dialog makes a new key.
+
+### After a start
+
+The dialog closes. A toast says "Started <workflow>" with "Show in tree", for 10 s. The button scrolls to the run row and flashes it. A new run has no row until it has a step thread (see "Runs in the tree"). Then the button opens `<T3 origin>/workflows?run=<runId>` in a new window.
+
+### Demo stub
+
+The demo has four fake workflows and a fake file scan: `review-pr` (`pr`, `text`), `land-stack` (`stack`), `digest` (`threadIds`, `text`) and `sentry-hook` (webhook only). The stub CLI answers `workflow start` after 1 s with a new run id. An input that holds "fail" gives a payload error. `WF_OLD=1` gives the unknown command error. `WF_SCAN=off` makes the file scan fail, with a scope error.
+
 ## Launched-thread lineage
 
 Source: [Can the spawner of a launched thread be recovered?](.wayfinder/tickets/002-recover-launched-lineage.md), [Standalone webapp or a view inside T3 Code?](.wayfinder/tickets/003-standalone-or-in-t3.md), research on branch `research/launched-lineage`.

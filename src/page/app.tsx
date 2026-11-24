@@ -209,6 +209,8 @@ import {
   type Layout,
   type SortBy,
 } from "./view.ts";
+import { prChoices, stackPoint } from "./workflow-start.ts";
+import { Launcher, StartDialog, StartedToast, StartMenu, type StartRequest } from "./workflow-start.tsx";
 
 /** The tab icon; its href follows the needs-you count. */
 const iconLink = document.head.appendChild(
@@ -1175,6 +1177,7 @@ type PanelProps = LinearProps &
     update: UpdateState | undefined;
     conn: Tree["conn"] | undefined;
     linearKey: Tree["linearKey"] | undefined;
+    workflowScan: Tree["workflowScan"] | undefined;
     /** Opens the T3 token fold. */
     tokenOpen: boolean;
     /** Opens the Linear links fold. */
@@ -1278,6 +1281,12 @@ function SettingsPanel(p: PanelProps) {
                 <CopyPrompt prompt={TOKEN_CMD} label="Copy command" />
               </div>
               <TokenForm />
+              {p.workflowScan && (
+                <p className={cn(HINT, "m-0")}>
+                  Row menus show no workflows: the app cannot read the workflow files ({p.workflowScan}).
+                  {SCOPE_ERROR.test(p.workflowScan) && " Give the token the filesystem:read scope."}
+                </p>
+              )}
             </div>
           </Fold>
           <Fold
@@ -1329,6 +1338,9 @@ function SettingsPanel(p: PanelProps) {
   );
 }
 
+/** A failure text that names a missing scope or authorization. */
+const SCOPE_ERROR = /scope|authoriz|forbidden|permission/i;
+
 const load = (k: string): string | null => {
   try {
     return localStorage.getItem(k);
@@ -1370,6 +1382,8 @@ const Details = createContext<{ open: Set<string>; toggle: (id: string) => void;
 });
 /** Opens the send dialog for a thread. Null where rows cannot send. */
 const SendTo = createContext<{ t3cli: CliStatus | null; open: (id: string) => void } | null>(null);
+/** The workspace root of the project block that holds the row. */
+const RowProject = createContext<string | undefined>(undefined);
 const NeedsOnly = createContext(false);
 /** Whether rows show the project name next to its icon. */
 const ProjectNames = createContext(true);
@@ -1795,6 +1809,8 @@ function ThreadRow({
   const dim = (useContext(NeedsOnly) && !needsYou(t.status)) || (section !== null && isContext(t, section));
   const linear = useContext(Linear);
   const sendTo = useContext(SendTo);
+  const rowProject = useContext(RowProject);
+  const projectPath = project?.path ?? rowProject;
   const chipHref = chip ? linearHref(chip, linear) : null;
   const pulse = useChanges(t.status);
   const noPrLabel = t.stack ? `PR stack · ${t.stack.total} PRs · no PR from this thread` : undefined;
@@ -1945,6 +1961,12 @@ function ThreadRow({
                     </Tooltip>
                   </CliGate>
                 )}
+                <StartMenu
+                  point={{ kind: "row", threadId: t.id, prs: prChoices(t.prs) }}
+                  project={projectPath}
+                  forTitle={t.title || t.id}
+                  className={ROW_BUTTON}
+                />
                 <FocusMark t={t} pressed={false} />
               </span>
             </span>
@@ -2245,6 +2267,8 @@ function StackRail({
   const hidden = section ? allRows.filter((r) => folds(r.t, section)) : [];
   const rows = showOther ? allRows : allRows.filter((r) => !hidden.includes(r));
   const partial = stops.filter((s) => s.n).length < total;
+  const rowProject = useContext(RowProject);
+  const projectPath = project?.path ?? rowProject;
   const render = (ref: RefFn, handleRef?: RefFn) => (
     <Collapsible asChild open={open} onOpenChange={() => toggle(`rail:${id}`)}>
       <li
@@ -2304,6 +2328,11 @@ function StackRail({
               </span>
             ))}
           </span>
+          <StartMenu
+            point={stackPoint(stops.flatMap((s) => s.p ?? []))}
+            project={projectPath}
+            className="relative z-10 size-6 text-muted-foreground"
+          />
           {hidden.length > 0 && (
             <button
               type="button"
@@ -2507,7 +2536,11 @@ function ProjectBlock({ b, closed, toggle, fold }: { b: Branch } & Fold) {
       </Collapsible>
     </li>
   );
-  return <Sortable sort={sortOf(lists, PROJECTS, b.id, b.label)}>{render}</Sortable>;
+  return (
+    <RowProject value={b.path}>
+      <Sortable sort={sortOf(lists, PROJECTS, b.id, b.label)}>{render}</Sortable>
+    </RowProject>
+  );
 }
 
 const KEYS: [keys: string, action: string][] = [
@@ -2711,6 +2744,8 @@ function App() {
   const [catchUpOn, setCatchUpOn] = useState<boolean>();
   const [t3cli, setT3cli] = useState<CliStatus | null>(null);
   const [sendTo, setSendTo] = useState({ id: "", open: false });
+  const [wfStart, setWfStart] = useState<{ req: StartRequest | null; open: boolean }>({ req: null, open: false });
+  const [wfStarted, setWfStarted] = useState<{ name: string; runId: string } | null>(null);
   const [orders, setOrders] = useState(() => parseOrders(load(ORDER_KEY)));
   const [linearOrders, setLinearOrders] = useState(() => parseOrders(load(ORDER_LINEAR_KEY)));
   const [focus, setFocus] = useState(() => parseFocus(load(FOCUS_KEY)));
@@ -2985,6 +3020,11 @@ function App() {
     show: (id: string) => setShown((s) => new Set(s).add(id)),
   };
   const sendToApi = { t3cli, open: (id: string) => setSendTo({ id, open: true }) };
+  const launcher = {
+    workflows: tree?.workflows ?? [],
+    t3cli,
+    open: (req: StartRequest) => setWfStart({ req, open: true }),
+  };
   const pick = effectivePick(clis, cli);
   const pickCli = (c: ModelPick) => (
     setCli(c),
@@ -3456,25 +3496,27 @@ function App() {
                               <Card className="gap-0 overflow-clip rounded-[12px] px-2 py-0 shadow-none">
                                 <ul key={listKey} className={cn("m-0 list-none p-0", layout === "flat" && "p-1")}>
                                   <SendTo value={sendToApi}>
-                                    {layout === "flat" ? (
-                                      <Presence key="flat" items={view.flat ?? []} keyOf={(i) => i.id}>
-                                        {(i) => (
-                                          <FlatRow
-                                            i={i}
-                                            corners={edgeCorners(view.flat ?? [], i)}
-                                            section={sectionOf(view.flat ?? [], i)}
-                                            closed={closed}
-                                            toggle={toggle}
-                                            fold={fold}
-                                            toggleSection={toggleSection}
-                                          />
-                                        )}
-                                      </Presence>
-                                    ) : (
-                                      <Presence key="tree" items={projects} keyOf={(p) => p.id}>
-                                        {(p) => <ProjectBlock b={p} closed={closed} toggle={toggle} fold={fold} />}
-                                      </Presence>
-                                    )}
+                                    <Launcher value={launcher}>
+                                      {layout === "flat" ? (
+                                        <Presence key="flat" items={view.flat ?? []} keyOf={(i) => i.id}>
+                                          {(i) => (
+                                            <FlatRow
+                                              i={i}
+                                              corners={edgeCorners(view.flat ?? [], i)}
+                                              section={sectionOf(view.flat ?? [], i)}
+                                              closed={closed}
+                                              toggle={toggle}
+                                              fold={fold}
+                                              toggleSection={toggleSection}
+                                            />
+                                          )}
+                                        </Presence>
+                                      ) : (
+                                        <Presence key="tree" items={projects} keyOf={(p) => p.id}>
+                                          {(p) => <ProjectBlock b={p} closed={closed} toggle={toggle} fold={fold} />}
+                                        </Presence>
+                                      )}
+                                    </Launcher>
                                   </SendTo>
                                 </ul>
                               </Card>
@@ -3498,7 +3540,9 @@ function App() {
                             )}
                             {settled && projects && (
                               <SendTo value={sendToApi}>
-                                <SettledList signature={tree?.settled ?? ""} scrollRoot={listRef} />
+                                <Launcher value={launcher}>
+                                  <SettledList signature={tree?.settled ?? ""} scrollRoot={listRef} />
+                                </Launcher>
                               </SendTo>
                             )}
                           </div>
@@ -3539,6 +3583,7 @@ function App() {
           update={update}
           conn={tree?.conn}
           linearKey={tree?.linearKey}
+          workflowScan={tree?.workflowScan}
           tokenOpen={tokenOpen}
           linearOpen={linearOpen}
           reloadModels={loadModels}
@@ -3557,16 +3602,35 @@ function App() {
         canShow={(id) => inView.has(id)}
         reveal={reveal}
         now={now}
+        workflows={tree?.workflows ?? null}
+        start={(workflow) => launcher.open({ workflow, point: { kind: "none" } })}
       />
-      <LooksDoneDialog
-        open={doneOpen}
-        items={lookDone}
-        onOpenChange={setDoneOpen}
-        onDone={(settledIds, skipped) => {
-          setSkip((s) => [...s.filter((e) => !skipped.some((k) => k.id === e.id)), ...skipped]);
-          if (settledIds.length > 0) setUndoIds((u) => [...(u ?? []), ...settledIds]);
-        }}
+      <Launcher value={launcher}>
+        <LooksDoneDialog
+          open={doneOpen}
+          items={lookDone}
+          onOpenChange={setDoneOpen}
+          onDone={(settledIds, skipped) => {
+            setSkip((s) => [...s.filter((e) => !skipped.some((k) => k.id === e.id)), ...skipped]);
+            if (settledIds.length > 0) setUndoIds((u) => [...(u ?? []), ...settledIds]);
+          }}
+        />
+      </Launcher>
+      <StartDialog
+        req={wfStart.req}
+        open={wfStart.open}
+        onOpenChange={(open) => setWfStart((s) => ({ ...s, open }))}
+        onStarted={(name, runId) => setWfStarted({ name, runId })}
       />
+      {wfStarted && (
+        <StartedToast
+          key={wfStarted.runId}
+          {...wfStarted}
+          origin={tree?.t3Origin ?? null}
+          reveal={reveal}
+          onClose={() => setWfStarted(null)}
+        />
+      )}
       {undoIds && <UndoToast key={undoIds.join()} ids={undoIds} onClose={() => setUndoIds(null)} />}
       <SendDialog
         fixed

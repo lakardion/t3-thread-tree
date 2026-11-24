@@ -1,4 +1,4 @@
-import type { SendError } from "../shared/send.ts";
+import type { SendError, WorkflowStartOk } from "../shared/send.ts";
 import type { Status } from "../shared/tree.ts";
 
 /** Statuses in which a sent message waits for the thread's next turn. */
@@ -6,9 +6,9 @@ const BUSY: Status[] = ["working", "starting", "waiting"];
 
 export const isBusy = (s: Status) => BUSY.includes(s);
 
-export type Result = { ok: true } | { ok: false; err: SendError };
+export type Result<T extends object = object> = ({ ok: true } & T) | { ok: false; err: SendError };
 
-async function post(path: string, body: object): Promise<Result> {
+async function post<T extends object = object>(path: string, body: object): Promise<Result<T>> {
   let r: Response;
   try {
     r = await fetch(path, {
@@ -19,7 +19,7 @@ async function post(path: string, body: object): Promise<Result> {
   } catch {
     return { ok: false, err: { error: "The server did not answer.", exitCode: null, stderrTail: "" } };
   }
-  if (r.ok) return { ok: true };
+  if (r.ok) return { ok: true, ...((await r.json().catch(() => ({}))) as T) };
   try {
     return { ok: false, err: (await r.json()) as SendError };
   } catch {
@@ -40,3 +40,6 @@ export const postResume = (runId: string) => post("/t3/workflows/resume", { runI
 
 /** A 202 (T3 has not confirmed yet) is `ok`: the next snapshot settles it. */
 export const postCancel = (runId: string) => post("/t3/workflows/cancel", { runId });
+
+export const postWorkflowStart = (workflow: string, input: object, key: string) =>
+  post<WorkflowStartOk>("/t3/workflows/start", { workflow, input, key });

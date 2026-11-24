@@ -1,7 +1,7 @@
 import { describe, expect, test } from "bun:test";
 import { homedir } from "node:os";
 
-import { cliPath, type CliRun, sendArgs, sendService, startArgs } from "../src/server/send.ts";
+import { cliPath, type CliRun, sendArgs, sendService, startArgs, workflowStartArgs } from "../src/server/send.ts";
 
 describe("argv", () => {
   test("send and start shapes", () => {
@@ -14,6 +14,18 @@ describe("argv", () => {
       "--title=SHOP-1 Fix",
       "p1",
       "-",
+    ]);
+  });
+
+  test("workflow start shape: input and key are single items", () => {
+    expect(workflowStartArgs("t3", "review", { text: "-x" }, "review/none/1")).toEqual([
+      "t3",
+      "workflow",
+      "start",
+      "--json",
+      '--input={"text":"-x"}',
+      "--key=review/none/1",
+      "review",
     ]);
   });
 
@@ -45,7 +57,7 @@ describe("sendService", () => {
         return result;
       },
     });
-    const call = async (route: "/t3/send" | "/t3/start", body: unknown) => {
+    const call = async (route: "/t3/send" | "/t3/start" | "/t3/workflows/start", body: unknown) => {
       const res = await svc.routes[route].POST(
         new Request(`http://x${route}`, {
           method: "POST",
@@ -180,5 +192,49 @@ describe("sendService", () => {
     const { json } = await s.call("/t3/send", SEND);
     expect((json.stderrTail as string).length).toBe(2048);
     expect(json.stderrTail as string).not.toContain("a");
+  });
+
+  describe("workflow start", () => {
+    const WF = { workflow: "review", input: { text: "go" }, key: "review/none/1" };
+
+    test("runs the CLI with no stdin and answers the run id", async () => {
+      const s = setup(ok('{"run":{"runId":"wr_1"}}'));
+      expect(await s.call("/t3/workflows/start", WF)).toEqual({ status: 200, json: { runId: "wr_1" } });
+      expect(s.calls).toEqual([
+        { argv: workflowStartArgs("/bin/t3", "review", { text: "go" }, "review/none/1"), stdin: "" },
+      ]);
+    });
+
+    test("a payload error gives 502 with the last stderr line", async () => {
+      const s = setup({ code: 1, stdout: "", stderr: "x\nThe payload does not fit\n", timedOut: false });
+      expect(await s.call("/t3/workflows/start", WF)).toMatchObject({
+        status: 502,
+        json: { error: "The payload does not fit", exitCode: 1 },
+      });
+    });
+
+    test("an old CLI gives the update text", async () => {
+      const s = setup({ code: 1, stdout: "", stderr: 'Unknown command "workflow"\n', timedOut: false });
+      expect(await s.call("/t3/workflows/start", WF)).toMatchObject({
+        status: 502,
+        json: { error: "Update T3 Code to use workflows" },
+      });
+    });
+
+    test("bad bodies give 400 and do not run the CLI", async () => {
+      const s = setup();
+      expect((await s.call("/t3/workflows/start", "{")).status).toBe(400);
+      expect((await s.call("/t3/workflows/start", { ...WF, workflow: " " })).status).toBe(400);
+      expect((await s.call("/t3/workflows/start", { ...WF, workflow: "--help" })).status).toBe(400);
+      expect((await s.call("/t3/workflows/start", { ...WF, input: "x" })).status).toBe(400);
+      expect((await s.call("/t3/workflows/start", { ...WF, input: [] })).status).toBe(400);
+      expect((await s.call("/t3/workflows/start", { ...WF, key: "" })).status).toBe(400);
+      expect(s.calls).toHaveLength(0);
+    });
+
+    test("an unavailable CLI gives 503, and output with no run id gives 502", async () => {
+      expect((await setup(undefined, false).call("/t3/workflows/start", WF)).status).toBe(503);
+      expect((await setup(ok("{}")).call("/t3/workflows/start", WF)).status).toBe(502);
+    });
   });
 });

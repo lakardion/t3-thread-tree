@@ -513,6 +513,7 @@ export function buildTree(input: BuildInput): Branch[] {
         id: `p:${projectId}`,
         label: project?.title ?? projectId,
         ...(project?.repo && { repo: project.repo }),
+        ...(project?.path && { path: project.path }),
         branches,
         threads: [],
       },

@@ -1,4 +1,4 @@
-import { Archive, LocateFixed, Search, SearchX } from "lucide-react";
+import { Archive, LocateFixed, Search, SearchX, Workflow as WorkflowIcon } from "lucide-react";
 import { useEffect, useRef, useState, type KeyboardEvent, type ReactNode } from "react";
 
 import { Button } from "@/components/ui/button";
@@ -8,9 +8,11 @@ import { Kbd } from "@/components/ui/kbd";
 import { cn } from "@/lib/utils";
 
 import { find, type Hit } from "../shared/find.ts";
+import type { Workflow } from "../shared/workflow-start.ts";
 import { needsYou } from "./attention.ts";
 import { ago } from "./format.ts";
 import { StatusIcon } from "./status-icon.tsx";
+import { fits } from "./workflow-start.ts";
 
 /** True on macOS, where Find is Cmd+K. */
 export const MAC = /Mac|iPhone|iPad/.test(navigator.platform);
@@ -97,18 +99,60 @@ type BodyProps = {
   now: number;
   open: (h: Hit) => void;
   show: (id: string) => void;
+  workflows: Workflow[] | null;
+  start: (w: Workflow) => void;
 };
 
+/** The "Start a workflow" group of the `>` mode. `text` is the query after the `>`. */
+function StartGroup({
+  workflows,
+  text,
+  start,
+}: {
+  workflows: Workflow[] | null;
+  text: string;
+  start: (w: Workflow) => void;
+}) {
+  /** No workflows snapshot yet: the list is not known, so no empty text. */
+  if (!workflows) return null;
+  const list = workflows.filter((w) => fits(w, { kind: "none" }));
+  const shown = list.filter((w) => w.name.toLowerCase().includes(text.toLowerCase()));
+  if (shown.length === 0)
+    return (
+      <IconState icon={<WorkflowIcon className="size-6" aria-hidden />}>
+        {list.length === 0
+          ? "No workflows. Turn on Workflows in T3 Settings → Labs, or add a workflow file."
+          : "No workflow matches"}
+      </IconState>
+    );
+  return (
+    <CommandGroup heading="Start a workflow">
+      {shown.map((w) => (
+        <CommandItem key={w.name} value={`wf:${w.name}`} onSelect={() => start(w)} className="gap-2.5 py-2">
+          <WorkflowIcon className="size-4 text-muted-foreground" />
+          <span className="font-mono text-[13px] font-medium">{w.name}</span>
+          <span className="text-[11px] text-muted-foreground">v{w.version}</span>
+          {w.triggers.length > 0 && (
+            <span className="truncate text-[11px] text-muted-foreground">· {w.triggers.join(", ")}</span>
+          )}
+        </CommandItem>
+      ))}
+    </CommandGroup>
+  );
+}
+
 /** The search and the results. It mounts with the dialog, so the query and the settled search reset on close. */
-function FindBody({ list, focus, canShow, now, open, show }: BodyProps) {
+function FindBody({ list, focus, canShow, now, open, show, workflows, start }: BodyProps) {
   const [q, setQ] = useState("");
   const [sel, setSel] = useState("");
   const [settledMode, setSettledMode] = useState(false);
   /** The settled hits with the query they answer, so a newer query never shows older hits. */
   const [settledHits, setSettledHits] = useState<{ q: string; hits: Hit[] }>({ q: "", hits: [] });
   const query = q.trim();
+  /** A query that starts with `>` lists workflows only. */
+  const startMode = query.startsWith(">");
   useEffect(() => {
-    if (!settledMode || !query) return;
+    if (!settledMode || !query || startMode) return;
     const ctl = new AbortController();
     const timer = setTimeout(() => {
       fetch(`/find?q=${encodeURIComponent(query)}`, { signal: ctl.signal })
@@ -122,7 +166,7 @@ function FindBody({ list, focus, canShow, now, open, show }: BodyProps) {
       clearTimeout(timer);
       ctl.abort();
     };
-  }, [settledMode, query]);
+  }, [settledMode, query, startMode]);
 
   const active = query ? find(list, query) : recent(list, focus);
   const settled = settledMode && query && settledHits.q === query ? settledHits.hits : [];
@@ -146,7 +190,9 @@ function FindBody({ list, focus, canShow, now, open, show }: BodyProps) {
     >
       <CommandInput value={q} onValueChange={setQ} placeholder="Find a thread" className="h-12 text-[15px]" />
       <CommandList className="max-h-[min(60vh,480px)] max-[720px]:max-h-none max-[720px]:flex-1">
-        {active.length === 0 &&
+        {startMode && <StartGroup workflows={workflows} text={query.slice(1).trim()} start={start} />}
+        {!startMode &&
+          active.length === 0 &&
           settled.length === 0 &&
           (query ? (
             <IconState icon={<SearchX className="size-6" aria-hidden />}>No thread matches</IconState>
@@ -155,11 +201,13 @@ function FindBody({ list, focus, canShow, now, open, show }: BodyProps) {
               Find by title, issue key, project, branch or #PR
             </IconState>
           ))}
-        {active.length > 0 && (
+        {!startMode && active.length > 0 && (
           <CommandGroup heading={query ? "Threads" : "Recent"}>{active.map((h) => row(h))}</CommandGroup>
         )}
-        {settled.length > 0 && <CommandGroup heading="Settled">{settled.map((h) => row(h))}</CommandGroup>}
-        {offerSettled && (
+        {!startMode && settled.length > 0 && (
+          <CommandGroup heading="Settled">{settled.map((h) => row(h))}</CommandGroup>
+        )}
+        {offerSettled && !startMode && (
           <CommandGroup>
             <CommandItem
               value={SETTLED_ROW}
@@ -172,6 +220,11 @@ function FindBody({ list, focus, canShow, now, open, show }: BodyProps) {
           </CommandGroup>
         )}
       </CommandList>
+      {!startMode && (
+        <div className="border-t px-3 py-2 text-[11px] text-muted-foreground">
+          Type <Kbd>&gt;</Kbd> to start a workflow
+        </div>
+      )}
       <div
         aria-hidden
         data-hint="find-bar"
@@ -206,6 +259,8 @@ export function FindDialog({
   canShow,
   reveal,
   now,
+  workflows,
+  start,
 }: {
   open: boolean;
   setOpen: (o: boolean) => void;
@@ -214,6 +269,9 @@ export function FindDialog({
   canShow: (id: string) => boolean;
   reveal: (id: string) => Promise<boolean>;
   now: number;
+  workflows: Workflow[] | null;
+  /** Called with the picked workflow. The dialog closes first. */
+  start: (w: Workflow) => void;
 }) {
   /** Set while a Show in tree closes the dialog, so the focus return does not fight the scroll. */
   const revealing = useRef(false);
@@ -236,6 +294,11 @@ export function FindDialog({
           focus={focus}
           canShow={canShow}
           now={now}
+          workflows={workflows}
+          start={(w) => {
+            setOpen(false);
+            start(w);
+          }}
           open={(h) => {
             setOpen(false);
             if (h.t.run) window.open(h.t.href, "_blank");

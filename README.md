@@ -46,6 +46,7 @@ _Screenshots use made-up data from `bun run demo`._
 
 - **Answer a Run question in Triage.** The card shows the question and its choices. Pick a choice (click, or the keys `1` to `9`), add a reason if you want, and press Answer. "Talk it through" opens the run's thread. A question with no choices opens in T3.
 - **Resume or cancel a Paused run.** The card shows why the run stopped. Press Resume to run the failed step again. Cancel asks you to confirm first. "Open run in T3" opens the run page.
+- **Start a workflow.** Press Cmd+K, then type `>` to list the workflows of your T3 server. A thread row with a PR, a PR stack and the Looks done list also have a workflow button. Each place lists only the workflows that fit it. A dialog fills the fields from the row, and you can change them. Press Start to run the workflow. A toast has "Show in tree" to go to the new run.
 - **Looks done.** The "N look done" button shows when threads look finished: no recent run, and all PRs merged or closed, or a Catch-up that says it is done. It opens a list with a checkbox for each thread and the reason. "Settle N" settles the checked threads. A toast lets you undo for 10 seconds.
 
   ![The Looks done dialog with two threads checked](docs/looks-done.png)
@@ -91,7 +92,7 @@ The cog opens the Settings panel. Each setup fold shows its state, and each fiel
 bun install
 ```
 
-Start the app, click the cog to open the Settings panel, and paste a T3 token in the "T3 token" field. The panel shows the command that issues one. The token needs the `orchestration:read` and `orchestration:operate` scopes. With a read-only token the tree works, but Settle fails. The app keeps the token in `~/.config/t3-thread-tree/token`, and the desktop app in `~/Library/Application Support/T3 Thread Tree/token`. A `T3_TOKEN` in `.env` works as the fallback.
+Start the app, click the cog to open the Settings panel, and paste a T3 token in the "T3 token" field. The panel shows the command that issues one. The token needs the `orchestration:read` and `orchestration:operate` scopes. With a read-only token the tree works, but Settle fails. The app keeps the token in `~/.config/t3-thread-tree/token`, and the desktop app in `~/Library/Application Support/T3 Thread Tree/token`. A `T3_TOKEN` in `.env` works as the fallback. To fill the fields of a workflow, the app reads the workflow files. This needs the `filesystem:read` scope. Without it, Find still lists every workflow, and Settings says why the row menus are empty.
 
 Optional: link Linear issue keys. Set them in Settings, or add these to `.env`. The Settings value wins.
 
@@ -151,7 +152,7 @@ statev2.sqlite (read-only) ──launch lineage──────────▶
 - `src/shared/` holds the types and logic that the server and the page share.
 - [SPEC.md](SPEC.md) defines the rules, [DESIGN-SPEC.md](DESIGN-SPEC.md) the visual design, and [CONTEXT.md](CONTEXT.md) the terms.
 
-The app writes to T3 in two ways. A send runs the `t3` CLI. Settle, unsettle and snooze go over the stream, with the `orchestration:operate` scope of the token.
+The app writes to T3 in two ways. A send or a workflow start runs the `t3` CLI. Settle, unsettle and snooze go over the stream, with the `orchestration:operate` scope of the token.
 
 The desktop app is Electron. `src/desktop/main.ts` starts the compiled server as a child process and loads the page in the window. electron-builder packages and signs the app ad-hoc.
 
