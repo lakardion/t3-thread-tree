@@ -1711,4 +1711,64 @@ describe("Map groups", () => {
       expect(tree[0].branches[0].threads[0]).toMatchObject({ id: "map:/m/x", map: { header: true } });
     });
   });
+
+  describe("marked map threads", () => {
+    const marked = (...ids: string[]) => ({ ...keys({}), marked: new Set(ids) });
+    const plan = shell("plan", "Plan Interview Mode Work Lanes");
+
+    test("the children of a marked thread group under it, with its title as the name", () => {
+      const tree = build(
+        [plan, shell("t4308", "TIB-4308 a"), shell("t4328", "TIB-4328 b"), shell("t4309", "TIB-4309 c")],
+        { t4308: "plan", t4328: "plan", t4309: "t4308" },
+        marked("plan"),
+      );
+      const [head] = loose(tree);
+      expect(head.title).toBe("Plan Interview Mode Work Lanes");
+      expect(head.map).toEqual({ name: "Plan Interview Mode Work Lanes", header: false, href: null });
+      expect(head.detail.mapMarked).toBe(true);
+      expect(titles(head.children)).toEqual(["TIB-4308 a", "TIB-4328 b"]);
+      expect(titles(head.children[0].children)).toEqual(["TIB-4309 c"]);
+    });
+
+    test("an unmarked thread gets no group and no flag", () => {
+      const tree = build([plan, shell("t1", "TIB-1 a")], { t1: "plan" }, marked());
+      expect(loose(tree).every((t) => !t.map && !t.detail.mapMarked)).toBe(true);
+    });
+
+    test("a child with a real key gives a second Map header", () => {
+      const tree = build(
+        [plan, shell("t1", "SHOP-1 a"), shell("t2", "SHOP-2 b")],
+        { t1: "plan", t2: "plan" },
+        { mapKeyOf: (id) => (id === "t1" ? "/m/real" : null), marked: new Set(["plan"]) },
+      );
+      const [head] = loose(tree);
+      expect(head.children.map((c) => c.map)).toEqual([
+        { name: "Real", header: true, href: hrefOf("plan") },
+        { name: "Plan Interview Mode Work Lanes", header: true, href: hrefOf("plan") },
+      ]);
+    });
+
+    test("a step thread under a marked thread stays out", () => {
+      const tree = build(
+        [plan, shell("st", "step", { workflowRun: { runId: "r1", workflow: "w", step: "go" } })],
+        { st: "plan" },
+        marked("plan"),
+      );
+      expect(loose(tree).every((t) => !t.map)).toBe(true);
+    });
+
+    test("a marked member of a real map holds a nested thread: group", () => {
+      const tree = build(
+        [shell("chart", "Wayfinder"), shell("m", "Marked ticket"), shell("k", "SHOP-1 k")],
+        { m: "chart", k: "m" },
+        { mapKeyOf: (id) => (id === "m" ? "/m/real" : null), marked: new Set(["m"]) },
+      );
+      const [head] = loose(tree);
+      expect(head.map?.name).toBe("Real");
+      const [m] = head.children;
+      expect(m.title).toBe("Marked ticket");
+      expect(m.map?.name).toBe("Marked ticket");
+      expect(titles(m.children)).toEqual(["SHOP-1 k"]);
+    });
+  });
 });

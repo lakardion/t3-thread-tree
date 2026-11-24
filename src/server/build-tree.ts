@@ -19,7 +19,7 @@ import {
   type ThreadNode,
 } from "../shared/tree.ts";
 import { waiting } from "./catch-up.ts";
-import { mapName, mapsOf } from "./maps.ts";
+import { mapName, mapsOf, markedKey } from "./maps.ts";
 import { suggestedReplies } from "./replies.ts";
 import type { Project, RunStepsRaw, RunsSnapshot, Thread } from "./t3.ts";
 
@@ -89,6 +89,8 @@ export type BuildInput = {
   origin?: string;
   /** The map key of a thread, from its first message. Unset: no Map groups. */
   mapKeyOf?: (id: string) => string | null;
+  /** The ids of marked map threads: their keyless children form a map group. */
+  marked?: Set<string>;
 };
 
 /** `si` is the stack index of a child in a stack rail of a Map group. */
@@ -380,7 +382,11 @@ function prepare(input: BuildInput) {
       prs: t.prs
         .filter((p) => p.source !== "stack" && p.source !== "stack-dismissed")
         .map((p) => prNode(p, labelsFor(t, p))),
-      detail: { ...detailOf(t, now, all), launchedBy: null },
+      detail: {
+        ...detailOf(t, now, all),
+        launchedBy: null,
+        ...(input.marked?.has(t.id) && { mapMarked: true as const }),
+      },
       children: [],
       ...(catchUp && { catchUp }),
       first: creationKey(t),
@@ -427,10 +433,11 @@ function prepare(input: BuildInput) {
    * Returns the nodes that left.
    */
   const groupMaps = (): Node[] => {
+    const markedKeyOf = markedKey(input.mapKeyOf!, spawnerOf, input.marked ?? new Set());
     const maps = mapsOf({
       ids: [...visible.keys()],
       spawnerOf,
-      keyOf: (id) => (all.get(id)?.workflowRun ? null : (input.mapKeyOf!(id) ?? null)),
+      keyOf: (id) => (all.get(id)?.workflowRun ? null : markedKeyOf(id)),
       createdKey: (id) => timeKey(all.get(id)?.createdAt ?? null, id),
     });
     const keyOf = new Map<string, string>();
@@ -464,6 +471,7 @@ function prepare(input: BuildInput) {
     const header = (key: string, id: string, t: Thread, mapThread: Thread | undefined): Node => {
       const alone = mapThread && anchored(mapThread.id).length === 1;
       const href = mapThread ? hrefOf(environmentId, mapThread.id) : null;
+      const title = key.startsWith("thread:") ? (all.get(key.slice(7))?.title ?? null) : alone ? mapThread.title : null;
       const n: Node = {
         ...nodeOf(t),
         id,
@@ -471,7 +479,7 @@ function prepare(input: BuildInput) {
         stack: null,
         lastRun: null,
         children: [],
-        map: { name: mapName(key, alone ? mapThread.title : null, shown), header: true, href },
+        map: { name: mapName(key, title, shown), header: true, href },
       };
       top.set(key, n);
       return n;

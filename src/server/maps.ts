@@ -83,6 +83,16 @@ export function mapsOf({ ids, spawnerOf, keyOf, createdKey }: MapsInput) {
   return { mapOf, threadOf, anchors, ancestors: chain };
 }
 
+/**
+ * `keyOf` with the synthetic key `thread:<spawner>` for a thread that has no own key and whose spawner is in `marked`.
+ */
+export const markedKey =
+  (keyOf: (id: string) => string | null, spawnerOf: (id: string) => string | null | undefined, marked: Set<string>) =>
+  (id: string): string | null => {
+    const spawner = spawnerOf(id);
+    return keyOf(id) ?? (spawner && marked.has(spawner) ? `thread:${spawner}` : null);
+  };
+
 /** The readable name of a folder: `workflow-runs-tree` gives "Workflow runs tree". */
 const readable = (s: string) => {
   const w = s.replace(/^\.+/, "").replace(/[-_]+/g, " ");
@@ -91,11 +101,13 @@ const readable = (s: string) => {
 
 /**
  * The display name of a map. `title` is the title of its map thread when that thread anchors this map only, else null.
+ * For a `thread:` key it is the title of the marked thread.
  * `keys` are the keys of all visible maps: a folder name that two of them share gets its parent folder.
  */
 export function mapName(key: string, title: string | null, keys: string[]): string {
   const named = title?.replace(/\s*[:-]?\s*wayfinder\s*[:-]?\s*/i, " ").trim();
   if (named) return named;
+  if (key.startsWith("thread:")) return key.slice(7);
   if (/^https?:\/\//.test(key)) {
     const last = key.split("/").at(-1)!;
     return /^\d+$/.test(last) ? `#${last}` : last;

@@ -11,7 +11,8 @@ import { lastMessageRoutes } from "./server/last-message.ts";
 import { mayBeLaunched, needsScan, openLineage } from "./server/lineage.ts";
 import { fetchLinear } from "./server/linear-api.ts";
 import { linearStore } from "./server/linear.ts";
-import { mapKey } from "./server/maps.ts";
+import { mapThreadRoutes, readMapThreads } from "./server/map-threads.ts";
+import { mapKey, markedKey } from "./server/maps.ts";
 import {
   appleHelperPath,
   createModels,
@@ -139,6 +140,9 @@ const clients = new Set<Client>();
 
 const linear = parseLinear(process.env.LINEAR_WORKSPACE, process.env.LINEAR_TEAMS);
 
+/** `POST /map-threads` marks and unmarks map threads here. */
+const mapThreadsFile = process.env.MAP_THREADS_FILE ?? join(homedir(), ".config", "t3-thread-tree", "map-threads");
+
 const treeFor = (settled: boolean, nest = false, labels: string[] = [], wantsLinear = false): Tree => ({
   conn: ready ? conn : "connecting",
   lastUpdate,
@@ -166,6 +170,7 @@ const treeFor = (settled: boolean, nest = false, labels: string[] = [], wantsLin
     stepsOf: (runId) => runSteps.get(runId)?.steps,
     origin: runsOrigin,
     mapKeyOf,
+    marked: readMapThreads(mapThreadsFile),
   }),
 });
 
@@ -186,11 +191,12 @@ function syncLinear() {
     if (key && !t.parentThreadId && !t.sideChat && !t.gone && !t.settledAt) keys.add(key);
   }
   /** A settled map thread with a key stands in for its Map header. */
+  const keyOfMapped = markedKey(mapKeyOf, (id) => spawners.get(id), readMapThreads(mapThreadsFile));
   for (const t of threads.values()) {
     const spawner = spawners.get(t.id);
     const stand = spawner ? threads.get(spawner) : undefined;
     const key = stand?.settledAt && !t.settledAt && !t.parentThreadId ? issueKey(stand.title) : null;
-    if (key && mapKeyOf(t.id)) keys.add(key);
+    if (key && keyOfMapped(t.id)) keys.add(key);
   }
   const withSteps = new Set([...threads.values()].flatMap((t) => (t.workflowRun ? [t.workflowRun.runId] : [])));
   for (const r of runsSnapshot?.runs ?? []) {
@@ -371,6 +377,7 @@ const server = Bun.serve({
     "/models": { GET: async () => Response.json(await models.offered()) },
     ...send.routes,
     ...localModelRoutes(localModelFile),
+    ...mapThreadRoutes(mapThreadsFile, changed),
     ...pickRoutes(pickFile, () => {
       if (!readPickFile(pickFile).catchUp) catchUp.clear();
       changed();

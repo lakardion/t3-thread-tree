@@ -141,6 +141,12 @@ The threads of one wayfinder map show as one **Map group** under their **Map thr
   - A token that ends in `map.md`: replace a leading `~` with the home folder, keep an absolute path, join `.wayfinder/…` to the `workspace_root` of the thread's project, and join any other relative path to `~/repos/wiki`. Normalize the path. The key is the folder that holds `map.md`.
   - Any other token gives no key. There is no rule for a bare issue key such as `ENG-5432`.
   - The key is internal and never shows. A moved map with two path spellings gives two keys and two maps.
+- **Marked map thread.** The user can mark any thread as a map thread, for a map that has no `map.md` path or issue URL, such as `$wayfinder-implement <folder>`.
+  - The marked ids are a JSON array in the server file `~/.config/t3-thread-tree/map-threads` (env `MAP_THREADS_FILE`). The server reads it on each tree build, so a hand edit shows on the next change. The Details block of a thread has a "Mark as map thread" or "Unmark map thread" button. It is not on a run, a Map header or a step thread. The head of a marked map shows an unmark button in place of its map icon (see below). `POST /map-threads` with `{ id, marked }` edits the file.
+  - A direct child of a marked thread that has no own **Map key** gets the key `thread:<id>`. Deeper descendants join through the nearest keyed ancestor. The marked thread is the map thread, not a member. `mapKey()` does not change.
+  - A real key on a child wins. Then the marked thread anchors several maps, and each map gets one Map header. A marked thread that is a member of a real map holds its keyless children in a nested `thread:` group inside that map.
+  - The name of a `thread:` map is the title of the marked thread with "Wayfinder" removed, else the thread id.
+  - The map icon at the left of a marked map group is a button. On hover and focus it shows an X, and its tooltip says "Unmark map thread". A click unmarks the thread. The head row has no Details button, so this is the way to unmark from the tree. A settled marked thread gives a Map header whose id is the thread id, and its icon does the same. A Map header with a `map:` id has no button. An id of a thread that does not exist does nothing.
 - **Spawner chain.** As in "Launched-thread lineage". A thread is an **ancestor** of another when it is on that thread's spawner chain.
 
 ### Membership

@@ -1,10 +1,14 @@
+import { Map as MapNode, X } from "lucide";
 import { ChevronDown, ExternalLink, Map as MapIcon } from "lucide-react";
+import { MorphIcon } from "morphicons/react";
 import { useState, type ComponentType, type CSSProperties, type ReactNode, type Ref } from "react";
 
 import { Button } from "@/components/ui/button";
+import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import { cn } from "@/lib/utils";
 
 import { flat, type Branch, type Status, type ThreadNode } from "../shared/tree.ts";
+import { postMapThread } from "./send.ts";
 import { folds } from "./view.ts";
 
 const MAP_TONE = "text-amber-600 dark:text-amber-400";
@@ -22,6 +26,46 @@ type RowProps = {
 const FoldIcon = ({ open }: { open: boolean }) => (
   <ChevronDown className={cn("size-3.5 transition-transform", !open && "-rotate-90")} />
 );
+
+const MAP_DOT =
+  "absolute top-[18px] left-1 flex size-5 -translate-y-1/2 items-center justify-center rounded-full border-2 border-amber-500/60 bg-card";
+
+/** The map icon of a marked map. It morphs to an X on hover and keyboard focus, and unmarks the thread on click. The tooltip shows an error. */
+function UnmarkDot({ id }: { id: string }) {
+  const [busy, setBusy] = useState(false);
+  const [err, setErr] = useState<string>();
+  const [hot, setHot] = useState(false);
+  return (
+    <Tooltip>
+      <TooltipTrigger asChild>
+        <button
+          type="button"
+          aria-label="Unmark map thread"
+          disabled={busy}
+          className={cn(
+            MAP_DOT,
+            "cursor-pointer pointer-coarse:min-h-11 pointer-coarse:min-w-11",
+            err ? "border-destructive text-destructive" : MAP_TONE,
+          )}
+          onPointerEnter={() => setHot(true)}
+          onPointerLeave={() => setHot(false)}
+          onFocus={(e) => setHot(e.currentTarget.matches(":focus-visible"))}
+          onBlur={() => setHot(false)}
+          onClick={async () => {
+            setBusy(true);
+            setErr(undefined);
+            const r = await postMapThread(id, false);
+            setBusy(false);
+            if (!r.ok) setErr(r.err.error);
+          }}
+        >
+          <MorphIcon icon={hot ? X : MapNode} size={12} reducedMotion="user" />
+        </button>
+      </TooltipTrigger>
+      <TooltipContent>{err ?? "Unmark map thread"}</TooltipContent>
+    </Tooltip>
+  );
+}
 
 /**
  * A Map group on its amber rail: the map thread row, or a Map header, then the members. `Row` renders a member, a
@@ -111,9 +155,13 @@ export function MapGroup({
   return (
     <li ref={liRef} className={cn("relative my-px list-none", liClass)} style={liStyle}>
       <div className="relative pl-7">
-        <span className="absolute top-[18px] left-1 flex size-5 -translate-y-1/2 items-center justify-center rounded-full border-2 border-amber-500/60 bg-card">
-          <MapIcon className={cn("size-3", MAP_TONE)} aria-hidden />
-        </span>
+        {t.detail.mapMarked && !t.id.startsWith("map:") ? (
+          <UnmarkDot id={t.id} />
+        ) : (
+          <span className={MAP_DOT}>
+            <MapIcon className={cn("size-3", MAP_TONE)} aria-hidden />
+          </span>
+        )}
         {info.header ? (
           <div className="group/row relative flex h-9 min-w-0 items-center gap-2 rounded-[8px] px-2 text-xs hover:bg-accent">
             {handle}
