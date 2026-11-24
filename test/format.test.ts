@@ -148,7 +148,8 @@ describe("railRows", () => {
 });
 
 describe("foldIds", () => {
-  const thread = (key: string | null) => ({ id: `t-${key}`, key }) as ThreadNode;
+  const thread = (key: string | null, map?: ThreadNode["map"]) =>
+    ({ id: `t-${key}`, key, children: [], map }) as unknown as ThreadNode;
   const b = (id: string, threads: ThreadNode[], branches: Branch[] = [], stack?: string): Branch => ({
     id,
     label: id,
@@ -183,6 +184,18 @@ describe("foldIds", () => {
   });
   test("a group that folds into one thread has no fold id", () => {
     expect(groupIds(b("SHOP-1", [thread("SHOP-1")]))).toEqual([]);
+  });
+  test("a Map head has its fold id, in a group, in a stack run and in a one-thread group", () => {
+    const map = { name: "m", header: false, href: null };
+    const head = { ...thread("SHOP-1", map), children: [thread(null, map)] };
+    expect(foldIds(b("p", [], [b("SHOP-1", [head])]))).toEqual(["t-SHOP-1", "t-null"]);
+    expect(foldIds(b("p", [], [b("g", [thread(null), head])]))).toEqual(["g", "t-SHOP-1", "t-null"]);
+    expect(foldIds(b("p", [thread("X", map)]))).toEqual(["t-X"]);
+    expect(foldIds(b("p", [], [b("A", [head], [], "s1"), b("B", [thread("B")], [], "s1")]))).toEqual([
+      "rail:s1",
+      "t-SHOP-1",
+      "t-null",
+    ]);
   });
 });
 

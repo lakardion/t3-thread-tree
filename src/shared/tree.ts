@@ -112,7 +112,14 @@ export type ThreadNode = {
   run?: RunInfo;
   /** The step that a step thread or a child run serves. */
   step?: string;
+  /** Set on the head of a Map group. Its `children` are the members, or one Map header for each map of a map thread that anchors several. */
+  map?: MapInfo;
+  /** Set on a member that sits in a stack rail inside a Map group. Consecutive children with one `rail.id` share the rail. */
+  rail?: Branch["stack"];
 };
+
+/** `header`: a Map header, which is not a thread. `href` is the map thread link, null with no map thread. */
+export type MapInfo = { name: string; header: boolean; href: string | null };
 
 export type Branch = {
   id: string;
@@ -198,8 +205,11 @@ export const parseLabels = (s = ""): string[] =>
     .map((x) => x.trim())
     .filter(Boolean);
 
-/** The threads of a node, subthreads at any depth. A run node is not a thread: only its children count. */
-export const flat = (t: ThreadNode): ThreadNode[] => [...(t.run ? [] : [t]), ...t.children.flatMap(flat)];
+/** A run node and a Map header are not threads. */
+export const isThread = (t: ThreadNode): boolean => !t.run && !t.map?.header;
+
+/** The threads of a node, subthreads at any depth. A node that is not a thread adds only its children. */
+export const flat = (t: ThreadNode): ThreadNode[] => [...(isThread(t) ? [t] : []), ...t.children.flatMap(flat)];
 export const allThreads = (b: Branch): ThreadNode[] => [...b.branches.flatMap(allThreads), ...b.threads.flatMap(flat)];
 /** The run nodes of a node and its children, at any depth. */
 export const runsOf = (t: ThreadNode): ThreadNode[] => [...(t.run ? [t] : []), ...t.children.flatMap(runsOf)];

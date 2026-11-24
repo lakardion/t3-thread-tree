@@ -741,3 +741,57 @@ describe("runs in the flat view", () => {
     expect(items.filter((i) => i.kind === "thread").map((i) => i.id)).toEqual(["t:r", "t:v"]);
   });
 });
+
+describe("Map groups in the views", () => {
+  const map = { name: "m", header: false, href: null };
+  const header = (id: string, children: ThreadNode[]): ThreadNode => ({
+    ...thread(id, null, children, "needs-input"),
+    map: { ...map, header: true },
+  });
+  const head = (id: string, children: ThreadNode[], status: Status = "idle"): ThreadNode => ({
+    ...thread(id, null, children, status),
+    map,
+  });
+  const lin = (b: Branch): Branch => ({ ...b, linear: {} });
+
+  test("a header is no thread: not in allThreads, not in a section count or placement", () => {
+    const projects = [project("p", [branch(NO_KEY, [header("h", [thread("a"), thread("b", null, [], "done")])])])];
+    expect(allThreads(projects[0]).map((t) => t.id)).toEqual(["a", "b"]);
+    const items = sequence(flatten(projects), "status");
+    expect(items.filter((i) => i.kind === "section").map((i) => [i.key, i.count])).toEqual([["working", 1]]);
+  });
+
+  test("a status unit goes to its most urgent member and folds context rows by thread", () => {
+    const h = head("m", [thread("a", null, [], "done"), thread("b", null, [], "working")]);
+    const [first] = sections(flatten([project("p", [branch(NO_KEY, [h])])]));
+    expect(first.key).toBe("working");
+    expect(folds(h.children[0], ["working"])).toBe(true);
+    expect(folds(h.children[1], ["working"])).toBe(false);
+  });
+
+  test("Group by Linear project keeps a unit that a header heads", () => {
+    const projects = [
+      lin(branch("lp:a", [], [lin(branch("lm:m1", [header("h", [thread("a")])]))])),
+      lin(branch("lf:loose", [header("g", [thread("b")])])),
+    ];
+    const items = sequence(flatten(projects), "linear", new Set(), true, projects);
+    expect(items.filter((i) => i.kind === "thread").map((i) => i.id)).toEqual(["t:h", "t:g"]);
+  });
+
+  test("pathFolds adds each Map head above the thread, not the thread itself", () => {
+    const inner = head("inner", [thread("deep")]);
+    const projects = [project("p", [branch("g", [head("outer", [inner, thread("x")])])])];
+    expect(pathFolds(projects, "deep")).toEqual(["p", "g", "outer", "inner"]);
+    expect(pathFolds(projects, "x")).toEqual(["p", "g", "outer"]);
+    expect(pathFolds(projects, "outer")).toEqual(["p", "g"]);
+  });
+
+  test("a header adds no run to Last updated: the group sorts by its members", () => {
+    const [p] = sortTree([
+      project("p", [
+        branch(NO_KEY, [thread("old", 1), { ...header("h", [thread("m", 7)]), lastRun: null }, thread("mid", 4)]),
+      ]),
+    ]);
+    expect(ids(p.branches[0].threads)).toEqual(["h", "mid", "old"]);
+  });
+});

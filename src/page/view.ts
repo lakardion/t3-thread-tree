@@ -4,6 +4,7 @@ import {
   flat,
   isFallback,
   isLinearReviews,
+  isThread,
   LINEAR_LOOSE,
   NO_KEY,
   REVIEWS,
@@ -235,7 +236,9 @@ export function linearSections(projects: Branch[], units: FlatUnit[]): Section[]
         label,
         statuses: null,
         date,
-        units: units.filter((u) => placing(u).some((t) => held.has(t.id))),
+        units: units.filter((u) =>
+          [...placing(u), ...(u.kind === "thread" && !isThread(u.t) ? [u.t] : [])].some((t) => held.has(t.id)),
+        ),
       };
     })
     .filter((s) => s.units.length > 0);
@@ -323,9 +326,15 @@ export function flatLists(items: FlatItem[]): Map<string, string[]> {
   return lists;
 }
 
+/** The ids of the Map heads above thread `id` inside the top-level node `t`. */
+const mapHeadsTo = (t: ThreadNode, id: string): string[] =>
+  t.children.some((c) => flat(c).some((x) => x.id === id))
+    ? [...(t.map ? [t.id] : []), ...t.children.flatMap((c) => mapHeadsTo(c, id))]
+    : [];
+
 /**
  * The fold ids to open so that the row of thread `id` shows in the tree: every branch on the path to it, from the
- * project down, and the rail of each PR stack on the path. Empty when the thread is not in `projects`.
+ * project down, the rail of each PR stack on the path, and the Map heads above it. Empty when the thread is not in `projects`.
  */
 export function pathFolds(projects: Branch[], id: string): string[] {
   const walk = (b: Branch): Branch[] | null => {
@@ -338,7 +347,11 @@ export function pathFolds(projects: Branch[], id: string): string[] {
   };
   for (const p of projects) {
     const path = walk(p);
-    if (path) return path.flatMap((b) => (b.stack ? [b.id, `rail:${b.stack.id}`] : [b.id]));
+    if (path)
+      return [
+        ...path.flatMap((b) => (b.stack ? [b.id, `rail:${b.stack.id}`] : [b.id])),
+        ...path.at(-1)!.threads.flatMap((t) => mapHeadsTo(t, id)),
+      ];
   }
   return [];
 }

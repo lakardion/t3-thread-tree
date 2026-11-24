@@ -46,6 +46,16 @@ describe("hits", () => {
   });
 });
 
+describe("hits and a Map header", () => {
+  test("a header is not a hit; its members keep the parent of the header", () => {
+    const header = { ...thread("h"), map: { name: "m", header: true, href: null } };
+    const head = thread("t", {}, [{ ...header, children: [thread("m1")] }]);
+    const out = hits([branch("p", [head])]);
+    expect(ids(out)).toEqual(["t", "m1"]);
+    expect(out.map((h) => h.parent)).toEqual([null, "t"]);
+  });
+});
+
 describe("find fields", () => {
   test.each([
     ["fix login", ["a"]],

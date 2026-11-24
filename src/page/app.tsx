@@ -161,6 +161,7 @@ import { Hint, useKeyHints } from "./key-hints.tsx";
 import { pageKey } from "./keys.ts";
 import { looksDone, parseSkip, pruneSkip, SKIP_KEY } from "./looks-done.ts";
 import { LooksDoneButton, LooksDoneDialog, UndoToast } from "./looks-done.tsx";
+import { MapGroup } from "./map-group.tsx";
 import {
   PROJECTS,
   arrange,
@@ -1389,6 +1390,8 @@ const ProjectNames = createContext(true);
 /** The statuses of the status section that holds the row. Null outside one. */
 const Section = createContext<Status[] | null>(null);
 const Linear = createContext<Tree["linear"]>(null);
+/** The fold state of the tree, for a Map group deep in a row. */
+const Folds = createContext<Fold>({ closed: new Set(), toggle: () => {}, fold: () => {} });
 /** The label names that rows show as pills, in pill order. */
 const Watched = createContext<string[]>([]);
 /** The rendered ids of each list, by list key. */
@@ -1790,10 +1793,16 @@ function ThreadRow({
   corners,
   review,
   nested,
+  end,
+  handle,
 }: {
   t: ThreadNode;
   chip?: string;
   sort?: Sort;
+  /** Replaces the details fold. A Map group puts its member count and fold here. */
+  end?: ReactNode;
+  /** Replaces the drag handle: the Map group owns the drag. */
+  handle?: ReactNode;
   inStack?: boolean;
   /** The row sits on a run rail: no drag handle, but the stack badge stays. */
   nested?: boolean;
@@ -1825,7 +1834,7 @@ function ThreadRow({
           data-status={t.status}
           data-thread={t.id}
         >
-          {!inStack && !nested && <DragHandle handleRef={handleRef} name={t.title || t.id} />}
+          {handle ?? (!inStack && !nested && <DragHandle handleRef={handleRef} name={t.title || t.id} />)}
           <StatusCell t={t} now={now} />
           <PhraseCell t={t} now={now} />
           <span
@@ -1969,11 +1978,13 @@ function ThreadRow({
                 <FocusMark t={t} pressed={false} />
               </span>
             </span>
-            <CollapsibleTrigger asChild>
-              <Button variant="ghost" size="icon" className={cn(ROW_BUTTON, "group")} aria-label="Details">
-                <ChevronDown className="size-3.5 transition-transform duration-200 group-data-[state=open]:rotate-180 motion-reduce:transition-none" />
-              </Button>
-            </CollapsibleTrigger>
+            {end ?? (
+              <CollapsibleTrigger asChild>
+                <Button variant="ghost" size="icon" className={cn(ROW_BUTTON, "group")} aria-label="Details">
+                  <ChevronDown className="size-3.5 transition-transform duration-200 group-data-[state=open]:rotate-180 motion-reduce:transition-none" />
+                </Button>
+              </CollapsibleTrigger>
+            )}
           </span>
         </div>
         <CollapsibleContent>
@@ -1982,7 +1993,7 @@ function ThreadRow({
         {t.children.length > 0 && (
           <ul className="m-0 list-none pl-2.5">
             <Presence items={t.children} keyOf={(c) => c.id}>
-              {(c) => <ThreadRow t={c} inStack={inStack} />}
+              {(c) => <NodeRow t={c} inStack={inStack} />}
             </Presence>
           </ul>
         )}
@@ -1992,10 +2003,39 @@ function ThreadRow({
   return <Sortable sort={sort && { ...sort, thread: t.id }}>{render}</Sortable>;
 }
 
-/** A run node renders as a run row, any other node as a thread row. */
+/** The PR stack rail of consecutive members in a Map group: no fold, no drag. */
+function MapRail({ run }: { run: Branch[] }) {
+  const { closed, toggle, fold } = useContext(Folds);
+  return <StackRail run={run} flat closed={closed} toggle={toggle} fold={fold} />;
+}
+
+/** A Map group renders as a map rail, a run node as a run row, any other node as a thread row. */
 function NodeRow(p: ComponentProps<typeof ThreadRow>) {
   const now = useContext(Now);
+  const section = useContext(Section);
+  const { closed, toggle } = useContext(Folds);
   const { t, sort, inStack, nested, project, corners } = p;
+  if (t.map)
+    return (
+      <Sortable sort={sort && { ...sort, thread: t.id }}>
+        {(ref, handleRef) => (
+          <MapGroup
+            t={t}
+            chip={p.chip}
+            project={project}
+            open={!closed.has(t.id)}
+            toggle={() => toggle(t.id)}
+            section={section}
+            Row={NodeRow}
+            Rail={MapRail}
+            liRef={ref}
+            liClass={cn(project && "border-l-[3px] pl-1", corners)}
+            liStyle={{ viewTransitionName: vtName("t", t.id), borderLeftColor: project && projectHex(project.label) }}
+            handle={!inStack && !nested && <DragHandle handleRef={handleRef} name={t.map!.name} />}
+          />
+        )}
+      </Sortable>
+    );
   if (!t.run) return <ThreadRow {...p} />;
   return (
     <Sortable sort={sort && { ...sort, thread: t.id }}>
@@ -3500,26 +3540,28 @@ function App() {
                                 <ul key={listKey} className={cn("m-0 list-none p-0", layout === "flat" && "p-1")}>
                                   <SendTo value={sendToApi}>
                                     <Launcher value={launcher}>
-                                      {layout === "flat" ? (
-                                        <Presence key="flat" items={view.flat ?? []} keyOf={(i) => i.id}>
-                                          {(i) => (
-                                            <FlatRow
-                                              i={i}
-                                              corners={edgeCorners(view.flat ?? [], i)}
-                                              linear={flatMode === "linear"}
-                                              section={sectionOf(view.flat ?? [], i)}
-                                              closed={closed}
-                                              toggle={toggle}
-                                              fold={fold}
-                                              toggleSection={toggleSection}
-                                            />
-                                          )}
-                                        </Presence>
-                                      ) : (
-                                        <Presence key="tree" items={projects} keyOf={(p) => p.id}>
-                                          {(p) => <ProjectBlock b={p} closed={closed} toggle={toggle} fold={fold} />}
-                                        </Presence>
-                                      )}
+                                      <Folds value={{ closed, toggle, fold }}>
+                                        {layout === "flat" ? (
+                                          <Presence key="flat" items={view.flat ?? []} keyOf={(i) => i.id}>
+                                            {(i) => (
+                                              <FlatRow
+                                                i={i}
+                                                corners={edgeCorners(view.flat ?? [], i)}
+                                                linear={flatMode === "linear"}
+                                                section={sectionOf(view.flat ?? [], i)}
+                                                closed={closed}
+                                                toggle={toggle}
+                                                fold={fold}
+                                                toggleSection={toggleSection}
+                                              />
+                                            )}
+                                          </Presence>
+                                        ) : (
+                                          <Presence key="tree" items={projects} keyOf={(p) => p.id}>
+                                            {(p) => <ProjectBlock b={p} closed={closed} toggle={toggle} fold={fold} />}
+                                          </Presence>
+                                        )}
+                                      </Folds>
                                     </Launcher>
                                   </SendTo>
                                 </ul>

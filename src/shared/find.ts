@@ -3,9 +3,10 @@ import type { Branch, ThreadNode } from "./tree.ts";
 /** A thread with the context that Find shows and matches. `parent` is the title of the parent thread of a subthread. */
 export type Hit = { t: ThreadNode; project: string; parent: string | null };
 
+/** A Map header is not a hit, and its members keep the parent of the header. */
 const withChildren = (t: ThreadNode, project: string, parent: string | null): Hit[] => [
-  { t, project: t.t3Project?.label ?? project, parent },
-  ...t.children.flatMap((c) => withChildren(c, project, t.title || t.id)),
+  ...(t.map?.header ? [] : [{ t, project: t.t3Project?.label ?? project, parent }]),
+  ...t.children.flatMap((c) => withChildren(c, project, t.map?.header ? parent : t.title || t.id)),
 ];
 
 const inBranch = (b: Branch, project: string): Hit[] => [
