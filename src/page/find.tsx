@@ -10,6 +10,7 @@ import { find, type Hit } from "../shared/find.ts";
 import { needsYou } from "./attention.ts";
 import { ago } from "./format.ts";
 import { StatusIcon } from "./status-icon.tsx";
+import { usePaletteWorkflows, useProto, variant } from "./workflow-start.prototype.tsx";
 
 /** True on macOS, where Find is Cmd+K. */
 export const MAC = /Mac|iPhone|iPad/.test(navigator.platform);
@@ -96,16 +97,18 @@ type BodyProps = {
   now: number;
   open: (h: Hit) => void;
   show: (id: string) => void;
+  close: () => void;
 };
 
 /** The search and the results. It mounts with the dialog, so the query and the settled search reset on close. */
-function FindBody({ list, focus, canShow, now, open, show }: BodyProps) {
+function FindBody({ list, focus, canShow, now, open, show, close }: BodyProps) {
   const [q, setQ] = useState("");
   const [sel, setSel] = useState("");
   const [settledMode, setSettledMode] = useState(false);
   /** The settled hits with the query they answer, so a newer query never shows older hits. */
   const [settledHits, setSettledHits] = useState<{ q: string; hits: Hit[] }>({ q: "", hits: [] });
   const query = q.trim();
+  const wf = usePaletteWorkflows(q, close);
   useEffect(() => {
     if (!settledMode || !query) return;
     const ctl = new AbortController();
@@ -135,6 +138,7 @@ function FindBody({ list, focus, canShow, now, open, show }: BodyProps) {
     const h = byValue.get(sel);
     if (h && canShow(h.t.id)) show(h.t.id);
   };
+  if (wf?.bare) return wf.takeover;
   return (
     <Command
       shouldFilter={false}
@@ -145,7 +149,9 @@ function FindBody({ list, focus, canShow, now, open, show }: BodyProps) {
     >
       <CommandInput value={q} onValueChange={setQ} placeholder="Find a thread" className="h-12 text-[15px]" />
       <CommandList className="max-h-[min(60vh,480px)] max-[720px]:max-h-none max-[720px]:flex-1">
-        {active.length === 0 &&
+        {wf?.takeover}
+        {!wf?.takeover &&
+          active.length === 0 &&
           settled.length === 0 &&
           (query ? (
             <IconState icon={<SearchX className="size-6" aria-hidden />}>No thread matches</IconState>
@@ -154,11 +160,14 @@ function FindBody({ list, focus, canShow, now, open, show }: BodyProps) {
               Find by title, issue key, project, branch or #PR
             </IconState>
           ))}
-        {active.length > 0 && (
+        {!wf?.takeover && active.length > 0 && (
           <CommandGroup heading={query ? "Threads" : "Recent"}>{active.map((h) => row(h))}</CommandGroup>
         )}
-        {settled.length > 0 && <CommandGroup heading="Settled">{settled.map((h) => row(h))}</CommandGroup>}
-        {offerSettled && (
+        {!wf?.takeover && settled.length > 0 && (
+          <CommandGroup heading="Settled">{settled.map((h) => row(h))}</CommandGroup>
+        )}
+        {!wf?.takeover && wf?.group}
+        {!wf?.takeover && offerSettled && (
           <CommandGroup>
             <CommandItem
               value={SETTLED_ROW}
@@ -198,8 +207,16 @@ export function FindDialog({
 }) {
   /** Set while a Show in tree closes the dialog, so the focus return does not fight the scroll. */
   const revealing = useRef(false);
+  const proto = useProto();
   return (
-    <Dialog open={open} onOpenChange={setOpen}>
+    <Dialog
+      open={open}
+      onOpenChange={(o) => {
+        setOpen(o);
+        if (!o && proto?.paletteFor) proto.setPaletteFor(null);
+        if (!o && proto?.form && variant() === "A") proto.setForm(null);
+      }}
+    >
       <DialogContent
         data-find=""
         className="top-[20%] translate-y-0 gap-0 overflow-hidden p-0 max-[720px]:top-0 max-[720px]:left-0 max-[720px]:h-dvh max-[720px]:max-w-none! max-[720px]:translate-x-0 max-[720px]:rounded-none max-[720px]:border-0 sm:max-w-xl"
@@ -221,6 +238,7 @@ export function FindDialog({
             setOpen(false);
             location.assign(h.t.href);
           }}
+          close={() => setOpen(false)}
           show={(id) => {
             revealing.current = true;
             setOpen(false);

@@ -202,6 +202,7 @@ import {
   type Layout,
   type SortBy,
 } from "./view.ts";
+import { ProtoLayer, ProtoProvider, RowWorkflowButton } from "./workflow-start.prototype.tsx";
 
 /** The tab icon; its href follows the needs-you count. */
 const iconLink = document.head.appendChild(
@@ -1910,6 +1911,7 @@ function ThreadRow({
                     </Tooltip>
                   </CliGate>
                 )}
+                <RowWorkflowButton t={t} className={ROW_BUTTON} />
                 <FocusMark t={t} pressed={false} />
               </span>
             </span>
@@ -3212,304 +3214,312 @@ function App() {
 
   return (
     /** A tooltip covers the row above, so a hoverable one stays open while the pointer moves up. */
-    <TooltipProvider disableHoverableContent>
-      <title>{tabTitle(tabCount)}</title>
-      <link rel="icon" type="image/svg+xml" href={favicon(appIcon, tabCount)} />
-      <header className="mb-3.5 flex flex-none flex-wrap items-center gap-x-4 gap-y-3 text-muted-foreground">
-        <h1 className="m-0 text-[15px] font-semibold text-foreground">Thread tree</h1>
-        <ToggleGroup
-          type="single"
-          size="sm"
-          variant="outline"
-          aria-label="Filter"
-          value={needsOnly ? "needs" : "all"}
-          onValueChange={(v) => v && setNeedsOnly(v === "needs")}
-        >
-          <ToggleGroupItem value="all" className={FILTER_ITEM}>
-            All
-          </ToggleGroupItem>
-          <ToggleGroupItem
-            value="needs"
-            aria-label={needsTip ? `Needs you, ${needsTip}` : "Needs you"}
-            className={cn(FILTER_ITEM, "gap-1.5 px-2.5")}
+    <ProtoProvider openPalette={() => setFindOpen(true)}>
+      <TooltipProvider disableHoverableContent>
+        <title>{tabTitle(tabCount)}</title>
+        <link rel="icon" type="image/svg+xml" href={favicon(appIcon, tabCount)} />
+        <header className="mb-3.5 flex flex-none flex-wrap items-center gap-x-4 gap-y-3 text-muted-foreground">
+          <h1 className="m-0 text-[15px] font-semibold text-foreground">Thread tree</h1>
+          <ToggleGroup
+            type="single"
+            size="sm"
+            variant="outline"
+            aria-label="Filter"
+            value={needsOnly ? "needs" : "all"}
+            onValueChange={(v) => v && setNeedsOnly(v === "needs")}
           >
-            {/** One baseline for the label and the numbers: centered, the smaller numbers look raised. */}
-            <span className="flex items-baseline gap-1.5">
-              Needs you
-              {needsTip && (
-                /** The tooltip sits inside the item so that the item keeps `data-state`. */
-                <Tooltip>
-                  <TooltipTrigger asChild>
-                    <span className="flex items-baseline gap-1">
-                      {counts.needYou > 0 && (
-                        <span className="rounded-[4px] bg-status-needs-input px-1 text-[11px] text-white tabular-nums">
-                          {counts.needYou}
-                        </span>
-                      )}
-                      {counts.needYou > 0 && counts.yourTurn > 0 && (
-                        <span aria-hidden className="text-muted-foreground">
-                          ·
-                        </span>
-                      )}
-                      {counts.yourTurn > 0 && (
-                        <span className="text-[11px] text-muted-foreground tabular-nums">{counts.yourTurn}</span>
-                      )}
-                    </span>
-                  </TooltipTrigger>
-                  <TooltipContent>{needsTip}</TooltipContent>
-                </Tooltip>
+            <ToggleGroupItem value="all" className={FILTER_ITEM}>
+              All
+            </ToggleGroupItem>
+            <ToggleGroupItem
+              value="needs"
+              aria-label={needsTip ? `Needs you, ${needsTip}` : "Needs you"}
+              className={cn(FILTER_ITEM, "gap-1.5 px-2.5")}
+            >
+              {/** One baseline for the label and the numbers: centered, the smaller numbers look raised. */}
+              <span className="flex items-baseline gap-1.5">
+                Needs you
+                {needsTip && (
+                  /** The tooltip sits inside the item so that the item keeps `data-state`. */
+                  <Tooltip>
+                    <TooltipTrigger asChild>
+                      <span className="flex items-baseline gap-1">
+                        {counts.needYou > 0 && (
+                          <span className="rounded-[4px] bg-status-needs-input px-1 text-[11px] text-white tabular-nums">
+                            {counts.needYou}
+                          </span>
+                        )}
+                        {counts.needYou > 0 && counts.yourTurn > 0 && (
+                          <span aria-hidden className="text-muted-foreground">
+                            ·
+                          </span>
+                        )}
+                        {counts.yourTurn > 0 && (
+                          <span className="text-[11px] text-muted-foreground tabular-nums">{counts.yourTurn}</span>
+                        )}
+                      </span>
+                    </TooltipTrigger>
+                    <TooltipContent>{needsTip}</TooltipContent>
+                  </Tooltip>
+                )}
+              </span>
+            </ToggleGroupItem>
+          </ToggleGroup>
+          <OpenNextButton target={target} title={openNextTitle} now={now} open={openNext} />
+          <FocusButton count={focus.length} shown={focusShow} setShown={setFocusShow} />
+          <TriageButton count={queue.length} open={triage} toggle={() => setTriage((o) => !o)} />
+          {lookDoneButton}
+          <div className="ml-auto flex items-center gap-1">
+            <div className="min-[720px]:hidden">
+              <ViewMenu
+                sortBy={sortBy}
+                setSortBy={pickSort}
+                layout={layout}
+                setLayout={pickLayout}
+                group={groupValue}
+                setGroup={pickGroupBy}
+                linearKey={tree?.linearKey}
+                inner={inner}
+                closed={closed}
+                fold={fold}
+              />
+            </div>
+            <div className="flex items-center gap-1 max-[720px]:hidden">
+              <SortMenu sortBy={sortBy} setSortBy={pickSort} />
+              <LayoutToggle layout={layout} setLayout={pickLayout} />
+              {projects && (
+                <>
+                  <GroupMenu
+                    flat={layout === "flat"}
+                    value={groupValue}
+                    set={pickGroupBy}
+                    linearKey={tree?.linearKey}
+                  />
+                  {layout === "tree" && <FoldAll inner={inner} closed={closed} fold={fold} />}
+                </>
               )}
-            </span>
-          </ToggleGroupItem>
-        </ToggleGroup>
-        <OpenNextButton target={target} title={openNextTitle} now={now} open={openNext} />
-        <FocusButton count={focus.length} shown={focusShow} setShown={setFocusShow} />
-        <TriageButton count={queue.length} open={triage} toggle={() => setTriage((o) => !o)} />
-        {lookDoneButton}
-        <div className="ml-auto flex items-center gap-1">
-          <div className="min-[720px]:hidden">
-            <ViewMenu
-              sortBy={sortBy}
-              setSortBy={pickSort}
-              layout={layout}
-              setLayout={pickLayout}
-              group={groupValue}
-              setGroup={pickGroupBy}
-              linearKey={tree?.linearKey}
-              inner={inner}
-              closed={closed}
-              fold={fold}
+            </div>
+            <SettingsButton
+              buttonRef={settingsButtonRef}
+              update={update}
+              open={settingsOpen}
+              toggle={() => {
+                setTokenOpen(false);
+                setLinearOpen(false);
+                setSettingsOpen((o) => !o);
+              }}
             />
           </div>
-          <div className="flex items-center gap-1 max-[720px]:hidden">
-            <SortMenu sortBy={sortBy} setSortBy={pickSort} />
-            <LayoutToggle layout={layout} setLayout={pickLayout} />
-            {projects && (
-              <>
-                <GroupMenu flat={layout === "flat"} value={groupValue} set={pickGroupBy} linearKey={tree?.linearKey} />
-                {layout === "tree" && <FoldAll inner={inner} closed={closed} fold={fold} />}
-              </>
+        </header>
+        <div ref={listRef} className="min-h-0 flex-1 overflow-y-auto">
+          <Focus value={focusApi}>
+            {tree?.conn === "down" && (
+              <Alert className="mb-3 border-l-[3px] border-l-status-needs-input">
+                <AlertDescription className="text-foreground">
+                  T3 not running: last update {tree.lastUpdate ? hhmm(tree.lastUpdate) : "never"}
+                </AlertDescription>
+              </Alert>
             )}
-          </div>
-          <SettingsButton
-            buttonRef={settingsButtonRef}
-            update={update}
-            open={settingsOpen}
-            toggle={() => {
-              setTokenOpen(false);
-              setLinearOpen(false);
-              setSettingsOpen((o) => !o);
-            }}
-          />
-        </div>
-      </header>
-      <div ref={listRef} className="min-h-0 flex-1 overflow-y-auto">
-        <Focus value={focusApi}>
-          {tree?.conn === "down" && (
-            <Alert className="mb-3 border-l-[3px] border-l-status-needs-input">
-              <AlertDescription className="text-foreground">
-                T3 not running: last update {tree.lastUpdate ? hhmm(tree.lastUpdate) : "never"}
-              </AlertDescription>
-            </Alert>
-          )}
-          {(tree?.conn === "no-token" || tree?.conn === "unauthorized") && (
-            <Alert className="mb-3 border-l-[3px] border-l-status-needs-input">
-              <AlertDescription className="flex flex-wrap items-center gap-x-2 text-foreground">
-                {tree.conn === "no-token" ? "No T3 token is set." : "T3 rejected the token."}
-                <Button
-                  variant="link"
-                  size="sm"
-                  className="h-auto p-0"
-                  onClick={() => {
-                    setTokenOpen(true);
-                    setSettingsOpen(true);
+            {(tree?.conn === "no-token" || tree?.conn === "unauthorized") && (
+              <Alert className="mb-3 border-l-[3px] border-l-status-needs-input">
+                <AlertDescription className="flex flex-wrap items-center gap-x-2 text-foreground">
+                  {tree.conn === "no-token" ? "No T3 token is set." : "T3 rejected the token."}
+                  <Button
+                    variant="link"
+                    size="sm"
+                    className="h-auto p-0"
+                    onClick={() => {
+                      setTokenOpen(true);
+                      setSettingsOpen(true);
+                    }}
+                  >
+                    Set the token
+                  </Button>
+                </AlertDescription>
+              </Alert>
+            )}
+            {linearOn && tree?.linearKey === "rejected" && (
+              <Alert className="mb-3 border-l-[3px] border-l-status-needs-input">
+                <AlertDescription className="flex flex-wrap items-center gap-x-2 text-foreground">
+                  Linear rejected the API key.
+                  <Button
+                    variant="link"
+                    size="sm"
+                    className="h-auto p-0"
+                    onClick={() => {
+                      setLinearOpen(true);
+                      setSettingsOpen(true);
+                    }}
+                  >
+                    Set the key
+                  </Button>
+                </AlertDescription>
+              </Alert>
+            )}
+            <DragDropProvider plugins={plugins} onDragStart={dragStart} onDragEnd={dragEnd}>
+              {triage && (
+                <TriageCard
+                  queue={queue}
+                  live={live}
+                  now={now}
+                  t3cli={t3cli}
+                  close={() => setTriage(false)}
+                  endExtra={lookDoneButton}
+                />
+              )}
+              {focusShow && (
+                <FocusStrip
+                  ids={focus}
+                  live={live}
+                  now={now}
+                  remove={focusApi.remove}
+                  pending={pend}
+                  replace={() => {
+                    if (!pend) return;
+                    setFocus((ids) => replaceFocus(ids, pend.slot, pend.id));
+                    setPending(null);
                   }}
-                >
-                  Set the token
-                </Button>
-              </AlertDescription>
-            </Alert>
-          )}
-          {linearOn && tree?.linearKey === "rejected" && (
-            <Alert className="mb-3 border-l-[3px] border-l-status-needs-input">
-              <AlertDescription className="flex flex-wrap items-center gap-x-2 text-foreground">
-                Linear rejected the API key.
-                <Button
-                  variant="link"
-                  size="sm"
-                  className="h-auto p-0"
-                  onClick={() => {
-                    setLinearOpen(true);
-                    setSettingsOpen(true);
-                  }}
-                >
-                  Set the key
-                </Button>
-              </AlertDescription>
-            </Alert>
-          )}
-          <DragDropProvider plugins={plugins} onDragStart={dragStart} onDragEnd={dragEnd}>
-            {triage && (
-              <TriageCard
-                queue={queue}
-                live={live}
-                now={now}
-                t3cli={t3cli}
-                close={() => setTriage(false)}
-                endExtra={lookDoneButton}
-              />
-            )}
-            {focusShow && (
-              <FocusStrip
-                ids={focus}
-                live={live}
-                now={now}
-                remove={focusApi.remove}
-                pending={pend}
-                replace={() => {
-                  if (!pend) return;
-                  setFocus((ids) => replaceFocus(ids, pend.slot, pend.id));
-                  setPending(null);
-                }}
-                cancel={cancelReplace}
-              />
-            )}
-            <Details value={details}>
-              <NeedsOnly value={needsOnly}>
-                <ProjectNames value={projectNames}>
-                  <Linear value={linear}>
-                    <Watched value={labels}>
-                      <Lists value={sortBy === "updated" ? NO_LISTS : view.lists}>
-                        <Now value={now}>
-                          <div
-                            className={!connecting && tree.conn !== "up" ? "grayscale" : ""}
-                            data-conn={!connecting && tree.conn !== "up" ? "down" : undefined}
-                            data-status-text={statusText ? undefined : "off"}
-                          >
-                            {projects?.length === 0 && <p className="text-muted-foreground">No active threads.</p>}
-                            {projects ? (
-                              <Card className="gap-0 overflow-clip rounded-[12px] px-2 py-0 shadow-none">
-                                <ul key={listKey} className={cn("m-0 list-none p-0", layout === "flat" && "p-1")}>
-                                  <SendTo value={sendToApi}>
-                                    {layout === "flat" ? (
-                                      <Presence key="flat" items={view.flat ?? []} keyOf={(i) => i.id}>
-                                        {(i) => (
-                                          <FlatRow
-                                            i={i}
-                                            corners={edgeCorners(view.flat ?? [], i)}
-                                            section={sectionOf(view.flat ?? [], i)}
-                                            closed={closed}
-                                            toggle={toggle}
-                                            fold={fold}
-                                            toggleSection={toggleSection}
-                                          />
-                                        )}
-                                      </Presence>
-                                    ) : (
-                                      <Presence key="tree" items={projects} keyOf={(p) => p.id}>
-                                        {(p) => <ProjectBlock b={p} closed={closed} toggle={toggle} fold={fold} />}
-                                      </Presence>
-                                    )}
-                                  </SendTo>
-                                </ul>
-                              </Card>
-                            ) : (
-                              <>
-                                <p className="mb-2 text-sm text-muted-foreground" role="status">
-                                  Connecting to T3…
-                                </p>
-                                <Card
-                                  className="gap-0 rounded-[12px] py-0 shadow-none"
-                                  aria-busy="true"
-                                  aria-label="Loading threads"
-                                >
-                                  <CardContent className="flex flex-col gap-0.5 p-1.5">
-                                    {[0, 1, 2].map((i) => (
-                                      <Skeleton key={i} className="h-9 rounded-[8px] motion-reduce:animate-none" />
-                                    ))}
-                                  </CardContent>
+                  cancel={cancelReplace}
+                />
+              )}
+              <Details value={details}>
+                <NeedsOnly value={needsOnly}>
+                  <ProjectNames value={projectNames}>
+                    <Linear value={linear}>
+                      <Watched value={labels}>
+                        <Lists value={sortBy === "updated" ? NO_LISTS : view.lists}>
+                          <Now value={now}>
+                            <div
+                              className={!connecting && tree.conn !== "up" ? "grayscale" : ""}
+                              data-conn={!connecting && tree.conn !== "up" ? "down" : undefined}
+                              data-status-text={statusText ? undefined : "off"}
+                            >
+                              {projects?.length === 0 && <p className="text-muted-foreground">No active threads.</p>}
+                              {projects ? (
+                                <Card className="gap-0 overflow-clip rounded-[12px] px-2 py-0 shadow-none">
+                                  <ul key={listKey} className={cn("m-0 list-none p-0", layout === "flat" && "p-1")}>
+                                    <SendTo value={sendToApi}>
+                                      {layout === "flat" ? (
+                                        <Presence key="flat" items={view.flat ?? []} keyOf={(i) => i.id}>
+                                          {(i) => (
+                                            <FlatRow
+                                              i={i}
+                                              corners={edgeCorners(view.flat ?? [], i)}
+                                              section={sectionOf(view.flat ?? [], i)}
+                                              closed={closed}
+                                              toggle={toggle}
+                                              fold={fold}
+                                              toggleSection={toggleSection}
+                                            />
+                                          )}
+                                        </Presence>
+                                      ) : (
+                                        <Presence key="tree" items={projects} keyOf={(p) => p.id}>
+                                          {(p) => <ProjectBlock b={p} closed={closed} toggle={toggle} fold={fold} />}
+                                        </Presence>
+                                      )}
+                                    </SendTo>
+                                  </ul>
                                 </Card>
-                              </>
-                            )}
-                            {settled && projects && (
-                              <SendTo value={sendToApi}>
-                                <SettledList signature={tree?.settled ?? ""} scrollRoot={listRef} />
-                              </SendTo>
-                            )}
-                          </div>
-                        </Now>
-                      </Lists>
-                    </Watched>
-                  </Linear>
-                </ProjectNames>
-              </NeedsOnly>
-            </Details>
-          </DragDropProvider>
-        </Focus>
-      </div>
-      {settingsOpen && (
-        <SettingsPanel
-          close={closeSettings}
-          buttonRef={settingsButtonRef}
-          linear={linear}
-          setLinear={setLinear}
-          labels={labels}
-          setLabels={setLabels}
-          settled={settled}
-          setSettled={setSettled}
-          snoozed={snoozed}
-          setSnoozed={setSnoozed}
-          nest={nest}
-          setNest={setNest}
-          statusText={statusText}
-          setStatusText={setStatusText}
-          projectNames={projectNames}
-          setProjectNames={setProjectNames}
-          canReset={Object.keys(orders).length + Object.keys(linearOrders).length > 0}
-          resetOrder={resetOrder}
-          theme={theme}
-          setTheme={setTheme}
-          update={update}
-          conn={tree?.conn}
-          linearKey={tree?.linearKey}
-          tokenOpen={tokenOpen}
-          linearOpen={linearOpen}
-          reloadModels={loadModels}
-          clis={clis}
-          pick={pick}
-          catchUpOn={catchUpOn}
-          setPick={pickCli}
-          setCatchUp={setCatchUp}
+                              ) : (
+                                <>
+                                  <p className="mb-2 text-sm text-muted-foreground" role="status">
+                                    Connecting to T3…
+                                  </p>
+                                  <Card
+                                    className="gap-0 rounded-[12px] py-0 shadow-none"
+                                    aria-busy="true"
+                                    aria-label="Loading threads"
+                                  >
+                                    <CardContent className="flex flex-col gap-0.5 p-1.5">
+                                      {[0, 1, 2].map((i) => (
+                                        <Skeleton key={i} className="h-9 rounded-[8px] motion-reduce:animate-none" />
+                                      ))}
+                                    </CardContent>
+                                  </Card>
+                                </>
+                              )}
+                              {settled && projects && (
+                                <SendTo value={sendToApi}>
+                                  <SettledList signature={tree?.settled ?? ""} scrollRoot={listRef} />
+                                </SendTo>
+                              )}
+                            </div>
+                          </Now>
+                        </Lists>
+                      </Watched>
+                    </Linear>
+                  </ProjectNames>
+                </NeedsOnly>
+              </Details>
+            </DragDropProvider>
+          </Focus>
+        </div>
+        {settingsOpen && (
+          <SettingsPanel
+            close={closeSettings}
+            buttonRef={settingsButtonRef}
+            linear={linear}
+            setLinear={setLinear}
+            labels={labels}
+            setLabels={setLabels}
+            settled={settled}
+            setSettled={setSettled}
+            snoozed={snoozed}
+            setSnoozed={setSnoozed}
+            nest={nest}
+            setNest={setNest}
+            statusText={statusText}
+            setStatusText={setStatusText}
+            projectNames={projectNames}
+            setProjectNames={setProjectNames}
+            canReset={Object.keys(orders).length + Object.keys(linearOrders).length > 0}
+            resetOrder={resetOrder}
+            theme={theme}
+            setTheme={setTheme}
+            update={update}
+            conn={tree?.conn}
+            linearKey={tree?.linearKey}
+            tokenOpen={tokenOpen}
+            linearOpen={linearOpen}
+            reloadModels={loadModels}
+            clis={clis}
+            pick={pick}
+            catchUpOn={catchUpOn}
+            setPick={pickCli}
+            setCatchUp={setCatchUp}
+          />
+        )}
+        <FindDialog
+          open={findOpen}
+          setOpen={setFindOpen}
+          list={hits(full.projects)}
+          focus={focus}
+          canShow={(id) => inView.has(id)}
+          reveal={reveal}
+          now={now}
         />
-      )}
-      <FindDialog
-        open={findOpen}
-        setOpen={setFindOpen}
-        list={hits(full.projects)}
-        focus={focus}
-        canShow={(id) => inView.has(id)}
-        reveal={reveal}
-        now={now}
-      />
-      <LooksDoneDialog
-        open={doneOpen}
-        items={lookDone}
-        onOpenChange={setDoneOpen}
-        onDone={(settledIds, skipped) => {
-          setSkip((s) => [...s.filter((e) => !skipped.some((k) => k.id === e.id)), ...skipped]);
-          if (settledIds.length > 0) setUndoIds((u) => [...(u ?? []), ...settledIds]);
-        }}
-      />
-      {undoIds && <UndoToast key={undoIds.join()} ids={undoIds} onClose={() => setUndoIds(null)} />}
-      <SendDialog
-        fixed
-        open={sendTo.open}
-        threadIds={[sendTo.id]}
-        live={live}
-        message=""
-        onOpenChange={(open) => setSendTo((s) => ({ ...s, open }))}
-      />
-    </TooltipProvider>
+        <LooksDoneDialog
+          open={doneOpen}
+          items={lookDone}
+          onOpenChange={setDoneOpen}
+          onDone={(settledIds, skipped) => {
+            setSkip((s) => [...s.filter((e) => !skipped.some((k) => k.id === e.id)), ...skipped]);
+            if (settledIds.length > 0) setUndoIds((u) => [...(u ?? []), ...settledIds]);
+          }}
+        />
+        {undoIds && <UndoToast key={undoIds.join()} ids={undoIds} onClose={() => setUndoIds(null)} />}
+        <SendDialog
+          fixed
+          open={sendTo.open}
+          threadIds={[sendTo.id]}
+          live={live}
+          message=""
+          onOpenChange={(open) => setSendTo((s) => ({ ...s, open }))}
+        />
+        <ProtoLayer />
+      </TooltipProvider>
+    </ProtoProvider>
   );
 }
 
