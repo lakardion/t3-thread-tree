@@ -69,7 +69,7 @@ Or remove the quarantine mark in Terminal, then open the app as usual:
 xattr -dr com.apple.quarantine "/Applications/T3 Thread Tree.app"
 ```
 
-Do this again each time you install a new `.dmg` by hand.
+Do this step again only when you install a new `.dmg` by hand. The app can also update itself in place (see [Updates](#updates)). An update from the app does not need this step again.
 
 ### 4. Connect the app to T3
 
