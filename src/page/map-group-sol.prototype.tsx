@@ -46,6 +46,21 @@ function firstThread(branches: Branch[]): ThreadNode | undefined {
   }
 }
 
+const pr = (n: number, title: string, draft: boolean): PrNode => ({
+  n,
+  title,
+  draft,
+  url: `#proto-pr-${n}`,
+  state: "open",
+  checks: draft ? "pending" : "passing",
+  review: draft ? null : "review-required",
+  conflicting: false,
+  additions: null,
+  deletions: null,
+  changedFiles: null,
+  labels: [],
+});
+
 function fixture(sample: ThreadNode): MapFixture {
   const now = Date.now();
   const phrases = { done: "Completed", "your-turn": "Your turn", working: "Working" } as const;
@@ -103,20 +118,6 @@ function fixture(sample: ThreadNode): MapFixture {
       ...fields,
     };
   };
-  const pr = (n: number, title: string, draft: boolean): PrNode => ({
-    n,
-    title,
-    draft,
-    url: `#proto-pr-${n}`,
-    state: "open",
-    checks: draft ? "pending" : "passing",
-    review: draft ? null : "review-required",
-    conflicting: false,
-    additions: null,
-    deletions: null,
-    changedFiles: null,
-    labels: [],
-  });
   const subMap: MapFixture = {
     name: "Flat view maps",
     head: thread("flat", "Wayfinder: Flat view maps", "working", 9),
@@ -424,20 +425,27 @@ export function MapGroupPrototype({ Row, projects, children }: { Row: Row; proje
   const group = (
     <MapGroup key="map" map={fixture(sample)} state={state} layout={{ Row, variant, stack }} onDrag={setDragging} />
   );
+  const moveGroup = () => {
+    setAtEnd(!atEnd);
+    setDragging(false);
+  };
   const dropTarget = dragging && (
-    <li
-      className="my-1 grid min-h-9 place-items-center rounded-md border border-dashed border-status-plan bg-card text-xs text-status-plan"
-      onDragOver={(event) => {
-        event.preventDefault();
-        event.dataTransfer.dropEffect = "move";
-      }}
-      onDrop={(event) => {
-        event.preventDefault();
-        setAtEnd(!atEnd);
-        setDragging(false);
-      }}
-    >
-      {atEnd ? "Move map above projects" : "Move map below projects"}
+    <li className="my-1">
+      <button
+        type="button"
+        className="grid min-h-9 w-full place-items-center rounded-md border border-dashed border-status-plan bg-card text-xs text-status-plan"
+        onClick={moveGroup}
+        onDragOver={(event) => {
+          event.preventDefault();
+          event.dataTransfer.dropEffect = "move";
+        }}
+        onDrop={(event) => {
+          event.preventDefault();
+          moveGroup();
+        }}
+      >
+        {atEnd ? "Move map above projects" : "Move map below projects"}
+      </button>
     </li>
   );
   return (
