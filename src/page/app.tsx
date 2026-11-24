@@ -161,6 +161,7 @@ import { Hint, useKeyHints } from "./key-hints.tsx";
 import { pageKey } from "./keys.ts";
 import { looksDone, parseSkip, pruneSkip, SKIP_KEY } from "./looks-done.ts";
 import { LooksDoneButton, LooksDoneDialog, UndoToast } from "./looks-done.tsx";
+import { MapGroupPrototype, MapGroupSwitcher } from "./map-group.prototype.tsx";
 import {
   PROJECTS,
   arrange,
@@ -180,7 +181,6 @@ import {
 } from "./order.ts";
 import { Presence, useMotion } from "./presence.tsx";
 import { ProjectIcon, projectHex } from "./project-icon.tsx";
-import { MapGroupPrototype, MapGroupSwitcher } from "./map-group.prototype.tsx";
 import { ProviderIcon } from "./provider-icon.tsx";
 import { RunRow } from "./run-row.tsx";
 import { CliGate, LastMessage, SendDialog, useLastMessage } from "./send-dialog.tsx";
@@ -1394,6 +1394,8 @@ const Linear = createContext<Tree["linear"]>(null);
 const Watched = createContext<string[]>([]);
 /** The rendered ids of each list, by list key. */
 const Lists = createContext(new Map<string, string[]>());
+/** PROTOTYPE: the project block that hosts the map group prototype. */
+const ProtoHost = createContext<string | undefined>(undefined);
 /** No list, so no row is sortable. */
 const NO_LISTS = new Map<string, string[]>();
 
@@ -1791,7 +1793,9 @@ function ThreadRow({
   corners,
   review,
   nested,
+  noDetails,
 }: {
+  noDetails?: boolean;
   t: ThreadNode;
   chip?: string;
   sort?: Sort;
@@ -1970,11 +1974,13 @@ function ThreadRow({
                 <FocusMark t={t} pressed={false} />
               </span>
             </span>
-            <CollapsibleTrigger asChild>
-              <Button variant="ghost" size="icon" className={cn(ROW_BUTTON, "group")} aria-label="Details">
-                <ChevronDown className="size-3.5 transition-transform duration-200 group-data-[state=open]:rotate-180 motion-reduce:transition-none" />
-              </Button>
-            </CollapsibleTrigger>
+            {!noDetails && (
+              <CollapsibleTrigger asChild>
+                <Button variant="ghost" size="icon" className={cn(ROW_BUTTON, "group")} aria-label="Details">
+                  <ChevronDown className="size-3.5 transition-transform duration-200 group-data-[state=open]:rotate-180 motion-reduce:transition-none" />
+                </Button>
+              </CollapsibleTrigger>
+            )}
           </span>
         </div>
         <CollapsibleContent>
@@ -2531,6 +2537,7 @@ function ProjectBlock({ b, closed, toggle, fold }: { b: Branch } & Fold) {
           <div className="min-w-0 px-1 pb-1">
             <CollapsibleContent asChild>
               <ul className="m-0 list-none p-0">
+                {useContext(ProtoHost) === b.id && <MapGroupPrototype Row={ThreadRow} projects={[b]} />}
                 <Groups b={b} closed={closed} toggle={toggle} fold={fold} />
                 {threads}
               </ul>
@@ -3501,27 +3508,28 @@ function App() {
                                 <ul key={listKey} className={cn("m-0 list-none p-0", layout === "flat" && "p-1")}>
                                   <SendTo value={sendToApi}>
                                     <Launcher value={launcher}>
-                                      {layout !== "flat" && <MapGroupPrototype Row={ThreadRow} projects={projects} />}
-                                      {layout === "flat" ? (
-                                        <Presence key="flat" items={view.flat ?? []} keyOf={(i) => i.id}>
-                                          {(i) => (
-                                            <FlatRow
-                                              i={i}
-                                              corners={edgeCorners(view.flat ?? [], i)}
-                                              linear={flatMode === "linear"}
-                                              section={sectionOf(view.flat ?? [], i)}
-                                              closed={closed}
-                                              toggle={toggle}
-                                              fold={fold}
-                                              toggleSection={toggleSection}
-                                            />
-                                          )}
-                                        </Presence>
-                                      ) : (
-                                        <Presence key="tree" items={projects} keyOf={(p) => p.id}>
-                                          {(p) => <ProjectBlock b={p} closed={closed} toggle={toggle} fold={fold} />}
-                                        </Presence>
-                                      )}
+                                      <ProtoHost value={projects[0]?.id}>
+                                        {layout === "flat" ? (
+                                          <Presence key="flat" items={view.flat ?? []} keyOf={(i) => i.id}>
+                                            {(i) => (
+                                              <FlatRow
+                                                i={i}
+                                                corners={edgeCorners(view.flat ?? [], i)}
+                                                linear={flatMode === "linear"}
+                                                section={sectionOf(view.flat ?? [], i)}
+                                                closed={closed}
+                                                toggle={toggle}
+                                                fold={fold}
+                                                toggleSection={toggleSection}
+                                              />
+                                            )}
+                                          </Presence>
+                                        ) : (
+                                          <Presence key="tree" items={projects} keyOf={(p) => p.id}>
+                                            {(p) => <ProjectBlock b={p} closed={closed} toggle={toggle} fold={fold} />}
+                                          </Presence>
+                                        )}
+                                      </ProtoHost>
                                     </Launcher>
                                   </SendTo>
                                 </ul>

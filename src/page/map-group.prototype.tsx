@@ -9,6 +9,9 @@
  * A Stack box: a dashed box like the PR stack rail holds the map thread row and its members on a dashed line.
  * B Map rail: no box. A map node sits left of the map thread row, and a solid colored rail drops from it.
  * C Tab card: a tinted card with a map tab on its top edge. Members indent as subthreads, with no line.
+ * D Map edge: B, but the rail takes the project edge, so rows keep the indent of the threads next to them.
+ *
+ * The map thread row has no details fold: the map fold takes its place.
  */
 import { ChevronDown, ChevronLeft, ChevronRight, ExternalLink, Layers, Map as MapIcon } from "lucide-react";
 import { useEffect, useState, useSyncExternalStore, type ComponentType, type ReactNode } from "react";
@@ -42,7 +45,8 @@ const node = (
   key: null,
   linear: null,
   status,
-  phrase: { working: "Working", "your-turn": "Your turn", done: "Completed", waiting: "Waiting" }[status as string] ?? status,
+  phrase:
+    { working: "Working", "your-turn": "Your turn", done: "Completed", waiting: "Waiting" }[status as string] ?? status,
   raw: status,
   settled: false,
   input: false,
@@ -113,7 +117,7 @@ const count = (m: FakeMap): number =>
 
 const MAP_TONE = "text-amber-600 dark:text-amber-400";
 
-type Row = ComponentType<{ t: ThreadNode; chip?: string; inStack?: boolean; nested?: boolean }>;
+type Row = ComponentType<{ t: ThreadNode; chip?: string; inStack?: boolean; nested?: boolean; noDetails?: boolean }>;
 type Ctx = { Row: Row; state: MapState; stack: StackLook };
 type Look = (p: { m: FakeMap; c: Ctx; depth: number }) => ReactNode;
 
@@ -260,7 +264,7 @@ function MapA({ m, c, depth }: { m: FakeMap; c: Ctx; depth: number }) {
             <span className="text-[11px] text-muted-foreground tabular-nums">{count(m)}</span>
           </span>
           <ul className="m-0 min-w-0 flex-1 list-none p-0">
-            <c.Row t={{ ...m.head, children: [] }} nested />
+            <c.Row t={{ ...m.head, children: [] }} nested noDetails />
           </ul>
         </div>
       ) : (
@@ -280,6 +284,7 @@ function MapA({ m, c, depth }: { m: FakeMap; c: Ctx; depth: number }) {
 function MapB({ m, c, depth }: { m: FakeMap; c: Ctx; depth: number }) {
   const [open, setOpen] = useState(true);
   const head = !headless(c, depth);
+  const items = Members({ m, c, depth, Look: MapB });
   return (
     <li className="relative my-px list-none">
       <div className="relative pl-7">
@@ -289,7 +294,7 @@ function MapB({ m, c, depth }: { m: FakeMap; c: Ctx; depth: number }) {
         {head ? (
           <div className="flex items-center gap-1">
             <ul className="m-0 min-w-0 flex-1 list-none p-0">
-              <c.Row t={{ ...m.head, children: [] }} nested />
+              <c.Row t={{ ...m.head, children: [] }} nested noDetails />
             </ul>
             <span className="flex-none text-[11px] text-muted-foreground tabular-nums" title="Map members">
               {count(m)}
@@ -301,8 +306,54 @@ function MapB({ m, c, depth }: { m: FakeMap; c: Ctx; depth: number }) {
         )}
       </div>
       {open && (
-        <ul className="m-0 ml-[13px] list-none border-l-2 border-amber-500/40 p-0 pl-3">
-          <Members m={m} c={c} depth={depth} Look={MapB} />
+        <ul className="m-0 ml-[13px] list-none p-0">
+          {items.map((el, i) => (
+            <li key={i} className="relative list-none pl-3">
+              {i < items.length - 1 ? (
+                <span aria-hidden className="absolute inset-y-0 left-0 w-0.5 bg-amber-500/40" />
+              ) : (
+                <span
+                  aria-hidden
+                  className="absolute top-0 left-0 h-[18px] w-2 rounded-bl-[8px] border-b-2 border-l-2 border-amber-500/40"
+                />
+              )}
+              <ul className="m-0 flex list-none flex-col p-0">{el}</ul>
+            </li>
+          ))}
+        </ul>
+      )}
+    </li>
+  );
+}
+
+/* ---------- D: Map edge ---------- */
+
+function MapD({ m, c, depth }: { m: FakeMap; c: Ctx; depth: number }) {
+  const [open, setOpen] = useState(true);
+  const head = !headless(c, depth);
+  return (
+    <li className={cn("relative my-px list-none", depth > 0 && "pl-2")}>
+      <span
+        aria-hidden
+        className={cn("pointer-events-none absolute inset-y-0.5 w-[3px] rounded-full bg-amber-500/70", "left-0")}
+      />
+      {head ? (
+        <div className="flex items-center gap-1">
+          <MapIcon className={cn("ml-2 size-3.5 flex-none", MAP_TONE)} aria-label="Map" />
+          <ul className="m-0 min-w-0 flex-1 list-none p-0">
+            <c.Row t={{ ...m.head, children: [] }} nested noDetails />
+          </ul>
+          <span className="flex-none text-[11px] text-muted-foreground tabular-nums" title="Map members">
+            {count(m)}
+          </span>
+          <Fold open={open} set={setOpen} />
+        </div>
+      ) : (
+        <Header m={m} c={c} open={open} set={setOpen} className="h-9" />
+      )}
+      {open && (
+        <ul className="m-0 list-none p-0 pl-2.5">
+          <Members m={m} c={c} depth={depth} Look={MapD} />
         </ul>
       )}
     </li>
@@ -332,7 +383,7 @@ function MapC({ m, c, depth }: { m: FakeMap; c: Ctx; depth: number }) {
         )}
       </span>
       <ul className="m-0 list-none p-0 px-1 pb-1">
-        {head && <c.Row t={{ ...m.head, children: [] }} nested />}
+        {head && <c.Row t={{ ...m.head, children: [] }} nested noDetails />}
         {open && (
           <li className={cn("list-none", head && "pl-2.5")}>
             <ul className="m-0 list-none p-0">
@@ -347,7 +398,7 @@ function MapC({ m, c, depth }: { m: FakeMap; c: Ctx; depth: number }) {
 
 /* ---------- switcher ---------- */
 
-const VARIANTS = { A: "Stack box", B: "Map rail", C: "Tab card" } as const;
+const VARIANTS = { A: "Stack box", B: "Map rail", C: "Tab card", D: "Map edge" } as const;
 type Variant = keyof typeof VARIANTS;
 const KEYS = Object.keys(VARIANTS) as Variant[];
 const subscribe = (fn: () => void) => {
@@ -367,18 +418,18 @@ const setParam = (k: string, v: string) => {
 };
 const useVariant = (): Variant => {
   const v = useSyncExternalStore(subscribe, () => param("variant"));
-  return KEYS.includes(v as Variant) ? (v as Variant) : "A";
+  return KEYS.includes(v as Variant) ? (v as Variant) : "D";
 };
 const useStackLook = (): StackLook => {
   const v = useSyncExternalStore(subscribe, () => param("stack"));
-  return STACK_LOOKS.includes(v as StackLook) ? (v as StackLook) : "badges";
+  return STACK_LOOKS.includes(v as StackLook) ? (v as StackLook) : "rail";
 };
 const useMapState = (): MapState => {
   const v = useSyncExternalStore(subscribe, () => param("map"));
   return MAP_STATES.includes(v as MapState) ? (v as MapState) : "live";
 };
 
-const LOOKS = { A: MapA, B: MapB, C: MapC };
+const LOOKS = { A: MapA, B: MapB, C: MapC, D: MapD };
 const firstThread = (bs: Branch[]): ThreadNode | undefined => {
   for (const b of bs) {
     const t = b.threads.find((x) => x.prs.length > 0) ?? b.threads[0] ?? firstThread(b.branches);
