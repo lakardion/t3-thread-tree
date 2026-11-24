@@ -642,3 +642,31 @@ describe("releaseHeld", () => {
     expect(r.held.size).toBe(1);
   });
 });
+
+describe("run nodes", () => {
+  const run = (id: string, children: ThreadNode[]): ThreadNode => ({
+    ...thread(id, "needs-input", children),
+    run: { runId: id, workflow: "w", state: "asks", steps: [], detail: null },
+  });
+  const projects = [branch("p", [run("r", [thread("s", "needs-input")])])];
+
+  test("countAttention counts the step thread, not the run", () => {
+    expect(countAttention(projects)).toEqual({ needYou: 1, working: 0, yourTurn: 0, stopped: 0 });
+  });
+
+  test("openNextQueue queues the step thread, not the run", () => {
+    expect(ids(openNextQueue(projects))).toEqual(["s"]);
+  });
+});
+
+describe("onlyNeedsYou and run nodes", () => {
+  const run = (children: ThreadNode[]): ThreadNode => ({
+    ...thread("r", "needs-input", children),
+    run: { runId: "r", workflow: "w", state: "asks", steps: [], detail: null },
+  });
+  test("a run with no waiting step thread is dropped; with one it stays through that thread", () => {
+    expect(onlyNeedsYou([branch("p", [run([thread("s", "working")])])])).toEqual([]);
+    const kept = onlyNeedsYou([branch("p", [run([thread("s", "needs-input"), thread("w", "working")])])]);
+    expect(ids(kept[0].threads[0].children)).toEqual(["s"]);
+  });
+});

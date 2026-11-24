@@ -47,6 +47,7 @@ import {
   useEffect,
   useRef,
   useState,
+  type ComponentProps,
   type ReactNode,
   type RefObject,
 } from "react";
@@ -181,6 +182,7 @@ import {
 import { Presence, useMotion } from "./presence.tsx";
 import { ProjectIcon, projectHex } from "./project-icon.tsx";
 import { ProviderIcon } from "./provider-icon.tsx";
+import { RunRow } from "./run-row.tsx";
 import { CliGate, LastMessage, SendDialog, useLastMessage } from "./send-dialog.tsx";
 import { postSettle } from "./send.ts";
 import { LEGEND, LegendIcon, STATUS, StatusIcon } from "./status-icon.tsx";
@@ -1774,11 +1776,14 @@ function ThreadRow({
   project,
   corners,
   review,
+  nested,
 }: {
   t: ThreadNode;
   chip?: string;
   sort?: Sort;
   inStack?: boolean;
+  /** The row sits on a run rail: no drag handle, but the stack badge stays. */
+  nested?: boolean;
   project?: Branch;
   corners?: string;
   review?: boolean;
@@ -1805,7 +1810,7 @@ function ThreadRow({
           data-status={t.status}
           data-thread={t.id}
         >
-          {!inStack && <DragHandle handleRef={handleRef} name={t.title || t.id} />}
+          {!inStack && !nested && <DragHandle handleRef={handleRef} name={t.title || t.id} />}
           <StatusCell t={t} now={now} />
           <PhraseCell t={t} now={now} />
           <span
@@ -1966,6 +1971,28 @@ function ThreadRow({
   return <Sortable sort={sort && { ...sort, thread: t.id }}>{render}</Sortable>;
 }
 
+/** A run node renders as a run row, any other node as a thread row. */
+function NodeRow(p: ComponentProps<typeof ThreadRow>) {
+  const now = useContext(Now);
+  const { t, sort, inStack, nested, project, corners } = p;
+  if (!t.run) return <ThreadRow {...p} />;
+  return (
+    <Sortable sort={sort && { ...sort, thread: t.id }}>
+      {(ref, handleRef) => (
+        <RunRow
+          t={t}
+          now={now}
+          Row={NodeRow}
+          liRef={ref}
+          liClass={cn(project && "border-l-[3px] pl-1", corners)}
+          liStyle={{ viewTransitionName: vtName("t", t.id), borderLeftColor: project && projectHex(project.label) }}
+          handle={!inStack && !nested && <DragHandle handleRef={handleRef} name={t.title || t.id} />}
+        />
+      )}
+    </Sortable>
+  );
+}
+
 /** The project icon, with the name as a tooltip while rows hide project names. */
 const ProjectTip = ({ name }: { name: string }) =>
   useContext(ProjectNames) ? (
@@ -2084,7 +2111,7 @@ function GroupRow({ b, closed, toggle, fold, sort }: { b: Branch; sort?: Sort } 
   const linear = useContext(Linear);
   const lists = useContext(Lists);
   const groupHref = isKeyGroup(b) ? linearHref(b.label, linear) : null;
-  if (one) return <ThreadRow t={one} chip={b.label} sort={sort} />;
+  if (one) return <NodeRow t={one} chip={b.label} sort={sort} />;
   const render = (ref: RefFn, handleRef?: RefFn) => (
     <Collapsible asChild open={open} onOpenChange={() => toggle(b.id)}>
       <li ref={ref} className="my-px">
@@ -2151,7 +2178,7 @@ function GroupRow({ b, closed, toggle, fold, sort }: { b: Branch; sort?: Sort } 
             </Presence>
             <Presence items={b.threads} keyOf={(t) => t.id}>
               {(t) => (
-                <ThreadRow
+                <NodeRow
                   t={t}
                   chip={b.linear ? (t.key ?? undefined) : undefined}
                   sort={sortOf(lists, threadsKey(b.id), threadUnitId(t), t.title || t.id)}
@@ -2339,7 +2366,7 @@ function FlatRow({
   if (i.kind === "thread")
     return (
       <Section value={section}>
-        <ThreadRow
+        <NodeRow
           t={i.t}
           chip={i.t.key ?? undefined}
           project={i.project.linear ? undefined : i.project}
@@ -2395,7 +2422,7 @@ function ProjectBlock({ b, closed, toggle, fold }: { b: Branch } & Fold) {
   const threads = (
     <Presence items={b.threads} keyOf={(t) => t.id}>
       {(t) => (
-        <ThreadRow
+        <NodeRow
           t={t}
           chip={t.key ?? undefined}
           sort={sortOf(lists, threadsKey(b.id), threadUnitId(t), t.title || t.id)}
@@ -3073,7 +3100,7 @@ function App() {
         to.scrollIntoView({ block: "nearest" });
       } else if (action === "toggle" || action === "expand" || action === "collapse") {
         const row = active?.closest(".thread-row");
-        const btn = row ? row.querySelector<HTMLElement>("[aria-label=Details]") : active;
+        const btn = row ? row.querySelector<HTMLElement>("[aria-label=Details], [data-fold]") : active;
         const expanded = btn?.getAttribute("aria-expanded") === "true";
         if (btn instanceof HTMLElement && (action === "toggle" || expanded === (action === "collapse"))) btn.click();
       } else if (action === "send") {

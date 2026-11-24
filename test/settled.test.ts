@@ -136,3 +136,11 @@ describe("settledRoutes", () => {
     ]);
   });
 });
+
+describe("step threads", () => {
+  test("a settled step thread is not in the signature", () => {
+    const step = thread("s", { settledAt: at(1), workflowRun: { runId: "r", workflow: "w", step: "plan" } });
+    expect(settledSignature([step])).toBe("");
+    expect(settledSignature([step, thread("x", { settledAt: at(2) })])).toMatch(/^1:/);
+  });
+});

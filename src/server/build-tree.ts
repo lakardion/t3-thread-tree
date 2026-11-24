@@ -13,12 +13,14 @@ import {
   type Label,
   type LinearIssue,
   type PrNode,
+  type RunInfo,
+  type RunStep,
   type Status,
   type ThreadNode,
 } from "../shared/tree.ts";
 import { waiting } from "./catch-up.ts";
 import { suggestedReplies } from "./replies.ts";
-import type { Project, Thread } from "./t3.ts";
+import type { Project, RunStepsRaw, RunsSnapshot, Thread } from "./t3.ts";
 
 /** Review threads sit in Reviews, whatever their key. */
 const isReview = (t: { title: string }) => t.title.startsWith("Review #");
@@ -78,6 +80,12 @@ export type BuildInput = {
   catchUpOf?: (id: string) => CatchUp | undefined;
   /** The newest complete assistant text of threads. Unset: no node gets Suggested replies. */
   lastMessagesOf?: (ids: string[]) => Map<string, string | null>;
+  /** The workflow runs snapshot. Unset: no run shows. */
+  runs?: RunsSnapshot | null;
+  /** The fetched steps of a run, in start order. */
+  stepsOf?: (runId: string) => RunStepsRaw | undefined;
+  /** The T3 web origin, for the run page link. */
+  origin?: string;
 };
 
 type Node = ThreadNode & { t: Thread; first: string };
@@ -139,8 +147,9 @@ export function detailOf(t: Thread, now: number, all: Map<string, Thread>): Omit
     pinned: t.pinned,
   };
 }
-/** Creation time in ms, zero-padded so a string compare orders it, then the id. A bad date sorts first. */
-const creationKey = (t: Thread) => `${String(Date.parse(t.createdAt ?? "") || 0).padStart(16, "0")} ${t.id}`;
+/** Time in ms, zero-padded so a string compare orders it, then the id. A bad date sorts first. */
+const timeKey = (iso: string | null, id: string) => `${String(Date.parse(iso ?? "") || 0).padStart(16, "0")} ${id}`;
+const creationKey = (t: Thread) => timeKey(t.createdAt, t.id);
 const byFirst = <T extends { first: string }>(a: T, b: T) => a.first.localeCompare(b.first);
 
 /**
@@ -188,6 +197,138 @@ export function computeStacks(threads: Thread[]): Stack[] {
 const newest = (a: string | null, b: string | null): string | null =>
   a && b ? (Date.parse(a) >= Date.parse(b) ? a : b) : (a ?? b);
 
+const BUSY_THREAD: Status[] = ["working", "starting", "needs-input", "plan-ready"];
+const BUSY_RUN = ["running", "waiting", "paused"];
+const STEP_STATE = new Map<string, RunStep["state"]>([
+  ["running", "now"],
+  ["completed", "done"],
+  ["failed", "failed"],
+]);
+
+/** The step line state of a child by its status. */
+const lineState = (c: ThreadNode): RunStep["state"] =>
+  c.status === "failed" ? "failed" : [...BUSY_THREAD, "waiting"].includes(c.status) ? "now" : "done";
+
+/**
+ * The root run nodes of the step threads. A run is a candidate when it has a step thread. It shows when it is active or a step
+ * thread is busy. A candidate nests under its candidate parent run; a showing run with no showing ancestor is a root.
+ * A root node carries its first step thread as `t`, which gives its project.
+ */
+function runNodes(steps: Node[], input: BuildInput): Node[] {
+  const snap = new Map((input.runs?.runs ?? []).map((r) => [r.runId, r]));
+  const asked = new Map((input.runs?.questions ?? []).toReversed().map((q) => [q.runId, q]));
+  const byRun = new Map<string, Node[]>();
+  for (const n of steps) {
+    const id = n.t.workflowRun!.runId;
+    byRun.set(id, [...(byRun.get(id) ?? []), n]);
+  }
+  const showing = (id: string) =>
+    BUSY_RUN.includes(snap.get(id)?.status ?? "") || byRun.get(id)!.some((n) => BUSY_THREAD.includes(n.status));
+  const parentOf = (id: string) => {
+    const p = snap.get(id)?.parentRunId;
+    return p && byRun.has(p) ? p : null;
+  };
+  const underShown = (id: string): boolean => {
+    const p = parentOf(id);
+    return p !== null && (showing(p) || underShown(p));
+  };
+  const projectLabel = (id: string) => input.projects.get(id)?.title ?? id;
+
+  const built = new Map<string, Node>();
+  const build = (runId: string): Node => {
+    const done = built.get(runId);
+    if (done) return done;
+    const own = byRun.get(runId)!.toSorted(byFirst);
+    const run = snap.get(runId);
+    const q = run && asked.get(runId);
+    const kids = [...snap.values()]
+      .filter((r) => byRun.has(r.runId) && parentOf(r.runId) === runId)
+      .map((r) => build(r.runId));
+    for (const c of own) {
+      c.step = c.t.workflowRun!.step;
+      if (c.t.projectId !== own[0].t.projectId) c.t3Project = { id: c.t.projectId, label: projectLabel(c.t.projectId) };
+    }
+    for (const k of kids) k.step = snap.get(k.run!.runId)?.parentStep ?? "";
+    const children = [...own, ...kids].toSorted(byFirst);
+
+    const used = new Set<ThreadNode>();
+    const lines: RunStep[] = (input.stepsOf?.(runId) ?? []).map((s) => {
+      const c =
+        children.find((x) => !used.has(x) && !x.run && x.id === s.threadId) ??
+        children.find((x) => !used.has(x) && x.run && x.step === s.name);
+      if (c) used.add(c);
+      return { name: s.name, state: STEP_STATE.get(s.status) ?? "pending", child: c?.id ?? null };
+    });
+    for (const c of children) if (!used.has(c)) lines.push({ name: c.step ?? "", state: lineState(c), child: c.id });
+
+    const active = lines.findLast((l) => l.state === "now" || l.state === "failed")?.name || q?.name;
+    const say = (word: string) => (active ? `${word} · ${active}` : word);
+    const [state, verdictOf] = ((): [RunInfo["state"], ReturnType<typeof verdict>] => {
+      if (q) return ["asks", verdict("needs-input", say("asks you"), q.askedAt)];
+      if (run?.status === "paused") return ["paused", verdict("needs-input", say("paused"), run.updatedAt)];
+      if (run?.status === "running" || run?.status === "waiting")
+        return ["running", verdict("working", say("running"))];
+      return ["done", verdict("done", `done · ${lines.length} ${lines.length === 1 ? "step" : "steps"}`)];
+    })();
+    const title = run?.title ?? own[0].t.workflowRun!.workflow;
+    const updatedAt =
+      run?.updatedAt ??
+      own
+        .map((n) => n.updatedAt)
+        .toSorted()
+        .at(-1)!;
+    const key = issueKey(title) ?? own[0].key;
+    const id = `run:${runId}`;
+    const node: Node = {
+      t: own[0].t,
+      id,
+      href: `${input.origin ?? ""}/workflows?run=${encodeURIComponent(runId)}`,
+      title,
+      key,
+      linear: (key && input.linearOf?.(key)) || null,
+      ...verdictOf,
+      raw: run?.status ?? "",
+      updatedAt,
+      lastRun: updatedAt,
+      settled: false,
+      input: false,
+      snoozedUntil: null,
+      stack: null,
+      prs: [],
+      detail: {
+        request: null,
+        error: null,
+        limitResetAt: null,
+        autoResume: false,
+        stopRequested: false,
+        model: null,
+        planMode: false,
+        branch: null,
+        worktreePath: null,
+        launchedBy: null,
+        origin: null,
+        startedBy: null,
+        createdAt: null,
+        goal: null,
+        tags: [],
+        pinned: false,
+      },
+      children,
+      run: {
+        runId,
+        workflow: run?.workflow ?? own[0].t.workflowRun!.workflow,
+        state,
+        steps: lines,
+        detail: run?.detail ?? null,
+      },
+      first: timeKey(run?.startedAt || own[0].t.createdAt, id),
+    };
+    built.set(runId, node);
+    return node;
+  };
+  return [...byRun.keys()].filter((id) => showing(id) && !underShown(id)).map(build);
+}
+
 /** The visible threads as nodes, with their stacks and spawner lookups. Shared by both trees. */
 function prepare(input: BuildInput) {
   const { spawnerOf, environmentId, settled, now } = input;
@@ -197,25 +338,27 @@ function prepare(input: BuildInput) {
       ? []
       : (input.labelsOf?.(p) ?? []).filter((l) => watched.has(l.name.toLowerCase()));
   const visible = new Map<string, Thread>();
+  const stepThreads: Thread[] = [];
   const all = new Map<string, Thread>();
   for (const t of input.threads) {
     all.set(t.id, t);
-    if (!t.parentThreadId && !t.sideChat && !t.gone && (settled || !t.settledAt)) visible.set(t.id, t);
+    if (t.parentThreadId || t.sideChat || t.gone) continue;
+    if (t.workflowRun) stepThreads.push(t);
+    else if (settled || !t.settledAt) visible.set(t.id, t);
   }
 
-  const stacks = computeStacks([...visible.values()]);
+  const stacks = computeStacks([...visible.values(), ...stepThreads]);
   const stackIdOf = new Map<string, number>();
   stacks.forEach((st, i) => st.threads.forEach((t) => stackIdOf.set(t.id, i)));
 
-  const nodes = new Map<string, Node>();
-  for (const t of visible.values()) {
+  const nodeOf = (t: Thread): Node => {
     const si = stackIdOf.get(t.id);
     const created = (t.prs.find((p) => p.source === "created") ?? t.prs.find((p) => p.source === "agent"))?.n;
     const st = si === undefined ? null : stacks[si];
     const pos = st && created !== undefined && st.order.includes(created) ? st.order.indexOf(created) + 1 : null;
     const key = issueKey(t.title);
     const catchUp = input.catchUpOf?.(t.id);
-    nodes.set(t.id, {
+    return {
       t,
       id: t.id,
       href: hrefOf(environmentId, t.id),
@@ -237,8 +380,10 @@ function prepare(input: BuildInput) {
       children: [],
       ...(catchUp && { catchUp }),
       first: creationKey(t),
-    });
-  }
+    };
+  };
+  const nodes = new Map<string, Node>();
+  for (const t of visible.values()) nodes.set(t.id, nodeOf(t));
 
   if (input.lastMessagesOf) {
     const asks = waiting([...nodes.values()]).filter((n) => !(n.status === "needs-input" && n.phrase === "Approval"));
@@ -248,6 +393,8 @@ function prepare(input: BuildInput) {
       if (text) n.suggestedReplies = suggestedReplies(text);
     }
   }
+
+  for (const r of runNodes(stepThreads.map(nodeOf), input)) nodes.set(r.id, r);
 
   const visibleSpawner = (id: string): string | null => {
     const seen = new Set([id]);
@@ -292,6 +439,10 @@ export function buildTree(input: BuildInput): Branch[] {
   };
   for (const n of nodes.values()) {
     const { t } = n;
+    if (n.run) {
+      addTo(t.projectId, isReview(n) ? REVIEWS : (n.key ?? NO_KEY), n);
+      continue;
+    }
     /** A stack outranks lineage: keyless mates share one group, so the stack keeps its rail. */
     const si = stackIdOf.get(t.id);
     const stackKey = si === undefined ? null : `PR stack #${stacks[si].order[0]}`;
@@ -410,7 +561,7 @@ export function buildLinearTree(input: BuildInput): Branch[] {
   for (const n of nodes.values()) {
     const { t } = n;
     n.t3Project = { id: t.projectId, label: projects.get(t.projectId)?.title ?? t.projectId };
-    const si = stackIdOf.get(t.id);
+    const si = n.run ? undefined : stackIdOf.get(t.id);
     const by = si === undefined ? n : placer.get(si);
     const lp = by?.linear?.project;
     if (isReview(n)) reviews.push(n);
@@ -432,7 +583,7 @@ export function buildLinearTree(input: BuildInput): Branch[] {
         entry.nodes.push(n);
       }
     } else {
-      const vs = nest && !stackIdOf.has(t.id) ? visibleSpawner(t.id) : null;
+      const vs = nest && !n.run && !stackIdOf.has(t.id) ? visibleSpawner(t.id) : null;
       const spawner = vs ? nodes.get(vs)! : null;
       if (spawner && !spawner.key && !isReview(spawner)) spawner.children.push(n);
       else loose.push(n);

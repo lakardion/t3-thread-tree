@@ -23,15 +23,27 @@ import { runItems } from "./server/runs.ts";
 import { checkCli, cliPath, sendService } from "./server/send.ts";
 import { settleRoutes } from "./server/settle.ts";
 import { settledPage, settledRoutes, settledSignature } from "./server/settled.ts";
-import { connectShell, readEnvironmentId, type Project, type Thread } from "./server/t3.ts";
+import {
+  connectShell,
+  decodeRunSteps,
+  readEnvironmentId,
+  type Project,
+  type RunStepsRaw,
+  type RunsSnapshot,
+  type Thread,
+} from "./server/t3.ts";
 import { parseToken, readToken, tokenResponse, writeToken } from "./server/token.ts";
 import { workflowRoutes } from "./server/workflows.ts";
 import type { RunItem } from "./shared/runs.ts";
-import { allThreads, parseLabels, parseLinear, type Conn, type Tree } from "./shared/tree.ts";
+import { allRuns, allThreads, parseLabels, parseLinear, type Conn, type Tree } from "./shared/tree.ts";
 
 const threads = new Map<string, Thread>();
 const projects = new Map<string, Project>();
 let runs: RunItem[] | null = null;
+let runsSnapshot: RunsSnapshot | null = null;
+let runsOrigin: string | undefined;
+/** The fetched steps of each run in the tree, with the run `updatedAt` they were fetched at. */
+const runSteps = new Map<string, { at: string; steps: RunStepsRaw }>();
 let conn: Conn = "connecting";
 let lastUpdate: string | null = null;
 const environmentId = await readEnvironmentId();
@@ -126,6 +138,9 @@ const treeFor = (settled: boolean, nest = false, labels: string[] = [], wantsLin
     linearOf: wantsLinear ? linearSource.of : undefined,
     catchUpOf: (id) => catchUp.of(id),
     lastMessagesOf: lineage.lastMessages,
+    runs: runsSnapshot,
+    stepsOf: (runId) => runSteps.get(runId)?.steps,
+    origin: runsOrigin,
   }),
 });
 
@@ -145,17 +160,44 @@ function syncLinear() {
     const key = issueKey(t.title);
     if (key && !t.parentThreadId && !t.sideChat && !t.gone && !t.settledAt) keys.add(key);
   }
+  const withSteps = new Set([...threads.values()].flatMap((t) => (t.workflowRun ? [t.workflowRun.runId] : [])));
+  for (const r of runsSnapshot?.runs ?? []) {
+    const key = withSteps.has(r.runId) ? issueKey(r.title) : null;
+    if (key) keys.add(key);
+  }
   linearSource.sync(
     keys,
     [...clients].some((c) => c.wantsLinear),
   );
 }
 
+/** Fetches the steps of each run in the tree again when its `updatedAt` changed. A failed fetch keeps the old steps. */
+function syncSteps(nodes: ReturnType<typeof allRuns>) {
+  const live = new Set(nodes.map((n) => n.run!.runId));
+  for (const id of runSteps.keys()) if (!live.has(id)) runSteps.delete(id);
+  for (const n of nodes) {
+    const { runId } = n.run!;
+    const at = n.updatedAt;
+    if (runSteps.get(runId)?.at === at) continue;
+    runSteps.set(runId, { at, steps: runSteps.get(runId)?.steps ?? [] });
+    shell.workflow("workflows.get", { runId }).then(
+      (r) => {
+        if (runSteps.get(runId)?.at !== at) return;
+        runSteps.set(runId, { at, steps: decodeRunSteps(r) });
+        changed();
+      },
+      (e: Error) => log(`could not read run ${runId}: ${e.message}`),
+    );
+  }
+}
+
 let timer: ReturnType<typeof setTimeout> | undefined;
 function changed() {
   clearTimeout(timer);
   timer = setTimeout(() => {
-    catchUp.sync(treeFor(false).projects.flatMap(allThreads), lineage.lastEntries, Date.now());
+    const tree = treeFor(false).projects;
+    catchUp.sync(tree.flatMap(allThreads), lineage.lastEntries, Date.now());
+    syncSteps(tree.flatMap(allRuns));
     const cache = new Map<string, string>();
     for (const c of clients) {
       const key = `${c.nest}|${c.labels.join(",")}|${c.wantsLinear}`;
@@ -195,6 +237,8 @@ const shell = connectShell({
   },
   onRuns: (snapshot, origin) => {
     runs = runItems(snapshot, origin, environmentId);
+    runsSnapshot = snapshot;
+    runsOrigin = origin;
     changed();
   },
   onEvent: (e) => {

@@ -625,3 +625,45 @@ describe("Linear flat", () => {
     expect(sectionHolding(flatten(tree()), true, "zz", "linear", tree())).toBeNull();
   });
 });
+
+describe("runs in the flat view", () => {
+  const runNode = (id: string, status: Status, children: ThreadNode[] = []): ThreadNode => ({
+    ...thread(id, null, children, status),
+    run: { runId: id, workflow: "w", state: "running", steps: [], detail: null },
+  });
+  const secOf = (units: ReturnType<typeof flatten>, id: string) =>
+    sections(units).find((s) => s.units.some((u) => u.id === `t:${id}`))?.key;
+  const units = (...threads: ThreadNode[]) => flatten([project("p", [branch("g", threads)])]);
+
+  test("a run with an open question goes to Needs input, even with a working step thread", () => {
+    expect(secOf(units(runNode("r", "needs-input", [thread("s", null, [], "working")])), "r")).toBe("needs-input");
+  });
+
+  test("a child run with an open question places the unit", () => {
+    const child = runNode("c", "needs-input");
+    expect(secOf(units(runNode("r", "working", [child, thread("s", null, [], "working")])), "r")).toBe("needs-input");
+  });
+
+  test("a running run alone goes to Working", () => {
+    expect(secOf(units(runNode("r", "working")), "r")).toBe("working");
+  });
+
+  test("a running run with a needs-input step thread goes to Needs input", () => {
+    expect(secOf(units(runNode("r", "working", [thread("s", null, [], "needs-input")])), "r")).toBe("needs-input");
+  });
+
+  test("the header count leaves the run node out", () => {
+    const [head] = sequence(units(runNode("r", "working", [thread("s", null, [], "working")])), "status");
+    expect(head).toMatchObject({ kind: "section", key: "working", count: 1 });
+  });
+
+  test("linearSections keeps a run unit, also in a Reviews subgroup", () => {
+    const lin = (b: Branch): Branch => ({ ...b, linear: {} });
+    const projects = [
+      lin(branch("lp:a", [], [lin(branch("lm:m1", [runNode("r", "working")]))])),
+      lin(branch("lf:reviews", [], [branch("lf:reviews:K", [runNode("v", "working")])])),
+    ];
+    const items = sequence(flatten(projects), "linear", new Set(), true, projects);
+    expect(items.filter((i) => i.kind === "thread").map((i) => i.id)).toEqual(["t:r", "t:v"]);
+  });
+});

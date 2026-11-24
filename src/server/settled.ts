@@ -4,7 +4,7 @@ import type { Thread } from "./t3.ts";
 /** Settle time in ms, zero-padded so a string compare orders it, then the id. A bad date sorts first. */
 export const settledKey = (t: Thread) => `${String(Date.parse(t.settledAt ?? "") || 0).padStart(16, "0")} ${t.id}`;
 
-const listed = (t: Thread) => !!t.settledAt && !t.parentThreadId && !t.sideChat && !t.gone;
+const listed = (t: Thread) => !!t.settledAt && !t.workflowRun && !t.parentThreadId && !t.sideChat && !t.gone;
 
 /** Changes when a settled thread appears, leaves or changes: `count:newest settle:newest update`. Empty with none. */
 export function settledSignature(threads: Iterable<Thread>): string {
