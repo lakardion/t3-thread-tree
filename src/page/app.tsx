@@ -2030,7 +2030,11 @@ function NodeRow(p: ComponentProps<typeof ThreadRow>) {
             Rail={MapRail}
             liRef={ref}
             liClass={cn(project && "border-l-[3px] pl-1", corners)}
-            liStyle={{ viewTransitionName: vtName("t", t.id), borderLeftColor: project && projectHex(project.label) }}
+            liStyle={{
+              /** A map thread row names its own transition; two elements with one name abort it. */
+              viewTransitionName: t.map!.header ? vtName("t", t.id) : undefined,
+              borderLeftColor: project && projectHex(project.label),
+            }}
             handle={!inStack && !nested && <DragHandle handleRef={handleRef} name={t.map!.name} />}
           />
         )}
@@ -3430,13 +3434,11 @@ function App() {
             />
           </div>
           <div className="flex items-center gap-1 max-[720px]:hidden">
+            {projects && layout === "tree" && <FoldAll inner={inner} closed={closed} fold={fold} />}
             <SortMenu sortBy={sortBy} setSortBy={pickSort} />
             <LayoutToggle layout={layout} setLayout={pickLayout} />
             {projects && (
-              <>
-                <GroupMenu flat={layout === "flat"} value={groupValue} set={pickGroupBy} linearKey={tree?.linearKey} />
-                {layout === "tree" && <FoldAll inner={inner} closed={closed} fold={fold} />}
-              </>
+              <GroupMenu flat={layout === "flat"} value={groupValue} set={pickGroupBy} linearKey={tree?.linearKey} />
             )}
           </div>
           <SettingsButton
