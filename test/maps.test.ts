@@ -1,6 +1,6 @@
 import { describe, expect, test } from "bun:test";
 
-import { mapKey, mapName, mapsOf } from "../src/server/maps.ts";
+import { mapKey, mapName, mapsOf, markedKey } from "../src/server/maps.ts";
 
 const HOME = "/home/u";
 const WS = "/work/app";
@@ -143,5 +143,38 @@ describe("mapsOf", () => {
     const m = maps({ c: [null, null, 1], d: ["c", "K", 2], s: ["d", null, 3] }, ["s"]);
     expect(m.mapOf("s")).toBe("K");
     expect(() => maps({ a: ["b", null, 1], b: ["a", null, 2] }, ["a"])).not.toThrow();
+  });
+});
+
+describe("marked map threads", () => {
+  const spawners: Record<string, string> = { a: "plan", b: "plan", c: "a" };
+  const own: Record<string, string> = { b: "K" };
+  const keyOf = markedKey(
+    (id) => own[id] ?? null,
+    (id) => spawners[id],
+    new Set(["plan"]),
+  );
+
+  test("a keyless child of a marked thread gets thread:<id>; an own key wins; a grandchild gets none", () => {
+    expect(keyOf("a")).toBe("thread:plan");
+    expect(keyOf("b")).toBe("K");
+    expect(keyOf("c")).toBeNull();
+  });
+
+  test("the marked thread is the map thread and the grandchild is a member", () => {
+    const m = mapsOf({
+      ids: ["plan", "a", "c"],
+      spawnerOf: (id) => spawners[id],
+      keyOf,
+      createdKey: (id) => id,
+    });
+    expect(m.threadOf.get("thread:plan")).toBe("plan");
+    expect(m.mapOf("c")).toBe("thread:plan");
+    expect(m.mapOf("plan")).toBeNull();
+  });
+
+  test("a thread: key names the title, else the id", () => {
+    expect(mapName("thread:x", null, [])).toBe("x");
+    expect(mapName("thread:x", "Wayfinder: Plan lanes", [])).toBe("Plan lanes");
   });
 });

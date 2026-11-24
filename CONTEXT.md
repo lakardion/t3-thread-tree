@@ -159,6 +159,10 @@ _Avoid_: map id, map slug
 The thread that launched the topmost threads of a **Map key**, usually the thread that charted the map. It gets the `/t3-handoff` callbacks and heads the **Map group**.
 _Avoid_: charting thread, launcher, root thread
 
+**Marked map thread**:
+A **Map thread** that the user marked from its Details, for a map with no **Map key**. Its direct children with no own key form its **Map group**.
+_Avoid_: manual map, fake map
+
 **Map member**:
 A thread that belongs to a map: by its own **Map key**, else by the key of its nearest ancestor on the spawner chain. A thread belongs to one map at most. A **Step thread** is never a member.
 _Avoid_: map thread (that is the head), ticket thread

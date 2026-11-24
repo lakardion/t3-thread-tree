@@ -28,6 +28,7 @@ import {
   List,
   ListTree,
   LoaderCircle,
+  Map as MapIcon,
   Moon,
   Send,
   Settings,
@@ -92,6 +93,7 @@ import {
   isFallback,
   LINEAR_LOOSE,
   isLinearReviews,
+  isThread,
   parseLabels,
   parseLinear,
   REVIEWS,
@@ -184,7 +186,7 @@ import { ProjectIcon, projectHex } from "./project-icon.tsx";
 import { ProviderIcon } from "./provider-icon.tsx";
 import { RunRow } from "./run-row.tsx";
 import { CliGate, LastMessage, SendDialog, useLastMessage } from "./send-dialog.tsx";
-import { postSettle } from "./send.ts";
+import { postMapThread, postSettle } from "./send.ts";
 import { LEGEND, LegendIcon, STATUS, StatusIcon } from "./status-icon.tsx";
 import { nextStop, refocusIndex, stopsIn } from "./stops.ts";
 import { Swap, useChanges } from "./swap.tsx";
@@ -1597,6 +1599,39 @@ function Line({ label, children }: { label: string; children: ReactNode }) {
 
 const Mono = ({ children }: { children: ReactNode }) => <span className="font-mono">{children}</span>;
 
+/** Marks the thread as a map thread, or unmarks it. An error shows in the tooltip, like the settle button. */
+function MapThreadButton({ t }: { t: ThreadNode }) {
+  const [busy, setBusy] = useState(false);
+  const [err, setErr] = useState<string>();
+  const marked = !!t.detail.mapMarked;
+  return (
+    <Tooltip>
+      <TooltipTrigger asChild>
+        {/** A disabled button gets no hover, so the wrapper keeps the tooltip. */}
+        <span className="inline-flex">
+          <Button
+            variant="ghost"
+            size="xs"
+            className={cn("gap-1.5 text-muted-foreground", err && "text-destructive")}
+            disabled={busy}
+            onClick={async () => {
+              setBusy(true);
+              setErr(undefined);
+              const r = await postMapThread(t.id, !marked);
+              setBusy(false);
+              if (!r.ok) setErr(r.err.error);
+            }}
+          >
+            <MapIcon className={cn("size-3.5", !err && "text-amber-600 dark:text-amber-400")} aria-hidden />
+            {marked ? "Unmark map thread" : "Mark as map thread"}
+          </Button>
+        </span>
+      </TooltipTrigger>
+      {err && <TooltipContent>{err}</TooltipContent>}
+    </Tooltip>
+  );
+}
+
 function DetailBlock({ t }: { t: ThreadNode }) {
   const now = useContext(Now);
   const d = t.detail;
@@ -1671,6 +1706,11 @@ function DetailBlock({ t }: { t: ThreadNode }) {
             .join(" · ")}
         </Line>
       ))}
+      {isThread(t) && !t.step && (
+        <div className="col-span-2 pt-2">
+          <MapThreadButton t={t} />
+        </div>
+      )}
     </dl>
   );
 }
@@ -1823,7 +1863,7 @@ function ThreadRow({
   const pulse = useChanges(t.status);
   const noPrLabel = t.stack ? `PR stack · ${t.stack.total} PRs · no PR from this thread` : undefined;
   const render = (ref: RefFn, handleRef?: RefFn) => (
-    <Collapsible asChild open={open.has(t.id)} onOpenChange={() => toggle(t.id)}>
+    <Collapsible asChild open={!end && open.has(t.id)} onOpenChange={() => toggle(t.id)}>
       <li
         ref={ref}
         className={cn("my-px", project && "border-l-[3px] pl-1", corners)}
