@@ -180,6 +180,7 @@ import {
 } from "./order.ts";
 import { Presence, useMotion } from "./presence.tsx";
 import { ProjectIcon, projectHex } from "./project-icon.tsx";
+import { MapGroupPrototype, MapGroupSwitcher } from "./map-group.prototype.tsx";
 import { ProviderIcon } from "./provider-icon.tsx";
 import { RunRow } from "./run-row.tsx";
 import { CliGate, LastMessage, SendDialog, useLastMessage } from "./send-dialog.tsx";
@@ -3500,6 +3501,7 @@ function App() {
                                 <ul key={listKey} className={cn("m-0 list-none p-0", layout === "flat" && "p-1")}>
                                   <SendTo value={sendToApi}>
                                     <Launcher value={launcher}>
+                                      {layout !== "flat" && <MapGroupPrototype Row={ThreadRow} projects={projects} />}
                                       {layout === "flat" ? (
                                         <Presence key="flat" items={view.flat ?? []} keyOf={(i) => i.id}>
                                           {(i) => (
@@ -3635,6 +3637,7 @@ function App() {
           onClose={() => setWfStarted(null)}
         />
       )}
+      <MapGroupSwitcher />
       {undoIds && <UndoToast key={undoIds.join()} ids={undoIds} onClose={() => setUndoIds(null)} />}
       <SendDialog
         fixed
