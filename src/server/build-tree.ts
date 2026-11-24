@@ -418,6 +418,13 @@ function prepare(input: BuildInput) {
   return { visible, stacks, stackIdOf, nodes, visibleSpawner, markLaunched };
 }
 
+/** The rail data of a stack. */
+const railOf = (st: Stack | undefined): Branch["stack"] => {
+  if (!st) return undefined;
+  const base = st.threads.flatMap((t) => t.prs).find((p) => st.set.has(p.n) && p.stackBase)?.stackBase ?? null;
+  return { id: `s${st.order[0]}`, total: st.order.length, base };
+};
+
 /** The creation key of a node is the oldest of its own and its nested threads'. Sorts children on the way. */
 const settle = (n: Node): string => {
   for (const c of n.children as Node[]) n.first = [n.first, settle(c)].toSorted()[0]!;
@@ -492,17 +499,10 @@ export function buildTree(input: BuildInput): Branch[] {
     ordered.sort((a, b) => rank(a) - rank(b));
 
     const gid = (key: string) => `g:${projectId}:${key}`;
-    /** The stack of a group, for the rail. A group with threads in two stacks takes the first one, as the order does. */
-    const railOf = (g: Group): Branch["stack"] => {
-      const st = stacks[stackOf(g) ?? -1];
-      if (!st) return undefined;
-      const base = st.threads.flatMap((t) => t.prs).find((p) => st.set.has(p.n) && p.stackBase)?.stackBase ?? null;
-      return { id: `s${st.order[0]}`, total: st.order.length, base };
-    };
     const branches = ordered.map((g): Branch => {
       if (g.key !== REVIEWS) {
         /** "No issue key" gets no rail: it does not sit with its stack mates. Reviews takes the other return. */
-        const stack = g.key === NO_KEY ? undefined : railOf(g);
+        const stack = g.key === NO_KEY ? undefined : railOf(stacks[stackOf(g) ?? -1]);
         return { id: gid(g.key), label: g.key, ...(stack && { stack }), branches: [], threads: g.nodes.map(clean) };
       }
       return { id: gid(REVIEWS), label: REVIEWS, threads: [], branches: reviewGroups(g.nodes, gid(REVIEWS)) };
@@ -546,7 +546,7 @@ type Milestone = { id: string; label: string; date: string | null; none: boolean
 /** Linear project, then milestone, then thread. Fallback groups follow the projects. */
 export function buildLinearTree(input: BuildInput): Branch[] {
   const { projects, nest } = input;
-  const { stackIdOf, nodes, visibleSpawner, markLaunched } = prepare(input);
+  const { stacks, stackIdOf, nodes, visibleSpawner, markLaunched } = prepare(input);
 
   const byProject = new Map<string, { name: string; url: string; milestones: Map<string, Milestone> }>();
   const reviews: Node[] = [];
@@ -597,6 +597,31 @@ export function buildLinearTree(input: BuildInput): Branch[] {
     ns.forEach(settle);
     return stackAdjacent(ns, stackIdOf);
   };
+  /** Splits placed nodes. Stack mates go in one key-group branch each, with the rail; the rest stay threads. */
+  const holder = (ns: Node[], parentId: string): Pick<Branch, "branches" | "threads"> => {
+    const keyed = new Map<string, Branch>();
+    const threads: ThreadNode[] = [];
+    for (const n of ns) {
+      const si = stackIdOf.get(n.id);
+      if (si === undefined) {
+        threads.push(clean(n));
+        continue;
+      }
+      const st = stacks[si];
+      const key = n.key ?? `PR stack #${st.order[0]}`;
+      const rail = railOf(st)!;
+      const g = keyed.get(`${si}:${key}`) ?? {
+        id: `${parentId}:${rail.id}:${key}`,
+        label: key,
+        stack: rail,
+        branches: [],
+        threads: [],
+      };
+      keyed.set(`${si}:${key}`, g);
+      g.threads.push(clean(n));
+    }
+    return { branches: [...keyed.values()], threads };
+  };
   const oldest = (ns: Node[]) => ns.toSorted(byFirst)[0].first;
   const rank = (m: Milestone) => (m.none ? 2 : m.date ? 0 : 1);
 
@@ -620,8 +645,7 @@ export function buildLinearTree(input: BuildInput): Branch[] {
             id: m.id,
             label: m.label,
             linear: { date: m.date },
-            branches: [],
-            threads: m.nodes.map(clean),
+            ...holder(m.nodes, m.id),
           })),
         } satisfies Branch,
       };
@@ -630,7 +654,7 @@ export function buildLinearTree(input: BuildInput): Branch[] {
     .map((o) => o.branch);
 
   const fallback = (id: string, label: string, ns: Node[]): Branch[] =>
-    ns.length ? [{ id, label, linear: {}, branches: [], threads: place(ns).map(clean) }] : [];
+    ns.length ? [{ id, label, linear: {}, ...holder(place(ns), id) }] : [];
   const reviewBranch: Branch[] = reviews.length
     ? [
         {

@@ -527,6 +527,58 @@ describe("Linear tree", () => {
     expect(ids(sortTree(tree())[2].branches)).toEqual(["lf:reviews:L", "lf:reviews:K"]);
   });
 
+  const stacked = () =>
+    lin(
+      branch(
+        "lp:s",
+        [],
+        [lin(branch("lm:m", [thread("p", 1)], [branch("lm:m:K", [thread("a", 3), thread("b", 2)], [], "st")]))],
+      ),
+    );
+
+  test("sortTree keeps the stack key groups of a milestone in stack order, against recency", () => {
+    const p = lin(
+      branch(
+        "lp:s",
+        [],
+        [
+          lin(
+            branch(
+              "lm:m",
+              [thread("p", 1)],
+              [branch("lm:m:K1", [thread("a", 1)], [], "st"), branch("lm:m:K2", [thread("b", 9)], [], "st")],
+            ),
+          ),
+        ],
+      ),
+    );
+    expect(ids(sortTree([p])[0].branches[0].branches)).toEqual(["lm:m:K1", "lm:m:K2"]);
+  });
+
+  test("sortTree keeps the stack branches of a fallback group as is", () => {
+    const fallback = (id: string) =>
+      lin(
+        branch(
+          id,
+          [],
+          [
+            branch(`${id}:K1`, [thread("a", 1), thread("c", 5)], [], "st"),
+            branch(`${id}:K2`, [thread("b", 9)], [], "st"),
+          ],
+        ),
+      );
+    for (const id of ["lf:none", LINEAR_LOOSE]) {
+      const [out] = sortTree([fallback(id)]);
+      expect(ids(out.branches)).toEqual([`${id}:K1`, `${id}:K2`]);
+      expect(ids(out.branches[0].threads)).toEqual(["a", "c"]);
+    }
+  });
+
+  test("foldIds and pathFolds reach the rail of a stack in a milestone", () => {
+    expect(foldIds(stacked())).toEqual(["lm:m", "rail:st"]);
+    expect(pathFolds([stacked()], "b")).toEqual(["lp:s", "lm:m", "lm:m:K", "rail:st"]);
+  });
+
   test("foldIds and pathFolds cover the milestones", () => {
     expect(foldIds(tree()[0])).toEqual(["lm:m1", "lm:m2"]);
     expect(pathFolds(tree(), "x")).toEqual(["lp:a", "lm:m2"]);
@@ -571,6 +623,28 @@ describe("Linear flat", () => {
 
   test("flatten keeps the No project and keyless threads", () => {
     expect(ids(flatten(tree()))).toEqual(["t:old", "t:new", "t:x", "t:r1", "t:r2", "t:n1", "t:n2", "t:k1"]);
+  });
+
+  test("a stack in a milestone or in No project is one stack unit under its section", () => {
+    const rail = (id: string, t: string) => branch(id, [thread(t, 4)], [], "st");
+    const projects = [
+      named(lin(branch("lp:s", [], [named(lin(branch("lm:m", [thread("p", 1)], [rail("lm:m:K", "a")])), "M")])), "P"),
+      named(lin(branch("lf:none", [], [rail("lf:none:K", "n")])), "No project"),
+    ];
+    const units = flatten(projects);
+    expect(units.map((u) => [u.kind, u.id])).toEqual([
+      ["stack", "stack:lp:s:st"],
+      ["thread", "t:p"],
+      ["stack", "stack:lf:none:st"],
+    ]);
+    const items = sequence(units, "linear", new Set(), true, projects);
+    expect(items.map((i) => (i.kind === "section" ? i.label : i.id))).toEqual([
+      "P · M",
+      "stack:lp:s:st",
+      "t:p",
+      "No project",
+      "stack:lf:none:st",
+    ]);
   });
 
   test("flatten marks every Reviews unit as review", () => {

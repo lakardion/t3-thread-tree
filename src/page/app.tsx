@@ -145,7 +145,6 @@ import {
   ago,
   folded,
   foldIds,
-  groupIds,
   initials,
   ink,
   isKeyGroup,
@@ -2127,6 +2126,28 @@ const ROW_FOLD = cn(
   "relative z-10 ml-auto opacity-0 group-hover/row:opacity-100 focus-visible:opacity-100 pointer-coarse:opacity-100",
 );
 
+/** The subgroups of a branch: a PR stack run shows as a rail, any other group as a row. */
+function Groups({ b, closed, toggle, fold }: { b: Branch } & Fold) {
+  const lists = useContext(Lists);
+  return (
+    <Presence items={stackRuns(b.branches)} keyOf={(run) => (run[0].stack ? `rail:${run[0].id}` : run[0].id)}>
+      {(run) => {
+        const sort = sortOf(
+          lists,
+          groupsKey(b.id),
+          runUnitId(b.id, run),
+          run[0].stack ? `PR stack of ${run[0].label}` : run[0].label,
+        );
+        return run[0].stack ? (
+          <StackRail run={run} closed={closed} toggle={toggle} fold={fold} sort={sort} />
+        ) : (
+          <GroupRow b={run[0]} closed={closed} toggle={toggle} fold={fold} sort={sort} />
+        );
+      }}
+    </Presence>
+  );
+}
+
 function GroupRow({ b, closed, toggle, fold, sort }: { b: Branch; sort?: Sort } & Fold) {
   const open = !closed.has(b.id);
   const one = folded(b);
@@ -2176,28 +2197,11 @@ function GroupRow({ b, closed, toggle, fold, sort }: { b: Branch; sort?: Sort } 
             </a>
           )}
           {!open && <ClosedSummary b={b} />}
-          <FoldAll
-            inner={b.branches.flatMap(groupIds)}
-            self={b.id}
-            name={b.label}
-            closed={closed}
-            fold={fold}
-            className={ROW_FOLD}
-          />
+          <FoldAll inner={foldIds(b)} self={b.id} name={b.label} closed={closed} fold={fold} className={ROW_FOLD} />
         </div>
         <CollapsibleContent asChild>
           <ul className={cn("m-0 list-none", isPinned(b) ? "pl-6" : "pl-2.5")}>
-            <Presence items={b.branches} keyOf={(c) => c.id}>
-              {(c) => (
-                <GroupRow
-                  b={c}
-                  closed={closed}
-                  toggle={toggle}
-                  fold={fold}
-                  sort={sortOf(lists, groupsKey(b.id), c.id, c.label)}
-                />
-              )}
-            </Presence>
+            <Groups b={b} closed={closed} toggle={toggle} fold={fold} />
             <Presence items={b.threads} keyOf={(t) => t.id}>
               {(t) => (
                 <NodeRow
@@ -2410,7 +2414,7 @@ function FlatRow({
       <Section value={section}>
         <StackRail
           run={i.run}
-          project={i.project}
+          project={i.project.linear ? undefined : i.project}
           flat
           closed={closed}
           toggle={toggle}
@@ -2462,7 +2466,10 @@ function ProjectBlock({ b, closed, toggle, fold }: { b: Branch } & Fold) {
   if (b.id === LINEAR_LOOSE)
     return (
       <li className="border-l-[3px] px-1 py-1" style={{ borderLeftColor: color }}>
-        <ul className="m-0 list-none p-0">{threads}</ul>
+        <ul className="m-0 list-none p-0">
+          <Groups b={b} closed={closed} toggle={toggle} fold={fold} />
+          {threads}
+        </ul>
       </li>
     );
   const render = (ref: RefFn, handleRef?: RefFn) => (
@@ -2508,26 +2515,7 @@ function ProjectBlock({ b, closed, toggle, fold }: { b: Branch } & Fold) {
           <div className="min-w-0 px-1 pb-1">
             <CollapsibleContent asChild>
               <ul className="m-0 list-none p-0">
-                <Presence
-                  items={stackRuns(b.branches)}
-                  keyOf={(run) => (run[0].stack ? `rail:${run[0].id}` : run[0].id)}
-                >
-                  {(run) => {
-                    const sort = !isPinned(run[0])
-                      ? sortOf(
-                          lists,
-                          groupsKey(b.id),
-                          runUnitId(b.id, run),
-                          run[0].stack ? `PR stack of ${run[0].label}` : run[0].label,
-                        )
-                      : undefined;
-                    return run[0].stack ? (
-                      <StackRail run={run} closed={closed} toggle={toggle} fold={fold} sort={sort} />
-                    ) : (
-                      <GroupRow b={run[0]} closed={closed} toggle={toggle} fold={fold} sort={sort} />
-                    );
-                  }}
-                </Presence>
+                <Groups b={b} closed={closed} toggle={toggle} fold={fold} />
                 {threads}
               </ul>
             </CollapsibleContent>
