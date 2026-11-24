@@ -7,6 +7,7 @@ import {
   LINEAR_LOOSE,
   NO_KEY,
   REVIEWS,
+  runsOf,
   type Branch,
   type Status,
   type ThreadNode,
@@ -117,12 +118,15 @@ export function flatten(projects: Branch[]): FlatUnit[] {
 /** All threads of a unit, subthreads at any depth. */
 const everyThread = (u: FlatUnit): ThreadNode[] => (u.kind === "thread" ? flat(u.t) : u.run.flatMap(allThreads));
 
+/** `everyThread` with the run nodes: the nodes that place a unit by status. */
+const placing = (u: FlatUnit): ThreadNode[] => (u.kind === "thread" ? [...flat(u.t), ...runsOf(u.t)] : everyThread(u));
+
 /**
  * The threads that place and sort a unit: all its threads, subthreads at any depth, without the settled ones.
  * When all are settled, all of them.
  */
 const unitThreads = (u: FlatUnit): ThreadNode[] => {
-  const all = everyThread(u);
+  const all = placing(u);
   const live = all.filter((t) => !t.settled);
   return live.length > 0 ? live : all;
 };
@@ -183,7 +187,7 @@ export function sections(units: FlatUnit[], snoozed = true): Section[] {
   const placed = (ts: ThreadNode[]) => ts.map((t) => indexOf(t.status)).filter((n) => n >= 0);
   const at = (u: FlatUnit) => {
     const own = placed(unitThreads(u));
-    return Math.min(...(own.length > 0 ? own : placed(everyThread(u))));
+    return Math.min(...(own.length > 0 ? own : placed(placing(u))));
   };
   return list
     .map(([key, label, statuses], i) => {
@@ -200,6 +204,9 @@ export function sections(units: FlatUnit[], snoozed = true): Section[] {
     .filter((s) => s.units.length > 0);
 }
 
+/** The top-level nodes of a branch and its subgroups. */
+const tops = (b: Branch): ThreadNode[] => [...b.branches.flatMap(tops), ...b.threads];
+
 /**
  * The Linear sections of an arranged Linear tree, in tree order: one per milestone, labelled "Project · Milestone",
  * and one per fallback group, the loose keyless threads last. A section takes the units whose thread sits in it, in unit order. Empty sections drop.
@@ -212,7 +219,7 @@ export function linearSections(projects: Branch[], units: FlatUnit[]): Section[]
         : p.branches.map((m) => [m, `${p.label} · ${m.label}`, m.linear?.date ?? null]),
     )
     .map(([b, label, date]) => {
-      const held = new Set(allThreads(b).map((t) => t.id));
+      const held = new Set(tops(b).map((t) => t.id));
       return {
         key: b.id,
         label,

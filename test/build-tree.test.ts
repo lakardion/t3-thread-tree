@@ -4,11 +4,12 @@ import { homedir } from "node:os";
 import { flatten, sortFlat } from "../src/page/view.ts";
 import { buildLinearTree, buildTree, issueKey, statusOf, type BuildInput } from "../src/server/build-tree.ts";
 import { launchedIds } from "../src/server/lineage.ts";
-import { decodeItem, decodeThread, type Thread } from "../src/server/t3.ts";
+import { decodeItem, decodeThread, type RunsSnapshot, type Thread } from "../src/server/t3.ts";
 import {
   NO_KEY,
   NO_MILESTONE,
   NO_PROJECT,
+  allRuns,
   allThreads,
   isFallback,
   type Branch,
@@ -1139,5 +1140,267 @@ describe("suggested replies", () => {
 
   test("no reader gives no field", () => {
     expect(all(build([shell("turn", "your turn", DONE_AT)]))[0].suggestedReplies).toBeUndefined();
+  });
+});
+
+describe("runs", () => {
+  const step = (id: string, title: string, runId: string, stepName = "implement", over: Record<string, unknown> = {}) =>
+    shell(id, title, { workflowRun: { runId, workflow: "ship-issue", step: stepName }, ...over });
+  const run = (runId: string, over: Partial<RunsSnapshot["runs"][number]> = {}): RunsSnapshot["runs"][number] => ({
+    runId,
+    workflow: "ship-issue",
+    title: `Ship SHOP-1 ${runId}`,
+    status: "running",
+    detail: null,
+    retired: false,
+    resumesAt: null,
+    updatedAt: "2026-11-12T11:00:00.000Z",
+    parentRunId: null,
+    parentStep: null,
+    startedAt: "2026-11-12T08:30:00.000Z",
+    ...over,
+  });
+  const snap = (runs: RunsSnapshot["runs"], questions: RunsSnapshot["questions"] = []): Partial<BuildInput> => ({
+    runs: { runs, questions },
+    origin: "http://t3",
+  });
+  const runsIn = (b: Branch[]) => b.flatMap((p) => allRuns(p));
+  const BUSY = { status: "running" };
+
+  test("the decoder reads workflowRun", () => {
+    expect(decodeThread(step("a", "x", "r1", "plan"))!.workflowRun).toEqual({
+      runId: "r1",
+      workflow: "ship-issue",
+      step: "plan",
+    });
+    expect(decodeThread(shell("b", "y"))!.workflowRun).toBeNull();
+  });
+
+  describe("placement", () => {
+    test("a root run goes to the project of its oldest step thread, with the key of its title", () => {
+      const tree = build(
+        [
+          step("late", "Implement", "r1", "implement", { projectId: "p2", createdAt: "2026-11-12T09:00:00.000Z" }),
+          step("early", "Plan", "r1", "plan", { createdAt: "2026-11-12T08:00:00.000Z" }),
+        ],
+        {},
+        snap([run("r1")]),
+      );
+      const [node] = child(tree, "frontend", "SHOP-1").threads;
+      expect(node).toMatchObject({ id: "run:r1", href: "http://t3/workflows?run=r1", key: "SHOP-1" });
+      expect(labels(tree)).toEqual(["frontend"]);
+    });
+
+    test("with no key in the title, the key of the first step thread", () => {
+      const tree = build([step("a", "Plan SHOP-7 thing", "r1", "plan")], {}, snap([run("r1", { title: "Nightly" })]));
+      expect(labels(tree[0].branches)).toEqual(["SHOP-7"]);
+    });
+
+    test("a Review run goes to Reviews; a keyless run to No issue key", () => {
+      const tree = build(
+        [step("a", "Review thread", "r1", "review"), step("b", "Work", "r2")],
+        {},
+        snap([run("r1", { title: "Review #12 SHOP-3 x" }), run("r2", { title: "Nightly" })]),
+      );
+      expect(child(tree, "frontend", "Reviews", "SHOP-3").threads[0].id).toBe("run:r1");
+      expect(child(tree, "frontend", NO_KEY).threads[0].id).toBe("run:r2");
+    });
+
+    test("step threads never show as loose rows, in any tree", () => {
+      const raws = [step("a", "Plan", "r1", "plan", { settledAt: "2026-11-12T09:00:00.000Z" }), shell("x", "SHOP-5 y")];
+      for (const tree of [
+        build(raws, {}, snap([run("r1")])),
+        build(raws, {}, { ...snap([run("r1")]), settled: true }),
+        buildLinearTree(inputOf(raws, {}, snap([run("r1")]))),
+      ]) {
+        const tops = tree.flatMap((p) => [...p.threads, ...p.branches.flatMap((b) => b.threads)]);
+        expect(tops.filter((t) => !t.run).map((t) => t.id)).toEqual(["x"]);
+        expect(runsIn(tree)).toHaveLength(1);
+      }
+    });
+
+    test("the Linear tree places a run by its key, with no launch nesting", () => {
+      const raws = [shell("spawner", "Wayfinder"), step("a", "Plan", "r1", "plan")];
+      const tree = buildLinearTree(
+        inputOf(raws, { "run:r1": "spawner", a: "spawner" }, snap([run("r1", { title: "Nightly" })])),
+      );
+      expect(tree.flatMap((p) => p.threads).map((t) => t.id)).toEqual(["spawner", "run:r1"]);
+      expect(tree[0].threads[0].children).toEqual([]);
+    });
+  });
+
+  describe("lifetime", () => {
+    test("running, waiting and paused runs show", () => {
+      for (const status of ["running", "waiting", "paused"])
+        expect(runsIn(build([step("a", "Plan", "r1")], {}, snap([run("r1", { status })])))).toHaveLength(1);
+    });
+
+    test("a completed run shows only while a step thread is busy or waits", () => {
+      const done = snap([run("r1", { status: "completed" })]);
+      expect(runsIn(build([step("a", "Plan", "r1")], {}, done))).toHaveLength(0);
+      expect(runsIn(build([step("a", "Plan", "r1", "plan", BUSY)], {}, done))).toHaveLength(1);
+      const ask = { pendingRuntimeRequest: { kind: "user_input", createdAt: "2026-11-12T09:00:00.000Z" } };
+      expect(runsIn(build([step("a", "Plan", "r1", "plan", ask)], {}, done))).toHaveLength(1);
+    });
+
+    test("a run with no step thread is absent", () => {
+      expect(runsIn(build([shell("a", "SHOP-1 x")], {}, snap([run("r1")])))).toHaveLength(0);
+    });
+
+    test("a run not in the snapshot titles itself by its workflow and counts as ended", () => {
+      expect(runsIn(build([step("a", "Plan", "r1")], {}, snap([])))).toHaveLength(0);
+      const [node] = runsIn(build([step("a", "Plan", "r1", "plan", BUSY)], {}, snap([])));
+      expect(node).toMatchObject({ title: "ship-issue", status: "done", phrase: "done · 1 step" });
+    });
+  });
+
+  test("a step thread from another project stays under the run, with its project", () => {
+    const tree = build(
+      [step("a", "Plan", "r1", "plan"), step("b", "Implement", "r1", "implement", { projectId: "p2" })],
+      {},
+      snap([run("r1")]),
+    );
+    expect(labels(tree)).toEqual(["frontend"]);
+    const [node] = runsIn(tree);
+    expect(node.children.map((c) => [c.id, c.t3Project?.label])).toEqual([
+      ["a", undefined],
+      ["b", "backend"],
+    ]);
+  });
+
+  test("a step thread in a PR stack stays under its run with its badge; its keyless mate goes to the stack group", () => {
+    const tree = build(
+      [
+        step("s1", "Impl", "r1", "implement", {
+          pullRequests: [pr(10, "created", "open", { base: "main" }), pr(11, "stack")],
+        }),
+        shell("mate", "keyless", { pullRequests: [pr(11, "created"), pr(10, "stack")] }),
+      ],
+      {},
+      snap([run("r1")]),
+    );
+    const [node] = runsIn(tree);
+    expect(node.children[0]).toMatchObject({ id: "s1", stack: { pos: 1, total: 2 } });
+    expect(child(tree, "frontend", "PR stack #10").threads.map((t) => t.id)).toEqual(["mate"]);
+    expect(child(tree, "frontend", "PR stack #10").threads[0].stack).toEqual({ pos: 2, total: 2 });
+  });
+
+  describe("child runs", () => {
+    test("a child run nests under its showing parent, in startedAt order with the step threads", () => {
+      const tree = build(
+        [step("a", "Plan", "r1", "plan"), step("c", "Review", "r2", "review"), step("b", "Impl", "r1", "implement")],
+        {},
+        snap([
+          run("r1"),
+          run("r2", { parentRunId: "r1", parentStep: "review", startedAt: "2026-11-12T08:00:30.000Z" }),
+        ]),
+      );
+      const roots = child(tree, "frontend", "SHOP-1").threads;
+      expect(roots.map((t) => t.id)).toEqual(["run:r1"]);
+      expect(roots[0].children.map((c) => c.id)).toEqual(["run:r2", "a", "b"]);
+      expect(roots[0].children[0]).toMatchObject({ step: "review", children: [{ id: "c" }] });
+    });
+
+    test("a child run with no step thread does not throw and does not show", () => {
+      const tree = build(
+        [step("a", "Plan", "r1", "plan")],
+        {},
+        snap([run("r1"), run("r2", { parentRunId: "r1", parentStep: "review" })]),
+      );
+      const [root] = runsIn(tree);
+      expect(root.id).toBe("run:r1");
+      expect(root.children.map((c) => c.id)).toEqual(["a"]);
+    });
+
+    test("a child run whose parent does not show is a root run", () => {
+      const tree = build(
+        [step("a", "Plan", "r1", "plan"), step("c", "Review", "r2", "review", BUSY)],
+        {},
+        snap([run("r1", { status: "completed" }), run("r2", { parentRunId: "r1", status: "completed" })]),
+      );
+      expect(runsIn(tree).map((n) => n.id)).toEqual(["run:r2"]);
+    });
+  });
+
+  describe("steps and status", () => {
+    test("lines follow the fetched steps; matched children first, the rest after", () => {
+      const [node] = runsIn(
+        build(
+          [
+            step("a", "Plan", "r1", "plan"),
+            step("b", "Impl", "r1", "implement", BUSY),
+            step("x", "Extra", "r1", "fix"),
+          ],
+          {},
+          {
+            ...snap([run("r1")]),
+            stepsOf: () => [
+              { name: "plan", status: "completed", threadId: "a" },
+              { name: "implement", status: "running", threadId: "b" },
+              { name: "open-pr", status: "failed", threadId: null },
+            ],
+          },
+        ),
+      );
+      expect(node.run!.steps).toEqual([
+        { name: "plan", state: "done", child: "a" },
+        { name: "implement", state: "now", child: "b" },
+        { name: "open-pr", state: "failed", child: null },
+        { name: "fix", state: "done", child: "x" },
+      ]);
+      expect(node).toMatchObject({ status: "working", phrase: "running · open-pr", since: null });
+    });
+
+    test("with no steps fetched, the lines are the children in order", () => {
+      const [node] = runsIn(
+        build([step("a", "Plan", "r1", "plan"), step("b", "Impl", "r1", "implement", BUSY)], {}, snap([run("r1")])),
+      );
+      expect(node.run!.steps).toEqual([
+        { name: "plan", state: "done", child: "a" },
+        { name: "implement", state: "now", child: "b" },
+      ]);
+    });
+
+    test("an open question, a pause and a finished run each give their status and phrase", () => {
+      const q = {
+        runId: "r1",
+        name: "approve",
+        title: "Approve?",
+        choices: [],
+        askedAt: "2026-11-12T10:00:00.000Z",
+        thread: null,
+      };
+      const one = (r: RunsSnapshot["runs"][number], questions: RunsSnapshot["questions"] = []) =>
+        runsIn(build([step("a", "Plan", "r1", "plan", BUSY)], {}, snap([r], questions)))[0];
+      expect(one(run("r1", { status: "waiting" }), [q])).toMatchObject({
+        status: "needs-input",
+        phrase: "asks you · plan",
+        since: "2026-11-12T10:00:00.000Z",
+        run: { state: "asks" },
+      });
+      expect(one(run("r1", { status: "paused", detail: "boom" }))).toMatchObject({
+        status: "needs-input",
+        phrase: "paused · plan",
+        since: "2026-11-12T11:00:00.000Z",
+        run: { state: "paused", detail: "boom" },
+      });
+      expect(one(run("r1", { status: "completed" }))).toMatchObject({
+        status: "done",
+        phrase: "done · 1 step",
+        run: { state: "done" },
+      });
+    });
+
+    test("the run takes its updatedAt, and the row has no PRs or stack", () => {
+      const [node] = runsIn(
+        build([step("a", "Plan", "r1")], {}, snap([run("r1", { updatedAt: "2026-11-12T11:30:00.000Z" })])),
+      );
+      expect(node).toMatchObject({
+        updatedAt: "2026-11-12T11:30:00.000Z",
+        lastRun: "2026-11-12T11:30:00.000Z",
+        prs: [],
+        stack: null,
+      });
+    });
   });
 });

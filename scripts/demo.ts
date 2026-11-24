@@ -61,6 +61,7 @@ function t(title: string, over: Partial<Thread> = {}): Thread {
     goal: null,
     tags: [],
     pinned: false,
+    workflowRun: null,
     ...over,
   };
 }
@@ -247,6 +248,40 @@ const threads: Thread[] = [
 ];
 /** The thread that the push steps add to API-77 and remove again. */
 const extra = t("API-77 · Add a per-key quota dashboard", { projectId: "api" });
+/** Step threads of the fake runs. They show only under their run. */
+const stepThread = (id: string, runId: string, name: string, title: string, over: Partial<Thread> = {}) =>
+  t(title, { id, workflowRun: { runId, workflow: "ship-issue", step: name }, ...over });
+threads.push(
+  stepThread("wf-plan", "run-8", "plan", "Plan SHOP-430 Gift cards", {
+    createdAt: ago(100),
+    latestRunCompletedAt: ago(80),
+    lastVisitedAt: ago(70),
+  }),
+  stepThread("wf-impl", "run-8", "implement", "Implement SHOP-430 Gift cards", {
+    status: "running",
+    createdAt: ago(75),
+    activityRunStartedAt: ago(12),
+  }),
+  stepThread("wf-docs", "run-8", "docs", "Update the docs for SHOP-430", {
+    projectId: "docs",
+    status: "running",
+    createdAt: ago(60),
+    activityRunStartedAt: ago(5),
+  }),
+  stepThread("wf-review", "run-9", "review", "Review #2110 Gift cards", {
+    status: "running",
+    createdAt: ago(20),
+    activityRunStartedAt: ago(4),
+  }),
+  stepThread("wf-fail", "run-10", "implement", "Implement SHOP-431 Wallet export", {
+    status: "failed",
+    createdAt: ago(50),
+  }),
+  stepThread("wf-old", "run-11", "implement", "Implement SHOP-399 Old report", {
+    createdAt: ago(600),
+    lastVisitedAt: ago(30),
+  }),
+);
 const spawners: Record<string, string> = {
   m1: "map",
   m2: "map",
@@ -329,7 +364,21 @@ const projectsFor = (settled: boolean, nest = false, labels: string[] = [], want
     catchUpOf: (id) => CATCH_UP[id],
     lastMessagesOf: (ids) => new Map(ids.map((id) => [id, lastMessage(id)])),
     linearOf: wantsLinear ? (key) => LINEAR[key] : undefined,
+    runs: workflows,
+    stepsOf: (runId) => RUN_STEPS[runId],
+    origin: "http://127.0.0.1:3773",
   });
+/** The fake `workflows.get` steps of the runs that have step threads. */
+const RUN_STEPS: Record<string, { name: string; status: string; threadId: string | null }[]> = {
+  "run-8": [
+    { name: "plan", status: "completed", threadId: "wf-plan" },
+    { name: "implement", status: "running", threadId: "wf-impl" },
+    { name: "docs", status: "running", threadId: "wf-docs" },
+    { name: "review", status: "running", threadId: null },
+  ],
+  "run-9": [{ name: "review", status: "running", threadId: "wf-review" }],
+  "run-10": [{ name: "implement", status: "failed", threadId: "wf-fail" }],
+};
 /** A fake `workflows.subscribe` snapshot: questions with and without choices, and paused runs that wait, that resume alone and that are retired. */
 const LONG_FAIL =
   "Step `open-pr` failed after 3 attempts: gh: GraphQL: Resource not accessible by integration (createPullRequest).\nThe token in GH_TOKEN lacks the `pull_requests: write` permission for acme/storefront. Retry with a token that has that scope, or open the PR by hand and resume the run so it picks up the existing PR from the branch shop-412-payment-route.";
@@ -346,6 +395,9 @@ const wfRun = (
   retired: false,
   resumesAt: null,
   updatedAt: ago(30),
+  parentRunId: null,
+  parentStep: null,
+  startedAt: ago(90),
   ...over,
 });
 const wfAsk = (runId: string, over: Partial<RunsSnapshot["questions"][number]>): RunsSnapshot["questions"][number] => ({
@@ -377,6 +429,22 @@ const workflows: RunsSnapshot = {
       updatedAt: ago(75),
     }),
     wfRun("run-7", "Release 4.2", { workflow: "release", status: "completed" }),
+    wfRun("run-8", "Ship SHOP-430 Gift cards", { status: "running", startedAt: ago(100), updatedAt: ago(2) }),
+    wfRun("run-9", "Review #2110 Gift cards", {
+      workflow: "review-pr",
+      status: "running",
+      parentRunId: "run-8",
+      parentStep: "review",
+      startedAt: ago(20),
+      updatedAt: ago(3),
+    }),
+    wfRun("run-10", "Ship SHOP-431 Wallet export", {
+      status: "paused",
+      detail: "Step `implement` failed: the agent hit its usage limit.",
+      startedAt: ago(50),
+      updatedAt: ago(15),
+    }),
+    wfRun("run-11", "Ship SHOP-399 Old report", { status: "completed", startedAt: ago(600), updatedAt: ago(500) }),
   ],
   questions: [
     wfAsk("run-1", {

@@ -238,7 +238,8 @@ export function FindDialog({
           now={now}
           open={(h) => {
             setOpen(false);
-            location.assign(h.t.href);
+            if (h.t.run) window.open(h.t.href, "_blank");
+            else location.assign(h.t.href);
           }}
           show={(id) => {
             revealing.current = true;

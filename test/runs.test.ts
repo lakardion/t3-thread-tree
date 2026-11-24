@@ -1,7 +1,7 @@
 import { describe, expect, test } from "bun:test";
 
 import { runItems } from "../src/server/runs.ts";
-import { decodeRunsSnapshot, type RunsSnapshot } from "../src/server/t3.ts";
+import { decodeRunSteps, decodeRunsSnapshot, type RunsSnapshot } from "../src/server/t3.ts";
 import { isRun } from "../src/shared/runs.ts";
 
 const run = (runId: string, over: Partial<RunsSnapshot["runs"][number]> = {}): RunsSnapshot["runs"][number] => ({
@@ -13,6 +13,9 @@ const run = (runId: string, over: Partial<RunsSnapshot["runs"][number]> = {}): R
   retired: false,
   resumesAt: null,
   updatedAt: "2026-11-12T10:00:00.000Z",
+  parentRunId: null,
+  parentStep: null,
+  startedAt: "2026-11-12T08:00:00.000Z",
   ...over,
 });
 const ask = (
@@ -115,7 +118,18 @@ describe("decodeRunsSnapshot", () => {
       decodeRunsSnapshot({
         workflows: [],
         runs: [
-          { runId: "r", workflow: "w", title: "T", status: "paused", detail: "d", retired: true, resumesAt: null },
+          {
+            runId: "r",
+            workflow: "w",
+            title: "T",
+            status: "paused",
+            detail: "d",
+            retired: true,
+            resumesAt: null,
+            parentRunId: "p",
+            parentStep: "review",
+            startedAt: "2026-11-12T08:00:00.000Z",
+          },
         ],
         questions: [
           {
@@ -138,6 +152,9 @@ describe("decodeRunsSnapshot", () => {
           retired: true,
           resumesAt: null,
           updatedAt: "",
+          parentRunId: "p",
+          parentStep: "review",
+          startedAt: "2026-11-12T08:00:00.000Z",
         },
       ],
       questions: [
@@ -159,5 +176,25 @@ describe("decodeRunsSnapshot", () => {
       questions: [],
     });
     expect(decodeRunsSnapshot("x")).toEqual({ runs: [], questions: [] });
+  });
+});
+
+describe("decodeRunSteps", () => {
+  test("reads the steps in order and drops entries without a name", () => {
+    expect(
+      decodeRunSteps({
+        run: {},
+        steps: [
+          { name: "plan", status: "completed", threadId: "t1" },
+          { status: "running" },
+          { name: "ask", status: "running" },
+          5,
+        ],
+      }),
+    ).toEqual([
+      { name: "plan", status: "completed", threadId: "t1" },
+      { name: "ask", status: "running", threadId: null },
+    ]);
+    expect(decodeRunSteps("x")).toEqual([]);
   });
 });

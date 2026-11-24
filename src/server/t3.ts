@@ -71,6 +71,8 @@ export type Thread = {
   goal: { objective: string; status: string } | null;
   tags: string[];
   pinned: boolean;
+  /** Set on a step thread: the run, its workflow and the step it runs. */
+  workflowRun: { runId: string; workflow: string; step: string } | null;
 };
 
 export type Project = { title: string; repo: string | null };
@@ -86,6 +88,9 @@ export type RunsSnapshot = {
     retired: boolean;
     resumesAt: string | null;
     updatedAt: string;
+    parentRunId: string | null;
+    parentStep: string | null;
+    startedAt: string;
   }[];
   questions: {
     runId: string;
@@ -135,6 +140,8 @@ export function decodeThread(raw: unknown): Thread | null {
   const prs = Array.isArray(t.pullRequests) ? t.pullRequests : [];
   const recovery = obj(t.limitRecovery);
   const goal = obj(t.goal);
+  const wf = obj(t.workflowRun);
+  const wfRunId = str(wf.runId);
   return {
     id,
     projectId: str(t.projectId) ?? "",
@@ -215,6 +222,7 @@ export function decodeThread(raw: unknown): Thread | null {
         : null,
     tags: Array.isArray(t.tags) ? t.tags.filter((x): x is string => typeof x === "string") : [],
     pinned: typeof t.pinnedAt === "string",
+    workflowRun: wfRunId ? { runId: wfRunId, workflow: str(wf.workflow) ?? "", step: str(wf.step) ?? "" } : null,
   };
 }
 
@@ -274,6 +282,9 @@ export function decodeRunsSnapshot(raw: unknown): RunsSnapshot {
               retired: o.retired === true,
               resumesAt: str(o.resumesAt),
               updatedAt: str(o.updatedAt) ?? "",
+              parentRunId: str(o.parentRunId),
+              parentStep: str(o.parentStep),
+              startedAt: str(o.startedAt) ?? "",
             },
           ]
         : [];
@@ -300,6 +311,15 @@ export function decodeRunsSnapshot(raw: unknown): RunsSnapshot {
     }),
   };
 }
+
+/** Lenient decode of a `workflows.get` result: the steps in start order. Entries without a name drop out. */
+export type RunStepsRaw = { name: string; status: string; threadId: string | null }[];
+export const decodeRunSteps = (raw: unknown): RunStepsRaw =>
+  list(obj(raw).steps).flatMap((x) => {
+    const o = obj(x);
+    const name = str(o.name);
+    return name ? [{ name, status: str(o.status) ?? "", threadId: str(o.threadId) }] : [];
+  });
 
 export const readEnvironmentId = async (): Promise<string> =>
   (await Bun.file(join(USERDATA, "environment-id")).text()).trim();

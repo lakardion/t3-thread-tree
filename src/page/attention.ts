@@ -50,7 +50,7 @@ const keepBranch = (b: Branch, keep: (t: ThreadNode) => boolean): Branch[] => {
 
 /** The tree with only the threads that need the user, and the spawners, groups and projects that hold them. */
 export const onlyNeedsYou = (projects: Branch[]): Branch[] =>
-  projects.flatMap((b) => keepBranch(b, (t) => needsYou(t.status)));
+  projects.flatMap((b) => keepBranch(b, (t) => !t.run && needsYou(t.status)));
 
 /** The tree without snoozed threads. A snoozed thread with a kept subthread stays; empty groups and projects drop out. */
 export const withoutSnoozed = (projects: Branch[]): Branch[] =>

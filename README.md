@@ -23,6 +23,7 @@ _Screenshots use made-up data from `bun run demo`._
 - **PR marks and stacks.** Each row shows its PRs with checks, review, conflicts, draft, merged and closed marks. Threads in one PR stack sit in one block, with a line of numbered stops from the base branch to the top PR.
 - **Launch lineage.** The details of a launched thread link to the thread that launched it. Turn on "Nest launched threads" to show it under that thread.
 - **Flat view and grouping.** Switch between Tree and Flat. Group by T3 project, Linear project (with milestones), or status. Sort by your own order (drag the rows) or by last updated.
+- **Run rows.** A T3 workflow run that is active shows as a purple row. A strip of step pills shows how far it is. Under it, a rail lists each step with its thread, and child runs nest in the same way. The thread of a step shows only there. The title opens the run in T3, and the chevron folds the rail.
 - **Details on demand.** The chevron at the end of a row shows the request, error, last message, model, branch, worktree, goal and all PRs.
 - **Live.** Changes arrive as T3 streams them. No polling, no reload. The page remembers your folds, filter, layout and theme.
 

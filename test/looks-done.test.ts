@@ -201,3 +201,10 @@ describe("reasonText", () => {
     expect(reasonText({ kind: "catch-up", did: "Shipped." })).toBe("Catch-up: Shipped.");
   });
 });
+
+describe("step threads", () => {
+  test("a step thread is never offered", () => {
+    expect(offered(node({ step: "plan" }))).toBe(false);
+    expect(ids([branch([node({ children: [node({ step: "plan" })] })])])).toHaveLength(1);
+  });
+});

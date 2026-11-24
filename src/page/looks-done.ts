@@ -33,6 +33,7 @@ export function looksDone(
       const reason = reasonOf(thread);
       const ok =
         reason &&
+        thread.step === undefined &&
         !thread.settled &&
         OFFERED.includes(thread.status) &&
         !thread.children.flatMap(flat).some((c) => BUSY.includes(c.status)) &&

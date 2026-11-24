@@ -132,8 +132,12 @@ A T3 Code script that chains agent steps, code steps and questions to the user i
 _Avoid_: pipeline, automation, bot
 
 **Run**:
-One execution of a **Workflow**, started from the CLI, a trigger or the page. Its agent steps run in threads that T3 leaves out of its thread lists.
+One execution of a **Workflow**, started from the CLI, a trigger or the page. Its agent steps run in threads that T3 leaves out of its thread lists. The tree shows an active run as a run row, with its **Step threads** and child runs under it.
 _Avoid_: job, execution, instance
+
+**Step thread**:
+A thread that an agent step of a **Run** runs in. It shows only under its run, never as a loose row.
+_Avoid_: run thread, workflow thread
 
 **Run question**:
 An open question that a **Run** asks the user, with a title and choices. The user answers with one choice and an optional reason. It counts toward **Needs you**.

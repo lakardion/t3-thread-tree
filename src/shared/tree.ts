@@ -63,6 +63,18 @@ export type CatchUp = {
   pick: ModelPick;
 };
 
+/** One line of a run row: a step, and the node id of the step thread or child run that it shows. */
+export type RunStep = { name: string; state: "done" | "now" | "failed" | "pending"; child: string | null };
+
+/** Set on a run node. Its `children` are its step threads and child runs. */
+export type RunInfo = {
+  runId: string;
+  workflow: string;
+  state: "running" | "asks" | "paused" | "done";
+  steps: RunStep[];
+  detail: string | null;
+};
+
 export type ThreadNode = {
   id: string;
   href: string;
@@ -93,8 +105,12 @@ export type ThreadNode = {
   catchUp?: CatchUp;
   /** Reply intent ids for the send dialog chips, in pool order. Set only on a waiting top-level thread with a complete assistant message. */
   suggestedReplies?: string[];
-  /** The T3 project. Set only in the Linear tree. */
+  /** The T3 project. Set only in the Linear tree, and on a step thread from another project than its run. */
   t3Project?: { id: string; label: string };
+  /** Set on a run node, which is not a thread. */
+  run?: RunInfo;
+  /** The step that a step thread or a child run serves. */
+  step?: string;
 };
 
 export type Branch = {
@@ -173,8 +189,13 @@ export const parseLabels = (s = ""): string[] =>
     .map((x) => x.trim())
     .filter(Boolean);
 
-export const flat = (t: ThreadNode): ThreadNode[] => [t, ...t.children.flatMap(flat)];
+/** The threads of a node, subthreads at any depth. A run node is not a thread: only its children count. */
+export const flat = (t: ThreadNode): ThreadNode[] => [...(t.run ? [] : [t]), ...t.children.flatMap(flat)];
 export const allThreads = (b: Branch): ThreadNode[] => [...b.branches.flatMap(allThreads), ...b.threads.flatMap(flat)];
+/** The run nodes of a node and its children, at any depth. */
+export const runsOf = (t: ThreadNode): ThreadNode[] => [...(t.run ? [t] : []), ...t.children.flatMap(runsOf)];
+/** The run nodes of a branch, at any depth. */
+export const allRuns = (b: Branch): ThreadNode[] => [...b.branches.flatMap(allRuns), ...b.threads.flatMap(runsOf)];
 
 /** Oldest `since` first, `null` last. ISO timestamps sort the same as text. */
 export const bySince = (a: string | null, b: string | null): number =>

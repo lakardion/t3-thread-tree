@@ -52,7 +52,7 @@ Source: [How can a local process read T3 thread data live?](.wayfinder/tickets/0
 
 ## Run questions
 
-A **Run question** and a **Paused run** wait for the user, as threads do (see CONTEXT.md). The app shows them with the threads that need the user. It adds no row to the tree.
+A **Run question** and a **Paused run** wait for the user, as threads do (see CONTEXT.md). The app shows them with the threads that need the user. They add no row to the tree. A run that has a step thread has its own row (see "Runs in the tree").
 
 ### Data
 
@@ -81,6 +81,47 @@ All three take JSON only (415 for another content type, 400 for a bad body) and 
 - **Triage card, Paused run.** The header has the `CirclePause` icon and "Paused run" in the failed color. Under the run title, a muted line says "Waits for you", or "Its workflow version is gone. It cannot resume." for a retired run. The `detail` shows clamped to 3 lines; "Show detail" (`space`) shows all. "Resume" is hidden for a retired run. "Cancel" shows the confirm "Cancel run <title>?" with "Cancel run" and "Keep"; while the call runs, the card says "Cancelling…". "Open run in T3" is there too.
 - **No other actions.** A run card has no Settle, Snooze, Focus or Send. The end counts add "answered", "resumed" and "cancelled" when they are not 0.
 
+## Runs in the tree
+
+A **Run** with a **Step thread** shows in the tree as a **run row**. The step threads and the child runs of the run sit under it.
+
+### Data
+
+- A step thread is a shell thread with `workflowRun { runId, workflow, step }`.
+- The runs come from `workflows.subscribe`. `parentRunId`, `parentStep` and `startedAt` of each run are read too.
+- The steps of a run come from `workflows.get` with `{ runId }`. The result has `steps` in start order, each with `name`, `status` (`running`, `completed`, `failed`) and `threadId`. T3 lists only steps that started.
+- The server calls `workflows.get` for each run that shows, and again when the `updatedAt` of the run changes. A failed call is logged once. The old steps stay.
+
+### Rules
+
+- **Step threads.** A step thread is never a top-level thread. It is not in the tree, the flat view or the Settled list. It shows only under its run. A subagent or side chat with `workflowRun` stays hidden.
+- **Which runs show.** A run shows when it has at least one step thread, and its status is `running`, `waiting` or `paused`, or one of its step threads is `working`, `starting`, `needs-input` or `plan-ready`. A run that is not in the snapshot counts as ended. Its title is the `workflow` of its first step thread. A run with no step thread is not in the tree. Its question or pause still shows in Needs you, Triage and Up next.
+- **Placement.** A root run has no `parentRunId`, or its parent run does not show. It is placed like a top-level thread (Tree rule 6), in the project of its first step thread (the oldest `createdAt`). Its issue key is the first key in the run title, else the key of its first step thread. A title that starts with `Review #` goes to Reviews. A run has no stack group and no launch nesting. With no key, it goes to No issue key (in the Linear tree, to the loose list).
+- **Children.** Under a run: all its step threads (from any project, settled or not) and its child runs, to any depth. A child run nests under its parent run and is never placed by itself. A step thread from another project than its run shows a muted project chip. A step thread in a PR stack stays under its run and keeps its stack badge. Its keyless stack mates still go to the stack group. The snooze rules apply to step threads as to threads. Subagents stay hidden (Tree rule 2).
+- **Order.** Children sort by `createdAt` (a child run by `startedAt`), oldest first. A tie goes to the id. A run row drags like a top-level thread in its group. With "Last updated", a run sorts by the newest of its `updatedAt` and the last run of its step threads.
+- **Row data.** The status and phrase of the run:
+  - An open **Run question**: needs input, "asks you · <step>", with the **Wait** from `askedAt`.
+  - A paused run: needs input, "paused · <step>", with the **Wait** from `updatedAt`.
+  - A run that is `running` or `waiting`: working, "running · <step>".
+  - Any other run: done, "done · N steps".
+  - `<step>` is the last step that is running or failed, else the question name. With neither, the phrase is only the word.
+  - The `detail` of the run is the tooltip of the phrase. A run row has no PR chips.
+- **Steps.** One line for each step from `workflows.get`: `running` is current, `completed` is done, `failed` is failed. A line shows the step thread whose id is the `threadId` of the step. Else it shows the child run whose `parentStep` is the step name. A child that no line took follows, as a line named by its step. Without fetched steps, the lines are the children in order. There is no pending line, because T3 lists only steps that started.
+- **Flat view.** A run with its children is one unit. In Group by Status, the unit goes to its most urgent section, from the run status and the statuses of its step threads. Group by Linear project places a run by its issue key, like a thread. A run does not count as a thread in a section header.
+- **Find.** Find matches a run by its title. Enter opens the run page in a new window. A step thread result shows "in <run title>".
+- **Keys.** A run row is a stop. Enter opens the run page. `o`, `l` and `h` fold and unfold its rail. `s` does nothing.
+- **Left out.** A run is not a thread. It never joins the Focus list, Needs you, Open next, Triage or Looks done. Its step threads count as threads. A run row has no Settle, no Send and no Focus mark.
+
+### Look
+
+- **Run row:** a box with a thin purple border and a light purple tint (`border-status-plan/30 bg-status-plan/5`), at the height and text size of a thread row. From left to right: the run icon, the title (semibold, truncates, opens the run page), the step strip, the phrase with its **Wait**, the workflow name (mono, muted), the age of `updatedAt`, "Open run in T3" and a fold chevron.
+- **Run icon and phrase:** running is `LoaderCircle` in the working color. An open question is `Workflow` in the plan color. A paused run is `CirclePause` in the failed color. A done run is `Check` in the done color.
+- **Step strip:** one short pill for each step, in step order: done green, current blue, failed red, pending muted. The tooltip lists each step name and state.
+- **Step rail:** under the run row, a 2 px purple rail. Each step is one line in a grid. The left column (6.5 rem) has a colored dot on the rail and the step name in mono. The right column has the step content: the thread row of the step thread (no drag handle), a child run row with its own rail, or a muted state word ("not started" for a pending step).
+- **Fold:** the chevron folds the rail. The run row stays. The fold state is not stored.
+- **Link:** the run title, "Open run in T3" and the Find result open `<T3 origin>/workflows?run=<runId>` in a new window (see "Run questions").
+- **Theme:** only theme tokens, so light and dark both work.
+
 ## Launched-thread lineage
 
 Source: [Can the spawner of a launched thread be recovered?](.wayfinder/tickets/002-recover-launched-lineage.md), [Standalone webapp or a view inside T3 Code?](.wayfinder/tickets/003-standalone-or-in-t3.md), research on branch `research/launched-lineage`.
@@ -98,7 +139,7 @@ Source: [Tree model rules for the nested tree](.wayfinder/tickets/004-tree-model
 
 A **top-level thread** has no native `parentThreadId`. A **subagent** has `relationshipToParent: subagent`. The backend applies these rules and builds the whole tree.
 
-1. **Visible.** A top-level, non-archived thread is visible when `settledAt` is null, whatever its status. No recency window applies. Settled threads are never in the tree. The settled toggle shows them in the Settled list.
+1. **Visible.** A top-level, non-archived thread is visible when `settledAt` is null, whatever its status. No recency window applies. Settled threads are never in the tree. A step thread (a thread with `workflowRun`) is never a top-level thread; it shows only under its run (see "Runs in the tree"). The settled toggle shows them in the Settled list.
 2. **Subagents are not shown.** The tree holds top-level threads only. It shows no subagent rows, counts or signals.
 3. **Snoozed** threads stay visible, unless "Show snoozed threads" is off. They are shown muted, with their wake time. When it is off, a page filter hides them. A snoozed thread with a visible subthread stays as a muted context row.
 4. **Issue key:** the first match of `/\b[A-Z][A-Z0-9]+-\d+\b/` in the title of a top-level thread. `Review #15708 JED-4319` gives `JED-4319`.
