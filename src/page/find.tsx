@@ -10,6 +10,7 @@ import { find, type Hit } from "../shared/find.ts";
 import { needsYou } from "./attention.ts";
 import { ago } from "./format.ts";
 import { StatusIcon } from "./status-icon.tsx";
+import { WorkflowFindItems } from "./workflow-start.sol.prototype.tsx";
 
 /** True on macOS, where Find is Cmd+K. */
 export const MAC = /Mac|iPhone|iPad/.test(navigator.platform);
@@ -96,10 +97,11 @@ type BodyProps = {
   now: number;
   open: (h: Hit) => void;
   show: (id: string) => void;
+  onChooseWorkflow: () => void;
 };
 
 /** The search and the results. It mounts with the dialog, so the query and the settled search reset on close. */
-function FindBody({ list, focus, canShow, now, open, show }: BodyProps) {
+function FindBody({ list, focus, canShow, now, open, show, onChooseWorkflow }: BodyProps) {
   const [q, setQ] = useState("");
   const [sel, setSel] = useState("");
   const [settledMode, setSettledMode] = useState(false);
@@ -158,6 +160,7 @@ function FindBody({ list, focus, canShow, now, open, show }: BodyProps) {
           <CommandGroup heading={query ? "Threads" : "Recent"}>{active.map((h) => row(h))}</CommandGroup>
         )}
         {settled.length > 0 && <CommandGroup heading="Settled">{settled.map((h) => row(h))}</CommandGroup>}
+        <WorkflowFindItems query={query} onChoose={onChooseWorkflow} />
         {offerSettled && (
           <CommandGroup>
             <CommandItem
@@ -196,16 +199,16 @@ export function FindDialog({
   reveal: (id: string) => Promise<boolean>;
   now: number;
 }) {
-  /** Set while a Show in tree closes the dialog, so the focus return does not fight the scroll. */
-  const revealing = useRef(false);
+  /** Suppress the default focus return when an action transfers focus elsewhere. */
+  const transferringFocus = useRef(false);
   return (
     <Dialog open={open} onOpenChange={setOpen}>
       <DialogContent
         data-find=""
         className="top-[20%] translate-y-0 gap-0 overflow-hidden p-0 max-[720px]:top-0 max-[720px]:left-0 max-[720px]:h-dvh max-[720px]:max-w-none! max-[720px]:translate-x-0 max-[720px]:rounded-none max-[720px]:border-0 sm:max-w-xl"
         onCloseAutoFocus={(e) => {
-          if (revealing.current) e.preventDefault();
-          revealing.current = false;
+          if (transferringFocus.current) e.preventDefault();
+          transferringFocus.current = false;
         }}
       >
         <DialogHeader className="sr-only">
@@ -217,12 +220,16 @@ export function FindDialog({
           focus={focus}
           canShow={canShow}
           now={now}
+          onChooseWorkflow={() => {
+            transferringFocus.current = true;
+            setOpen(false);
+          }}
           open={(h) => {
             setOpen(false);
             location.assign(h.t.href);
           }}
           show={(id) => {
-            revealing.current = true;
+            transferringFocus.current = true;
             setOpen(false);
             void reveal(id);
           }}

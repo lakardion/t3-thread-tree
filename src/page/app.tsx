@@ -202,6 +202,7 @@ import {
   type Layout,
   type SortBy,
 } from "./view.ts";
+import { WorkflowPrototypeProvider, WorkflowRowAction, WorkflowRowComposer } from "./workflow-start.sol.prototype.tsx";
 
 /** The tab icon; its href follows the needs-you count. */
 const iconLink = document.head.appendChild(
@@ -1755,6 +1756,7 @@ function ThreadRow({
   chip,
   sort,
   inStack,
+  stackPrs,
   project,
   corners,
   review,
@@ -1763,6 +1765,7 @@ function ThreadRow({
   chip?: string;
   sort?: Sort;
   inStack?: boolean;
+  stackPrs?: number[];
   project?: Branch;
   corners?: string;
   review?: boolean;
@@ -1910,6 +1913,7 @@ function ThreadRow({
                     </Tooltip>
                   </CliGate>
                 )}
+                <WorkflowRowAction thread={t} stackPrs={stackPrs} className={ROW_BUTTON} />
                 <FocusMark t={t} pressed={false} />
               </span>
             </span>
@@ -1920,13 +1924,14 @@ function ThreadRow({
             </CollapsibleTrigger>
           </span>
         </div>
+        <WorkflowRowComposer thread={t} />
         <CollapsibleContent>
           <DetailBlock t={t} />
         </CollapsibleContent>
         {t.children.length > 0 && (
           <ul className="m-0 list-none pl-2.5">
             <Presence items={t.children} keyOf={(c) => c.id}>
-              {(c) => <ThreadRow t={c} inStack={inStack} />}
+              {(c) => <ThreadRow t={c} inStack={inStack} stackPrs={stackPrs} />}
             </Presence>
           </ul>
         )}
@@ -2188,6 +2193,7 @@ function StackRail({
   const hidden = section ? allRows.filter((r) => folds(r.t, section)) : [];
   const rows = showOther ? allRows : allRows.filter((r) => !hidden.includes(r));
   const partial = stops.filter((s) => s.n).length < total;
+  const stackPrs = stops.flatMap(({ p }) => (p ? [p.n] : []));
   const render = (ref: RefFn, handleRef?: RefFn) => (
     <Collapsible asChild open={open} onOpenChange={() => toggle(`rail:${id}`)}>
       <li
@@ -2272,7 +2278,12 @@ function StackRail({
                     n={r.n}
                   />
                   <ul className="m-0 list-none p-0">
-                    <ThreadRow t={r.t} chip={r.chip} inStack />
+                    <ThreadRow
+                      t={r.t}
+                      chip={r.chip}
+                      inStack
+                      stackPrs={stackPrs.length === total ? stackPrs : undefined}
+                    />
                   </ul>
                 </li>
               )}
@@ -3516,4 +3527,8 @@ function App() {
 /** Hot reload re-runs this module; reuse the root so two roots never share one container. */
 const container = document.getElementById("root")!;
 const root = import.meta.hot ? (import.meta.hot.data.root ??= createRoot(container)) : createRoot(container);
-root.render(<App />);
+root.render(
+  <WorkflowPrototypeProvider>
+    <App />
+  </WorkflowPrototypeProvider>,
+);
