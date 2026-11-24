@@ -1910,8 +1910,8 @@ function ThreadRow({
           )}
           {t.t3Project && (
             <Badge
-              variant="outline"
-              className={cn(CHIP, "flex-none")}
+              variant={projectNames ? "outline" : "ghost"}
+              className={cn(CHIP, "flex-none max-[720px]:border-transparent")}
               title={projectNames ? t.t3Project.label : undefined}
             >
               <ProjectTip name={t.t3Project.label} />
