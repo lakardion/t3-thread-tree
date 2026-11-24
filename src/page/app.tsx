@@ -218,7 +218,7 @@ const iconLink = document.head.appendChild(
 );
 
 const TOKEN_CMD =
-  "~/.t3/bin/t3 auth session issue --scope orchestration:read --scope orchestration:operate --label thread-tree --ttl 52w --token-only | pbcopy";
+  "~/.t3/bin/t3 auth session issue --scope orchestration:read --scope orchestration:operate --scope filesystem:read --label thread-tree --ttl 52w --token-only | pbcopy";
 const CLOSED_KEY = "thread-tree:closed";
 const SETTLED_KEY = "thread-tree:settled";
 const SNOOZED_KEY = "thread-tree:snoozed";

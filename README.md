@@ -44,54 +44,101 @@ Use it as a Mac app or in a browser. The Mac app adds a Dock badge, notification
 
 [SPEC.md](SPEC.md) gives the full rules for each feature.
 
-## Requirements
+## Getting started
 
-- [Bun](https://bun.sh) 1.3 or later
-- T3 Code running on the same machine (the app reads `~/.t3/userdata`)
-- Optional, for the desktop app: macOS on Apple Silicon
-- Optional, for the Catch-up: the `claude` or `codex` CLI, logged in
-- Optional, for the Catch-up on a local model: the Ollama app build (`brew install --cask ollama-app`)
-- Optional, for the Catch-up on the Apple model: the desktop app on macOS 26.4 or later, with Apple Intelligence on. To build the desktop app from source, Command Line Tools with the macOS 26.4 SDK or later
+### 1. Check what you need
 
-## Setup
+- A Mac with Apple Silicon.
+- [T3 Code](https://github.com/pingdotgg/t3code), installed and running on the same Mac. The app reads `~/.t3/userdata` and sends messages with the `t3` CLI in `~/.t3/bin/t3`.
+
+### 2. Install the app
+
+Download the `.dmg` of the latest release from the [Releases page](https://github.com/lakardion/t3-thread-tree/releases/latest). Open it and drag **T3 Thread Tree** to `/Applications`.
+
+### 3. Open the app the first time
+
+The app is not notarized by Apple. It has an ad-hoc signature, not a Developer ID signature. Thus macOS blocks it at the first open and says that it cannot check the app. To open it:
+
+1. Open the app one time, and close the warning.
+2. Open System Settings › Privacy & Security.
+3. Scroll to "T3 Thread Tree was blocked" and click **Open Anyway**. Confirm with your password or Touch ID.
+
+Or remove the quarantine mark in Terminal, then open the app as usual:
+
+```sh
+xattr -dr com.apple.quarantine "/Applications/T3 Thread Tree.app"
+```
+
+Do this again each time you install a new `.dmg` by hand.
+
+### 4. Connect the app to T3
+
+The app needs a T3 token. Run this command in Terminal. It copies a new token to the clipboard:
+
+```sh
+~/.t3/bin/t3 auth session issue --scope orchestration:read --scope orchestration:operate --scope filesystem:read --label thread-tree --ttl 52w --token-only | pbcopy
+```
+
+In the app, click the cog to open Settings. Open the **T3 token** fold, paste the token and save. The tree shows at once.
+
+The scopes:
+
+- `orchestration:read` shows the tree.
+- `orchestration:operate` lets you settle and snooze threads.
+- `filesystem:read` lets the app fill the fields when you start a workflow. Without it, the rest of the app works.
+
+The token is valid for 52 weeks. When it expires, the app shows a banner. Issue a new token and paste it again.
+
+### 5. Turn on the Catch-up (optional)
+
+The Catch-up writes a short line under each waiting thread. A model writes it. Choose one:
+
+- **Claude or Codex:** install the `claude` or `codex` CLI and log in. The app finds it.
+- **A local model**, such as Ollama. See [Local model setup](docs/local-model.md).
+- **The Apple model**, on macOS 26.4 or later. See [Apple model setup](docs/apple-model.md).
+
+Then open Settings › **Catch-up**, turn on the switch and pick the model. The Apple model and a local model keep thread text on your Mac. Claude and Codex send it to their provider.
+
+### 6. Link Linear (optional)
+
+Issue keys can link to Linear, and the tree can group by Linear project and milestone. See [Linear setup](docs/linear.md).
+
+### Updates
+
+The app checks GitHub Releases. When a new version exists, the app menu, the menu-bar menu and Settings show **Update and restart**.
+
+### Use it in a browser
+
+The browser version runs from source and needs [Bun](https://bun.sh). See [Contributing](#contributing).
+
+## Contributing
+
+### Requirements
+
+- [Bun](https://bun.sh) 1.3 or later.
+- T3 Code running on the same machine.
+- For the desktop app: macOS on Apple Silicon.
+- To build the Apple model helper: Command Line Tools with the macOS 26.4 SDK or later.
+- To run `bun run screenshots`: Google Chrome.
+
+### Set up
 
 ```sh
 bun install
 ```
 
-Start the app, click the cog to open the Settings panel, and paste a T3 token in the "T3 token" field. The panel shows the command that issues one. The token needs the `orchestration:read` and `orchestration:operate` scopes. With a read-only token the tree works, but Settle fails. The app keeps the token in `~/.config/t3-thread-tree/token`, and the desktop app in `~/Library/Application Support/T3 Thread Tree/token`. A `T3_TOKEN` in `.env` works as the fallback. To fill the fields of a workflow, the app reads the workflow files. This needs the `filesystem:read` scope. Without it, Find still lists every workflow, and Settings says why the row menus are empty.
+Start the app with `bun start`, and paste a T3 token in Settings › T3 token, as in [Getting started](#4-connect-the-app-to-t3). The server keeps the token in `~/.config/t3-thread-tree/token`. The desktop app keeps its data in `~/Library/Application Support/T3 Thread Tree/`.
 
-Optional: link Linear issue keys. Set them in Settings, or add these to `.env`. The Settings value wins.
+A `.env` file in the repo gives fallback values. A value saved in Settings wins.
 
-```sh
-LINEAR_WORKSPACE=join-com   # the slug in linear.app/<workspace>
-LINEAR_TEAMS=JED,ENG,MOR    # optional: link only the keys of these teams
-```
+| Variable                                             | Use                                                            |
+| ---------------------------------------------------- | -------------------------------------------------------------- |
+| `T3_TOKEN`                                           | The T3 token, when no token is saved.                          |
+| `T3_BIN`                                             | The path of the `t3` CLI. The default is `~/.t3/bin/t3`.       |
+| `LINEAR_WORKSPACE`, `LINEAR_TEAMS`, `LINEAR_API_KEY` | Linear links and grouping. See [Linear setup](docs/linear.md). |
+| `PORT`                                               | The server port. The default is `4773`.                        |
 
-To group by Linear project and milestone, make a personal API key at `linear.app/settings/account/security` and paste it in the "Linear links" fold. A `LINEAR_API_KEY` in `.env` works as the fallback.
-
-Optional: run the Catch-up on a local model. Install the Ollama app build with `brew install --cask ollama-app` (the Homebrew formula cannot return structured output). Pull a model, for example `ollama pull qwen3.5:4b-nvfp4`, and start Ollama. In the "Local model" fold, type the base URL (`http://localhost:11434/v1`) and the model name, and save. apfel (`brew install apfel`) also works here: base URL `http://localhost:11434/v1`, model `apple-foundationmodel`.
-
-Optional: set the path of the `t3` CLI, which the app runs to send messages. The default is `~/.t3/bin/t3`:
-
-```sh
-T3_BIN=/path/to/t3
-```
-
-### Install
-
-Choose one path.
-
-- **`.dmg`:** download the `.dmg` from GitHub Releases and drag the app to `/Applications`. The app has an ad-hoc signature, not a Developer ID. At the first open, macOS blocks it. Open System Settings › Privacy & Security and click "Open Anyway". Or run this command:
-
-  ```sh
-  xattr -dr com.apple.quarantine "/Applications/T3 Thread Tree.app"
-  ```
-
-- **From source:** run `bun run desktop:install`. It builds and signs the app and copies it to `/Applications/T3 Thread Tree.app`. Quit the app first, because the command replaces it. Run `bun run desktop:dmg` to write the `.dmg` to `release/` instead.
-- **Browser:** run `bun start`. See [Run](#run).
-
-## Run
+### Run
 
 ```sh
 bun start
@@ -99,31 +146,11 @@ bun start
 
 Open <http://127.0.0.1:4773>. The app starts even when T3 is not running. Until T3 is back, the page shows the last tree, greyed.
 
-To use the desktop window from source, run `bun run desktop`. Run `bun run desktop:demo` to see the demo in the window.
+- `bun run desktop` opens the desktop window from source.
+- `bun run demo` serves made-up data at <http://127.0.0.1:4774>, with no T3. Set `CLIS=0` to offer no CLI model, `PUSH=1` to fake a live change every 3 seconds, `SEND=failed` to make a send fail, and `T3CLI=0` to show the `t3` CLI as missing.
+- `bun run desktop:demo` shows the demo in the desktop window.
 
-To see the UI without T3, run `bun run demo` and open <http://127.0.0.1:4774>. Set `CLIS=0` to offer no CLI model, `PUSH=1` to fake a live change every 3 seconds, `SEND=failed` to make a send fail, and `T3CLI=0` to show the `t3` CLI as missing.
-
-## How it works
-
-```
-T3 Code ──WebSocket (orchestration.subscribeShell)──▶ Bun server ──SSE (/events)──▶ React page
-statev2.sqlite (read-only) ──launch lineage──────────▶
-```
-
-- `src/server/t3.ts` holds the T3 stream: a small Effect RPC client and a lenient decoder. T3's protocol is internal, so all protocol code stays in this one module.
-- `src/server/lineage.ts` reads `statev2.sqlite`, read-only, for launch lineage and the last message of each thread.
-- `src/server/model.ts` runs every model call, such as the Catch-up.
-- `src/server/build-tree.ts` applies the tree rules. It is a pure function, and `bun test` covers it.
-- `src/server.ts` builds the tree again on each change and pushes it over Server-Sent Events.
-- `src/page/` is a React, Tailwind and shadcn page, bundled by Bun's HTML imports. There is no Vite and no build step.
-- `src/shared/` holds the types and logic that the server and the page share.
-- [SPEC.md](SPEC.md) defines the rules, [DESIGN-SPEC.md](DESIGN-SPEC.md) the visual design, and [CONTEXT.md](CONTEXT.md) the terms.
-
-The app writes to T3 in two ways. A send or a workflow start runs the `t3` CLI. Settle, unsettle and snooze go over the stream, with the `orchestration:operate` scope of the token.
-
-The desktop app is Electron. `src/desktop/main.ts` starts the compiled server as a child process and loads the page in the window. electron-builder packages and signs the app ad-hoc.
-
-## Develop
+### Commands
 
 ```sh
 bun test                 # unit tests
@@ -139,4 +166,31 @@ bun run release          # builds the .dmg and .zip and creates the GitHub relea
 bun run screenshots      # writes the framed README screenshots in docs/ from the demo data (needs Google Chrome)
 ```
 
+`bun run desktop:install` replaces the app in `/Applications`. Quit the app first.
+
 CI runs `bun run check` and `bun run build:sidecar` on every pull request. A pull request merges only when it passes.
+
+### Rules for a change
+
+- [SPEC.md](SPEC.md) defines the behavior, [DESIGN-SPEC.md](DESIGN-SPEC.md) the visual design, and [CONTEXT.md](CONTEXT.md) the terms. Update them with the code.
+- When a change adds or changes a feature that the user sees, update this README in the same change. Write in ASD-STE100 Simplified Technical English.
+- When the UI changes, run `bun run screenshots` to make the screenshots again.
+
+### How it works
+
+```
+T3 Code ──WebSocket (orchestration.subscribeShell)──▶ Bun server ──SSE (/events)──▶ React page
+statev2.sqlite (read-only) ──launch lineage──────────▶
+```
+
+- `src/server/t3.ts` holds the T3 stream: a small Effect RPC client and a lenient decoder. T3's protocol is internal, so all protocol code stays in this one module.
+- `src/server/lineage.ts` reads `statev2.sqlite`, read-only, for launch lineage and the last message of each thread.
+- `src/server/model.ts` runs every model call, such as the Catch-up.
+- `src/server/build-tree.ts` applies the tree rules. It is a pure function, and `bun test` covers it.
+- `src/server.ts` builds the tree again on each change and pushes it over Server-Sent Events.
+- `src/page/` is a React, Tailwind and shadcn page, bundled by Bun's HTML imports. There is no Vite and no build step.
+- `src/shared/` holds the types and logic that the server and the page share.
+
+The app writes to T3 in two ways. A send or a workflow start runs the `t3` CLI. Settle, unsettle and snooze go over the stream, with the `orchestration:operate` scope of the token.
+
+The desktop app is Electron. `src/desktop/main.ts` starts the compiled server as a child process and loads the page in the window. electron-builder packages and signs the app ad-hoc.
