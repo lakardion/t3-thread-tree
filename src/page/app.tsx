@@ -178,6 +178,7 @@ import {
   type Freeze,
   type Orders,
 } from "./order.ts";
+import { MapGroupPrototype } from "./map-group-sol.prototype.tsx";
 import { Presence, useMotion } from "./presence.tsx";
 import { ProjectIcon, projectHex } from "./project-icon.tsx";
 import { ProviderIcon } from "./provider-icon.tsx";
@@ -3516,9 +3517,11 @@ function App() {
                                           )}
                                         </Presence>
                                       ) : (
-                                        <Presence key="tree" items={projects} keyOf={(p) => p.id}>
-                                          {(p) => <ProjectBlock b={p} closed={closed} toggle={toggle} fold={fold} />}
-                                        </Presence>
+                                        <MapGroupPrototype Row={ThreadRow} projects={projects}>
+                                          <Presence key="tree" items={projects} keyOf={(p) => p.id}>
+                                            {(p) => <ProjectBlock b={p} closed={closed} toggle={toggle} fold={fold} />}
+                                          </Presence>
+                                        </MapGroupPrototype>
                                       )}
                                     </Launcher>
                                   </SendTo>
