@@ -131,7 +131,7 @@ export type Branch = {
   /** Project branches only: the workspace root. */
   path?: string;
   /** Key groups in a PR stack. Adjacent groups with the same `id` share one rail. */
-  stack?: { id: string; total: number; base: string | null };
+  stack?: { id: string; total: number; base: string | null; number?: number };
   /** Top-level and milestone branches of the Linear tree. `url`: project link. `date`: milestone target date. */
   linear?: { url?: string; date?: string | null };
   branches: Branch[];

@@ -1536,6 +1536,25 @@ describe("Map groups", () => {
     expect(titles(head.children[0].children)).toEqual(["start-issue", "t3"]);
   });
 
+  test("the rail carries the stack number, on a key group and on a Map member", () => {
+    const stack = (own: number) => [
+      pr(own, "created", "open", { number: 42, base: "main" }),
+      ...[10, 11, 12].filter((n) => n !== own).map((n) => pr(n, "stack")),
+    ];
+    const tree = mapped(
+      [
+        shell("chart", "Wayfinder"),
+        shell("other", "WEB-9 other", { pullRequests: stack(12) }),
+        shell("mate", "mate", { pullRequests: stack(11) }),
+        shell("m", "SHOP-1 member", { pullRequests: stack(10) }),
+      ],
+      { m: "/m/x" },
+      { m: "chart" },
+    );
+    expect(child(tree, "frontend", "WEB-9").stack?.number).toBe(42);
+    expect(loose(tree)[0].children[0].rail?.number).toBe(42);
+  });
+
   test("keyless stack mates join the group with a rail; a keyed non-member stays", () => {
     const stack = (own: number) => [
       pr(own, "created"),

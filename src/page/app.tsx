@@ -2335,6 +2335,26 @@ function RailNode({
   );
 }
 
+/** "Copied stack #N" for 2 s. */
+function CopiedToast({ number, onClose }: { number: number; onClose: () => void }) {
+  const closeRef = useRef(onClose);
+  useEffect(() => {
+    closeRef.current = onClose;
+  });
+  useEffect(() => {
+    const timer = setTimeout(() => closeRef.current(), 2000);
+    return () => clearTimeout(timer);
+  }, []);
+  return (
+    <div
+      role="status"
+      className="fixed bottom-4 left-1/2 z-50 flex -translate-x-1/2 items-center gap-3 rounded-lg border bg-card px-3 py-2 text-sm shadow-md"
+    >
+      Copied stack #{number}
+    </div>
+  );
+}
+
 /**
  * Key groups of one PR stack. The header is a line of stops from the base to the top PR; the body lists the
  * threads on a numbered line, one number per PR. Both are colored by PR state.
@@ -2348,7 +2368,17 @@ function StackRail({
   project,
   className,
 }: { run: Branch[]; sort?: Sort; flat?: boolean; project?: Branch; className?: string } & Fold) {
-  const { id, total, base } = run[0].stack!;
+  const { id, total, base, number } = run[0].stack!;
+  const [copies, setCopies] = useState(0);
+  const lastCopy = useRef(0);
+  const copy = () => {
+    if (Date.now() - lastCopy.current < 1000) return;
+    lastCopy.current = Date.now();
+    navigator.clipboard.writeText(String(number)).then(
+      () => setCopies((c) => c + 1),
+      () => {},
+    );
+  };
   const open = flat || !closed.has(`rail:${id}`);
   const { stops, rows: allRows } = railRows(run);
   const section = useContext(Section);
@@ -2426,17 +2456,32 @@ function StackRail({
             project={projectPath}
             className="relative z-10 size-6 text-muted-foreground"
           />
-          {hidden.length > 0 && (
-            <button
-              type="button"
-              className="relative z-10 ml-auto rounded-full border border-dashed px-2 py-px text-[11px] text-muted-foreground hover:text-foreground max-[720px]:min-h-11"
-              aria-expanded={showOther}
-              onClick={() => setShowOther(!showOther)}
-            >
-              {showOther ? "Hide " : "+"}
-              {hidden.length} other {hidden.length === 1 ? "thread" : "threads"}
-            </button>
+          {(hidden.length > 0 || number) && (
+            <span className="relative z-10 ml-auto flex items-center gap-2">
+              {hidden.length > 0 && (
+                <button
+                  type="button"
+                  className="rounded-full border border-dashed px-2 py-px text-[11px] text-muted-foreground hover:text-foreground max-[720px]:min-h-11"
+                  aria-expanded={showOther}
+                  onClick={() => setShowOther(!showOther)}
+                >
+                  {showOther ? "Hide " : "+"}
+                  {hidden.length} other {hidden.length === 1 ? "thread" : "threads"}
+                </button>
+              )}
+              {number && (
+                <button
+                  type="button"
+                  className="rounded-full border px-2 py-px font-mono text-[11px] text-muted-foreground hover:text-foreground max-[720px]:min-h-11"
+                  title="Copy stack number"
+                  onClick={copy}
+                >
+                  #{number}
+                </button>
+              )}
+            </span>
           )}
+          {copies > 0 && <CopiedToast key={copies} number={number!} onClose={() => setCopies(0)} />}
         </div>
         <CollapsibleContent asChild>
           <ul className="m-0 list-none p-0 pb-1 pl-1">
