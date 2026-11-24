@@ -19,7 +19,8 @@
     "fmt": "oxfmt --disable-nested-config",
     "fmt:check": "oxfmt --check --disable-nested-config",
     "check": "bun run fmt:check && bun run lint && bun run typecheck && bun test",
-    "release": "rm -rf release && bun run desktop:dmg --publish never && gh release create \"v$(jq -r .version package.json)\" release/*.dmg release/*.zip --generate-notes --target \"$(git rev-parse HEAD)\""
+    "release": "rm -rf release && bun run desktop:dmg --publish never && gh release create \"v$(jq -r .version package.json)\" release/*.dmg release/*.zip --generate-notes --target \"$(git rev-parse HEAD)\"",
+    "screenshots": "bun run scripts/screenshots.ts"
   },
   "dependencies": {
     "@dnd-kit/abstract": "0.5.3",
@@ -50,6 +51,7 @@
     "oxfmt": "^0.78.0",
     "oxlint": "^1.93.0",
     "oxlint-tsgolint": "^7.0.2007",
+    "playwright-core": "^1.65.1",
     "typescript": "^7.0.2"
   },
   "build": {
