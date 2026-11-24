@@ -1779,7 +1779,7 @@ function SettleButton({ t }: { t: ThreadNode }) {
 
 /**
  * `inStack`: the row sits on a stack rail, which holds no drag handles and shows the stack itself.
- * `project` adds the Project column and project edge of the flat list, `corners` rounds that edge, `review` the eye.
+ * `project` adds the Project column and project edge of the flat list, `corners` holds the classes of the row edge, `review` the eye.
  */
 function ThreadRow({
   t,
@@ -2262,7 +2262,8 @@ function StackRail({
   sort,
   flat,
   project,
-}: { run: Branch[]; sort?: Sort; flat?: boolean; project?: Branch } & Fold) {
+  className,
+}: { run: Branch[]; sort?: Sort; flat?: boolean; project?: Branch; className?: string } & Fold) {
   const { id, total, base } = run[0].stack!;
   const open = flat || !closed.has(`rail:${id}`);
   const { stops, rows: allRows } = railRows(run);
@@ -2277,7 +2278,11 @@ function StackRail({
     <Collapsible asChild open={open} onOpenChange={() => toggle(`rail:${id}`)}>
       <li
         ref={ref}
-        className={cn("relative my-1 rounded-[10px] border border-dashed border-border", project && "border-l-[3px]")}
+        className={cn(
+          "relative my-1 rounded-[10px] border border-dashed border-border",
+          project && "border-l-[3px]",
+          className,
+        )}
         style={{
           viewTransitionName: vtName("s", run[0].id),
           borderLeftColor: project && projectHex(project.label),
@@ -2387,15 +2392,24 @@ const edgeCorners = (items: FlatItem[], i: FlatItem) => {
 function FlatRow({
   i,
   corners,
+  linear,
   section,
   closed,
   toggle,
   fold,
   toggleSection,
-}: { i: FlatItem; corners: string; section: Status[] | null; toggleSection: (key: string) => void } & Fold) {
+}: {
+  i: FlatItem;
+  corners: string;
+  linear: boolean;
+  section: Status[] | null;
+  toggleSection: (key: string) => void;
+} & Fold) {
   const lists = useContext(Lists);
   /** The section list that holds the unit, or the whole flat list when ungrouped. */
   const list = [...lists.keys()].find((k) => k !== FLAT && lists.get(k)?.includes(i.id)) ?? FLAT;
+  /** Rows under a Linear section header sit one chevron to the right of it. */
+  const indent = linear && i.kind !== "section" && i.project.id !== LINEAR_LOOSE ? "ml-6" : undefined;
   if (i.kind === "thread")
     return (
       <Section value={section}>
@@ -2403,7 +2417,7 @@ function FlatRow({
           t={i.t}
           chip={i.t.key ?? undefined}
           project={i.project.linear ? undefined : i.project}
-          corners={corners}
+          corners={indent ?? corners}
           review={i.review}
           sort={sortOf(lists, list, i.id, i.t.title || i.t.id)}
         />
@@ -2416,6 +2430,7 @@ function FlatRow({
           run={i.run}
           project={i.project.linear ? undefined : i.project}
           flat
+          className={indent}
           closed={closed}
           toggle={toggle}
           fold={fold}
@@ -3491,6 +3506,7 @@ function App() {
                                             <FlatRow
                                               i={i}
                                               corners={edgeCorners(view.flat ?? [], i)}
+                                              linear={flatMode === "linear"}
                                               section={sectionOf(view.flat ?? [], i)}
                                               closed={closed}
                                               toggle={toggle}
