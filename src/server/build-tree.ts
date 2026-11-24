@@ -19,6 +19,7 @@ import {
   type ThreadNode,
 } from "../shared/tree.ts";
 import { waiting } from "./catch-up.ts";
+import { mapName, mapsOf } from "./maps.ts";
 import { suggestedReplies } from "./replies.ts";
 import type { Project, RunStepsRaw, RunsSnapshot, Thread } from "./t3.ts";
 
@@ -86,9 +87,12 @@ export type BuildInput = {
   stepsOf?: (runId: string) => RunStepsRaw | undefined;
   /** The T3 web origin, for the run page link. */
   origin?: string;
+  /** The map key of a thread, from its first message. Unset: no Map groups. */
+  mapKeyOf?: (id: string) => string | null;
 };
 
-type Node = ThreadNode & { t: Thread; first: string };
+/** `si` is the stack index of a child in a stack rail of a Map group. */
+type Node = ThreadNode & { t: Thread; first: string; si?: number };
 type Group = { key: string; nodes: Node[]; first: string };
 type Stack = { set: Set<number>; threads: Thread[]; order: number[] };
 
@@ -396,11 +400,13 @@ function prepare(input: BuildInput) {
 
   for (const r of runNodes(stepThreads.map(nodeOf), input)) nodes.set(r.id, r);
 
+  /** Map members and map threads: no thread nests under them by launch. */
+  const claimed = new Set<string>();
   const visibleSpawner = (id: string): string | null => {
     const seen = new Set([id]);
     let c = spawnerOf(id);
     while (c && !seen.has(c)) {
-      if (visible.has(c)) return c;
+      if (visible.has(c)) return claimed.has(c) ? null : c;
       seen.add(c);
       c = spawnerOf(c);
     }
@@ -415,8 +421,137 @@ function prepare(input: BuildInput) {
       n.detail.launchedBy = { title: spawner.title || spawner.id, href: hrefOf(environmentId, spawner.id) };
   };
 
-  return { visible, stacks, stackIdOf, nodes, visibleSpawner, markLaunched };
+  /**
+   * Rule 6.0. Each Map member, and each keyless stack mate of a member, leaves `nodes` and nests in its group, under its
+   * nearest ancestor in the same map. A group hangs on its map thread, or on a Map header that `nodes` then holds.
+   * Returns the nodes that left.
+   */
+  const groupMaps = (): Node[] => {
+    const maps = mapsOf({
+      ids: [...visible.keys()],
+      spawnerOf,
+      keyOf: (id) => (all.get(id)?.workflowRun ? null : (input.mapKeyOf!(id) ?? null)),
+      createdKey: (id) => timeKey(all.get(id)?.createdAt ?? null, id),
+    });
+    const keyOf = new Map<string, string>();
+    for (const id of visible.keys()) {
+      const k = maps.mapOf(id);
+      if (k) keyOf.set(id, k);
+    }
+    const members = new Set(keyOf.keys());
+    const lowest = new Map<number, Node>();
+    for (const n of [...members].map((id) => nodes.get(id)!).toSorted(byPos)) {
+      const si = stackIdOf.get(n.id);
+      if (si !== undefined && !lowest.has(si)) lowest.set(si, n);
+    }
+    const mates = new Map<string, Node>();
+    for (const id of visible.keys()) {
+      const n = nodes.get(id)!;
+      const si = stackIdOf.get(id);
+      const low = si === undefined ? undefined : lowest.get(si);
+      if (low && !members.has(id) && !n.key && !isReview(n)) {
+        keyOf.set(id, keyOf.get(low.id)!);
+        mates.set(id, low);
+      }
+    }
+
+    const shown = [...new Set(keyOf.values())];
+    const anchored = (id: string) => (maps.anchors.get(id) ?? []).filter((k) => shown.includes(k));
+    /** The node that holds the top level of each group. */
+    const top = new Map<string, Node>();
+    const placed: Node[] = [];
+    const sub: { header: Node; of: string; parentKey: string }[] = [];
+    const header = (key: string, id: string, t: Thread, mapThread: Thread | undefined): Node => {
+      const alone = mapThread && anchored(mapThread.id).length === 1;
+      const href = mapThread ? hrefOf(environmentId, mapThread.id) : null;
+      const n: Node = {
+        ...nodeOf(t),
+        id,
+        href: href ?? "",
+        stack: null,
+        lastRun: null,
+        children: [],
+        map: { name: mapName(key, alone ? mapThread.title : null, shown), header: true, href },
+      };
+      top.set(key, n);
+      return n;
+    };
+    for (const key of shown) {
+      const mt = maps.threadOf.get(key);
+      const mapThread = mt ? all.get(mt) : undefined;
+      const head = mt ? nodes.get(mt) : undefined;
+      if (head) {
+        claimed.add(head.id);
+        if (anchored(head.id).length === 1) {
+          top.set(key, head);
+          head.map = { name: mapName(key, head.title, shown), header: false, href: null };
+        } else {
+          head.map = { name: head.title, header: false, href: null };
+          head.children.push(header(key, `map:${key}`, head.t, mapThread));
+        }
+        continue;
+      }
+      if (mapThread && !mapThread.workflowRun) {
+        const h = header(key, anchored(mapThread.id).length === 1 ? mapThread.id : `map:${key}`, mapThread, mapThread);
+        const parentKey = maps.mapOf(mapThread.id);
+        if (parentKey && shown.includes(parentKey)) sub.push({ header: h, of: mapThread.id, parentKey });
+        else placed.push(h);
+        continue;
+      }
+      const oldest = [...members]
+        .filter((id) => keyOf.get(id) === key)
+        .map((id) => nodes.get(id)!)
+        .toSorted(byFirst)[0];
+      placed.push(header(key, `map:${key}`, oldest.t, undefined));
+    }
+
+    /** The nearest member of the map above `id`, skipping the head of another map. */
+    const ancestorIn = (id: string, key: string) =>
+      maps.ancestors(id).find((a) => members.has(a) && keyOf.get(a) === key && anchored(a).length === 0);
+    const containerOf = (id: string, key: string) => {
+      const a = ancestorIn(id, key);
+      return a ? nodes.get(a)! : top.get(key)!;
+    };
+    const lists = new Set<Node>();
+    const put = (n: Node, container: Node) => {
+      container.children.push(n);
+      lists.add(container);
+    };
+    for (const id of members) put(nodes.get(id)!, containerOf(id, keyOf.get(id)!));
+    for (const [id, low] of mates) put(nodes.get(id)!, containerOf(low.id, keyOf.get(id)!));
+    for (const s of sub) put(s.header, containerOf(s.of, s.parentKey));
+    for (const c of lists) {
+      const bySi = Map.groupBy(
+        (c.children as Node[]).filter((n) => stackIdOf.has(n.id)),
+        (n) => stackIdOf.get(n.id)!,
+      );
+      for (const [si, ns] of bySi)
+        if (ns.length > 1)
+          for (const n of ns) {
+            n.si = si;
+            n.rail = railOf(stacks[si]);
+          }
+    }
+
+    const left = [...members, ...mates.keys()].map((id) => nodes.get(id)!);
+    for (const n of left) {
+      const top1 = top.get(keyOf.get(n.id)!)!;
+      if (n.t.projectId !== top1.t.projectId)
+        n.t3Project = { id: n.t.projectId, label: input.projects.get(n.t.projectId)?.title ?? n.t.projectId };
+      markLaunched(n);
+      claimed.add(n.id);
+    }
+    for (const n of left) nodes.delete(n.id);
+    for (const h of placed) nodes.set(h.id, h);
+    return left;
+  };
+  const grouped = input.mapKeyOf ? groupMaps() : [];
+
+  return { visible, stacks, stackIdOf, nodes, grouped, visibleSpawner, markLaunched };
 }
+
+/** Stack mates in a stack, then creation. */
+const byPos = (a: Node, b: Node) => (a.stack?.pos ?? Infinity) - (b.stack?.pos ?? Infinity) || byFirst(a, b);
 
 /** The rail data of a stack. */
 const railOf = (st: Stack | undefined): Branch["stack"] => {
@@ -425,10 +560,11 @@ const railOf = (st: Stack | undefined): Branch["stack"] => {
   return { id: `s${st.order[0]}`, total: st.order.length, base };
 };
 
-/** The creation key of a node is the oldest of its own and its nested threads'. Sorts children on the way. */
+/** The creation key of a node is the oldest of its own and its nested threads'. Sorts children on the way, with the stack mates of a Map group together. */
 const settle = (n: Node): string => {
-  for (const c of n.children as Node[]) n.first = [n.first, settle(c)].toSorted()[0]!;
-  (n.children as Node[]).sort(byFirst);
+  const kids = n.children as Node[];
+  for (const c of kids) n.first = [n.first, settle(c)].toSorted()[0]!;
+  n.children = stackAdjacent(kids, new Map(kids.flatMap((c) => (c.si === undefined ? [] : [[c.id, c.si] as const]))));
   return n.first;
 };
 
@@ -451,7 +587,7 @@ export function buildTree(input: BuildInput): Branch[] {
       continue;
     }
     /** A stack outranks lineage: keyless mates share one group, so the stack keeps its rail. */
-    const si = stackIdOf.get(t.id);
+    const si = stackIdOf.get(n.id);
     const stackKey = si === undefined ? null : `PR stack #${stacks[si].order[0]}`;
     if (isReview(t)) addTo(t.projectId, REVIEWS, n);
     else if (n.key) addTo(t.projectId, n.key, n);
@@ -546,7 +682,7 @@ type Milestone = { id: string; label: string; date: string | null; none: boolean
 /** Linear project, then milestone, then thread. Fallback groups follow the projects. */
 export function buildLinearTree(input: BuildInput): Branch[] {
   const { projects, nest } = input;
-  const { stacks, stackIdOf, nodes, visibleSpawner, markLaunched } = prepare(input);
+  const { stacks, stackIdOf, nodes, grouped, visibleSpawner, markLaunched } = prepare(input);
 
   const byProject = new Map<string, { name: string; url: string; milestones: Map<string, Milestone> }>();
   const reviews: Node[] = [];
@@ -554,15 +690,16 @@ export function buildLinearTree(input: BuildInput): Branch[] {
   const loose: Node[] = [];
   /** A stack stays whole where its lowest member with a key goes. */
   const placer = new Map<number, Node>();
-  const byPos = (a: Node, b: Node) => (a.stack?.pos ?? Infinity) - (b.stack?.pos ?? Infinity) || byFirst(a, b);
   for (const n of [...nodes.values()].toSorted(byPos)) {
     const si = stackIdOf.get(n.id);
     if (si !== undefined && n.key && !isReview(n) && !placer.has(si)) placer.set(si, n);
   }
+  for (const n of grouped)
+    n.t3Project = { id: n.t.projectId, label: projects.get(n.t.projectId)?.title ?? n.t.projectId };
   for (const n of nodes.values()) {
     const { t } = n;
     n.t3Project = { id: t.projectId, label: projects.get(t.projectId)?.title ?? t.projectId };
-    const si = n.run ? undefined : stackIdOf.get(t.id);
+    const si = n.run ? undefined : stackIdOf.get(n.id);
     const by = si === undefined ? n : placer.get(si);
     const lp = by?.linear?.project;
     if (isReview(n)) reviews.push(n);
@@ -584,7 +721,7 @@ export function buildLinearTree(input: BuildInput): Branch[] {
         entry.nodes.push(n);
       }
     } else {
-      const vs = nest && !n.run && !stackIdOf.has(t.id) ? visibleSpawner(t.id) : null;
+      const vs = nest && !n.run && !stackIdOf.has(n.id) ? visibleSpawner(t.id) : null;
       const spawner = vs ? nodes.get(vs)! : null;
       if (spawner && !spawner.key && !isReview(spawner)) spawner.children.push(n);
       else loose.push(n);
@@ -677,7 +814,7 @@ const reviewGroups = (nodes: Node[], id: string): Branch[] => {
 };
 
 /** Strips the build-only fields before the node goes on the wire. Nested subthreads get no Suggested replies. */
-const clean = ({ t: _t, first: _f, children, ...n }: Node): ThreadNode => ({
+const clean = ({ t: _t, first: _f, si: _si, children, ...n }: Node): ThreadNode => ({
   ...n,
   children: (children as Node[]).map(({ suggestedReplies: _s, ...c }) => clean(c as Node)),
 });

@@ -18,6 +18,7 @@ Use it as a Mac app or in a browser. The Mac app adds a Dock badge, notification
 - **Status at a glance.** Each row starts with a status icon. Rows that wait for you show the wait time and a phrase, such as "Approval" or "Your turn".
 - **PR marks and stacks.** Each row shows its PRs with checks, review, conflicts and merge marks. Threads in one PR stack sit in one block, with numbered stops from the base branch to the top PR.
 - **Workflow runs.** An active T3 workflow run shows as a row with step pills. A rail under it lists each step with its thread.
+- **Map groups.** Threads that work on one Wayfinder map sit in one group, under an amber rail. The group has the map thread as its head, or a Map header when that thread is settled. A count shows the members. Fold the group to hide them.
 - **Live.** Changes arrive as T3 streams them. No polling, no reload.
 
 ### Know what needs you

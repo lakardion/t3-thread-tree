@@ -679,3 +679,46 @@ describe("onlyNeedsYou and run nodes", () => {
     expect(ids(kept[0].threads[0].children)).toEqual(["s"]);
   });
 });
+
+describe("Map groups", () => {
+  const map = { name: "m", header: false, href: null };
+  const header = (id: string, children: ThreadNode[]): ThreadNode => ({
+    ...thread(id, "done", children),
+    map: { ...map, header: true },
+  });
+  const head = (id: string, status: Status, children: ThreadNode[]): ThreadNode => ({
+    ...thread(id, status, children),
+    map,
+  });
+
+  test("a header is not a thread in any count or queue", () => {
+    const projects = [branch("p", [header("h", [thread("a", "needs-input"), thread("b", "working")])])];
+    expect(countAttention(projects)).toEqual({ needYou: 1, working: 1, yourTurn: 0, stopped: 0 });
+    expect(ids(openNextQueue(projects))).toEqual(["a"]);
+    expect(waits(projects[0])).toBe(true);
+  });
+
+  test("onlyNeedsYou keeps a header through a waiting member and drops it with none", () => {
+    const kept = onlyNeedsYou([branch("p", [header("h", [thread("a", "needs-input"), thread("b", "working")])])]);
+    expect(ids(kept[0].threads)).toEqual(["h"]);
+    expect(ids(kept[0].threads[0].children)).toEqual(["a"]);
+    expect(onlyNeedsYou([branch("p", [header("h", [thread("b", "working")])])])).toEqual([]);
+  });
+
+  test("a map thread with no member left shows as a plain row", () => {
+    const [p] = withoutSnoozed([branch("p", [head("m", "working", [thread("s", "snoozed")])])]);
+    expect(p.threads[0].id).toBe("m");
+    expect(p.threads[0].map).toBeUndefined();
+    const [q] = withoutSnoozed([branch("p", [head("m", "working", [thread("s", "working")])])]);
+    expect(q.threads[0].map).toEqual(map);
+  });
+
+  test("withoutSnoozed drops a header with no member left", () => {
+    expect(withoutSnoozed([branch("p", [header("h", [thread("s", "snoozed")])])])).toEqual([]);
+  });
+
+  test("a snoozed map thread stays while a member stays", () => {
+    const [p] = withoutSnoozed([branch("p", [head("m", "snoozed", [thread("s", "working")])])]);
+    expect(p.threads[0].map).toEqual(map);
+  });
+});

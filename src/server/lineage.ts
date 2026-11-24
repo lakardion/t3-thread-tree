@@ -17,6 +17,18 @@ const SENDER = `
   FROM orchestration_v2_projection_messages
   WHERE thread_id = ?1 AND message_id = ?1`;
 
+const FIRST_LAUNCHED = `
+  SELECT json_extract(payload_json, '$.text') AS text
+  FROM orchestration_v2_projection_messages
+  WHERE thread_id = ?1 AND message_id = ?1`;
+
+const FIRST_USER = `
+  SELECT json_extract(payload_json, '$.text') AS text
+  FROM orchestration_v2_projection_messages
+  WHERE thread_id = ? AND role = 'user'
+  ORDER BY created_at, message_id
+  LIMIT 1`;
+
 /** Child thread ids named in one launch tool result. Some providers wrap the JSON in `[{ text }]`. */
 export function launchedIds(result: unknown): string[] {
   let o: unknown;
@@ -73,6 +85,8 @@ export function openLineage(path = join(USERDATA, "statev2.sqlite")) {
   const db = new Database(path, { readonly: true });
   const calls = db.query<{ caller: string; result: string | null }, []>(CALLS);
   const sender = db.query<{ sender: string | null }, [string]>(SENDER);
+  const firstLaunched = db.query<{ text: string | null }, [string]>(FIRST_LAUNCHED);
+  const firstUser = db.query<{ text: string | null }, [string]>(FIRST_USER);
   const last = db.query<{ id: string; messageId: string | null; text: string | null }, [string]>(LAST_MESSAGES);
   const lastEntries = (ids: string[]): Map<string, { id: string; text: string } | null> =>
     new Map(
@@ -83,6 +97,9 @@ export function openLineage(path = join(USERDATA, "statev2.sqlite")) {
   let callers = new Map<string, string>();
 
   return {
+    /** The text of the first user message of a thread; `null` when it has none yet. */
+    firstMessage: (id: string): string | null =>
+      (id.startsWith("mcp:") ? firstLaunched : firstUser).get(id)?.text ?? null,
     /** The newest complete assistant text per thread; `null` when it has none. */
     lastMessages: (ids: string[]): Map<string, string | null> =>
       new Map([...lastEntries(ids)].map(([id, e]) => [id, e?.text ?? null])),

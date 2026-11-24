@@ -7,7 +7,7 @@ import type {
   UpNext,
 } from "../shared/desktop.ts";
 import { isRun, type RunItem } from "../shared/runs.ts";
-import { allThreads, bySince, type Branch, type Status, type ThreadNode, type Tree } from "../shared/tree.ts";
+import { allThreads, bySince, isThread, type Branch, type Status, type ThreadNode, type Tree } from "../shared/tree.ts";
 import { linearHref } from "./format.ts";
 
 export type Counts = { needYou: number; working: number; yourTurn: number; stopped: number };
@@ -36,10 +36,13 @@ export function countAttention(projects: Branch[], runs: RunItem[] = []): Counts
   return c;
 }
 
+/** A Map header with no child left drops out; a map thread with no child left is a plain row. */
 const keepThreads = (ts: ThreadNode[], keep: (t: ThreadNode) => boolean): ThreadNode[] =>
   ts.flatMap((t) => {
     const children = keepThreads(t.children, keep);
-    return keep(t) || children.length > 0 ? [{ ...t, children }] : [];
+    if (t.map?.header) return children.length > 0 ? [{ ...t, children }] : [];
+    if (!keep(t) && children.length === 0) return [];
+    return [{ ...t, children, ...(t.map && children.length === 0 && { map: undefined }) }];
   });
 
 const keepBranch = (b: Branch, keep: (t: ThreadNode) => boolean): Branch[] => {
@@ -50,7 +53,7 @@ const keepBranch = (b: Branch, keep: (t: ThreadNode) => boolean): Branch[] => {
 
 /** The tree with only the threads that need the user, and the spawners, groups and projects that hold them. */
 export const onlyNeedsYou = (projects: Branch[]): Branch[] =>
-  projects.flatMap((b) => keepBranch(b, (t) => !t.run && needsYou(t.status)));
+  projects.flatMap((b) => keepBranch(b, (t) => isThread(t) && needsYou(t.status)));
 
 /** The tree without snoozed threads. A snoozed thread with a kept subthread stays; empty groups and projects drop out. */
 export const withoutSnoozed = (projects: Branch[]): Branch[] =>

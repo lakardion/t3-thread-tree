@@ -11,6 +11,7 @@ import { lastMessageRoutes } from "./server/last-message.ts";
 import { mayBeLaunched, needsScan, openLineage } from "./server/lineage.ts";
 import { fetchLinear } from "./server/linear-api.ts";
 import { linearStore } from "./server/linear.ts";
+import { mapKey } from "./server/maps.ts";
 import {
   appleHelperPath,
   createModels,
@@ -97,6 +98,17 @@ function scanIfNeeded(settledView = false) {
   };
 }
 
+/** The map key of each thread, from its first message. A thread with no user message yet is read again. */
+const mapKeys = new Map<string, string | null>();
+function mapKeyOf(id: string): string | null {
+  if (mapKeys.has(id)) return mapKeys.get(id)!;
+  const text = lineage.firstMessage(id);
+  if (text === null) return null;
+  const key = mapKey(text, projects.get(threads.get(id)?.projectId ?? "")?.path, homedir());
+  mapKeys.set(id, key);
+  return key;
+}
+
 let retry: ReturnType<typeof setTimeout> | undefined;
 function resolveSpawners() {
   for (const t of threads.values()) {
@@ -153,6 +165,7 @@ const treeFor = (settled: boolean, nest = false, labels: string[] = [], wantsLin
     runs: runsSnapshot,
     stepsOf: (runId) => runSteps.get(runId)?.steps,
     origin: runsOrigin,
+    mapKeyOf,
   }),
 });
 
@@ -171,6 +184,13 @@ function syncLinear() {
   for (const t of threads.values()) {
     const key = issueKey(t.title);
     if (key && !t.parentThreadId && !t.sideChat && !t.gone && !t.settledAt) keys.add(key);
+  }
+  /** A settled map thread with a key stands in for its Map header. */
+  for (const t of threads.values()) {
+    const spawner = spawners.get(t.id);
+    const stand = spawner ? threads.get(spawner) : undefined;
+    const key = stand?.settledAt && !t.settledAt && !t.parentThreadId ? issueKey(stand.title) : null;
+    if (key && mapKeyOf(t.id)) keys.add(key);
   }
   const withSteps = new Set([...threads.values()].flatMap((t) => (t.workflowRun ? [t.workflowRun.runId] : [])));
   for (const r of runsSnapshot?.runs ?? []) {

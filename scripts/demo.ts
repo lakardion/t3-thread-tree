@@ -155,6 +155,7 @@ const threads: Thread[] = [
   t("Migrate Button to the new tokens", { id: "m1", status: "running" }),
   t("Migrate Dialog to the new tokens", { id: "m2", ...completed }),
   t("Migrate Tooltip to the new tokens", { id: "m3", snoozedUntil: later(20) }),
+  t("Migrate Popover to the new tokens", { id: "m4", status: "idle" }),
   t("Flaky e2e: cart badge count", {
     status: "failed",
     lastErrorClass: "provider",
@@ -219,6 +220,9 @@ const threads: Thread[] = [
     snoozedUntil: later(30),
   }),
   t("Rewrite the install page", { id: "launched", projectId: "docs" }),
+  t("Docs sweep map", { id: "sweep", projectId: "docs", settledAt: ago(300), ...completed }),
+  t("Sweep: fix the install page links", { id: "sweep-1", projectId: "docs", status: "running" }),
+  t("Sweep: rename the guides folder", { id: "sweep-2", projectId: "docs", ...completed }),
   t("Compare two date libraries", { projectId: "scratch", status: "idle" }),
   t("DOC-16 · Archive the old tutorial", { projectId: "docs", settledAt: ago(60), prs: [pr(3010, "linked")] }),
   t("Cache rollout dispatch", { id: "dispatch", projectId: "api", ...completed }),
@@ -288,6 +292,8 @@ const spawners: Record<string, string> = {
   m2: "map",
   m3: "map",
   launched: "map",
+  "sweep-1": "sweep",
+  "sweep-2": "sweep",
   "cache-1": "dispatch",
   "cache-2": "cache-1",
   "cache-3": "cache-2",
@@ -295,6 +301,17 @@ const spawners: Record<string, string> = {
   "search-r": "search",
   "search-w": "search-plan",
   "search-b": "search-plan",
+};
+/** The map key that the first message of a thread names; m4 and the sweep threads start with `/wayfinder`. */
+const MAP_KEYS: Record<string, string> = {
+  m1: "/wiki/design-system",
+  m2: "/wiki/design-system",
+  m3: "/wiki/design-system",
+  m4: "/wiki/design-system",
+  "search-plan": "/wiki/search-revamp",
+  "search-r": "/wiki/search-revamp",
+  "sweep-1": "/wiki/docs-sweep",
+  "sweep-2": "/wiki/docs-sweep",
 };
 const projects = new Map<string, Project>([
   ["storefront", { title: "storefront", repo: "acme/storefront" }],
@@ -356,6 +373,7 @@ const projectsFor = (settled: boolean, nest = false, labels: string[] = [], want
     threads,
     projects,
     spawnerOf: (id) => spawners[id],
+    mapKeyOf: (id) => MAP_KEYS[id] ?? null,
     environmentId: "demo",
     settled,
     nest,

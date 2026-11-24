@@ -93,11 +93,18 @@ export function linearHref(key: string, linear: Tree["linear"]): string | null {
 }
 
 /** The fold ids of a group and of the groups and PR stacks in it. A group that folds into its one thread has none. */
-export const groupIds = (g: Branch): string[] => (folded(g) ? [] : [g.id, ...foldIds(g)]);
+export const groupIds = (g: Branch): string[] => (folded(g) ? g.threads.flatMap(mapFolds) : [g.id, ...foldIds(g)]);
 
-/** The fold ids of the rows in a project: its groups and its PR stacks. */
-export const foldIds = (project: Branch): string[] =>
-  stackRuns(project.branches).flatMap((run) => (run[0].stack ? [`rail:${run[0].stack.id}`] : groupIds(run[0])));
+/** The fold ids of the Map heads in a thread and its subthreads. A head folds under its own id. */
+const mapFolds = (t: ThreadNode): string[] => [...(t.map ? [t.id] : []), ...t.children.flatMap(mapFolds)];
+
+/** The fold ids of the rows in a project: its groups, its PR stacks and the Map heads of its threads. */
+export const foldIds = (project: Branch): string[] => [
+  ...stackRuns(project.branches).flatMap((run) =>
+    run[0].stack ? [`rail:${run[0].stack.id}`, ...run.flatMap(foldIds)] : groupIds(run[0]),
+  ),
+  ...project.threads.flatMap(mapFolds),
+];
 
 /** Initials of the first three words of a label name: "ready-for-review" gives "RFR". */
 export const initials = (name: string): string =>
