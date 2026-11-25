@@ -2,6 +2,7 @@ import { describe, expect, test } from "bun:test";
 
 import {
   countAttention,
+  emptyKind,
   favicon,
   hasCatchUpLine,
   needsYou,
@@ -189,6 +190,25 @@ describe("withoutSnoozed", () => {
   test("keeps a thread with a pending request, which has status needs-input", () => {
     const out = withoutSnoozed([branch("p", [thread("a", "needs-input")])]);
     expect(ids(out[0].threads)).toEqual(["a"]);
+  });
+});
+
+describe("emptyKind", () => {
+  const live = [branch("p", [thread("a", "idle")])];
+  const asleep = [branch("p", [thread("a", "snoozed")])];
+
+  test("needs: Needs you is on and threads remain", () => {
+    expect(emptyKind(live, true, true)).toBe("needs");
+  });
+
+  test("snoozed: all threads are snoozed and hidden, with or without Needs you", () => {
+    expect(emptyKind(asleep, false, true)).toBe("snoozed");
+    expect(emptyKind(asleep, false, false)).toBe("snoozed");
+  });
+
+  test("none: no threads at all", () => {
+    expect(emptyKind([], true, false)).toBe("none");
+    expect(emptyKind([], false, true)).toBe("none");
   });
 });
 
