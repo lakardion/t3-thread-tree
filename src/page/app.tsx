@@ -2828,7 +2828,7 @@ const EmptyList = ({
           <ResetButton label="Show snoozed" onClick={showSnoozed} />
         ) : undefined
       }
-      className="min-h-[60vh] justify-center"
+      className="min-h-[60vh] flex-1 justify-center"
     >
       <span className="font-medium text-foreground">{text}</span>
       {kind === "none" && <span>Threads you start in T3 show here</span>}
@@ -3632,7 +3632,7 @@ function App() {
           />
         </div>
       </header>
-      <div ref={listRef} className="min-h-0 flex-1 overflow-y-auto">
+      <div ref={listRef} className={cn("min-h-0 flex-1 overflow-y-auto", projects?.length === 0 && "flex flex-col")}>
         <Focus value={focusApi}>
           {tree?.conn === "down" && (
             <Alert className="mb-3 border-l-[3px] border-l-status-needs-input">
@@ -3711,7 +3711,10 @@ function App() {
                       <Lists value={sortBy === "updated" ? NO_LISTS : view.lists}>
                         <Now value={now}>
                           <div
-                            className={!connecting && tree.conn !== "up" ? "grayscale" : ""}
+                            className={cn(
+                              !connecting && tree.conn !== "up" && "grayscale",
+                              projects?.length === 0 && "flex flex-1 flex-col",
+                            )}
                             data-conn={!connecting && tree.conn !== "up" ? "down" : undefined}
                             data-status-text={statusText ? undefined : "off"}
                           >
