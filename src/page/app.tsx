@@ -2988,7 +2988,7 @@ function App() {
   const linear = linearSet ?? tree?.linear ?? null;
   const [labels, setLabelsState] = useState(() => parseLabels(load(LABELS_KEY) ?? ""));
   const labelsParam = labels.join(",");
-  const [settingsOpen, setSettingsOpen] = useState(false);
+  const [settingsOpen, setSettingsOpen] = useState(() => new URLSearchParams(location.search).has("variant"));
   const settingsButtonRef = useRef<HTMLButtonElement>(null);
   const [seen, setSeen] = useState<ReadonlySet<string>>(new Set());
   const [tokenOpen, setTokenOpen] = useState(false);
