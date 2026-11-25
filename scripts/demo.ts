@@ -105,6 +105,7 @@ const pr = (n: number, source: string, state = "open", over: Partial<Pr> = {}): 
   stackBase: null,
   stackNumber: null,
   stackLayers: null,
+  stackSlots: null,
   title: null,
   additions: null,
   deletions: null,
@@ -151,6 +152,9 @@ const threads: Thread[] = [
     status: "interrupted",
     forkedFromThreadId: "demo-1",
     prs: stacked(2107, { checks: "failing", review: "changes-requested", mergeability: "conflicting" }),
+  }),
+  t("SHOP-410 · Move the cart totals into one helper", {
+    prs: [pr(2099, "created", "merged", { stackBase: "main", stackNumber: 87 }), ...STACK.map((n) => pr(n, "stack"))],
   }),
   t("Review #2088 SHOP-398", { prs: [pr(2088, "agent")] }),
   t("Review #2093 SHOP-401", { status: "running", prs: [pr(2093, "agent")] }),

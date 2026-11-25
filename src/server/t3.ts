@@ -29,6 +29,8 @@ export type Pr = {
   stackNumber: number | null;
   /** Open PR numbers of the stack, base first, as T3 reports them. */
   stackLayers: number[] | null;
+  /** All PR numbers of the stack, merged ones too, base first. */
+  stackSlots: number[] | null;
   title: string | null;
   additions: number | null;
   deletions: number | null;
@@ -208,6 +210,12 @@ export function decodeThread(raw: unknown): Thread | null {
             ? (obj(o.stack).layers as unknown[])
                 .map(obj)
                 .filter((l) => l.state === "open" && typeof l.number === "number")
+                .map((l) => l.number as number)
+            : null,
+          stackSlots: Array.isArray(obj(o.stack).layers)
+            ? (obj(o.stack).layers as unknown[])
+                .map(obj)
+                .filter((l) => typeof l.number === "number")
                 .map((l) => l.number as number)
             : null,
           title: str(snap.title),

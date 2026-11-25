@@ -446,6 +446,34 @@ describe("PR stack", () => {
     expect(child(tree, "frontend", "WEB-2").threads[0].stack).toEqual({ pos: 4, total: 4 });
   });
 
+  test("a merged stack PR keeps its slot with no number, in, out of or with no layers", () => {
+    for (const keep of [true, false, null]) {
+      const stack =
+        keep === null
+          ? null
+          : {
+              base: "main",
+              layers: [
+                ...(keep ? [{ number: 10, state: "merged" }] : []),
+                { number: 11, state: "open" },
+                { number: 12, state: "open" },
+              ],
+            };
+      const own = (n: number) =>
+        [10, 11, 12].map((x) => pr(x, x === n ? "created" : "stack", x === 10 ? "merged" : "open", stack));
+      const tree = build([
+        shell("b", "WEB-2 B", { pullRequests: own(11) }),
+        shell("c", "WEB-3 C", { pullRequests: own(12) }),
+        shell("a", "WEB-1 A", { pullRequests: own(10) }),
+      ]);
+      expect(tree[0].branches.map((b) => [b.label, b.threads[0].stack?.pos])).toEqual([
+        ["WEB-1", null],
+        ["WEB-2", 1],
+        ["WEB-3", 2],
+      ]);
+    }
+  });
+
   test("the most recently synced stack layers win, whatever the thread order", () => {
     const layers = (ns: number[]) => ({ base: "main", layers: ns.map((number) => ({ number, state: "open" })) });
     const copy = (n: number, ns: number[], at: string) =>
