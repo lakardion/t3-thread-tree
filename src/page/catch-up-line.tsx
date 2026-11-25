@@ -7,8 +7,8 @@ import { cn } from "@/lib/utils";
 
 import { catchUpLines } from "../shared/desktop.ts";
 import type { ThreadNode } from "../shared/tree.ts";
-import { hasCatchUpLine } from "./attention.ts";
 import { Markdown } from "./markdown.tsx";
+import { hasCatchUpLine } from "./needs-you.ts";
 import { useLastMessage } from "./send-dialog.tsx";
 import { STATUS } from "./status-icon.tsx";
 

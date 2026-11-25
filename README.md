@@ -178,7 +178,7 @@ CI runs `bun run check` and `bun run build:sidecar` on every pull request. A pul
 
 ### Rules for a change
 
-- [SPEC.md](SPEC.md) defines the behavior, [DESIGN-SPEC.md](DESIGN-SPEC.md) the visual design, and [CONTEXT.md](CONTEXT.md) the terms. Update them with the code.
+- [SPEC.md](SPEC.md) defines the behavior, [DESIGN-SPEC.md](DESIGN-SPEC.md) the visual design, and [GLOSSARY.md](GLOSSARY.md) the terms. Update them with the code.
 - When a change adds or changes a feature that the user sees, update this README in the same change. Write in ASD-STE100 Simplified Technical English.
 - When the UI changes, run `bun run screenshots` to make the screenshots again.
 

@@ -1,7 +1,7 @@
 import { describe, expect, test } from "bun:test";
 
 import {
-  countAttention,
+  countHeader,
   emptyKind,
   favicon,
   hasCatchUpLine,
@@ -21,7 +21,7 @@ import {
   upNextList,
   waits,
   withoutSnoozed,
-} from "../src/page/attention.ts";
+} from "../src/page/needs-you.ts";
 import type { RunItem } from "../src/shared/runs.ts";
 import type { Branch, Conn, Status, ThreadNode, Tree } from "../src/shared/tree.ts";
 
@@ -80,7 +80,7 @@ const paused = (id: string, since = "2026-11-12T10:00:00.000Z"): RunItem => ({
   retired: false,
 });
 
-describe("countAttention", () => {
+describe("countHeader", () => {
   test("buckets the eleven statuses, nested threads included", () => {
     const tree = [
       branch("p", [
@@ -96,11 +96,11 @@ describe("countAttention", () => {
         thread("k", "idle"),
       ]),
     ];
-    expect(countAttention(tree)).toEqual({ needYou: 2, working: 3, yourTurn: 1, stopped: 2 });
+    expect(countHeader(tree)).toEqual({ needYou: 2, working: 3, yourTurn: 1, stopped: 2 });
   });
 
   test("an empty tree gives zeros", () => {
-    expect(countAttention([])).toEqual({ needYou: 0, working: 0, yourTurn: 0, stopped: 0 });
+    expect(countHeader([])).toEqual({ needYou: 0, working: 0, yourTurn: 0, stopped: 0 });
   });
 });
 
@@ -238,7 +238,7 @@ describe("needsYouThreads", () => {
 
   test("has the length of the need-you count", () => {
     const tree = [branch("p", [thread("a", "needs-input"), thread("b", "plan-ready", [thread("c", "needs-input")])])];
-    expect(needsYouThreads(tree)).toHaveLength(countAttention(tree).needYou);
+    expect(needsYouThreads(tree)).toHaveLength(countHeader(tree).needYou);
   });
 });
 
@@ -451,8 +451,8 @@ describe("run items", () => {
   const th = { ...thread("a", "needs-input"), since: "2026-11-12T10:00:00.000Z" };
 
   test("count in the Needs-you count", () => {
-    expect(countAttention([branch("p", [th])], runs).needYou).toBe(3);
-    expect(countAttention([], runs).needYou).toBe(2);
+    expect(countHeader([branch("p", [th])], runs).needYou).toBe(3);
+    expect(countHeader([], runs).needYou).toBe(2);
   });
 
   test("needsYouThreads lists them with the run page and the Catch-up line", () => {
@@ -679,8 +679,8 @@ describe("run nodes", () => {
   });
   const projects = [branch("p", [run("r", [thread("s", "needs-input")])])];
 
-  test("countAttention counts the step thread, not the run", () => {
-    expect(countAttention(projects)).toEqual({ needYou: 1, working: 0, yourTurn: 0, stopped: 0 });
+  test("countHeader counts the step thread, not the run", () => {
+    expect(countHeader(projects)).toEqual({ needYou: 1, working: 0, yourTurn: 0, stopped: 0 });
   });
 
   test("openNextQueue queues the step thread, not the run", () => {
@@ -713,7 +713,7 @@ describe("Map groups", () => {
 
   test("a header is not a thread in any count or queue", () => {
     const projects = [branch("p", [header("h", [thread("a", "needs-input"), thread("b", "working")])])];
-    expect(countAttention(projects)).toEqual({ needYou: 1, working: 1, yourTurn: 0, stopped: 0 });
+    expect(countHeader(projects)).toEqual({ needYou: 1, working: 1, yourTurn: 0, stopped: 0 });
     expect(ids(openNextQueue(projects))).toEqual(["a"]);
     expect(waits(projects[0])).toBe(true);
   });

@@ -105,29 +105,6 @@ import {
   type ThreadNode,
   type Tree,
 } from "../shared/tree.ts";
-import {
-  countAttention,
-  emptyKind,
-  type EmptyKind,
-  favicon,
-  HOLD_MS,
-  type Held,
-  needsYou,
-  needsYouThreads,
-  needsYouTip,
-  nextTarget,
-  noMemory,
-  notifyEvents,
-  type NotifyMemory,
-  onlyNeedsYou,
-  openNextQueue,
-  releaseHeld,
-  remember,
-  tabTitle,
-  upNextList,
-  waits,
-  withoutSnoozed,
-} from "./attention.ts";
 import { effectivePick, foldValue, switchBody } from "./catch-up-fold.ts";
 import { CatchUpTitle } from "./catch-up-line.tsx";
 import { CopyPrompt } from "./copy-prompt.tsx";
@@ -156,6 +133,29 @@ import { SetupDialog } from "./local-setup-dialog.tsx";
 import { looksDone, parseSkip, pruneSkip, SKIP_KEY } from "./looks-done.ts";
 import { LooksDoneButton, LooksDoneDialog, UndoToast } from "./looks-done.tsx";
 import { MapGroup } from "./map-group.tsx";
+import {
+  countHeader,
+  emptyKind,
+  type EmptyKind,
+  favicon,
+  HOLD_MS,
+  type Held,
+  needsYou,
+  needsYouThreads,
+  needsYouTip,
+  nextTarget,
+  noMemory,
+  notifyEvents,
+  type NotifyMemory,
+  onlyNeedsYou,
+  openNextQueue,
+  releaseHeld,
+  remember,
+  tabTitle,
+  upNextList,
+  waits,
+  withoutSnoozed,
+} from "./needs-you.ts";
 import {
   PROJECTS,
   arrange,
@@ -3265,7 +3265,7 @@ function App() {
     });
     return new Promise((done) => requestAnimationFrame(() => done(revealRow(id))));
   };
-  const counts = countAttention(tree?.projects ?? [], runs);
+  const counts = countHeader(tree?.projects ?? [], runs);
   const needsTip = needsYouTip(counts);
   const connecting = !tree || tree.conn === "connecting";
   const cfg: Cfg = {
