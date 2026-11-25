@@ -1,4 +1,5 @@
 import { ago } from "../page/format.ts";
+import { RULES, type RuleId } from "../shared/rules.ts";
 /** The tree rules: visibility, placement, stack order and status. Pure, so `bun test` covers it. */
 import {
   LINEAR_LOOSE,
@@ -8,10 +9,12 @@ import {
   NO_PROJECT,
   REVIEWS,
   type Group,
+  type GroupKind,
   type CatchUp,
   type Detail,
   type Label,
   type LinearIssue,
+  type MapInfo,
   type PrNode,
   type RunInfo,
   type RunStep,
@@ -95,7 +98,7 @@ export type BuildInput = {
 
 /** `si` is the stack index of a child in a stack rail of a Map group. */
 type Node = ThreadNode & { t: Thread; first: string; si?: number; slot?: number };
-type KeyGroup = { key: string; nodes: Node[]; first: string };
+type KeyGroup = { key: string; nodes: Node[]; first: string; kind: GroupKind };
 /** `order` holds the open PRs, which get numbers. `slots` adds merged PRs at their place in the stack. */
 type Stack = { set: Set<number>; threads: Thread[]; order: number[]; slots: number[] };
 
@@ -437,32 +440,26 @@ function prepare(input: BuildInput) {
   for (const r of runNodes(stepThreads.map(nodeOf), input)) nodes.set(r.id, r);
 
   /** Map members and map threads: no thread nests under them by launch. */
-  const claimed = new Set<string>();
+  const mapped = new Set<string>();
   const visibleSpawner = (id: string): string | null => {
     const seen = new Set([id]);
     let c = spawnerOf(id);
     while (c && !seen.has(c)) {
-      if (visible.has(c)) return claimed.has(c) ? null : c;
+      if (visible.has(c)) return mapped.has(c) ? null : c;
       seen.add(c);
       c = spawnerOf(c);
     }
     return null;
   };
 
-  /** Sets `launchedBy` unless the node nests under its spawner. */
-  const markLaunched = (n: Node) => {
-    const sp = spawnerOf(n.id);
-    const spawner = sp ? all.get(sp) : undefined;
-    if (spawner && !nodes.get(spawner.id)?.children.includes(n))
-      n.detail.launchedBy = { title: spawner.title || spawner.id, href: hrefOf(environmentId, spawner.id) };
-  };
-
   /**
-   * Rule 6.0. Each Map member, and each keyless stack mate of a member, leaves `nodes` and nests in its group, under its
-   * nearest ancestor in the same map. A group hangs on its map thread, or on a Map header that `nodes` then holds.
-   * Returns the nodes that left.
+   * Rule 6.0. Claims each Map member, and each keyless stack mate of a member, under its nearest ancestor in the same
+   * map. A group hangs on its map thread, or on a Map header that the pool then holds.
+   * Returns the claims, the new headers and the head marks.
    */
-  const groupMaps = (): Node[] => {
+  const groupMaps = (): Ruled => {
+    const claims = new Map<Node, Claim>();
+    const marks = new Map<Node, MapInfo>();
     const markedKeyOf = markedKey(input.mapKeyOf!, spawnerOf, input.marked ?? new Set());
     const maps = mapsOf({
       ids: [...visible.keys()],
@@ -519,13 +516,12 @@ function prepare(input: BuildInput) {
       const mapThread = mt ? all.get(mt) : undefined;
       const head = mt ? nodes.get(mt) : undefined;
       if (head) {
-        claimed.add(head.id);
         if (anchored(head.id).length === 1) {
           top.set(key, head);
-          head.map = { name: mapName(key, head.title, shown), header: false, href: null };
+          marks.set(head, { name: mapName(key, head.title, shown), header: false, href: null });
         } else {
-          head.map = { name: head.title, header: false, href: null };
-          head.children.push(header(key, `map:${key}`, head.t, mapThread));
+          marks.set(head, { name: head.title, header: false, href: null });
+          claims.set(header(key, `map:${key}`, head.t, mapThread), { under: head });
         }
         continue;
       }
@@ -558,42 +554,22 @@ function prepare(input: BuildInput) {
       const a = ancestorIn(id, key);
       return a ? nodes.get(a)! : top.get(key)!;
     };
-    const lists = new Set<Node>();
-    const put = (n: Node, container: Node) => {
-      container.children.push(n);
-      lists.add(container);
-    };
-    for (const id of members) put(nodes.get(id)!, containerOf(id, keyOf.get(id)!));
-    for (const [id, low] of mates) put(nodes.get(id)!, containerOf(low.id, keyOf.get(id)!));
-    for (const s of sub) put(s.header, containerOf(s.of, s.parentKey));
-    for (const c of lists) {
-      const bySi = Map.groupBy(
-        (c.children as Node[]).filter((n) => stackIdOf.has(n.id)),
-        (n) => stackIdOf.get(n.id)!,
-      );
-      for (const [si, ns] of bySi)
-        if (ns.length > 1)
-          for (const n of ns) {
-            n.si = si;
-            n.rail = railOf(stacks[si]);
-          }
-    }
-
-    const left = [...members, ...mates.keys()].map((id) => nodes.get(id)!);
-    for (const n of left) {
-      const top1 = top.get(keyOf.get(n.id)!)!;
-      if (n.t.projectId !== top1.t.projectId)
-        n.t3Project = { id: n.t.projectId, label: input.projects.get(n.t.projectId)?.title ?? n.t.projectId };
-      markLaunched(n);
-      claimed.add(n.id);
-    }
-    for (const n of left) nodes.delete(n.id);
-    for (const h of placed) nodes.set(h.id, h);
-    return left;
+    const put = (n: Node, container: Node, key: string) => claims.set(n, { under: container, top: top.get(key) });
+    for (const id of members) put(nodes.get(id)!, containerOf(id, keyOf.get(id)!), keyOf.get(id)!);
+    for (const [id, low] of mates) put(nodes.get(id)!, containerOf(low.id, keyOf.get(id)!), keyOf.get(id)!);
+    for (const s of sub) claims.set(s.header, { under: containerOf(s.of, s.parentKey) });
+    return { claims, added: placed, marks };
   };
-  const grouped = input.mapKeyOf ? groupMaps() : [];
 
-  return { visible, stacks, stackIdOf, nodes, grouped, visibleSpawner, markLaunched };
+  return {
+    stacks,
+    stackIdOf,
+    nodes,
+    all,
+    mapped,
+    visibleSpawner,
+    groupMaps: input.mapKeyOf ? groupMaps : (): Ruled => ({ claims: new Map() }),
+  };
 }
 
 /** Stack mates in a stack, then creation. */
@@ -617,36 +593,153 @@ const settle = (n: Node): string => {
   return n.first;
 };
 
-export function buildTree(input: BuildInput): Group[] {
-  const { projects, nest } = input;
-  const { visible, stacks, stackIdOf, nodes, visibleSpawner, markLaunched } = prepare(input);
+/** Where a rule puts a node. `by`: the node whose key gives the group. `top`: the head of a map group. */
+type Claim =
+  | { into: "review" | "loose" }
+  | { into: "key"; by: Node }
+  | { into: "stack"; si: number }
+  | { under: Node; top?: Node };
+type Ruled = { claims: Map<Node, Claim>; added?: Node[]; marks?: Map<Node, MapInfo> };
+export type Layout = "project" | "linear";
+type Facts = ReturnType<typeof prepare> & { input: BuildInput; layout: Layout; rules: RuleId[] };
+type Rule = (pool: Node[], f: Facts) => Ruled;
+
+const claiming = (pool: Node[], pick: (n: Node) => Claim | null): Ruled => ({
+  claims: new Map(
+    pool.flatMap((n) => {
+      const c = pick(n);
+      return c ? [[n, c] as const] : [];
+    }),
+  ),
+});
+
+/** The group of a node by its own key and review flag. A keyless thread nests under a spawner of the same home. */
+const home = (n: Node, layout: Layout): string => {
+  if (layout === "project") return n.t.projectId;
+  if (isReview(n)) return "review";
+  if (!n.key) return "loose";
+  const lp = n.linear?.project;
+  return lp ? `key:${lp.id}:${n.linear?.milestone?.id ?? "none"}` : "none";
+};
+
+const CHAIN: Record<RuleId, Rule> = {
+  map: (_pool, f) => f.groupMaps(),
+  review: (pool) => claiming(pool, (n) => (isReview(n) ? { into: "review" } : null)),
+  stack: (pool, f) => {
+    const siOf = (n: Node) => (n.run ? undefined : f.stackIdOf.get(n.id));
+    if (f.layout === "project")
+      return claiming(pool, (n) => {
+        const si = siOf(n);
+        return si !== undefined && (!n.key || !f.rules.includes("key")) ? { into: "stack", si } : null;
+      });
+    /** A stack stays whole where its lowest member with a key goes. */
+    const placer = new Map<number, Node>();
+    for (const n of pool.toSorted(byPos)) {
+      const si = siOf(n);
+      if (si !== undefined && n.key && !isReview(n) && !placer.has(si)) placer.set(si, n);
+    }
+    return claiming(pool, (n) => {
+      const si = siOf(n);
+      if (si === undefined) return null;
+      const by = placer.get(si);
+      return by ? { into: "key", by } : { into: "loose" };
+    });
+  },
+  key: (pool) => claiming(pool, (n) => (n.key ? { into: "key", by: n } : null)),
+  nest: (pool, f) =>
+    claiming(pool, (n) => {
+      if (n.run || n.key || isReview(n)) return null;
+      const vs = f.visibleSpawner(n.t.id);
+      const s = vs ? f.nodes.get(vs) : undefined;
+      return s && home(n, f.layout) === home(s, f.layout) ? { under: s } : null;
+    }),
+};
+
+/** The default chain; `nest` turns Launch nesting on. */
+export const defaultRules = (nest: boolean): RuleId[] =>
+  RULES.filter((r) => r.on || (nest && r.id === "nest")).map((r) => r.id);
+
+/** Runs the rules on the pool in order, then lays the claims out as groups. */
+export function place(input: BuildInput, rules: RuleId[], layout: Layout): Group[] {
+  const f: Facts = { ...prepare(input), input, layout, rules };
+  const pool = new Set(f.nodes.values());
+  const entered = new Set(pool);
+  const claims = new Map<Node, Claim>();
+  /** The rows of map claims, with the children each one got from the map rule. */
+  const mapRows = new Map<Node, Node[]>();
+  for (const id of rules) {
+    const ruled = CHAIN[id]([...pool], f);
+    for (const [head, m] of ruled.marks ?? []) {
+      head.map = m;
+      f.mapped.add(head.id);
+    }
+    for (const [n, c] of ruled.claims) {
+      if (entered.has(n) && !pool.has(n)) continue;
+      claims.set(n, c);
+      pool.delete(n);
+      if (!("under" in c)) continue;
+      c.under.children.push(n);
+      if (c.top) f.mapped.add(n.id);
+      if (id === "map") mapRows.set(c.under, [...(mapRows.get(c.under) ?? []), n]);
+    }
+    for (const n of ruled.added ?? []) {
+      pool.add(n);
+      entered.add(n);
+    }
+  }
+  for (const n of pool) claims.set(n, { into: "loose" });
+
+  for (const kids of mapRows.values()) {
+    const bySi = Map.groupBy(
+      kids.filter((n) => f.stackIdOf.has(n.id)),
+      (n) => f.stackIdOf.get(n.id)!,
+    );
+    for (const [si, ns] of bySi)
+      if (ns.length > 1)
+        for (const n of ns) {
+          n.si = si;
+          n.rail = railOf(f.stacks[si]);
+        }
+  }
+  for (const n of entered) {
+    const c = claims.get(n)!;
+    const top = "under" in c ? c.top : undefined;
+    if (top && n.t.projectId !== top.t.projectId)
+      n.t3Project = { id: n.t.projectId, label: input.projects.get(n.t.projectId)?.title ?? n.t.projectId };
+    const sp = input.spawnerOf(n.id);
+    const spawner = sp ? f.all.get(sp) : undefined;
+    if (spawner && !("under" in c && c.under === f.nodes.get(spawner.id)))
+      n.detail.launchedBy = { title: spawner.title || spawner.id, href: hrefOf(input.environmentId, spawner.id) };
+  }
+  return LAYOUTS[layout](entered, claims, f);
+}
+
+export const buildTree = (input: BuildInput) => place(input, defaultRules(input.nest), "project");
+export const buildLinearTree = (input: BuildInput) => place(input, defaultRules(input.nest), "linear");
+
+type LayoutFn = (entered: Set<Node>, claims: Map<Node, Claim>, f: Facts) => Group[];
+const LAYOUTS: Record<Layout, LayoutFn> = { project: projectLayout, linear: linearLayout };
+
+function projectLayout(entered: Set<Node>, claims: Map<Node, Claim>, f: Facts): Group[] {
+  const { projects } = f.input;
+  const { stacks, stackIdOf } = f;
 
   const groups = new Map<string, Map<string, KeyGroup>>();
-  const addTo = (projectId: string, key: string, n: Node) => {
+  const addTo = (projectId: string, key: string, kind: GroupKind, n: Node) => {
     const g = groups.get(projectId) ?? new Map<string, KeyGroup>();
     groups.set(projectId, g);
-    const grp = g.get(key) ?? { key, nodes: [], first: "" };
+    const grp = g.get(key) ?? { key, nodes: [], first: "", kind };
     g.set(key, grp);
     grp.nodes.push(n);
   };
-  for (const n of nodes.values()) {
-    const { t } = n;
-    if (n.run) {
-      addTo(t.projectId, isReview(n) ? REVIEWS : (n.key ?? NO_KEY), n);
-      continue;
-    }
-    /** A stack outranks lineage: keyless mates share one group, so the stack keeps its rail. */
-    const si = stackIdOf.get(n.id);
-    const stackKey = si === undefined ? null : `PR stack #${stacks[si].order[0]}`;
-    if (isReview(t)) addTo(t.projectId, REVIEWS, n);
-    else if (n.key) addTo(t.projectId, n.key, n);
-    else if (stackKey) addTo(t.projectId, stackKey, n);
-    else {
-      const vs = nest ? visibleSpawner(t.id) : null;
-      if (vs && visible.get(vs)!.projectId === t.projectId) nodes.get(vs)!.children.push(n);
-      else addTo(t.projectId, NO_KEY, n);
-    }
-    markLaunched(n);
+  for (const n of entered) {
+    const c = claims.get(n)!;
+    if ("under" in c) continue;
+    const pid = n.t.projectId;
+    if (c.into === "review") addTo(pid, REVIEWS, "review", n);
+    else if (c.into === "key") addTo(pid, c.by.key!, "key", n);
+    else if (c.into === "stack") addTo(pid, `PR stack #${stacks[c.si].order[0]}`, "stack", n);
+    else addTo(pid, NO_KEY, "loose", n);
   }
 
   const out: { branch: Group; first: string }[] = [];
@@ -688,15 +781,29 @@ export function buildTree(input: BuildInput): Group[] {
       if (g.key !== REVIEWS) {
         /** "No issue key" gets no rail: it does not sit with its stack mates. Reviews takes the other return. */
         const stack = g.key === NO_KEY ? undefined : railOf(stacks[stackOf(g) ?? -1]);
-        return { id: gid(g.key), label: g.key, ...(stack && { stack }), groups: [], threads: g.nodes.map(clean) };
+        return {
+          id: gid(g.key),
+          label: g.key,
+          kind: g.kind,
+          ...(stack && { stack }),
+          groups: [],
+          threads: g.nodes.map(clean),
+        };
       }
-      return { id: gid(REVIEWS), label: REVIEWS, threads: [], groups: reviewGroups(g.nodes, gid(REVIEWS)) };
+      return {
+        id: gid(REVIEWS),
+        label: REVIEWS,
+        kind: "review",
+        threads: [],
+        groups: reviewGroups(g.nodes, gid(REVIEWS)),
+      };
     });
     const project = projects.get(projectId);
     out.push({
       branch: {
         id: `p:${projectId}`,
         label: project?.title ?? projectId,
+        kind: "project",
         ...(project?.repo && { repo: project.repo }),
         ...(project?.path && { path: project.path }),
         groups: keyGroups,
@@ -724,30 +831,23 @@ const stackAdjacent = (nodes: Node[], stackIdOf: Map<string, number>): Node[] =>
 type Milestone = { id: string; label: string; date: string | null; none: boolean; nodes: Node[] };
 
 /** Linear project, then milestone, then thread. Fallback groups follow the projects. */
-export function buildLinearTree(input: BuildInput): Group[] {
-  const { projects, nest } = input;
-  const { stacks, stackIdOf, nodes, grouped, visibleSpawner, markLaunched } = prepare(input);
+function linearLayout(entered: Set<Node>, claims: Map<Node, Claim>, f: Facts): Group[] {
+  const { projects } = f.input;
+  const { stacks, stackIdOf } = f;
 
   const byProject = new Map<string, { name: string; url: string; milestones: Map<string, Milestone> }>();
   const reviews: Node[] = [];
   const noProject: Node[] = [];
   const loose: Node[] = [];
-  /** A stack stays whole where its lowest member with a key goes. */
-  const placer = new Map<number, Node>();
-  for (const n of [...nodes.values()].toSorted(byPos)) {
-    const si = stackIdOf.get(n.id);
-    if (si !== undefined && n.key && !isReview(n) && !placer.has(si)) placer.set(si, n);
-  }
-  for (const n of grouped)
-    n.t3Project = { id: n.t.projectId, label: projects.get(n.t.projectId)?.title ?? n.t.projectId };
-  for (const n of nodes.values()) {
+  for (const n of entered) {
     const { t } = n;
     n.t3Project = { id: t.projectId, label: projects.get(t.projectId)?.title ?? t.projectId };
-    const si = n.run ? undefined : stackIdOf.get(n.id);
-    const by = si === undefined ? n : placer.get(si);
-    const lp = by?.linear?.project;
-    if (isReview(n)) reviews.push(n);
-    else if (by?.key) {
+    const c = claims.get(n)!;
+    if ("under" in c) continue;
+    if (c.into === "review") reviews.push(n);
+    else if (c.into === "key") {
+      const by = c.by;
+      const lp = by.linear?.project;
       if (!lp) noProject.push(n);
       else {
         const p = byProject.get(lp.id) ?? { name: lp.name, url: lp.url, milestones: new Map() };
@@ -764,17 +864,11 @@ export function buildLinearTree(input: BuildInput): Group[] {
         p.milestones.set(id, entry);
         entry.nodes.push(n);
       }
-    } else {
-      const vs = nest && !n.run && !stackIdOf.has(n.id) ? visibleSpawner(t.id) : null;
-      const spawner = vs ? nodes.get(vs)! : null;
-      if (spawner && !spawner.key && !isReview(spawner)) spawner.children.push(n);
-      else loose.push(n);
-    }
-    markLaunched(n);
+    } else loose.push(n);
   }
 
   /** Settles nested threads, then orders the group. */
-  const place = (ns: Node[]) => {
+  const placeAll = (ns: Node[]) => {
     ns.forEach(settle);
     return stackAdjacent(ns, stackIdOf);
   };
@@ -794,6 +888,7 @@ export function buildLinearTree(input: BuildInput): Group[] {
       const g = keyed.get(`${si}:${key}`) ?? {
         id: `${parentId}:${rail.id}:${key}`,
         label: key,
+        kind: "stack" as const,
         stack: rail,
         groups: [],
         threads: [],
@@ -806,7 +901,7 @@ export function buildLinearTree(input: BuildInput): Group[] {
   const oldest = (ns: Node[]) => ns.toSorted(byFirst)[0].first;
   const rank = (m: Milestone) => (m.none ? 2 : m.date ? 0 : 1);
 
-  for (const p of byProject.values()) for (const m of p.milestones.values()) m.nodes = place(m.nodes);
+  for (const p of byProject.values()) for (const m of p.milestones.values()) m.nodes = placeAll(m.nodes);
 
   const top = [...byProject]
     .map(([id, p]) => {
@@ -820,11 +915,13 @@ export function buildLinearTree(input: BuildInput): Group[] {
         branch: {
           id: `lp:${id}`,
           label: p.name,
+          kind: "linear-project",
           linear: { url: p.url },
           threads: [],
           groups: ms.map((m): Group => ({
             id: m.id,
             label: m.label,
+            kind: "milestone",
             linear: { date: m.date },
             ...holder(m.nodes, m.id),
           })),
@@ -834,27 +931,39 @@ export function buildLinearTree(input: BuildInput): Group[] {
     .toSorted(byFirst)
     .map((o) => o.branch);
 
-  const fallback = (id: string, label: string, ns: Node[]): Group[] =>
-    ns.length ? [{ id, label, linear: {}, ...holder(place(ns), id) }] : [];
+  const fallback = (id: string, label: string, kind: GroupKind, ns: Node[]): Group[] =>
+    ns.length ? [{ id, label, kind, linear: {}, ...holder(placeAll(ns), id) }] : [];
   const reviewGroup: Group[] = reviews.length
     ? [
         {
           id: LINEAR_REVIEWS,
           label: REVIEWS,
+          kind: "review",
           linear: {},
           threads: [],
-          groups: reviewGroups(place(reviews), LINEAR_REVIEWS),
+          groups: reviewGroups(placeAll(reviews), LINEAR_REVIEWS),
         },
       ]
     : [];
-  return [...top, ...reviewGroup, ...fallback("lf:none", NO_PROJECT, noProject), ...fallback(LINEAR_LOOSE, "", loose)];
+  return [
+    ...top,
+    ...reviewGroup,
+    ...fallback("lf:none", NO_PROJECT, "no-project", noProject),
+    ...fallback(LINEAR_LOOSE, "", "loose", loose),
+  ];
 }
 
 /** Review threads in one subgroup per issue key, in first-seen order. */
 const reviewGroups = (nodes: Node[], id: string): Group[] => {
   const byKey = new Map<string, Node[]>();
   for (const n of nodes) byKey.set(n.key ?? NO_KEY, [...(byKey.get(n.key ?? NO_KEY) ?? []), n]);
-  return [...byKey].map(([k, ns]) => ({ id: `${id}:${k}`, label: k, groups: [], threads: ns.map(clean) }));
+  return [...byKey].map(([k, ns]): Group => ({
+    id: `${id}:${k}`,
+    label: k,
+    kind: "key",
+    groups: [],
+    threads: ns.map(clean),
+  }));
 };
 
 /** Strips the build-only fields before the node goes on the wire. Nested subthreads get no Suggested replies. */
