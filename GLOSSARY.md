@@ -78,7 +78,7 @@ A row that shows only to give context: a thread outside the statuses of its **St
 ### Waiting on the user
 
 **Needs you**:
-The threads with needs input or plan ready, plus the **Run questions** and **Paused runs**. These wait on the user.
+The unsettled threads with needs input, plan ready or **Your turn**, plus the **Run questions** and **Paused runs**. These wait on the user.
 _Avoid_: attention, unread
 
 **Wait**:
@@ -86,7 +86,7 @@ The time since a thread or a run started to wait on the user.
 _Avoid_: age (age is the time since the last update)
 
 **Open next queue**:
-The items that "Open next" can open, oldest **Wait** first: the unsettled threads with needs input, plan ready or your turn, subthreads included, plus the **Run questions** and **Paused runs**. It is wider than **Needs you**, because it has your-turn threads too.
+The **Needs you** items, subthreads included, in the order that "Open next" opens them: oldest **Wait** first.
 _Avoid_: waiting list, Needs-you list
 
 **Triage**:

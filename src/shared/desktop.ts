@@ -1,6 +1,6 @@
 import * as v from "valibot";
 
-import { NEEDS_YOU, NOTIFY, OPEN_NEXT } from "./status.ts";
+import { NEEDS_YOU, NOTIFY } from "./status.ts";
 
 /** The Catch-up fields that cross the bridge. Unknown keys are dropped. */
 export const CatchUpLine = v.optional(
@@ -69,7 +69,7 @@ export const UpNextList = v.object({
       v.object({
         id: v.string(),
         title: v.string(),
-        status: v.picklist([...OPEN_NEXT, "run-question", "paused-run"]),
+        status: v.picklist([...NEEDS_YOU, "run-question", "paused-run"]),
         phrase: v.string(),
         raw: v.string(),
         since: v.nullable(v.string()),

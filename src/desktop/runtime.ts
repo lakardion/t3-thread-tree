@@ -49,6 +49,7 @@ export const STATUS_TITLE: Record<NotifyStatus, string> = {
 const NEEDS_YOU_TITLE: Record<NeedsYouThread["status"], string> = {
   "needs-input": STATUS_TITLE["needs-input"],
   "plan-ready": STATUS_TITLE["plan-ready"],
+  "your-turn": "Your turn",
   "run-question": "Run question",
   "paused-run": "Run paused",
 };

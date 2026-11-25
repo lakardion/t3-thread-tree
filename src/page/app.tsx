@@ -3530,14 +3530,6 @@ function App() {
                           {counts.needYou}
                         </span>
                       )}
-                      {counts.needYou > 0 && counts.yourTurn > 0 && (
-                        <span aria-hidden className="text-muted-foreground">
-                          ·
-                        </span>
-                      )}
-                      {counts.yourTurn > 0 && (
-                        <span className="text-[11px] text-muted-foreground tabular-nums">{counts.yourTurn}</span>
-                      )}
                     </span>
                   </TooltipTrigger>
                   <TooltipContent>{needsTip}</TooltipContent>

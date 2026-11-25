@@ -863,7 +863,7 @@ Main checks each payload by hand (types, sizes, a `t3code:`, `https:` or `http:`
 
 ### Needs you
 
-The **Needs you** set is the visible top-level threads with status `needs-input` or `plan-ready`, and the **Run questions** and **Paused runs** (see "Run questions"). Settled threads do not count. A run item has `url` (its run page) in place of an environment id, and a `status` of `run-question` or `paused-run`. Its title is the run title, and its Catch-up line is the question title or the first line of the failure. The page computes it from each tree it gets (the same count as the Needs-you badge in the header) and calls `setNeedsYou`. `since` is the start of the wait, for the menu order: the request time for `needs-input`, `latestRunCompletedAt` for `plan-ready`, `askedAt` for a question, and `updatedAt` for a paused run.
+The **Needs you** set is the visible top-level threads with status `needs-input`, `plan-ready` or `your-turn`, and the **Run questions** and **Paused runs** (see "Run questions"). Settled threads do not count. A run item has `url` (its run page) in place of an environment id, and a `status` of `run-question` or `paused-run`. Its title is the run title, and its Catch-up line is the question title or the first line of the failure. The page computes it from each tree it gets (the same count as the Needs-you badge in the header) and calls `setNeedsYou`. `since` is the start of the wait, for the menu order: the request time for `needs-input`, `latestRunCompletedAt` for `plan-ready` and `your-turn`, `askedAt` for a question, and `updatedAt` for a paused run.
 
 ### Up next window
 

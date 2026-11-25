@@ -7,29 +7,30 @@ import type {
   UpNext,
 } from "../shared/desktop.ts";
 import { isRun, type RunItem } from "../shared/runs.ts";
-import { BUSY, CATCH_UP, isIn, NEEDS_YOU, NOTIFY, OPEN_NEXT } from "../shared/status.ts";
+import { BUSY, CATCH_UP, isIn, NEEDS_YOU, NOTIFY } from "../shared/status.ts";
 import { allThreads, bySince, isThread, type Branch, type Status, type ThreadNode, type Tree } from "../shared/tree.ts";
 import { linearHref } from "./format.ts";
 
 export type Counts = { needYou: number; working: number; yourTurn: number; stopped: number };
 
-/** The statuses that the "Needs you" filter keeps. */
-export const needsYou = (s: Status) => isIn(OPEN_NEXT, s);
+/** Whether a thread status is in Needs you. */
+export const needsYou = (s: Status) => isIn(NEEDS_YOU, s);
 
 /** Whether a row shows a Catch-up line. */
 export const hasCatchUpLine = (t: Pick<ThreadNode, "status" | "catchUp">) => !!t.catchUp && isIn(CATCH_UP, t.status);
 
-/** The tooltip of the "Needs you" chip numbers: the Needs-you count, then the your-turn count; "" when both are 0. */
+/** The tooltip of the "Needs you" chip: the Needs-you count, with the your-turn part of it; "" when it is 0. */
 export const needsYouTip = (c: Counts): string =>
-  [c.needYou > 0 && `${c.needYou} need you`, c.yourTurn > 0 && `${c.yourTurn} your turn`].filter(Boolean).join(", ");
+  c.needYou === 0 ? "" : `${c.needYou} need you${c.yourTurn > 0 ? ` (${c.yourTurn} your turn)` : ""}`;
 
-/** The summary counts over all threads of the tree, nested threads included. Each run item needs the user. */
+/** The header counts over all threads of the tree, nested threads included. Each run item needs the user. `yourTurn` is a part of `needYou`. */
 export function countHeader(projects: Branch[], runs: RunItem[] = []): Counts {
   const c: Counts = { needYou: runs.length, working: 0, yourTurn: 0, stopped: 0 };
   for (const { status } of projects.flatMap(allThreads)) {
-    if (isIn(NEEDS_YOU, status)) c.needYou++;
-    else if (isIn(BUSY, status)) c.working++;
-    else if (status === "your-turn") c.yourTurn++;
+    if (isIn(NEEDS_YOU, status)) {
+      c.needYou++;
+      if (status === "your-turn") c.yourTurn++;
+    } else if (isIn(BUSY, status)) c.working++;
     else if (status === "failed" || status === "interrupted") c.stopped++;
   }
   return c;
@@ -79,7 +80,7 @@ const envOf = (t: ThreadNode) => decodeURIComponent(t.href.split("/")[3] ?? "");
 const inNeedsYou = (t: ThreadNode): t is ThreadNode & { status: (typeof NEEDS_YOU)[number] } =>
   !t.settled && isIn(NEEDS_YOU, t.status);
 
-/** True when a thread under `b` waits for the user (needs input or plan ready), settled ones left out. */
+/** True when a thread under `b` is in Needs you, settled ones left out. */
 export const waits = (b: Branch): boolean => allThreads(b).some(inNeedsYou);
 
 const runStatus = (r: RunItem): "run-question" | "paused-run" =>
@@ -111,7 +112,7 @@ export const needsYouThreads = (projects: Branch[], runs: RunItem[] = []): Needs
   })),
 ];
 
-/** The items "Open next" can open: threads that need input, have a plan ready or are your turn (not settled, subthreads included), and run items. Oldest `since` first, no `since` last, ties in tree order. */
+/** The items "Open next" can open: the Needs-you threads (not settled, subthreads included) and run items. Oldest `since` first, no `since` last, ties in tree order. */
 export const openNextQueue = (projects: Branch[], runs: RunItem[] = []): (ThreadNode | RunItem)[] =>
   [...projects.flatMap(allThreads).filter((t) => !t.settled && needsYou(t.status)), ...runs].toSorted((a, b) =>
     bySince(a.since, b.since),
