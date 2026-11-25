@@ -438,7 +438,7 @@ With `linear=1`, the server builds `projects` with `buildLinearTree`, not `build
 - **Headers.** Project: name, project URL, thread count. Milestone: name, target date, count. Fallback group: name and count. The server sends no count.
 - **Ids.** These ids feed the fold store and the order lists. They never clash with the T3 ids `p:` and `g:`.
 
-  | Branch               | Id                    |
+  | Group                | Id                    |
   | -------------------- | --------------------- |
   | Linear project       | `lp:<projectId>`      |
   | Milestone            | `lm:<milestoneId>`    |
@@ -448,7 +448,7 @@ With `linear=1`, the server builds `projects` with `buildLinearTree`, not `build
   | No project           | `lf:none`             |
   | Loose rows           | `lf:loose`            |
 
-- **Payload shape.** Every top-level branch and every milestone branch has `linear`. A project has `linear.url`. A milestone has `linear.date` (`"YYYY-MM-DD"` or `null`). A fallback group has `linear: {}`. A branch of the T3 tree never has `linear`. A fallback group has an id that starts with `lf:`, so the page tells it from a project. Projects have milestone branches in `branches` and no `threads`. Milestones and fallback groups hold the threads. Reviews holds its key subgroups in `branches`.
+- **Payload shape.** Every top-level group and every milestone group has `linear`. A project has `linear.url`. A milestone has `linear.date` (`"YYYY-MM-DD"` or `null`). A fallback group has `linear: {}`. A branch of the T3 tree never has `linear`. A fallback group has an id that starts with `lf:`, so the page tells it from a project. Projects have milestone branches in `branches` and no `threads`. Milestones and fallback groups hold the threads. Reviews holds its key subgroups in `branches`.
 
 ### Flat
 

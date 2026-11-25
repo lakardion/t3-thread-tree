@@ -12,7 +12,7 @@ import {
   allRuns,
   allThreads,
   isFallback,
-  type Branch,
+  type Group,
   type LinearIssue,
   type Status,
   type ThreadNode,
@@ -100,9 +100,9 @@ function build(raws: object[], spawners: Record<string, string> = {}, over: Part
   return buildTree(inputOf(raws, spawners, over));
 }
 
-const labels = (b: Branch[]) => b.map((x) => x.label);
-const child = (b: Branch[], ...path: string[]): Branch =>
-  path.reduce<Branch>((cur, l) => cur.branches.find((x) => x.label === l)!, { branches: b } as Branch);
+const labels = (b: Group[]) => b.map((x) => x.label);
+const child = (b: Group[], ...path: string[]): Group =>
+  path.reduce<Group>((cur, l) => cur.groups.find((x) => x.label === l)!, { groups: b } as Group);
 const titles = (ts: ThreadNode[]) => ts.map((t) => t.title);
 
 describe("issue key", () => {
@@ -128,7 +128,7 @@ describe("visibility", () => {
         lineage: { parentThreadId: null, relationshipToParent: null, rootThreadId: "f", sideChat: true },
       }),
     ]);
-    expect(labels(tree[0].branches)).toEqual(["SHOP-1"]);
+    expect(labels(tree[0].groups)).toEqual(["SHOP-1"]);
   });
 
   test("settled toggle shows settled threads, never archived ones", () => {
@@ -141,12 +141,12 @@ describe("visibility", () => {
       {},
       { settled: true },
     );
-    expect(labels(tree[0].branches).toSorted()).toEqual(["SHOP-1", "SHOP-2"]);
+    expect(labels(tree[0].groups).toSorted()).toEqual(["SHOP-1", "SHOP-2"]);
   });
 
   test("snoozed threads stay visible, with their wake time", () => {
     const until = "2026-11-13T09:00:00.000Z";
-    const [t] = build([shell("a", "SHOP-1", { snoozedUntil: until, status: "completed" })])[0].branches[0].threads;
+    const [t] = build([shell("a", "SHOP-1", { snoozedUntil: until, status: "completed" })])[0].groups[0].threads;
     expect(t.status).toBe("snoozed");
     expect(t.snoozedUntil).toBe(until);
   });
@@ -201,8 +201,8 @@ describe("placement", () => {
       shell("n", "loose thread"),
     ]);
     const p = tree[0];
-    expect(labels(p.branches)).toEqual(["Reviews", "SHOP-4319", "No issue key"]);
-    expect(labels(child(tree, "frontend", "Reviews").branches)).toEqual(["SHOP-4319", "No issue key"]);
+    expect(labels(p.groups)).toEqual(["Reviews", "SHOP-4319", "No issue key"]);
+    expect(labels(child(tree, "frontend", "Reviews").groups)).toEqual(["SHOP-4319", "No issue key"]);
     expect(titles(child(tree, "frontend", "Reviews", "SHOP-4319").threads)).toEqual(["Review #15708 SHOP-4319"]);
   });
 
@@ -234,7 +234,7 @@ describe("placement", () => {
 
   test("keyed thread stays under its key even with a visible spawner", () => {
     const tree = build([shell("a", "SHOP-4312 parent"), shell("mcp:b", "SHOP-4313 child")], { "mcp:b": "a" });
-    expect(labels(tree[0].branches).toSorted()).toEqual(["SHOP-4312", "SHOP-4313"]);
+    expect(labels(tree[0].groups).toSorted()).toEqual(["SHOP-4312", "SHOP-4313"]);
   });
 
   test("spawner in another project is not followed", () => {
@@ -282,7 +282,7 @@ describe("order", () => {
 
   test("lastRun is the latest of activity run start, run start and run end, and null when all are null", () => {
     const run = (over: Record<string, unknown>) =>
-      build([shell("a", "SHOP-1 a", over)])[0].branches[0].threads[0].lastRun;
+      build([shell("a", "SHOP-1 a", over)])[0].groups[0].threads[0].lastRun;
     const early = "2026-11-12T07:00:00.000Z";
     const late = "2026-11-12T08:00:00.000Z";
     expect(run({ latestRunStartedAt: early, latestRunCompletedAt: late })).toBe(late);
@@ -316,9 +316,9 @@ describe("order", () => {
       pullRequests: [pr(5, "created")],
     };
     const bump = (t: typeof a) => ({ ...t, ...change });
-    expect(labels(build([a, b])[0].branches)).toEqual(["SHOP-1", "SHOP-2"]);
-    expect(labels(build([bump(a), b])[0].branches)).toEqual(["SHOP-1", "SHOP-2"]);
-    expect(labels(build([a, bump(b)])[0].branches)).toEqual(["SHOP-1", "SHOP-2"]);
+    expect(labels(build([a, b])[0].groups)).toEqual(["SHOP-1", "SHOP-2"]);
+    expect(labels(build([bump(a), b])[0].groups)).toEqual(["SHOP-1", "SHOP-2"]);
+    expect(labels(build([a, bump(b)])[0].groups)).toEqual(["SHOP-1", "SHOP-2"]);
   });
 
   test("same createdAt: the thread id breaks the tie", () => {
@@ -339,7 +339,7 @@ describe("order", () => {
       shell("k1", "SHOP-1 first"),
       shell("k2", "SHOP-2 second"),
     ]);
-    expect(labels(tree[0].branches)).toEqual(["Reviews", "SHOP-1", "SHOP-2", "No issue key"]);
+    expect(labels(tree[0].groups)).toEqual(["Reviews", "SHOP-1", "SHOP-2", "No issue key"]);
   });
 });
 
@@ -366,7 +366,7 @@ describe("PR stack", () => {
   });
 
   test("stack-mate groups sit together in stack order, at the oldest member's slot", () => {
-    expect(labels(build(stacked())[0].branches)).toEqual(["WEB-1", "WEB-2", "WEB-3", "WEB-9"]);
+    expect(labels(build(stacked())[0].groups)).toEqual(["WEB-1", "WEB-2", "WEB-3", "WEB-9"]);
   });
 
   test("the decoder reads the stack base", () => {
@@ -397,7 +397,7 @@ describe("PR stack", () => {
       shell("loose", "loose thread", { pullRequests: [pr(12, "stack"), pr(10, "stack")] }),
       shell("plain", "plain thread"),
     ]);
-    expect(labels(tree[0].branches)).toEqual(["WEB-1", "WEB-2", "WEB-3", "PR stack #10", "WEB-9", "No issue key"]);
+    expect(labels(tree[0].groups)).toEqual(["WEB-1", "WEB-2", "WEB-3", "PR stack #10", "WEB-9", "No issue key"]);
     expect(child(tree, "frontend", "PR stack #10").stack).toEqual({ id: "s10", total: 3, base: "main" });
     expect(titles(child(tree, "frontend", "No issue key").threads)).toEqual(["plain thread"]);
     expect("stack" in child(tree, "frontend", "No issue key")).toBe(false);
@@ -413,7 +413,7 @@ describe("PR stack", () => {
       ],
       { a: "lead", b: "a", c: "b" },
     );
-    expect(labels(tree[0].branches)).toEqual(["PR stack #61", "No issue key"]);
+    expect(labels(tree[0].groups)).toEqual(["PR stack #61", "No issue key"]);
     const g = child(tree, "frontend", "PR stack #61");
     expect(g.stack).toEqual({ id: "s61", total: 3, base: null });
     expect(g.threads.map((t) => [t.title, t.stack?.pos, t.children.length])).toEqual([
@@ -437,7 +437,7 @@ describe("PR stack", () => {
       shell("a1", "WEB-1 A1", { pullRequests: own(10, "agent"), createdAt: "2026-11-12T07:01:00.000Z" }),
       shell("a2", "WEB-1 A2", { pullRequests: own(11, "agent"), createdAt: "2026-11-12T07:02:00.000Z" }),
     ]);
-    expect(labels(tree[0].branches)).toEqual(["WEB-1", "WEB-2"]);
+    expect(labels(tree[0].groups)).toEqual(["WEB-1", "WEB-2"]);
     expect(child(tree, "frontend", "WEB-1").threads.map((t) => [t.title, t.stack?.pos])).toEqual([
       ["WEB-1 A1", 1],
       ["WEB-1 A2", 2],
@@ -466,7 +466,7 @@ describe("PR stack", () => {
         shell("c", "WEB-3 C", { pullRequests: own(12) }),
         shell("a", "WEB-1 A", { pullRequests: own(10) }),
       ]);
-      expect(tree[0].branches.map((b) => [b.label, b.threads[0].stack?.pos])).toEqual([
+      expect(tree[0].groups.map((b) => [b.label, b.threads[0].stack?.pos])).toEqual([
         ["WEB-1", null],
         ["WEB-2", 1],
         ["WEB-3", 2],
@@ -645,7 +645,7 @@ describe("status", () => {
       ],
       {},
       { settled: true },
-    )[0].branches[0].threads;
+    )[0].groups[0].threads;
     expect(t).toMatchObject({ key: "SHOP-1", settled: true, input: true, updatedAt: expect.any(String) });
     expect(t.prs).toEqual([
       {
@@ -683,7 +683,7 @@ describe("status", () => {
 describe("details", () => {
   const node = (raws: object[], id: string, spawners: Record<string, string> = {}) => {
     const walk = (ts: ThreadNode[]): ThreadNode[] => ts.flatMap((t) => [t, ...walk(t.children)]);
-    const walkB = (b: Branch): ThreadNode[] => [...walk(b.threads), ...b.branches.flatMap(walkB)];
+    const walkB = (b: Group): ThreadNode[] => [...walk(b.threads), ...b.groups.flatMap(walkB)];
     return build(raws, spawners)
       .flatMap(walkB)
       .find((t) => t.id === id)!;
@@ -840,7 +840,7 @@ describe("labels", () => {
       [shell("a", "SHOP-1 x", { pullRequests: [linked], ...raw })],
       {},
       { labelsOf: () => all, settled, ...over },
-    )[0].branches[0].threads[0].prs;
+    )[0].groups[0].threads[0].prs;
 
   test("decode keeps host, repository and the snapshot updatedAt", () => {
     const [p] = decodeThread(shell("a", "x", { pullRequests: [linked] }))!.prs;
@@ -875,7 +875,7 @@ describe("linearOf", () => {
   };
   const linearOf = (key: string) => (key === "SHOP-1" ? ISSUE : undefined);
   const nodeOf = (title: string, over: Partial<BuildInput> = {}) =>
-    build([shell("a", title)], {}, over)[0].branches[0].threads[0];
+    build([shell("a", title)], {}, over)[0].groups[0].threads[0];
 
   test("a node gets the Linear data of the first key in its title", () => {
     expect(nodeOf("SHOP-1 and SHOP-2 x", { linearOf }).linear).toEqual(ISSUE);
@@ -904,20 +904,20 @@ describe("buildLinearTree", () => {
     const linearOf = (k: string) => answers[k] ?? undefined;
     return buildLinearTree(inputOf(raws, spawners, { linearOf, ...over }));
   };
-  const ids = (b: Branch[]) => b.map((x) => x.id);
+  const ids = (b: Group[]) => b.map((x) => x.id);
 
   test("a keyed thread goes to its project, then its milestone", () => {
     const tree = buildL([shell("a", "SHOP-1 x")], { "SHOP-1": issue("x", ms("m", "2026-12-04")) });
     expect(tree).toHaveLength(1);
     expect(tree[0].label).toBe("Proj x");
     expect(tree[0].threads).toEqual([]);
-    expect(tree[0].branches[0].label).toBe("Mile m");
-    expect(titles(tree[0].branches[0].threads)).toEqual(["SHOP-1 x"]);
+    expect(tree[0].groups[0].label).toBe("Mile m");
+    expect(titles(tree[0].groups[0].threads)).toEqual(["SHOP-1 x"]);
   });
 
   test("a project without a milestone goes to No milestone", () => {
     const tree = buildL([shell("a", "SHOP-1 x")], { "SHOP-1": issue("x") });
-    expect(tree[0].branches.map((b) => [b.id, b.label])).toEqual([["lm:x:none", NO_MILESTONE]]);
+    expect(tree[0].groups.map((b) => [b.id, b.label])).toEqual([["lm:x:none", NO_MILESTONE]]);
   });
 
   test("a keyed thread with null linear or no project goes to No project", () => {
@@ -937,7 +937,7 @@ describe("buildLinearTree", () => {
     expect(tree[0].id).toBe("lf:reviews");
     expect(tree[0].label).toBe("Reviews");
     expect(tree[0].threads).toEqual([]);
-    expect(tree[0].branches.map((b) => [b.id, b.label, b.threads.length])).toEqual([
+    expect(tree[0].groups.map((b) => [b.id, b.label, b.threads.length])).toEqual([
       ["lf:reviews:SHOP-1", "SHOP-1", 2],
       [`lf:reviews:${NO_KEY}`, NO_KEY, 1],
     ]);
@@ -959,7 +959,7 @@ describe("buildLinearTree", () => {
         "SHOP-4": issue("x", ms("soon", "2026-12-04")),
       },
     );
-    expect(ids(tree[0].branches)).toEqual(["lm:soon", "lm:late", "lm:none", "lm:x:none"]);
+    expect(ids(tree[0].groups)).toEqual(["lm:soon", "lm:late", "lm:none", "lm:x:none"]);
   });
 
   test("milestones with the same date sort by oldest thread", () => {
@@ -967,7 +967,7 @@ describe("buildLinearTree", () => {
       "SHOP-1": issue("x", ms("second", "2026-12-04")),
       "SHOP-2": issue("x", ms("first", "2026-12-04")),
     });
-    expect(ids(tree[0].branches)).toEqual(["lm:second", "lm:first"]);
+    expect(ids(tree[0].groups)).toEqual(["lm:second", "lm:first"]);
   });
 
   test("projects sort by oldest thread, then Reviews, No project, loose rows; empty fallbacks go", () => {
@@ -984,7 +984,7 @@ describe("buildLinearTree", () => {
   });
 
   /** The thread titles of a branch: its key groups first, then its own threads. */
-  const rows = (b: Branch) => [...b.branches.flatMap((g) => titles(g.threads)), ...titles(b.threads)];
+  const rows = (b: Group) => [...b.groups.flatMap((g) => titles(g.threads)), ...titles(b.threads)];
 
   const stackRaws = () => [
     shell("s2", "WEB-2 two", { pullRequests: [pr(11, "created"), pr(10, "stack")] }),
@@ -995,8 +995,8 @@ describe("buildLinearTree", () => {
   test("stack mates sit together in stack order inside a milestone", () => {
     const m = ms("m", "2026-12-04");
     const tree = buildL(stackRaws(), { "WEB-1": issue("x", m), "WEB-2": issue("x", m), "WEB-9": issue("x", m) });
-    const [lm] = tree[0].branches;
-    expect(lm.branches.map((g) => [g.id, g.label, g.stack, titles(g.threads)])).toEqual([
+    const [lm] = tree[0].groups;
+    expect(lm.groups.map((g) => [g.id, g.label, g.stack, titles(g.threads)])).toEqual([
       ["lm:m:s10:WEB-1", "WEB-1", { id: "s10", total: 2, base: null }, ["WEB-1 one"]],
       ["lm:m:s10:WEB-2", "WEB-2", { id: "s10", total: 2, base: null }, ["WEB-2 two"]],
     ]);
@@ -1009,7 +1009,7 @@ describe("buildLinearTree", () => {
       "WEB-2": issue(null),
     });
     expect(ids(tree)).toEqual(["lf:none"]);
-    expect(tree[0].branches.map((g) => [g.id, g.stack?.id, titles(g.threads)])).toEqual([
+    expect(tree[0].groups.map((g) => [g.id, g.stack?.id, titles(g.threads)])).toEqual([
       ["lf:none:s10:WEB-1", "s10", ["WEB-1 one"]],
       ["lf:none:s10:WEB-2", "s10", ["WEB-2 two"]],
     ]);
@@ -1023,7 +1023,7 @@ describe("buildLinearTree", () => {
       "WEB-9": issue("x"),
     });
     expect(ids(tree)).toEqual(["lp:x"]);
-    expect(tree[0].branches.map(rows)).toEqual([["WEB-1 one", "WEB-2 two"], ["WEB-9 other"]]);
+    expect(tree[0].groups.map(rows)).toEqual([["WEB-1 one", "WEB-2 two"], ["WEB-9 other"]]);
   });
 
   test("a stack is placed by its lowest member that has a key", () => {
@@ -1045,7 +1045,7 @@ describe("buildLinearTree", () => {
       shell("o", "other"),
       shell("s1", "one", { pullRequests: [pr(10, "created"), pr(11, "stack")] }),
     ]);
-    expect(tree[0].branches.map((g) => [g.label, g.stack?.id, titles(g.threads)])).toEqual([
+    expect(tree[0].groups.map((g) => [g.label, g.stack?.id, titles(g.threads)])).toEqual([
       ["PR stack #10", "s10", ["one", "two"]],
     ]);
     expect(titles(tree[0].threads)).toEqual(["other"]);
@@ -1067,7 +1067,7 @@ describe("buildLinearTree", () => {
     expect(tree[0].threads[1].detail.launchedBy?.title).toBe("parent");
   });
 
-  test("ids, Linear meta on branches, and t3Project on nodes and children", () => {
+  test("ids, Linear meta on groups, and t3Project on nodes and children", () => {
     const m = ms("m", "2026-12-04");
     const tree = buildL(
       [
@@ -1081,14 +1081,14 @@ describe("buildLinearTree", () => {
       { c: "p" },
     );
     expect(ids(tree)).toEqual(["lp:x", "lf:reviews", "lf:loose"]);
-    expect(ids(tree[0].branches)).toEqual(["lm:m", "lm:x:none"]);
+    expect(ids(tree[0].groups)).toEqual(["lm:m", "lm:x:none"]);
     expect(tree.map(isFallback)).toEqual([false, true, true]);
     expect(tree[0].linear).toEqual({ url: "https://linear.app/w/project/x" });
-    expect(tree[0].branches[0].linear).toEqual({ date: "2026-12-04" });
-    expect(tree[0].branches[1].linear).toEqual({ date: null });
+    expect(tree[0].groups[0].linear).toEqual({ date: "2026-12-04" });
+    expect(tree[0].groups[1].linear).toEqual({ date: null });
     expect(tree[1].linear).toEqual({});
-    expect(tree[0].branches[0].threads[0].t3Project).toEqual({ id: "p2", label: "backend" });
-    expect(tree[0].branches[1].threads[0].t3Project).toEqual({ id: "p1", label: "frontend" });
+    expect(tree[0].groups[0].threads[0].t3Project).toEqual({ id: "p2", label: "backend" });
+    expect(tree[0].groups[1].threads[0].t3Project).toEqual({ id: "p1", label: "frontend" });
     const parent = tree[2].threads[0];
     expect(parent.children[0].t3Project).toEqual({ id: "p2", label: "backend" });
   });
@@ -1104,9 +1104,9 @@ describe("buildLinearTree", () => {
       { s1: "p" },
     );
     expect(titles(tree[0].threads)).toEqual(["parent"]);
-    expect(titles(tree[0].branches[0].threads)).toEqual(["one", "two"]);
+    expect(titles(tree[0].groups[0].threads)).toEqual(["one", "two"]);
     expect(tree[0].threads[0].children).toEqual([]);
-    expect(tree[0].branches[0].threads[0].detail.launchedBy?.title).toBe("parent");
+    expect(tree[0].groups[0].threads[0].detail.launchedBy?.title).toBe("parent");
   });
 
   test("a keyless thread does not nest under a keyless review", () => {
@@ -1150,14 +1150,14 @@ describe("buildLinearTree", () => {
     ];
     const answers = Object.fromEntries(["WEB-8", "WEB-2", "WEB-9", "WEB-1", "WEB-7"].map((k) => [k, issue("x", m)]));
     const tree = buildL(raws, answers);
-    expect(rows(tree[0].branches[0])).toEqual(["WEB-1 one", "WEB-2 two", "WEB-8 o0", "WEB-9 o1", "WEB-7 o2"]);
-    expect(titles(tree[0].branches[0].threads)).toEqual(["WEB-8 o0", "WEB-9 o1", "WEB-7 o2"]);
+    expect(rows(tree[0].groups[0])).toEqual(["WEB-1 one", "WEB-2 two", "WEB-8 o0", "WEB-9 o1", "WEB-7 o2"]);
+    expect(titles(tree[0].groups[0].threads)).toEqual(["WEB-8 o0", "WEB-9 o1", "WEB-7 o2"]);
   });
 
   test("the T3 tree stays free of Linear fields", () => {
     const tree = build([shell("a", "SHOP-1 x")], {}, { linearOf: () => issue("x") });
     expect(tree[0].linear).toBeUndefined();
-    expect(tree[0].branches[0].threads[0].t3Project).toBeUndefined();
+    expect(tree[0].groups[0].threads[0].t3Project).toBeUndefined();
   });
 });
 
@@ -1165,7 +1165,7 @@ describe("suggested replies", () => {
   const DONE_AT = { status: "completed", latestRunCompletedAt: "2026-11-12T10:00:00.000Z" };
   const req = (kind: string) => ({ pendingRuntimeRequest: { id: "r", kind, createdAt: "2026-11-12T09:00:00.000Z" } });
   const MSG = "Tell me when PR #53 is merged.";
-  const all = (b: Branch[]): ThreadNode[] => b.flatMap(allThreads);
+  const all = (b: Group[]): ThreadNode[] => b.flatMap(allThreads);
   const repliesOf = (raws: object[], over: Partial<BuildInput> = {}, spawners: Record<string, string> = {}) => {
     const asked: string[][] = [];
     const tree = build(raws, spawners, {
@@ -1241,7 +1241,7 @@ describe("runs", () => {
     runs: { runs, questions },
     origin: "http://t3",
   });
-  const runsIn = (b: Branch[]) => b.flatMap((p) => allRuns(p));
+  const runsIn = (b: Group[]) => b.flatMap((p) => allRuns(p));
   const BUSY = { status: "running" };
 
   test("the decoder reads workflowRun", () => {
@@ -1270,7 +1270,7 @@ describe("runs", () => {
 
     test("with no key in the title, the key of the first step thread", () => {
       const tree = build([step("a", "Plan SHOP-7 thing", "r1", "plan")], {}, snap([run("r1", { title: "Nightly" })]));
-      expect(labels(tree[0].branches)).toEqual(["SHOP-7"]);
+      expect(labels(tree[0].groups)).toEqual(["SHOP-7"]);
     });
 
     test("a Review run goes to Reviews; a keyless run to No issue key", () => {
@@ -1290,7 +1290,7 @@ describe("runs", () => {
         build(raws, {}, { ...snap([run("r1")]), settled: true }),
         buildLinearTree(inputOf(raws, {}, snap([run("r1")]))),
       ]) {
-        const tops = tree.flatMap((p) => [...p.threads, ...p.branches.flatMap((b) => b.threads)]);
+        const tops = tree.flatMap((p) => [...p.threads, ...p.groups.flatMap((b) => b.threads)]);
         expect(tops.filter((t) => !t.run).map((t) => t.id)).toEqual(["x"]);
         expect(runsIn(tree)).toHaveLength(1);
       }
@@ -1487,7 +1487,7 @@ describe("Map groups", () => {
   const keys = (m: Record<string, string>) => ({ mapKeyOf: (id: string) => m[id] ?? null });
   const mapped = (raws: object[], m: Record<string, string>, spawners: Record<string, string> = {}) =>
     build(raws, spawners, keys(m));
-  const loose = (tree: Branch[]) => child(tree, "frontend", NO_KEY).threads;
+  const loose = (tree: Group[]) => child(tree, "frontend", NO_KEY).threads;
   const hrefOf = (id: string) => `t3code://threads/env-1/${id}`;
 
   test("a member leaves its key group and nests under the map thread", () => {
@@ -1496,7 +1496,7 @@ describe("Map groups", () => {
       { t1: "/m/search", t2: "/m/search" },
       { t1: "chart", t2: "chart" },
     );
-    expect(labels(tree[0].branches)).toEqual([NO_KEY]);
+    expect(labels(tree[0].groups)).toEqual([NO_KEY]);
     const [head] = loose(tree);
     expect(head.map).toEqual({ name: "Search", header: false, href: null });
     expect(titles(head.children)).toEqual(["SHOP-1 a", "SHOP-2 b"]);
@@ -1545,7 +1545,7 @@ describe("Map groups", () => {
 
   test("a map with no map thread puts its header at the oldest member's place", () => {
     const tree = mapped([shell("t1", "SHOP-1 a"), shell("t2", "SHOP-2 b")], { t1: "/m/alpha-map", t2: "/m/alpha-map" });
-    expect(labels(tree[0].branches)).toEqual(["SHOP-1"]);
+    expect(labels(tree[0].groups)).toEqual(["SHOP-1"]);
     const [header] = child(tree, "frontend", "SHOP-1").threads;
     expect(header).toMatchObject({ id: "map:/m/alpha-map", map: { name: "Alpha map", header: true, href: null } });
     expect(titles(header.children)).toEqual(["SHOP-1 a", "SHOP-2 b"]);
@@ -1627,7 +1627,7 @@ describe("Map groups", () => {
       { id: "s10", total: 3, base: null },
       { id: "s10", total: 3, base: null },
     ]);
-    expect(labels(tree[0].branches)).toEqual(["WEB-9", NO_KEY]);
+    expect(labels(tree[0].groups)).toEqual(["WEB-9", NO_KEY]);
   });
 
   test("in a stack of two maps, each member stays and mates go to the lowest member", () => {
@@ -1778,7 +1778,7 @@ describe("Map groups", () => {
     test("a map with no map thread puts the header at the oldest member's place", () => {
       const tree = buildL([shell("t1", "SHOP-1 a"), shell("t2", "SHOP-2 b")], { t1: "/m/x", t2: "/m/x" });
       expect(tree.map((b) => b.id)).toEqual(["lp:x"]);
-      expect(tree[0].branches[0].threads[0]).toMatchObject({ id: "map:/m/x", map: { header: true } });
+      expect(tree[0].groups[0].threads[0]).toMatchObject({ id: "map:/m/x", map: { header: true } });
     });
   });
 
@@ -1795,7 +1795,7 @@ describe("Map groups", () => {
       shell("kid", "kid"),
     ];
     const spawners = { s1: "chart", s2: "s1", s3: "s2", kid: "s2" };
-    const check = (tree: Branch[]) => {
+    const check = (tree: Group[]) => {
       const [head] = loose(tree);
       expect(titles(head.children)).toEqual(["s1", "s2", "s3"]);
       expect(head.children.every((c) => c.rail)).toBe(true);

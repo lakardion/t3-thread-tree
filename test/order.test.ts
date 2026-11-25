@@ -2,7 +2,7 @@ import { describe, expect, test } from "bun:test";
 
 import { onlyNeedsYou } from "../src/page/needs-you.ts";
 import { applyOrder, arrange, parseOrders, prune, reorder, type Freeze } from "../src/page/order.ts";
-import { NO_KEY, REVIEWS, type Branch, type Status, type ThreadNode } from "../src/shared/tree.ts";
+import { NO_KEY, REVIEWS, type Group, type Status, type ThreadNode } from "../src/shared/tree.ts";
 
 const thread = (id: string, status: Status = "working", children: ThreadNode[] = []): ThreadNode => ({
   id,
@@ -24,16 +24,16 @@ const thread = (id: string, status: Status = "working", children: ThreadNode[] =
   detail: {} as ThreadNode["detail"],
   children,
 });
-const branch = (id: string, threads: ThreadNode[] = [], branches: Branch[] = [], stack?: string): Branch => ({
+const branch = (id: string, threads: ThreadNode[] = [], groups: Group[] = [], stack?: string): Group => ({
   id,
   label: id,
   ...(stack && { stack: { id: stack, total: 2, base: null } }),
-  branches,
+  groups,
   threads,
 });
 const ids = (xs: { id: string }[]) => xs.map((x) => x.id);
 
-const project = (id: string, branches: Branch[]) => branch(id, [], branches);
+const project = (id: string, groups: Group[]) => branch(id, [], groups);
 const sample = () => [
   project("p:a", [
     branch("g:a1", [thread("t1"), thread("t2", "working", [thread("c1"), thread("c2")])]),
@@ -69,26 +69,26 @@ describe("arrange", () => {
 
   test("moves a stack run as one block and keeps its inner order", () => {
     const { projects, lists } = arrange(sample(), { "groups:p:a": ["g:a4", "stack:p:a:s0", "g:a1"] });
-    expect(ids(projects[0].branches)).toEqual([REVIEWS, "g:a4", "g:a2", "g:a3", "g:a1", NO_KEY]);
+    expect(ids(projects[0].groups)).toEqual([REVIEWS, "g:a4", "g:a2", "g:a3", "g:a1", NO_KEY]);
     expect(lists.get("groups:p:a")).toEqual(["g:a4", "stack:p:a:s0", "g:a1"]);
   });
 
   test("keeps Reviews first and No issue key last whatever the stored order", () => {
     const { projects } = arrange(sample(), { "groups:p:a": [NO_KEY, REVIEWS, "g:a4"] });
-    const got = ids(projects[0].branches);
+    const got = ids(projects[0].groups);
     expect([got[0], got.at(-1)]).toEqual([REVIEWS, NO_KEY]);
   });
 
   test("reorders top-level threads, not subthreads", () => {
     const { projects } = arrange(sample(), { "threads:g:a1": ["t:t2", "t:t1"] });
-    const a1 = projects[0].branches.find((b) => b.id === "g:a1")!;
+    const a1 = projects[0].groups.find((b) => b.id === "g:a1")!;
     expect(ids(a1.threads)).toEqual(["t2", "t1"]);
     expect(ids(a1.threads[0].children)).toEqual(["c1", "c2"]);
   });
 
   test("reorders the groups of Reviews", () => {
     const { projects } = arrange(sample(), { [`groups:${REVIEWS}`]: ["r2", "r1"] });
-    expect(ids(projects[0].branches.find((b) => b.label === REVIEWS)!.branches)).toEqual(["r2", "r1"]);
+    expect(ids(projects[0].groups.find((b) => b.label === REVIEWS)!.groups)).toEqual(["r2", "r1"]);
   });
 
   test("does not change the input", () => {
@@ -100,7 +100,7 @@ describe("arrange", () => {
 });
 
 describe("arrange with a freeze", () => {
-  const frozen = (list: string, tree: Branch[]): Freeze => {
+  const frozen = (list: string, tree: Group[]): Freeze => {
     const { lists, units } = arrange(tree, {});
     return { list, ids: lists.get(list)!, units: units.get(list)! };
   };
@@ -110,7 +110,7 @@ describe("arrange with a freeze", () => {
     const freeze = frozen(list, [project("p:a", [branch("g:a1", [thread("x"), thread("y"), thread("z")])])]);
     const next = [project("p:a", [branch("g:a1", [thread("x"), thread("z"), thread("n")])])];
     const { projects } = arrange(next, {}, freeze);
-    expect(ids(projects[0].branches[0].threads)).toEqual(["x", "y", "z", "n"]);
+    expect(ids(projects[0].groups[0].threads)).toEqual(["x", "y", "z", "n"]);
   });
 
   test("keeps a thread that no longer needs you, at its frozen slot", () => {
@@ -122,7 +122,7 @@ describe("arrange with a freeze", () => {
       project("p:a", [branch("g:a1", [thread("x", "your-turn"), thread("y", "working"), thread("z", "your-turn")])]),
     ];
     const { projects } = arrange(onlyNeedsYou(pushed), {}, freeze);
-    expect(ids(projects[0].branches[0].threads)).toEqual(["x", "y", "z"]);
+    expect(ids(projects[0].groups[0].threads)).toEqual(["x", "y", "z"]);
   });
 
   test("a group that moved into another stack run renders once", () => {
@@ -130,7 +130,7 @@ describe("arrange with a freeze", () => {
     const freeze = frozen("groups:p:a", before);
     const after = [project("p:a", [branch("g:1", [thread("t1")], [], "s1"), branch("g:2", [thread("t2")], [], "s0")])];
     const { projects } = arrange(after, {}, freeze);
-    expect(ids(projects[0].branches).toSorted()).toEqual(["g:1", "g:2"]);
+    expect(ids(projects[0].groups).toSorted()).toEqual(["g:1", "g:2"]);
   });
 });
 
@@ -169,7 +169,7 @@ describe("prune", () => {
 });
 
 describe("arrange on a Linear tree", () => {
-  const lin = (b: Branch): Branch => ({ ...b, linear: {} });
+  const lin = (b: Group): Group => ({ ...b, linear: {} });
   const sampleL = () => [
     lin(
       branch(
@@ -201,18 +201,18 @@ describe("arrange on a Linear tree", () => {
 
   test("milestones keep server order and have no list", () => {
     const { projects, lists } = arrange(sampleL(), { "groups:lp:a": ["lm:a:none", "lm:m1"] });
-    expect(ids(projects[0].branches)).toEqual(["lm:m1", "lm:m2", "lm:a:none"]);
+    expect(ids(projects[0].groups)).toEqual(["lm:m1", "lm:m2", "lm:a:none"]);
     expect(lists.has("groups:lp:a")).toBe(false);
   });
 
   test("threads reorder inside a milestone and inside No project", () => {
     const { projects } = arrange(sampleL(), { "threads:lm:m1": ["t:t2", "t:t1"], "threads:lf:none": ["t:t9", "t:t8"] });
-    expect(ids(projects[0].branches[0].threads)).toEqual(["t2", "t1"]);
+    expect(ids(projects[0].groups[0].threads)).toEqual(["t2", "t1"]);
     expect(ids(projects[3].threads)).toEqual(["t9", "t8"]);
   });
 
   test("the key subgroups of Reviews reorder", () => {
     const { projects } = arrange(sampleL(), { "groups:lf:reviews": ["lf:reviews:L", "lf:reviews:K"] });
-    expect(ids(projects[2].branches)).toEqual(["lf:reviews:L", "lf:reviews:K"]);
+    expect(ids(projects[2].groups)).toEqual(["lf:reviews:L", "lf:reviews:K"]);
   });
 });

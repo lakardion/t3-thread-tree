@@ -8,7 +8,7 @@ import type {
 } from "../shared/desktop.ts";
 import { isRun, type RunItem } from "../shared/runs.ts";
 import { BUSY, CATCH_UP, isIn, NEEDS_YOU, NOTIFY } from "../shared/status.ts";
-import { allThreads, bySince, isThread, type Branch, type Status, type ThreadNode, type Tree } from "../shared/tree.ts";
+import { allThreads, bySince, isThread, type Group, type Status, type ThreadNode, type Tree } from "../shared/tree.ts";
 import { linearHref } from "./format.ts";
 
 export type Counts = { needYou: number; working: number; yourTurn: number; stopped: number };
@@ -24,7 +24,7 @@ export const needsYouTip = (c: Counts): string =>
   c.needYou === 0 ? "" : `${c.needYou} need you${c.yourTurn > 0 ? ` (${c.yourTurn} your turn)` : ""}`;
 
 /** The header counts over all threads of the tree, nested threads included. Each run item needs the user. `yourTurn` is a part of `needYou`. */
-export function countHeader(projects: Branch[], runs: RunItem[] = []): Counts {
+export function countHeader(projects: Group[], runs: RunItem[] = []): Counts {
   const c: Counts = { needYou: runs.length, working: 0, yourTurn: 0, stopped: 0 };
   for (const { status } of projects.flatMap(allThreads)) {
     if (isIn(NEEDS_YOU, status)) {
@@ -45,24 +45,24 @@ const keepThreads = (ts: ThreadNode[], keep: (t: ThreadNode) => boolean): Thread
     return [{ ...t, children, ...(t.map && children.length === 0 && { map: undefined }) }];
   });
 
-const keepBranch = (b: Branch, keep: (t: ThreadNode) => boolean): Branch[] => {
-  const branches = b.branches.flatMap((x) => keepBranch(x, keep));
+const keepGroup = (b: Group, keep: (t: ThreadNode) => boolean): Group[] => {
+  const groups = b.groups.flatMap((x) => keepGroup(x, keep));
   const threads = keepThreads(b.threads, keep);
-  return branches.length > 0 || threads.length > 0 ? [{ ...b, branches, threads }] : [];
+  return groups.length > 0 || threads.length > 0 ? [{ ...b, groups, threads }] : [];
 };
 
 /** The tree with only the threads that need the user, and the spawners, groups and projects that hold them. */
-export const onlyNeedsYou = (projects: Branch[]): Branch[] =>
-  projects.flatMap((b) => keepBranch(b, (t) => isThread(t) && needsYou(t.status)));
+export const onlyNeedsYou = (projects: Group[]): Group[] =>
+  projects.flatMap((b) => keepGroup(b, (t) => isThread(t) && needsYou(t.status)));
 
 /** The tree without snoozed threads. A snoozed thread with a kept subthread stays; empty groups and projects drop out. */
-export const withoutSnoozed = (projects: Branch[]): Branch[] =>
-  projects.flatMap((b) => keepBranch(b, (t) => t.status !== "snoozed"));
+export const withoutSnoozed = (projects: Group[]): Group[] =>
+  projects.flatMap((b) => keepGroup(b, (t) => t.status !== "snoozed"));
 
 /** Why the list is empty. Follows the page pipeline order: the snoozed filter, then the Needs you filter. */
 export type EmptyKind = "needs" | "snoozed" | "none";
-const count = (ps: Branch[]) => ps.flatMap(allThreads).length;
-export const emptyKind = (projects: Branch[], snoozed: boolean, needsOnly: boolean): EmptyKind => {
+const count = (ps: Group[]) => ps.flatMap(allThreads).length;
+export const emptyKind = (projects: Group[], snoozed: boolean, needsOnly: boolean): EmptyKind => {
   if (needsOnly && count(snoozed ? projects : withoutSnoozed(projects)) > 0) return "needs";
   if (!snoozed && count(projects) > 0) return "snoozed";
   return "none";
@@ -81,7 +81,7 @@ const inNeedsYou = (t: ThreadNode): t is ThreadNode & { status: (typeof NEEDS_YO
   !t.settled && isIn(NEEDS_YOU, t.status);
 
 /** True when a thread under `b` is in Needs you, settled ones left out. */
-export const waits = (b: Branch): boolean => allThreads(b).some(inNeedsYou);
+export const waits = (b: Group): boolean => allThreads(b).some(inNeedsYou);
 
 const runStatus = (r: RunItem): "run-question" | "paused-run" =>
   r.kind === "question" ? "run-question" : "paused-run";
@@ -93,7 +93,7 @@ export const runPhrase = (r: RunItem) => (r.kind === "question" ? "Run question"
 const runLine = (r: RunItem): { catchUp?: CatchUpLineData } => ({ catchUp: { state: "done", ask: r.line } });
 
 /** The visible threads that wait for the user (needs input or plan ready), settled ones left out, then the run items. */
-export const needsYouThreads = (projects: Branch[], runs: RunItem[] = []): NeedsYouThread[] => [
+export const needsYouThreads = (projects: Group[], runs: RunItem[] = []): NeedsYouThread[] => [
   ...projects
     .flatMap(allThreads)
     .flatMap((t) =>
@@ -113,14 +113,14 @@ export const needsYouThreads = (projects: Branch[], runs: RunItem[] = []): Needs
 ];
 
 /** The items "Open next" can open: the Needs-you threads (not settled, subthreads included) and run items. Oldest `since` first, no `since` last, ties in tree order. */
-export const openNextQueue = (projects: Branch[], runs: RunItem[] = []): (ThreadNode | RunItem)[] =>
+export const openNextQueue = (projects: Group[], runs: RunItem[] = []): (ThreadNode | RunItem)[] =>
   [...projects.flatMap(allThreads).filter((t) => !t.settled && needsYou(t.status)), ...runs].toSorted((a, b) =>
     bySince(a.since, b.since),
   );
 
 /** The Up next window payload: the queue in order, each row with its project label and Linear URL. */
 export const upNextList = (
-  projects: Branch[],
+  projects: Group[],
   queue: (ThreadNode | RunItem)[],
   target: ThreadNode | RunItem | null,
   linear: Tree["linear"],

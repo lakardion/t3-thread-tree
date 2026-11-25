@@ -18,7 +18,7 @@ import {
   stopLabel,
   stripKey,
 } from "../src/page/format.ts";
-import { parseLinear, type Branch, type PrNode, type ThreadNode } from "../src/shared/tree.ts";
+import { parseLinear, type Group, type PrNode, type ThreadNode } from "../src/shared/tree.ts";
 
 const NOW = Date.parse("2026-11-12T12:00:00.000Z");
 const before = (sec: number) => new Date(NOW - sec * 1000).toISOString();
@@ -65,10 +65,10 @@ describe("stripKey", () => {
 
 describe("folded", () => {
   const thread = (key: string | null) => ({ id: `t-${key}`, key }) as ThreadNode;
-  const group = (label: string, threads: ThreadNode[], branches: Branch[] = []): Branch => ({
+  const group = (label: string, threads: ThreadNode[], groups: Group[] = []): Group => ({
     id: label,
     label,
-    branches,
+    groups,
     threads,
   });
 
@@ -82,22 +82,22 @@ describe("folded", () => {
   test("No issue key does not fold", () => {
     expect(folded(group("No issue key", [thread(null)]))).toBeNull();
   });
-  test("a group with branches and no threads does not fold", () => {
+  test("a group with groups and no threads does not fold", () => {
     expect(folded(group("Reviews", [], [group("SHOP-1", [thread("SHOP-1")])]))).toBeNull();
   });
 });
 
 describe("stackRuns", () => {
-  const b = (label: string, stack?: string): Branch => ({
+  const b = (label: string, stack?: string): Group => ({
     id: label,
     label,
-    branches: [],
+    groups: [],
     threads: [],
     ...(stack && { stack: { id: stack, total: 2, base: null } }),
   });
-  const names = (runs: Branch[][]) => runs.map((r) => r.map((x) => x.label));
+  const names = (runs: Group[][]) => runs.map((r) => r.map((x) => x.label));
 
-  test("adjacent branches of one stack share a run", () => {
+  test("adjacent groups of one stack share a run", () => {
     const bs = [b("a", "s1"), b("b", "s1"), b("c"), b("d", "s2"), b("e", "s1")];
     const runs = stackRuns(bs);
     expect(names(runs)).toEqual([["a", "b"], ["c"], ["d"], ["e"]]);
@@ -112,8 +112,8 @@ describe("railRows", () => {
   const pr = (n: number) => ({ n }) as PrNode;
   const t = (id: string, pos: number | null, key: string | null = null) =>
     ({ id, key, stack: { pos, total: 3 }, prs: pos ? [pr(100 + pos)] : [], children: [] }) as unknown as ThreadNode;
-  const g = (label: string, threads: ThreadNode[]): Branch => ({ id: label, label, branches: [], threads });
-  const show = (run: Branch[]) => {
+  const g = (label: string, threads: ThreadNode[]): Group => ({ id: label, label, groups: [], threads });
+  const show = (run: Group[]) => {
     const { stops, rows } = railRows(run);
     return { stops: stops.map((s) => s.p?.n ?? null), rows: rows.map((r) => [r.t.id, r.n ?? null, r.chip ?? null]) };
   };
@@ -150,10 +150,10 @@ describe("railRows", () => {
 describe("foldIds", () => {
   const thread = (key: string | null, map?: ThreadNode["map"]) =>
     ({ id: `t-${key}`, key, children: [], map }) as unknown as ThreadNode;
-  const b = (id: string, threads: ThreadNode[], branches: Branch[] = [], stack?: string): Branch => ({
+  const b = (id: string, threads: ThreadNode[], groups: Group[] = [], stack?: string): Group => ({
     id,
     label: id,
-    branches,
+    groups,
     threads,
     ...(stack && { stack: { id: stack, total: 2, base: null } }),
   });
@@ -260,7 +260,7 @@ describe("prTone", () => {
 describe("ownPos", () => {
   const t = (pos: number | null, children: ThreadNode[] = []) =>
     ({ id: `t${pos}`, stack: { pos, total: 4 }, prs: [], children }) as unknown as ThreadNode;
-  const g = (threads: ThreadNode[]): Branch => ({ id: "g", label: "g", branches: [], threads });
+  const g = (threads: ThreadNode[]): Group => ({ id: "g", label: "g", groups: [], threads });
 
   test("is the position of the thread that made the stack PR", () => {
     expect(ownPos(g([t(null), t(2)]))).toBe(2);

@@ -24,7 +24,7 @@ import {
   withoutSnoozed,
 } from "../src/page/needs-you.ts";
 import type { RunItem } from "../src/shared/runs.ts";
-import type { Branch, Conn, Status, ThreadNode, Tree } from "../src/shared/tree.ts";
+import type { Group, Conn, Status, ThreadNode, Tree } from "../src/shared/tree.ts";
 
 const thread = (id: string, status: Status, children: ThreadNode[] = []): ThreadNode => ({
   id,
@@ -46,10 +46,10 @@ const thread = (id: string, status: Status, children: ThreadNode[] = []): Thread
   detail: {} as ThreadNode["detail"],
   children,
 });
-const branch = (id: string, threads: ThreadNode[], branches: Branch[] = []): Branch => ({
+const branch = (id: string, threads: ThreadNode[], groups: Group[] = []): Group => ({
   id,
   label: id,
-  branches,
+  groups,
   threads,
 });
 const ids = (ts: { id: string }[]) => ts.map((t) => t.id);
@@ -158,8 +158,8 @@ describe("onlyNeedsYou", () => {
     const tree = [branch("p", [], [branch("g", [thread("a", "plan-ready")])])];
     const out = onlyNeedsYou(tree);
     expect(out[0].id).toBe("p");
-    expect(out[0].branches[0].id).toBe("g");
-    expect(ids(out[0].branches[0].threads)).toEqual(["a"]);
+    expect(out[0].groups[0].id).toBe("g");
+    expect(ids(out[0].groups[0].threads)).toEqual(["a"]);
   });
 
   test("does not change the input", () => {

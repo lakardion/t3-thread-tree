@@ -1,7 +1,7 @@
 import { describe, expect, test } from "bun:test";
 
 import { looksDone, parseSkip, pruneSkip, reasonText, type Skip } from "../src/page/looks-done.ts";
-import type { Branch, CatchUp, PrNode, Status, ThreadNode } from "../src/shared/tree.ts";
+import type { Group, CatchUp, PrNode, Status, ThreadNode } from "../src/shared/tree.ts";
 
 const NOW = Date.parse("2026-01-01T12:00:00Z");
 const ago = (min: number) => new Date(NOW - min * 60_000).toISOString();
@@ -29,15 +29,15 @@ const node = (over: Partial<ThreadNode> = {}): ThreadNode => {
     ...over,
   } as ThreadNode;
 };
-const branch = (threads: ThreadNode[], over: Partial<Branch> = {}): Branch => ({
+const branch = (threads: ThreadNode[], over: Partial<Group> = {}): Group => ({
   id: "b",
   label: "Storefront",
-  branches: [],
+  groups: [],
   threads,
   ...over,
 });
 const ctx = { skip: [] as Skip[], now: NOW };
-const ids = (projects: Branch[], c = ctx) => looksDone(projects, c).map((o) => o.thread.id);
+const ids = (projects: Group[], c = ctx) => looksDone(projects, c).map((o) => o.thread.id);
 const offered = (t: ThreadNode, c = ctx) => ids([branch([t])], c).includes(t.id);
 
 describe("looksDone candidates", () => {
@@ -136,7 +136,7 @@ describe("tree shapes", () => {
     const a = node({ t3Project: { id: "p", label: "Docs" } });
     const b = node({ t3Project: { id: "q", label: "Shop" } });
     const t3 = [branch([a]), branch([b])];
-    const linear = [branch([], { id: "lf:1", label: "Roadmap", branches: [branch([a, b], { label: "M1" })] })];
+    const linear = [branch([], { id: "lf:1", label: "Roadmap", groups: [branch([a, b], { label: "M1" })] })];
     expect(ids(t3).toSorted()).toEqual(ids(linear).toSorted());
     expect(looksDone(linear, ctx).map((o) => o.project)).toEqual(["Docs", "Shop"]);
   });

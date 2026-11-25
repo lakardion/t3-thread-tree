@@ -1,19 +1,19 @@
 import { arrayMove } from "@dnd-kit/helpers";
 
-import { isFallback, isLinearReviews, NO_KEY, REVIEWS, type Branch, type ThreadNode } from "../shared/tree.ts";
+import { isFallback, isLinearReviews, NO_KEY, REVIEWS, type Group, type ThreadNode } from "../shared/tree.ts";
 import { stackRuns } from "./format.ts";
 
 /** The stored order: list key to the ids of that list. */
 export type Orders = Record<string, string[]>;
 
 /** What one list holds: a project or review group, a run of stacked key groups, or a thread. */
-export type Unit = Branch | Branch[] | ThreadNode;
+export type Unit = Group | Group[] | ThreadNode;
 
 /** While a drag runs, the list `list` renders as `ids`; `units` keeps the units that a push removed. */
 export type Freeze = { list: string; ids: string[]; units: Map<string, Unit> };
 
 export type Arranged = {
-  projects: Branch[];
+  projects: Group[];
   /** List key to the ids of that list, in render order. */
   lists: Map<string, string[]>;
   /** List key to id to unit, in the same order. */
@@ -25,17 +25,17 @@ export const groupsKey = (parentId: string) => `groups:${parentId}`;
 export const threadsKey = (groupId: string) => `threads:${groupId}`;
 export const threadUnitId = (t: ThreadNode) => `t:${t.id}`;
 /** A stack run moves as one block, so it has one id. */
-export const runUnitId = (projectId: string, run: Branch[]) =>
+export const runUnitId = (projectId: string, run: Group[]) =>
   run[0].stack ? `stack:${projectId}:${run[0].stack.id}` : run[0].id;
 
 /** Reviews and No issue key: Reviews stays first, No issue key stays last, and neither moves. */
-export const isPinned = (b: Branch): boolean => b.label === REVIEWS || b.label === NO_KEY;
+export const isPinned = (b: Group): boolean => b.label === REVIEWS || b.label === NO_KEY;
 
-/** True for the Linear tree: its top-level branches carry `linear`. */
-export const isLinear = (projects: Branch[]): boolean => projects.some((p) => p.linear);
+/** True for the Linear tree: its top-level groups carry `linear`. */
+export const isLinear = (projects: Group[]): boolean => projects.some((p) => p.linear);
 
-const isRun = (u: Unit): u is Branch[] => Array.isArray(u);
-const isBranch = (u: Unit): u is Branch => !Array.isArray(u) && "branches" in u;
+const isRun = (u: Unit): u is Group[] => Array.isArray(u);
+const isGroup = (u: Unit): u is Group => !Array.isArray(u) && "groups" in u;
 const isThread = (u: Unit): u is ThreadNode => !Array.isArray(u) && "children" in u;
 const groupIds = (u: Unit): string[] => (isRun(u) ? u.map((b) => b.id) : [u.id]);
 
@@ -77,7 +77,7 @@ function applyFreeze<T extends Unit>(
  * A Linear tree orders its projects, the threads of each milestone and fallback group, and the Reviews subgroups.
  * Milestones and fallback groups do not move.
  */
-export function arrange(projects: Branch[], orders: Orders, freeze?: Freeze): Arranged {
+export function arrange(projects: Group[], orders: Orders, freeze?: Freeze): Arranged {
   const lists = new Map<string, string[]>();
   const units = new Map<string, Map<string, Unit>>();
   const put = <T extends Unit>(key: string, items: T[], idOf: (t: T) => string, fits: (u: Unit) => u is T): T[] => {
@@ -87,38 +87,38 @@ export function arrange(projects: Branch[], orders: Orders, freeze?: Freeze): Ar
     units.set(key, new Map(out.map((t) => [idOf(t), t])));
     return out;
   };
-  const group = (b: Branch): Branch => ({
+  const group = (b: Group): Group => ({
     ...b,
     threads: put(threadsKey(b.id), b.threads, threadUnitId, isThread),
   });
-  const reviews = (b: Branch): Branch => ({
+  const reviews = (b: Group): Group => ({
     ...b,
-    branches: put(groupsKey(b.id), b.branches, (c) => c.id, isBranch).map(group),
+    groups: put(groupsKey(b.id), b.groups, (c) => c.id, isGroup).map(group),
   });
-  const project = (p: Branch): Branch => {
-    const keys = p.branches.filter((b) => !isPinned(b));
+  const project = (p: Group): Group => {
+    const keys = p.groups.filter((b) => !isPinned(b));
     const runs = put(groupsKey(p.id), stackRuns(keys), (r) => runUnitId(p.id, r), isRun);
     return {
       ...p,
-      branches: [
-        ...p.branches.filter((b) => b.label === REVIEWS).map(reviews),
+      groups: [
+        ...p.groups.filter((b) => b.label === REVIEWS).map(reviews),
         ...runs.flat().map(group),
-        ...p.branches.filter((b) => b.label === NO_KEY).map(group),
+        ...p.groups.filter((b) => b.label === NO_KEY).map(group),
       ],
     };
   };
   if (isLinear(projects)) {
-    const milestones = (p: Branch): Branch => ({ ...p, branches: p.branches.map(group) });
+    const milestones = (p: Group): Group => ({ ...p, groups: p.groups.map(group) });
     const top = put(
       PROJECTS,
       projects.filter((b) => !isFallback(b)),
       (b) => b.id,
-      isBranch,
+      isGroup,
     ).map(milestones);
     const fallbacks = projects.filter(isFallback).map((b) => (isLinearReviews(b) ? reviews(b) : group(b)));
     return { projects: [...top, ...fallbacks], lists, units };
   }
-  const ordered = put(PROJECTS, projects, (b) => b.id, isBranch).map(project);
+  const ordered = put(PROJECTS, projects, (b) => b.id, isGroup).map(project);
   return { projects: ordered, lists, units };
 }
 

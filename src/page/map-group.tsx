@@ -7,7 +7,7 @@ import { Button } from "@/components/ui/button";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import { cn } from "@/lib/utils";
 
-import { flat, type Branch, type Status, type ThreadNode } from "../shared/tree.ts";
+import { flat, type Group, type Status, type ThreadNode } from "../shared/tree.ts";
 import { postMapThread } from "./send.ts";
 import { folds } from "./view.ts";
 
@@ -17,7 +17,7 @@ type RowProps = {
   t: ThreadNode;
   chip?: string;
   nested?: boolean;
-  project?: Branch;
+  project?: Group;
   corners?: string;
   end?: ReactNode;
   handle?: ReactNode;
@@ -90,12 +90,12 @@ export function MapGroup({
   t: ThreadNode;
   chip?: string;
   /** The project column of the map thread row; the caller draws the project border. */
-  project?: Branch;
+  project?: Group;
   open: boolean;
   toggle: () => void;
   section: Status[] | null;
   Row: ComponentType<RowProps>;
-  Rail: ComponentType<{ run: Branch[] }>;
+  Rail: ComponentType<{ run: Group[] }>;
   liRef: Ref<HTMLLIElement>;
   liClass?: string;
   liStyle?: CSSProperties;
@@ -122,7 +122,7 @@ export function MapGroup({
             id: `${t.id}:${c.id}`,
             label: c.key ?? c.title,
             stack: c.rail,
-            branches: [],
+            groups: [],
             threads: [c],
           }))}
         />

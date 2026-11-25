@@ -653,14 +653,14 @@ export type ThreadNode = {
   children: ThreadNode[];
 };
 
-export type Branch = {
+export type Group = {
   id: string;
   label: string;
-  /** Project branches only: `owner/name`. */
+  /** Project groups only: `owner/name`. */
   repo?: string;
   /** Key groups in a PR stack. Adjacent groups with the same `id` share one rail. */
   stack?: { id: string; total: number; base: string | null };
-  branches: Branch[];
+  groups: Group[];
   threads: ThreadNode[];
 };
 ```

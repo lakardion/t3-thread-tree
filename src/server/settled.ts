@@ -1,4 +1,4 @@
-import type { Branch, ThreadNode } from "../shared/tree.ts";
+import type { Group, ThreadNode } from "../shared/tree.ts";
 import type { Thread } from "./t3.ts";
 
 /** Settle time in ms, zero-padded so a string compare orders it, then the id. A bad date sorts first. */
@@ -21,20 +21,17 @@ export function settledSignature(threads: Iterable<Thread>): string {
   return count ? `${count}:${key}:${updated}` : "";
 }
 
-const settledIn = (b: Branch): ThreadNode[] => [
-  ...b.branches.flatMap(settledIn),
-  ...b.threads.filter((t) => t.settled),
-];
+const settledIn = (b: Group): ThreadNode[] => [...b.groups.flatMap(settledIn), ...b.threads.filter((t) => t.settled)];
 
 /**
  * One page of settled threads, newest settle first. `projects` is the unnested tree with settled threads.
  * `after` is the `next` of the previous page. `next` is null on the last page.
  */
-export function settledPage(projects: Branch[], threads: Map<string, Thread>, after: string | null, limit: number) {
+export function settledPage(projects: Group[], threads: Map<string, Thread>, after: string | null, limit: number) {
   const keyed = projects
     .flatMap((p) =>
       settledIn(p).map((t) => ({
-        project: { id: p.id, label: p.label, repo: p.repo, branches: [], threads: [] } as Branch,
+        project: { id: p.id, label: p.label, repo: p.repo, groups: [], threads: [] } as Group,
         t,
         key: settledKey(threads.get(t.id)!),
       })),
