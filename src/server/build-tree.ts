@@ -503,7 +503,7 @@ function prepare(input: BuildInput) {
         stack: null,
         lastRun: null,
         children: [],
-        map: { name: mapName(key, title, shown), header: true, href },
+        map: { name: mapName(key, title, shown), header: true, href, key },
       };
       top.set(key, n);
       return n;
@@ -515,7 +515,7 @@ function prepare(input: BuildInput) {
       if (head) {
         if (anchored(head.id).length === 1) {
           top.set(key, head);
-          marks.set(head, { name: mapName(key, head.title, shown), header: false, href: null });
+          marks.set(head, { name: mapName(key, head.title, shown), header: false, href: null, key });
         } else {
           marks.set(head, { name: head.title, header: false, href: null });
           claims.set(header(key, `map:${key}`, head.t, mapThread), { under: head });

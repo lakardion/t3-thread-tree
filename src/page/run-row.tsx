@@ -39,7 +39,7 @@ const Strip = ({ steps }: { steps: RunStep[] }) => (
 
 /**
  * A run node: a tinted row with the step strip, and a rail with one line per step. `Row` renders a step's thread or child
- * run. `liRef`, `liClass`, `liStyle` and `handle` come from the caller, which owns the drag and the row frame.
+ * run. `liRef`, `liClass`, `liStyle`, `handle` and `pin` come from the caller, which owns the drag and the row frame.
  */
 export function RunRow({
   t,
@@ -50,6 +50,7 @@ export function RunRow({
   liClass,
   liStyle,
   handle,
+  pin,
 }: {
   t: ThreadNode;
   now: number;
@@ -60,6 +61,7 @@ export function RunRow({
   liClass?: string;
   liStyle?: CSSProperties;
   handle?: ReactNode;
+  pin?: ReactNode;
 }) {
   const [open, setOpen] = useState(true);
   const run = t.run!;
@@ -93,6 +95,7 @@ export function RunRow({
         >
           {at > -Infinity && agoAt(at, now)}
         </span>
+        {pin}
         <Button asChild variant="ghost" size="icon" className="size-6 flex-none text-muted-foreground">
           <a href={t.href} target="_blank" rel="noreferrer" aria-label="Open run in T3">
             <ExternalLink className="size-3.5" />

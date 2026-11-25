@@ -158,7 +158,11 @@ import {
   applyOrder,
   parseOrders,
   prune,
+  baseList,
   groupsKey,
+  pinFirst,
+  pinIdOf,
+  pinnedList,
   reorder,
   runUnitId,
   threadUnitId,
@@ -167,6 +171,7 @@ import {
   type Freeze,
   type Orders,
 } from "./order.ts";
+import { PinButton, Pins } from "./pin-button.tsx";
 import {
   flag,
   forget,
@@ -197,6 +202,7 @@ import {
   blockTime,
   FLAT,
   flatLists,
+  flatPinId,
   flatten,
   folds,
   groupTime,
@@ -227,6 +233,7 @@ const iconLink = document.head.appendChild(
 const TOKEN_CMD =
   "~/.t3/bin/t3 auth session issue --scope orchestration:read --scope orchestration:operate --scope filesystem:read --label thread-tree --ttl 52w --token-only | pbcopy";
 const CLOSED_KEY = "thread-tree:closed";
+const PINS_KEY = "thread-tree:pins";
 const SETTLED_KEY = "thread-tree:settled";
 const SNOOZED_KEY = "thread-tree:snoozed";
 const SECTIONS_KEY = "thread-tree:sections";
@@ -1411,6 +1418,8 @@ const ROW_BUTTON =
 const FILTER_ITEM =
   "pointer-coarse:min-h-11 pointer-coarse:min-w-11 focus-visible:ring-0 focus-visible:outline-solid focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring";
 
+const RowPin = (p: Omit<ComponentProps<typeof PinButton>, "className">) => <PinButton {...p} className={ROW_BUTTON} />;
+
 const Mark = ({ title, children }: { title: string; children: ReactNode }) => (
   <span title={title} className="flex [&>svg]:size-3">
     {children}
@@ -1422,9 +1431,11 @@ type Sort = { id: string; list: string; index: number; name: string };
 
 /** A unit gets sort props only when its list has two or more units and it is in the list. */
 const sortOf = (lists: Map<string, string[]>, list: string, id: string, name: string): Sort | undefined => {
-  const ids = lists.get(list);
+  const part = pinnedList(list);
+  const own = lists.get(part)?.includes(id) ? part : list;
+  const ids = lists.get(own);
   const index = ids?.indexOf(id) ?? -1;
-  return ids && ids.length > 1 && index >= 0 ? { id, list, index, name } : undefined;
+  return ids && ids.length > 1 && index >= 0 ? { id, list: own, index, name } : undefined;
 };
 
 type Detector = NonNullable<Parameters<typeof useSortable>[0]["collisionDetector"]>;
@@ -1895,6 +1906,7 @@ function ThreadRow({
   nested,
   end,
   handle,
+  pin,
 }: {
   t: ThreadNode;
   /** The node whose block gives the row time. Defaults to the row. */
@@ -1905,6 +1917,8 @@ function ThreadRow({
   end?: ReactNode;
   /** Replaces the drag handle: the Map group owns the drag. */
   handle?: ReactNode;
+  /** Replaces the Pin button: the Map group or a key group of one thread owns the pin. */
+  pin?: ReactNode;
   inStack?: boolean;
   /** The row sits on a run rail: no drag handle, but the stack badge stays. */
   nested?: boolean;
@@ -2048,6 +2062,7 @@ function ThreadRow({
                 <TooltipContent>{ageTip(t, time)}</TooltipContent>
               </Tooltip>
             )}
+            {pin ?? (!inStack && !nested && <RowPin id={pinIdOf(t)} stop={t.id} name={t.title || t.id} />)}
             <RowActions t={t} projectPath={projectPath} />
             {end ?? (
               <CollapsibleTrigger asChild>
@@ -2064,7 +2079,7 @@ function ThreadRow({
         {t.children.length > 0 && (
           <ul className="m-0 list-none pl-2.5">
             <Presence items={t.children} keyOf={(c) => c.id}>
-              {(c) => <NodeRow t={c} inStack={inStack} />}
+              {(c) => <NodeRow t={c} inStack={inStack} pin={false} />}
             </Presence>
           </ul>
         )}
@@ -2109,6 +2124,7 @@ function NodeRow(p: ComponentProps<typeof ThreadRow>) {
               borderLeftColor: project && projectHex(project.label),
             }}
             handle={!inStack && !nested && <DragHandle handleRef={handleRef} name={t.map!.name} />}
+            pin={p.pin ?? (!inStack && !nested && <RowPin id={pinIdOf(t)} stop={t.id} name={t.map!.name} />)}
           />
         )}
       </Sortable>
@@ -2126,6 +2142,7 @@ function NodeRow(p: ComponentProps<typeof ThreadRow>) {
           liClass={cn(project && "border-l-[3px] pl-1", corners)}
           liStyle={{ viewTransitionName: vtName("t", t.id), borderLeftColor: project && projectHex(project.label) }}
           handle={!inStack && !nested && <DragHandle handleRef={handleRef} name={t.title || t.id} />}
+          pin={p.pin ?? (!inStack && !nested && <RowPin id={pinIdOf(t)} stop={t.id} name={t.title || t.id} />)}
         />
       )}
     </Sortable>
@@ -2261,7 +2278,7 @@ function Groups({ b, closed, toggle, fold }: { b: Group } & Fold) {
               : run[0].label,
         );
         return run[0].stack ? (
-          <StackRail run={run} closed={closed} toggle={toggle} fold={fold} sort={sort} />
+          <StackRail run={run} closed={closed} toggle={toggle} fold={fold} sort={sort} pinId={runUnitId(b.id, run)} />
         ) : (
           <GroupRow b={run[0]} closed={closed} toggle={toggle} fold={fold} sort={sort} />
         );
@@ -2278,7 +2295,15 @@ function GroupRow({ b, closed, toggle, fold, sort }: { b: Group; sort?: Sort } &
   const groupHref = isKeyGroup(b) ? linearHref(b.label, linear) : null;
   const snoozed = useContext(ShowSnoozed);
   const tip = b.linear ? undefined : headerTip(groupTime([b], snoozed));
-  if (one) return <NodeRow t={one} chip={b.label} sort={sort} />;
+  if (one)
+    return (
+      <NodeRow
+        t={one}
+        chip={b.label}
+        sort={sort}
+        pin={b.kind === "loose" ? undefined : <RowPin id={b.id} stop={one.id} name={one.title || one.id} />}
+      />
+    );
   const render = (ref: RefFn, handleRef?: RefFn) => (
     <Collapsible asChild open={open} onOpenChange={() => toggle(b.id)}>
       <li ref={ref} className="my-px">
@@ -2322,6 +2347,7 @@ function GroupRow({ b, closed, toggle, fold, sort }: { b: Group; sort?: Sort } &
             </a>
           )}
           {!open && <ClosedSummary b={b} />}
+          {b.kind !== "milestone" && <RowPin id={b.id} stop={b.id} name={b.label} />}
           <FoldAll inner={foldIds(b)} self={b.id} name={b.label} closed={closed} fold={fold} className={ROW_FOLD} />
         </div>
         <CollapsibleContent asChild>
@@ -2415,7 +2441,8 @@ function StackRail({
   flat,
   project,
   className,
-}: { run: Group[]; sort?: Sort; flat?: boolean; project?: Group; className?: string } & Fold) {
+  pinId,
+}: { run: Group[]; sort?: Sort; flat?: boolean; project?: Group; className?: string; pinId?: string } & Fold) {
   const { id, total, base, number } = run[0].stack!;
   const [copies, setCopies] = useState(0);
   const lastCopy = useRef(0);
@@ -2527,8 +2554,9 @@ function StackRail({
             project={projectPath}
             className="relative z-10 size-6 text-muted-foreground"
           />
-          {(hidden.length > 0 || number) && (
+          {(pinId || hidden.length > 0 || number) && (
             <span className="relative z-10 ml-auto flex items-center gap-2">
+              {pinId && <RowPin id={pinId} stop={`rail:${id}`} name={`PR stack of ${run[0].label}`} />}
               {hidden.length > 0 && (
                 <button
                   type="button"
@@ -2608,7 +2636,8 @@ function FlatRow({
 } & Fold) {
   const lists = useContext(Lists);
   /** The section list that holds the unit, or the whole flat list when ungrouped. */
-  const list = [...lists.keys()].find((k) => k !== FLAT && lists.get(k)?.includes(i.id)) ?? FLAT;
+  const list =
+    [...lists.keys()].find((k) => k !== FLAT && k !== pinnedList(FLAT) && lists.get(k)?.includes(i.id)) ?? FLAT;
   /** Rows under a Linear section header sit one chevron to the right of it. */
   const indent = linear && i.kind !== "section" && i.project.kind !== "loose" ? "ml-6" : undefined;
   if (i.kind === "thread")
@@ -2636,6 +2665,7 @@ function FlatRow({
           toggle={toggle}
           fold={fold}
           sort={sortOf(lists, list, i.id, `PR stack of ${i.run[0].label}`)}
+          pinId={i.id}
         />
       </Section>
     );
@@ -2679,7 +2709,7 @@ function ProjectBlock({ b, closed, toggle, fold }: { b: Group } & Fold) {
           {one ? (
             <NodeRow t={one} chip={one.key ?? undefined} sort={sort} />
           ) : (
-            <StackRail run={b.groups} closed={closed} toggle={toggle} fold={fold} sort={sort} />
+            <StackRail run={b.groups} closed={closed} toggle={toggle} fold={fold} sort={sort} pinId={b.id} />
           )}
         </ul>
       </li>
@@ -2724,6 +2754,7 @@ function ProjectBlock({ b, closed, toggle, fold }: { b: Group } & Fold) {
               </a>
             )}
             {!open && <ClosedSummary b={b} />}
+            <RowPin id={b.id} stop={b.id} name={b.label} />
             <FoldAll inner={foldIds(b)} self={b.id} name={b.label} closed={closed} fold={fold} className={ROW_FOLD} />
           </div>
           <div className="min-w-0 px-1 pb-1">
@@ -2750,6 +2781,7 @@ const KEYS: [keys: string, action: string][] = [
   ["o", "Details or fold"],
   ["l h", "Expand, collapse"],
   ["s", "Send"],
+  ["p", "Pin"],
   ["n", "Open next"],
   ["t", "Triage"],
   [FIND_KEY, "Find"],
@@ -2807,6 +2839,7 @@ type Cfg = {
   sortBy: SortBy;
   layout: Layout;
   groupBy: GroupBy;
+  pins: ReadonlySet<string>;
   freeze?: Freeze;
 };
 
@@ -2855,21 +2888,29 @@ const pipeline = (ps: Group[], c: Cfg): { full: Arranged; view: Arranged & { fla
   const flatIds = applyOrder(flatten(tree.projects), (u) => u.id, c.orders[FLAT]).map((u) => u.id);
   const full = { ...tree, lists: new Map(tree.lists).set(FLAT, flatIds) };
   const shown = c.snoozed ? full.projects : withoutSnoozed(full.projects);
-  const view = arrange(c.needsOnly ? onlyNeedsYou(shown) : shown, {}, c.freeze);
+  const view = arrange(
+    c.needsOnly ? onlyNeedsYou(shown) : shown,
+    {},
+    c.freeze,
+    c.layout === "tree" ? c.pins : undefined,
+  );
   if (c.layout === "flat") {
     const own = c.freeze?.list === FLAT ? c.freeze.ids : c.orders[FLAT];
-    const units =
+    const units = pinFirst(
       c.sortBy === "updated"
         ? sortFlat(flatten(view.projects), c.snoozed)
-        : applyOrder(flatten(view.projects), (u) => u.id, own);
+        : applyOrder(flatten(view.projects), (u) => u.id, own),
+      flatPinId,
+      c.pins,
+    );
     /** The payload can still have the T3 shape just after the choice changes: it groups as None until the Linear tree arrives. */
     const groupBy = c.groupBy === "linear" && !isLinear(ps) ? "none" : c.groupBy;
-    const flat = sequence(units, groupBy, c.shutSections, c.snoozed, view.projects);
-    return { full, view: { ...view, lists: flatLists(flat), flat } };
+    const flat = sequence(units, groupBy, c.shutSections, c.snoozed, view.projects, c.pins);
+    return { full, view: { ...view, lists: flatLists(flat, c.pins), flat } };
   }
   return {
     full,
-    view: { ...view, projects: c.sortBy === "updated" ? sortTree(view.projects, c.snoozed) : view.projects },
+    view: { ...view, projects: c.sortBy === "updated" ? sortTree(view.projects, c.snoozed, c.pins) : view.projects },
   };
 };
 
@@ -2979,6 +3020,7 @@ function App() {
   const [now, setNow] = useState(Date.now);
   const [shown, setShown] = useState(() => new Set<string>());
   const [closed, setClosed] = usePref(CLOSED_KEY, idSet());
+  const [pins, setPins] = usePref(PINS_KEY, idSet());
   const [shutSections, setShutSections] = usePref(SECTIONS_KEY, idSet(["idle", "done"]));
   const [clis, setClis] = useState<Offered | null>(null);
   const [cli, setCli] = useState<ModelPick | null | undefined>(undefined);
@@ -3167,6 +3209,15 @@ function App() {
       }),
     show: (id: string) => setShown((s) => new Set(s).add(id)),
   };
+  const pinApi = {
+    pins,
+    toggle: (id: string) =>
+      setPins((prev) => {
+        const next = new Set(prev);
+        if (!next.delete(id)) next.add(id);
+        return next;
+      }),
+  };
   const sendToApi = { t3cli, open: (id: string) => setSendTo({ id, open: true }) };
   const workflowStarter = {
     workflows: tree?.workflows ?? [],
@@ -3213,6 +3264,7 @@ function App() {
     sortBy,
     layout,
     groupBy: flatMode,
+    pins,
     freeze,
   };
   const { full, view } = pipeline(tree?.projects ?? [], cfg);
@@ -3273,6 +3325,9 @@ function App() {
         const btn = row ? row.querySelector<HTMLElement>("[aria-label=Details], [data-fold]") : active;
         const expanded = btn?.getAttribute("aria-expanded") === "true";
         if (btn instanceof HTMLElement && (action === "toggle" || expanded === (action === "collapse"))) btn.click();
+      } else if (action === "pin") {
+        const stop = active instanceof HTMLElement ? active.dataset.stop : undefined;
+        if (stop) listRef.current?.querySelector<HTMLElement>(`[data-pin-for="${CSS.escape(stop)}"]`)?.click();
       } else if (action === "send") {
         const id = active?.closest<HTMLElement>(".thread-row")?.dataset.thread;
         if (id && latest.current.t3cli?.available !== false) setSendTo({ id, open: true });
@@ -3376,16 +3431,21 @@ function App() {
     const list = String(source.sortable.group);
     const ids = latest.current.view.lists.get(list);
     const units = latest.current.view.units.get(list);
-    if (list.startsWith(FLAT))
-      setFreeze({ list: FLAT, ids: latest.current.view.lists.get(FLAT) ?? [], units: new Map() });
-    else if (ids && units) setFreeze({ list, ids, units });
+    if (list.startsWith(FLAT)) {
+      const { lists } = latest.current.view;
+      setFreeze({
+        list: FLAT,
+        ids: [...(lists.get(pinnedList(FLAT)) ?? []), ...(lists.get(FLAT) ?? [])],
+        units: new Map(),
+      });
+    } else if (ids && units) setFreeze({ list, ids, units });
   };
   const dragEnd = ({ operation: { source }, canceled }: DragEndEvent) => {
     drag.on = false;
     setFreeze(undefined);
     if (canceled || !isSortable(source)) return;
     const list = String(source.sortable.group);
-    const store = list.startsWith(FLAT) ? FLAT : list;
+    const store = list.startsWith(FLAT) ? FLAT : baseList(list);
     const all = latest.current.full.lists.get(store);
     const visible = latest.current.view.lists.get(list);
     if (!all || !visible) return;
@@ -3601,28 +3661,30 @@ function App() {
                                     <WorkflowStarter value={workflowStarter}>
                                       <Folds value={{ closed, toggle, fold }}>
                                         <ShowSnoozed value={snoozed}>
-                                          {layout === "flat" ? (
-                                            <Presence key="flat" items={view.flat ?? []} keyOf={(i) => i.id}>
-                                              {(i) => (
-                                                <FlatRow
-                                                  i={i}
-                                                  corners={edgeCorners(view.flat ?? [], i)}
-                                                  linear={flatMode === "linear"}
-                                                  section={sectionOf(view.flat ?? [], i)}
-                                                  closed={closed}
-                                                  toggle={toggle}
-                                                  fold={fold}
-                                                  toggleSection={toggleSection}
-                                                />
-                                              )}
-                                            </Presence>
-                                          ) : (
-                                            <Presence key="tree" items={projects} keyOf={(p) => p.id}>
-                                              {(p) => (
-                                                <ProjectBlock b={p} closed={closed} toggle={toggle} fold={fold} />
-                                              )}
-                                            </Presence>
-                                          )}
+                                          <Pins value={pinApi}>
+                                            {layout === "flat" ? (
+                                              <Presence key="flat" items={view.flat ?? []} keyOf={(i) => i.id}>
+                                                {(i) => (
+                                                  <FlatRow
+                                                    i={i}
+                                                    corners={edgeCorners(view.flat ?? [], i)}
+                                                    linear={flatMode === "linear"}
+                                                    section={sectionOf(view.flat ?? [], i)}
+                                                    closed={closed}
+                                                    toggle={toggle}
+                                                    fold={fold}
+                                                    toggleSection={toggleSection}
+                                                  />
+                                                )}
+                                              </Presence>
+                                            ) : (
+                                              <Presence key="tree" items={projects} keyOf={(p) => p.id}>
+                                                {(p) => (
+                                                  <ProjectBlock b={p} closed={closed} toggle={toggle} fold={fold} />
+                                                )}
+                                              </Presence>
+                                            )}
+                                          </Pins>
                                         </ShowSnoozed>
                                       </Folds>
                                     </WorkflowStarter>

@@ -1518,7 +1518,7 @@ describe("Map groups", () => {
     );
     expect(tree[0].groups).toEqual([]);
     const [head] = loose(tree);
-    expect(head.map).toEqual({ name: "Search", header: false, href: null });
+    expect(head.map).toEqual({ name: "Search", header: false, href: null, key: "/m/search" });
     expect(titles(head.children)).toEqual(["SHOP-1 a", "SHOP-2 b"]);
   });
 
@@ -1576,6 +1576,8 @@ describe("Map groups", () => {
     const tree = mapped(raws, { x: "/m/k", y: "/m/l" }, { x: "chart", y: "chart" });
     const [head] = loose(tree);
     expect(head.map).toMatchObject({ header: false });
+    expect(head.map?.key).toBeUndefined();
+    expect(head.children.map((c) => c.map?.key)).toEqual(["/m/l", "/m/k"]);
     expect(head.children.map((c) => c.id)).toEqual(["map:/m/l", "map:/m/k"]);
     expect(head.children.map((c) => c.map?.name)).toEqual(["L", "K"]);
     expect(head.children.map((c) => c.map?.href)).toEqual([null, null].map(() => hrefOf("chart")));
@@ -1844,7 +1846,12 @@ describe("Map groups", () => {
       );
       const [head] = loose(tree);
       expect(head.title).toBe("Plan Interview Mode Work Lanes");
-      expect(head.map).toEqual({ name: "Plan Interview Mode Work Lanes", header: false, href: null });
+      expect(head.map).toEqual({
+        name: "Plan Interview Mode Work Lanes",
+        header: false,
+        href: null,
+        key: "thread:plan",
+      });
       expect(head.detail.mapMarked).toBe(true);
       expect(titles(head.children)).toEqual(["TIB-4308 a", "TIB-4328 b"]);
       expect(titles(head.children[0].children)).toEqual(["TIB-4309 c"]);
@@ -1863,8 +1870,8 @@ describe("Map groups", () => {
       );
       const [head] = loose(tree);
       expect(head.children.map((c) => c.map)).toEqual([
-        { name: "Real", header: true, href: hrefOf("plan") },
-        { name: "Plan Interview Mode Work Lanes", header: true, href: hrefOf("plan") },
+        { name: "Real", header: true, href: hrefOf("plan"), key: "/m/real" },
+        { name: "Plan Interview Mode Work Lanes", header: true, href: hrefOf("plan"), key: "thread:plan" },
       ]);
     });
 

@@ -1,7 +1,17 @@
 import { describe, expect, test } from "bun:test";
 
 import { onlyNeedsYou } from "../src/page/needs-you.ts";
-import { applyOrder, arrange, parseOrders, prune, reorder, type Freeze } from "../src/page/order.ts";
+import {
+  applyOrder,
+  arrange,
+  parseOrders,
+  pinFirst,
+  pinIdOf,
+  pinnedList,
+  prune,
+  reorder,
+  type Freeze,
+} from "../src/page/order.ts";
 import { REVIEWS, type Group, type GroupKind, type Status, type ThreadNode } from "../src/shared/tree.ts";
 
 const thread = (id: string, status: Status = "working", children: ThreadNode[] = []): ThreadNode => ({
@@ -313,5 +323,73 @@ describe("arrange on a Linear tree", () => {
   test("the key subgroups of Reviews reorder", () => {
     const { projects } = arrange(sampleL(), { "groups:lf:reviews": ["lf:reviews:L", "lf:reviews:K"] });
     expect(ids(projects[2].groups)).toEqual(["lf:reviews:L", "lf:reviews:K"]);
+  });
+});
+
+describe("pins", () => {
+  const pin = (...p: string[]) => new Set(p);
+  const mapHead = (id: string, key: string): ThreadNode => ({
+    ...thread(id),
+    map: { name: id, header: false, href: null, key },
+  });
+
+  test("pinFirst keeps the order inside each part", () => {
+    expect(pinFirst(["a", "b", "c", "d"], (x) => x, pin("d", "b"))).toEqual(["b", "d", "a", "c"]);
+  });
+
+  test("a pinned project leads the top list, split into two lists", () => {
+    const { projects, lists } = arrange(sample(), {}, undefined, pin("p:b"));
+    expect(ids(projects)).toEqual(["p:b", "p:a"]);
+    expect(lists.get("projects")).toEqual(["p:a"]);
+    expect(lists.get(pinnedList("projects"))).toEqual(["p:b"]);
+  });
+
+  test("a pinned group, stack run and loose thread lead their list", () => {
+    const { projects, lists } = arrange(sample(), {}, undefined, pin("g:a4", "stack:p:a:s0", "t:t8"));
+    expect(ids(projects[0].groups)).toEqual(["g:a2", "g:a3", "g:a4", "t:t8", "g:a1", REVIEWS]);
+    expect(lists.get(pinnedList("groups:p:a"))).toEqual(["stack:p:a:s0", "g:a4", "t:t8"]);
+    expect(lists.get("groups:p:a")).toEqual(["g:a1", REVIEWS]);
+  });
+
+  test("a pinned thread leads the threads of its key group", () => {
+    const tree = [project("p", [branch("g", [thread("a"), thread("b")])])];
+    const { projects, lists } = arrange(tree, {}, undefined, pin("t:b"));
+    expect(ids(projects[0].groups[0].threads)).toEqual(["b", "a"]);
+    expect(lists.get(pinnedList("threads:g"))).toEqual(["t:b"]);
+  });
+
+  test("map:<key> pins the map head, and the thread id does not", () => {
+    const tree = [project("p", [], [thread("x"), mapHead("h", "/m/k")])];
+    expect(pinIdOf(mapHead("h", "/m/k"))).toBe("map:/m/k");
+    expect(ids(arrange(tree, {}, undefined, pin("map:/m/k")).projects[0].groups)).toEqual(["t:h", "t:x"]);
+    expect(ids(arrange(tree, {}, undefined, pin("t:h")).projects[0].groups)).toEqual(["t:x", "t:h"]);
+  });
+
+  test("a pin that matches nothing does nothing, and works when the item returns", () => {
+    const without = [project("p:a", []), project("p:b", [])];
+    const set = pin("p:c");
+    expect(ids(arrange(without, {}, undefined, set).projects)).toEqual(["p:a", "p:b"]);
+    expect(ids(arrange([...without, project("p:c", [])], {}, undefined, set).projects)).toEqual(["p:c", "p:a", "p:b"]);
+  });
+
+  test("a pinned member of a stack does not move in the stack", () => {
+    const tree = [project("p", [branch("g", [thread("a"), thread("b")], [], "s0", "stack")])];
+    const { projects, lists } = arrange(tree, {}, undefined, pin("t:b"));
+    expect(ids(projects[0].groups[0].threads)).toEqual(["a", "b"]);
+    expect(lists.has(pinnedList("threads:g"))).toBe(false);
+  });
+
+  test("a drop in the pinned part keeps the unpinned slots, so unpin restores the place", () => {
+    const full = arrange(sample(), {}).lists.get("groups:p:a")!;
+    const view = arrange(sample(), {}, undefined, pin("g:a4", "g:a1")).lists;
+    const stored = reorder(full, view.get(pinnedList("groups:p:a"))!, 0, 1);
+    expect(stored).toEqual(["g:a4", "stack:p:a:s0", "g:a1", REVIEWS, "t:t8"]);
+    expect(arrange(sample(), { "groups:p:a": stored }).lists.get("groups:p:a")).toEqual(stored);
+  });
+
+  test("the freeze applies to the part that holds the dragged list", () => {
+    const freeze: Freeze = { list: pinnedList("groups:p:a"), ids: ["g:a4", "g:a1"], units: new Map() };
+    const { lists } = arrange(sample(), {}, freeze, pin("g:a1", "g:a4"));
+    expect(lists.get(pinnedList("groups:p:a"))).toEqual(["g:a4", "g:a1"]);
   });
 });

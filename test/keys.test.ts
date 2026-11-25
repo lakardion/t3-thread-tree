@@ -21,6 +21,15 @@ const ctx = (c: Partial<KeyContext> = {}): KeyContext => ({
   ...c,
 });
 
+describe("pin key", () => {
+  test("p pins a thread or header stop, and does nothing with no stop", () => {
+    expect(pageKey(ev("p"), ctx({ stop: "thread" }))).toBe("pin");
+    expect(pageKey(ev("p"), ctx({ stop: "header" }))).toBe("pin");
+    expect(pageKey(ev("p"), ctx())).toBeNull();
+    expect(pageKey(ev("p", { repeat: true }), ctx({ stop: "thread" }))).toBeNull();
+  });
+});
+
 describe("plain keys", () => {
   test("n acts on a free page, 1 does nothing", () => {
     expect(pageKey(ev("n"), ctx())).toBe("next");

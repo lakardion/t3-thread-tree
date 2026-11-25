@@ -28,12 +28,31 @@ export const threadUnitId = (t: ThreadNode) => `t:${t.id}`;
 export const runUnitId = (projectId: string, run: Group[]) =>
   run[0].stack ? `stack:${projectId}:${run[0].stack.id}` : run[0].id;
 
+/** The drag list of the pinned part of list `list`. */
+export const pinnedList = (list: string) => `${list}#pin`;
+/** The stored list key of a drag list: the pinned part shares the key of its list. */
+export const baseList = (list: string) => list.replace(/#pin$/, "");
+/** The pin id of a thread: `map:<key>` for the head of one map, else its unit id. */
+export const pinIdOf = (t: ThreadNode) => (t.map?.key ? `map:${t.map.key}` : threadUnitId(t));
+
+/** The items that are in `pins` first, then the others. Each part keeps its order. */
+export function pinFirst<T>(items: T[], pinOf: (t: T) => string, pins: ReadonlySet<string>): T[] {
+  if (pins.size === 0) return items;
+  return [...items.filter((t) => pins.has(pinOf(t))), ...items.filter((t) => !pins.has(pinOf(t)))];
+}
+
 /** True for the Linear tree: its top-level groups carry `linear`. */
 export const isLinear = (projects: Group[]): boolean => projects.some((p) => p.linear);
 
 const isRun = (u: Unit): u is Group[] => Array.isArray(u);
 const isGroup = (u: Unit): u is Group => !Array.isArray(u) && "groups" in u;
 const isThread = (u: Unit): u is ThreadNode => !Array.isArray(u) && "children" in u;
+/** The pin id of a unit: a loose group that wraps one thread, alone in its run, pins as that thread. */
+export const unitPinId = (id: string, u: Unit): string => {
+  const one = isRun(u) ? (u.length === 1 ? u[0] : undefined) : u;
+  const t = one && isGroup(one) ? (one.kind === "loose" && one.threads.length === 1 ? one.threads[0] : undefined) : one;
+  return t && isThread(t) ? pinIdOf(t) : id;
+};
 const groupIds = (u: Unit): string[] => (isRun(u) ? u.map((b) => b.id) : [u.id]);
 
 /** The oldest creation time in a run of groups. `Infinity` when no thread has one, so the run goes last. */
@@ -129,21 +148,42 @@ function applyFreeze<T extends Unit>(
  * Every list holds groups, stack runs and loose threads, and the user can move each.
  * Subthreads keep the base order. The input is not changed.
  * A Linear project keeps its milestones in order.
+ * A unit in `pins` leads its list. The list then has two drag lists: the unpinned part under its key and the pinned part under `pinnedList(key)`.
  */
-export function arrange(input: Group[], orders: Orders, freeze?: Freeze): Arranged {
+export function arrange(
+  input: Group[],
+  orders: Orders,
+  freeze?: Freeze,
+  pins: ReadonlySet<string> = new Set(),
+): Arranged {
   const lists = new Map<string, string[]>();
   const units = new Map<string, Map<string, Unit>>();
-  const put = <T extends Unit>(key: string, items: T[], idOf: (t: T) => string, fits: (u: Unit) => u is T): T[] => {
+  const put = <T extends Unit>(
+    key: string,
+    items: T[],
+    idOf: (t: T) => string,
+    fits: (u: Unit) => u is T,
+    pinnable = true,
+  ): T[] => {
     const ordered = applyOrder(items, idOf, orders[key]);
-    const out = freeze?.list === key ? applyFreeze(ordered, idOf, freeze, fits) : ordered;
-    lists.set(key, out.map(idOf));
-    units.set(key, new Map(out.map((t) => [idOf(t), t])));
-    return out;
+    const isPinned = (t: T) => pinnable && pins.has(unitPinId(idOf(t), t));
+    const part = (list: string, own: T[]): T[] => {
+      const out = freeze?.list === list ? applyFreeze(own, idOf, freeze, fits) : own;
+      lists.set(list, out.map(idOf));
+      units.set(list, new Map(out.map((t) => [idOf(t), t])));
+      return out;
+    };
+    const unpinned = part(
+      key,
+      ordered.filter((t) => !isPinned(t)),
+    );
+    const pinned = ordered.some(isPinned) ? part(pinnedList(key), ordered.filter(isPinned)) : [];
+    return [...pinned, ...unpinned];
   };
   const container = (b: Group): Group => {
     if (b.kind === "loose") return b;
     if (b.kind === "key" || b.kind === "stack")
-      return { ...b, threads: put(threadsKey(b.id), b.threads, threadUnitId, isThread) };
+      return { ...b, threads: put(threadsKey(b.id), b.threads, threadUnitId, isThread, b.kind === "key") };
     if (b.kind === "linear-project") return { ...b, groups: b.groups.map(container) };
     return {
       ...b,
