@@ -59,6 +59,15 @@ export const onlyNeedsYou = (projects: Branch[]): Branch[] =>
 export const withoutSnoozed = (projects: Branch[]): Branch[] =>
   projects.flatMap((b) => keepBranch(b, (t) => t.status !== "snoozed"));
 
+/** Why the list is empty. Follows the page pipeline order: the snoozed filter, then the Needs you filter. */
+export type EmptyKind = "needs" | "snoozed" | "none";
+const count = (ps: Branch[]) => ps.flatMap(allThreads).length;
+export const emptyKind = (projects: Branch[], snoozed: boolean, needsOnly: boolean): EmptyKind => {
+  if (needsOnly && count(snoozed ? projects : withoutSnoozed(projects)) > 0) return "needs";
+  if (!snoozed && count(projects) > 0) return "snoozed";
+  return "none";
+};
+
 /** The Catch-up fields that cross the bridge, as an optional key to spread. */
 const lineOf = (t: ThreadNode): { catchUp?: CatchUpLineData } => {
   if (!t.catchUp) return {};

@@ -1,5 +1,5 @@
 import { Archive, LocateFixed, Search, SearchX, Workflow as WorkflowIcon } from "lucide-react";
-import { useEffect, useRef, useState, type KeyboardEvent, type ReactNode } from "react";
+import { useEffect, useRef, useState, type KeyboardEvent } from "react";
 
 import { Button } from "@/components/ui/button";
 import { Command, CommandGroup, CommandInput, CommandItem, CommandList } from "@/components/ui/command";
@@ -11,6 +11,7 @@ import { find, type Hit } from "../shared/find.ts";
 import type { Workflow } from "../shared/workflow-start.ts";
 import { needsYou } from "./attention.ts";
 import { ago } from "./format.ts";
+import { IconState } from "./icon-state.tsx";
 import { StatusIcon } from "./status-icon.tsx";
 import { fits } from "./workflow-start.ts";
 
@@ -84,13 +85,6 @@ function Row({ h, now, canShow, open, show }: RowProps) {
     </CommandItem>
   );
 }
-
-const IconState = ({ icon, children }: { icon: ReactNode; children: ReactNode }) => (
-  <div className="flex flex-col items-center gap-2 px-4 py-10 text-center text-sm text-muted-foreground">
-    {icon}
-    {children}
-  </div>
-);
 
 type BodyProps = {
   list: Hit[];

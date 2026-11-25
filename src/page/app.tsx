@@ -13,6 +13,7 @@ import { ChevronsDownUp, ChevronsUpDown, Ellipsis, X as XGlyph } from "lucide";
 import {
   ArrowDownUp,
   Check,
+  CheckCheck,
   ChevronDown,
   ChevronRight,
   CircleArrowUp,
@@ -23,6 +24,7 @@ import {
   Eye,
   Rows3,
   GripVertical,
+  Inbox,
   Info,
   Layers,
   List,
@@ -107,6 +109,8 @@ import {
 } from "../shared/tree.ts";
 import {
   countAttention,
+  emptyKind,
+  type EmptyKind,
   favicon,
   HOLD_MS,
   type Held,
@@ -160,6 +164,7 @@ import {
   stopLabel,
   stripKey,
 } from "./format.ts";
+import { IconState } from "./icon-state.tsx";
 import { Hint, useKeyHints } from "./key-hints.tsx";
 import { pageKey } from "./keys.ts";
 import { SetupDialog } from "./local-setup-dialog.tsx";
@@ -2883,6 +2888,42 @@ type Cfg = {
   freeze?: Freeze;
 };
 
+const ResetButton = ({ label, onClick }: { label: string; onClick: () => void }) => (
+  <Button variant="outline" size="sm" onClick={onClick}>
+    {label}
+  </Button>
+);
+
+/** The empty main list: the text says why, and a button undoes the filter that caused it. */
+const EmptyList = ({
+  kind,
+  showAll,
+  showSnoozed,
+}: {
+  kind: EmptyKind;
+  showAll: () => void;
+  showSnoozed: () => void;
+}) => {
+  const Glyph = kind === "needs" ? CheckCheck : kind === "snoozed" ? Moon : Inbox;
+  const text = { needs: "Nothing needs you", snoozed: "All threads are snoozed", none: "No active threads" }[kind];
+  return (
+    <IconState
+      icon={<Glyph className="size-6" aria-hidden />}
+      action={
+        kind === "needs" ? (
+          <ResetButton label="Show all threads" onClick={showAll} />
+        ) : kind === "snoozed" ? (
+          <ResetButton label="Show snoozed" onClick={showSnoozed} />
+        ) : undefined
+      }
+      className="min-h-[60vh] flex-1 justify-center"
+    >
+      <span className="font-medium text-foreground">{text}</span>
+      {kind === "none" && <span>Threads you start in T3 show here</span>}
+    </IconState>
+  );
+};
+
 /**
  * The user order on the whole tree, then the filter, then the drag freeze. In the tree, `view.projects` is also sorted.
  * In the flat layout, `view.flat` is also set: the sorted units, with section headers when grouped.
@@ -3677,7 +3718,7 @@ function App() {
           />
         </div>
       </header>
-      <div ref={listRef} className="min-h-0 flex-1 overflow-y-auto">
+      <div ref={listRef} className={cn("min-h-0 flex-1 overflow-y-auto", projects?.length === 0 && "flex flex-col")}>
         <Focus value={focusApi}>
           {tree?.conn === "down" && (
             <Alert className="mb-3 border-l-[3px] border-l-status-needs-input">
@@ -3756,12 +3797,21 @@ function App() {
                       <Lists value={sortBy === "updated" ? NO_LISTS : view.lists}>
                         <Now value={now}>
                           <div
-                            className={!connecting && tree.conn !== "up" ? "grayscale" : ""}
+                            className={cn(
+                              !connecting && tree.conn !== "up" && "grayscale",
+                              projects?.length === 0 && "flex flex-1 flex-col",
+                            )}
                             data-conn={!connecting && tree.conn !== "up" ? "down" : undefined}
                             data-status-text={statusText ? undefined : "off"}
                           >
-                            {projects?.length === 0 && <p className="text-muted-foreground">No active threads.</p>}
-                            {projects ? (
+                            {projects?.length === 0 && (
+                              <EmptyList
+                                kind={emptyKind(full.projects, snoozed, needsOnly)}
+                                showAll={() => setNeedsOnly(false)}
+                                showSnoozed={() => setSnoozed(true)}
+                              />
+                            )}
+                            {projects && projects.length > 0 ? (
                               <Card className="gap-0 overflow-clip rounded-[12px] px-2 py-0 shadow-none">
                                 <ul key={listKey} className={cn("m-0 list-none p-0", layout === "flat" && "p-1")}>
                                   <SendTo value={sendToApi}>
@@ -3792,7 +3842,7 @@ function App() {
                                   </SendTo>
                                 </ul>
                               </Card>
-                            ) : (
+                            ) : projects === undefined ? (
                               <>
                                 <p className="mb-2 text-sm text-muted-foreground" role="status">
                                   Connecting to T3…
@@ -3809,7 +3859,7 @@ function App() {
                                   </CardContent>
                                 </Card>
                               </>
-                            )}
+                            ) : null}
                             {settled && projects && (
                               <SendTo value={sendToApi}>
                                 <Launcher value={launcher}>
