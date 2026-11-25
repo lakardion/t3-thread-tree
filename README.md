@@ -39,7 +39,7 @@ Use it as a Mac app or in a browser. The Mac app adds a Dock badge, notification
 - **Mac app:** Dock badge, notifications, a menu-bar entry and an Up next window (⌥⌘U) that stays on top.
 - **Start a workflow:** type `>` in Cmd+K, or use the workflow button on a row, a PR stack or the Looks done list.
 - **Suggested replies:** the send dialog offers reply chips, such as `commit push`, from the last agent message.
-- **Looks done:** finds threads that look finished and settles them in one step, with undo.
+- **Looks done:** finds threads that look finished and settles them in one step, with undo. The eye button on a row shows the last message of the thread in the same dialog, with Markdown formatting, so you can examine the thread before you settle it.
 - **Views:** Tree or Flat, group by T3 project, Linear project or status, and drag rows into your own order.
 - **Find and keys:** Cmd+K searches all threads. Hold Alt/Option to see the keys next to the controls. Settings lists all keys.
 - **Focus list:** pin up to three threads above the tree.

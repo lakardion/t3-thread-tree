@@ -1,5 +1,5 @@
-import { CircleCheckBig, LoaderCircle } from "lucide-react";
-import { useEffect, useRef, useState } from "react";
+import { ArrowLeft, CircleCheckBig, Eye, LoaderCircle } from "lucide-react";
+import { type ReactNode, useEffect, useLayoutEffect, useRef, useState } from "react";
 
 import { Button } from "@/components/ui/button";
 import {
@@ -11,10 +11,13 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
+import { cn } from "@/lib/utils";
 
 import type { SendError } from "../shared/send.ts";
 import { reasonText, type Offer, type Skip } from "./looks-done.ts";
+import { Markdown } from "./markdown.tsx";
 import { ProjectIcon } from "./project-icon.tsx";
+import { useLastMessage } from "./send-dialog.tsx";
 import { postSettle } from "./send.ts";
 import { StatusIcon } from "./status-icon.tsx";
 import { StartMenu } from "./workflow-start.tsx";
@@ -36,17 +39,66 @@ export function LooksDoneButton({ count, onOpen }: { count: number; onOpen: () =
   );
 }
 
+/** The last message of `t` in place of the list. The body mounts only while shown, so a row fetches nothing on its own. */
+function Preview({ t, back }: { t: Offer["thread"]; back: () => void }) {
+  return (
+    <>
+      <DialogHeader>
+        <DialogTitle className="flex min-w-0 items-center gap-1.5 pr-6">
+          <Button variant="ghost" size="icon-xs" aria-label="Back to the list" onClick={back}>
+            <ArrowLeft />
+          </Button>
+          <span className="truncate">{t.title || t.id}</span>
+        </DialogTitle>
+        <DialogDescription>Last message</DialogDescription>
+      </DialogHeader>
+      <PreviewText t={t} />
+    </>
+  );
+}
+
+/** Animates its height to the height of its content. */
+function AnimatedHeight({ children }: { children: ReactNode }) {
+  const inner = useRef<HTMLDivElement>(null);
+  const [height, setHeight] = useState<number>();
+  useLayoutEffect(() => {
+    const el = inner.current;
+    if (!el) return;
+    const ro = new ResizeObserver(() => setHeight(el.offsetHeight));
+    ro.observe(el);
+    return () => ro.disconnect();
+  }, []);
+  return (
+    <div className="-m-2 overflow-hidden transition-[height] duration-200 ease-out" style={{ height }}>
+      <div ref={inner} className="grid gap-4 p-2">
+        {children}
+      </div>
+    </div>
+  );
+}
+
+function PreviewText({ t }: { t: Offer["thread"] }) {
+  const text = useLastMessage(t.id, t.updatedAt);
+  return (
+    <div className="max-h-[60vh] overflow-auto rounded-[6px] bg-muted p-3 text-sm">
+      {text == null ? text === undefined ? "Loading…" : "No message." : <Markdown text={text} className="text-sm" />}
+    </div>
+  );
+}
+
 /** The list of the dialog. It mounts on open, so `items` is a snapshot: rows stay while the tree drops the settled threads. */
 function Body({
   items,
   onDone,
   close,
+  onPreview,
   busy,
   setBusy,
 }: {
   items: Offer[];
   onDone: (settled: string[], skipped: Skip[]) => void;
   close: () => void;
+  onPreview: (t: Offer["thread"]) => void;
   busy: boolean;
   setBusy: (busy: boolean) => void;
 }) {
@@ -84,7 +136,7 @@ function Body({
       <ul className="m-0 flex max-h-[60vh] list-none flex-col gap-1 overflow-auto p-0">
         {rows.map(({ thread: t, reason, project }) => (
           <li key={t.id}>
-            <label className="flex cursor-pointer items-start gap-2 rounded-md p-1.5 text-sm hover:bg-accent">
+            <label className="flex cursor-pointer items-start gap-2 rounded-md p-1.5 text-sm select-none hover:bg-accent">
               <input
                 type="checkbox"
                 className="mt-1 flex-none"
@@ -111,11 +163,26 @@ function Body({
                 </span>
                 {errors.has(t.id) && <span className="text-xs text-status-failed">{errors.get(t.id)?.error}</span>}
               </span>
+              <Button
+                type="button"
+                variant="ghost"
+                size="icon-xs"
+                className="ml-auto flex-none self-center hover:bg-foreground/10 dark:hover:bg-foreground/10"
+                aria-label="Show last message"
+                disabled={busy}
+                onClick={(e) => {
+                  e.preventDefault();
+                  e.stopPropagation();
+                  onPreview(t);
+                }}
+              >
+                <Eye />
+              </Button>
             </label>
           </li>
         ))}
       </ul>
-      <DialogFooter>
+      <DialogFooter className="select-none">
         <StartMenu
           point={{ kind: "threads", ids: rows.flatMap((o) => (checked.has(o.thread.id) ? o.thread.id : [])) }}
           label="Start a workflow"
@@ -125,7 +192,7 @@ function Body({
         <Button variant="ghost" disabled={busy} onClick={close}>
           Cancel
         </Button>
-        <Button disabled={n === 0 || busy} onClick={() => void settle()}>
+        <Button className="min-w-36 tabular-nums" disabled={n === 0 || busy} onClick={() => void settle()}>
           {busy && <LoaderCircle className="animate-spin" />} Settle {n}
         </Button>
       </DialogFooter>
@@ -145,10 +212,32 @@ export function LooksDoneDialog({
   onDone: (settled: string[], skipped: Skip[]) => void;
 }) {
   const [busy, setBusy] = useState(false);
+  const [preview, setPreview] = useState<Offer["thread"]>();
   return (
-    <Dialog open={open} onOpenChange={(o) => !busy && onOpenChange(o)}>
-      <DialogContent showCloseButton={!busy}>
-        <Body items={items} onDone={onDone} close={() => onOpenChange(false)} busy={busy} setBusy={setBusy} />
+    <Dialog
+      open={open}
+      onOpenChange={(o) => {
+        if (preview) setPreview(undefined);
+        else if (!busy) onOpenChange(o);
+      }}
+    >
+      <DialogContent
+        showCloseButton={!busy}
+        className={cn("transition-[max-width] duration-200 ease-out", preview && "sm:max-w-2xl")}
+      >
+        <AnimatedHeight>
+          {preview && <Preview t={preview} back={() => setPreview(undefined)} />}
+          <div className={cn("contents", preview && "hidden")}>
+            <Body
+              items={items}
+              onDone={onDone}
+              close={() => onOpenChange(false)}
+              onPreview={setPreview}
+              busy={busy}
+              setBusy={setBusy}
+            />
+          </div>
+        </AnimatedHeight>
       </DialogContent>
     </Dialog>
   );
