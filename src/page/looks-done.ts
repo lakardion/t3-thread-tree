@@ -1,5 +1,5 @@
 import { BUSY } from "../shared/status.ts";
-import { allThreads, flat, type Branch, type Conn, type Status, type ThreadNode } from "../shared/tree.ts";
+import { allThreads, flat, type Group, type Conn, type Status, type ThreadNode } from "../shared/tree.ts";
 
 export const SKIP_KEY = "thread-tree:looks-done-skip";
 
@@ -26,7 +26,7 @@ function reasonOf(t: ThreadNode): Reason | null {
  * Unsettled threads with status your-turn, done or idle, an old run, and a reason.
  * Subthreads are read from `children`, so they count only while the tree nests them.
  */
-export function looksDone(projects: Branch[], { skip, now }: { skip: Skip[]; now: number }): Offer[] {
+export function looksDone(projects: Group[], { skip, now }: { skip: Skip[]; now: number }): Offer[] {
   return projects.flatMap((p) =>
     allThreads(p).flatMap((thread) => {
       const reason = reasonOf(thread);

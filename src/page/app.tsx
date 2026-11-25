@@ -99,7 +99,7 @@ import {
   parseLabels,
   parseLinear,
   REVIEWS,
-  type Branch,
+  type Group,
   type LinearKeyState,
   type PrNode,
   type Status,
@@ -529,7 +529,7 @@ function LabelsForm({ labels, setLabels }: LabelsProps) {
 }
 
 /** One labelled group: a title outside a card of rows. */
-const Group = ({ title, children, accent }: { title: string; children: ReactNode; accent?: boolean }) => (
+const SettingsGroup = ({ title, children, accent }: { title: string; children: ReactNode; accent?: boolean }) => (
   <section className="grid gap-1.5">
     <h3 className="m-0 px-1 text-xs font-semibold text-muted-foreground">{title}</h3>
     <div className={cn("divide-y rounded-lg border bg-background", accent && "border-l-[3px] border-l-primary")}>
@@ -1208,11 +1208,11 @@ function SettingsPanel(p: PanelProps) {
       </div>
       <div className="grid content-start gap-4 p-4">
         {p.update && (
-          <Group title="Updates" accent={p.update.release !== null && p.update.install === null}>
+          <SettingsGroup title="Updates" accent={p.update.release !== null && p.update.install === null}>
             <UpdateRow update={p.update} />
-          </Group>
+          </SettingsGroup>
         )}
-        <Group title="View">
+        <SettingsGroup title="View">
           <Row label="Show settled threads" htmlFor="settled">
             <Switch id="settled" checked={p.settled} onCheckedChange={p.setSettled} />
           </Row>
@@ -1239,8 +1239,8 @@ function SettingsPanel(p: PanelProps) {
           <Row label="Theme">
             <ThemeToggle theme={p.theme} setTheme={p.setTheme} />
           </Row>
-        </Group>
-        <Group title="Setup">
+        </SettingsGroup>
+        <SettingsGroup title="Setup">
           <Fold label="T3 token" value={token} tone={token === "Connected" ? "ok" : "warn"} defaultOpen={p.tokenOpen}>
             <div className="grid gap-2">
               <p className={cn(HINT, "m-0")}>
@@ -1304,7 +1304,7 @@ function SettingsPanel(p: PanelProps) {
           <Fold label="Keys" value={<span className="sr-only">Shortcuts</span>} tone="info">
             <Keys />
           </Fold>
-        </Group>
+        </SettingsGroup>
       </div>
     </aside>
   );
@@ -1615,7 +1615,7 @@ function DetailBlock({ t }: { t: ThreadNode }) {
         </Line>
       )}
       {d.branch && (
-        <Line label="Branch">
+        <Line label="Group">
           <Mono>{d.branch}</Mono>
         </Line>
       )}
@@ -1884,7 +1884,7 @@ function ThreadRow({
   inStack?: boolean;
   /** The row sits on a run rail: no drag handle, but the stack badge stays. */
   nested?: boolean;
-  project?: Branch;
+  project?: Group;
   corners?: string;
   review?: boolean;
 }) {
@@ -2048,7 +2048,7 @@ function ThreadRow({
 }
 
 /** The PR stack rail of consecutive members in a Map group: no fold, no drag. */
-function MapRail({ run }: { run: Branch[] }) {
+function MapRail({ run }: { run: Group[] }) {
   const { closed, toggle, fold } = useContext(Folds);
   return <StackRail run={run} flat closed={closed} toggle={toggle} fold={fold} />;
 }
@@ -2118,7 +2118,7 @@ const ProjectTip = ({ name }: { name: string }) =>
   );
 
 /** The project icon and name of a flat row. Phone widths show the icon only. */
-const ProjectColumn = ({ b }: { b: Branch }) => {
+const ProjectColumn = ({ b }: { b: Group }) => {
   const names = useContext(ProjectNames);
   return (
     <span
@@ -2141,7 +2141,7 @@ const Chevron = ({ open }: { open: boolean }) => (
 );
 
 /** One status icon for each thread of a closed branch, in tree order. */
-const Icons = ({ b }: { b: Branch }) => (
+const Icons = ({ b }: { b: Group }) => (
   <span className="relative z-10 inline-flex flex-wrap items-center gap-[3px]">
     {allThreads(b).map((t) => (
       <StatusIcon key={t.id} t={t} />
@@ -2173,8 +2173,8 @@ function Counts({ groups }: { groups: ReturnType<typeof closedCounts> }) {
   );
 }
 
-/** Counts for large closed branches, or one icon per thread for smaller branches. */
-function ClosedSummary({ b }: { b: Branch }) {
+/** Counts for large closed groups, or one icon per thread for smaller groups. */
+function ClosedSummary({ b }: { b: Group }) {
   const counts = closedCounts(allThreads(b));
   return counts.length > 0 ? <Counts groups={counts} /> : <Icons b={b} />;
 }
@@ -2215,10 +2215,10 @@ const ROW_FOLD = cn(
 );
 
 /** The subgroups of a branch: a PR stack run shows as a rail, any other group as a row. */
-function Groups({ b, closed, toggle, fold }: { b: Branch } & Fold) {
+function Groups({ b, closed, toggle, fold }: { b: Group } & Fold) {
   const lists = useContext(Lists);
   return (
-    <Presence items={stackRuns(b.branches)} keyOf={(run) => (run[0].stack ? `rail:${run[0].id}` : run[0].id)}>
+    <Presence items={stackRuns(b.groups)} keyOf={(run) => (run[0].stack ? `rail:${run[0].id}` : run[0].id)}>
       {(run) => {
         const sort = sortOf(
           lists,
@@ -2236,7 +2236,7 @@ function Groups({ b, closed, toggle, fold }: { b: Branch } & Fold) {
   );
 }
 
-function GroupRow({ b, closed, toggle, fold, sort }: { b: Branch; sort?: Sort } & Fold) {
+function GroupRow({ b, closed, toggle, fold, sort }: { b: Group; sort?: Sort } & Fold) {
   const open = !closed.has(b.id);
   const one = folded(b);
   const linear = useContext(Linear);
@@ -2378,7 +2378,7 @@ function StackRail({
   flat,
   project,
   className,
-}: { run: Branch[]; sort?: Sort; flat?: boolean; project?: Branch; className?: string } & Fold) {
+}: { run: Group[]; sort?: Sort; flat?: boolean; project?: Group; className?: string } & Fold) {
   const { id, total, base, number } = run[0].stack!;
   const [copies, setCopies] = useState(0);
   const lastCopy = useRef(0);
@@ -2624,7 +2624,7 @@ function FlatRow({
 }
 
 /** A project as one block of the shared list: a one-line header, then its groups. */
-function ProjectBlock({ b, closed, toggle, fold }: { b: Branch } & Fold) {
+function ProjectBlock({ b, closed, toggle, fold }: { b: Group } & Fold) {
   const open = !closed.has(b.id);
   const lists = useContext(Lists);
   const fallback = isFallback(b);
@@ -2814,7 +2814,7 @@ const EmptyList = ({
  * The user order on the whole tree, then the filter, then the drag freeze. In the tree, `view.projects` is also sorted.
  * In the flat layout, `view.flat` is also set: the sorted units, with section headers when grouped.
  */
-const pipeline = (ps: Branch[], c: Cfg): { full: Arranged; view: Arranged & { flat?: FlatItem[] } } => {
+const pipeline = (ps: Group[], c: Cfg): { full: Arranged; view: Arranged & { flat?: FlatItem[] } } => {
   const tree = arrange(ps, c.orders);
   const flatIds = applyOrder(flatten(tree.projects), (u) => u.id, c.orders[FLAT]).map((u) => u.id);
   const full = { ...tree, lists: new Map(tree.lists).set(FLAT, flatIds) };
@@ -2832,7 +2832,7 @@ const pipeline = (ps: Branch[], c: Cfg): { full: Arranged; view: Arranged & { fl
   return { full, view: { ...view, projects: c.sortBy === "updated" ? sortTree(view.projects) : view.projects } };
 };
 
-type SettledItem = { project: Branch; t: ThreadNode };
+type SettledItem = { project: Group; t: ThreadNode };
 type SettledPage = { items: SettledItem[]; next: string | null; total: number };
 const SETTLED_PAGE = 50;
 
@@ -3176,7 +3176,7 @@ function App() {
   const { full, view } = pipeline(tree?.projects ?? [], cfg);
   const inView = new Set(view.projects.flatMap(allThreads).map((t) => t.id));
   /** The ids of the rendered rows and section headers, in order, for a tree. */
-  const rows = (ps: Branch[]) => {
+  const rows = (ps: Group[]) => {
     const v = pipeline(ps, cfg).view;
     return (
       layout === "flat" ? (v.flat ?? []).flatMap(itemIds) : v.projects.flatMap(allThreads).map((t) => t.id)

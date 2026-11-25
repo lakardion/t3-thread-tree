@@ -1,8 +1,8 @@
-import { allThreads, type Branch, type Label, type PrNode, type ThreadNode, type Tree } from "../shared/tree.ts";
+import { allThreads, type Group, type Label, type PrNode, type ThreadNode, type Tree } from "../shared/tree.ts";
 
-/** Adjacent branches with the same stack id form one run. A branch with no stack is a run of one. */
-export function stackRuns(bs: Branch[]): Branch[][] {
-  const runs: Branch[][] = [];
+/** Adjacent groups with the same stack id form one run. A branch with no stack is a run of one. */
+export function stackRuns(bs: Group[]): Group[][] {
+  const runs: Group[][] = [];
   for (const b of bs) {
     const last = runs.at(-1);
     if (b.stack && last?.[0]?.stack?.id === b.stack.id) last.push(b);
@@ -12,10 +12,10 @@ export function stackRuns(bs: Branch[]): Branch[][] {
 }
 
 /** The PR a stack group opened: the first PR of its thread with a stack position. */
-export const ownPr = (g: Branch): PrNode | undefined => allThreads(g).find((t) => t.stack?.pos)?.prs[0];
+export const ownPr = (g: Group): PrNode | undefined => allThreads(g).find((t) => t.stack?.pos)?.prs[0];
 
 /** The stack position of the PR a stack group opened, or undefined when no thread of it has one. */
-export const ownPos = (g: Branch): number | undefined =>
+export const ownPos = (g: Group): number | undefined =>
   allThreads(g).find((t) => t.stack?.pos)?.stack?.pos ?? undefined;
 
 /** The label of a stack stop: its PR number, or its position when it has no PR. */
@@ -29,7 +29,7 @@ type RailRow = { t: ThreadNode; chip: string | undefined; stop: RailStop; n: num
  * a group with no such thread is one stop. A row with no stop of its own takes its group's first stop.
  * A stop's number is its stack position, so it stays right when a filter hides other stops.
  */
-export function railRows(run: Branch[]): { stops: RailStop[]; rows: RailRow[] } {
+export function railRows(run: Group[]): { stops: RailStop[]; rows: RailRow[] } {
   const stops: RailStop[] = [];
   const rows: RailRow[] = [];
   for (const g of run) {
@@ -80,10 +80,10 @@ export function stripKey(title: string, key: string): string {
 }
 
 /** True for a group whose top-level threads all carry the group label as their key. "Reviews" and "No issue key" are not key groups. */
-export const isKeyGroup = (b: Branch): boolean => b.threads.length > 0 && b.threads.every((t) => t.key === b.label);
+export const isKeyGroup = (b: Group): boolean => b.threads.length > 0 && b.threads.every((t) => t.key === b.label);
 
 /** The one thread of a key group that folds into its row, else null. */
-export const folded = (b: Branch): ThreadNode | null => (isKeyGroup(b) && b.threads.length === 1 ? b.threads[0] : null);
+export const folded = (b: Group): ThreadNode | null => (isKeyGroup(b) && b.threads.length === 1 ? b.threads[0] : null);
 
 /** The Linear issue URL, else null. With teams set, only a key of a listed team links. */
 export function linearHref(key: string, linear: Tree["linear"]): string | null {
@@ -92,14 +92,14 @@ export function linearHref(key: string, linear: Tree["linear"]): string | null {
 }
 
 /** The fold ids of a group and of the groups and PR stacks in it. A group that folds into its one thread has none. */
-export const groupIds = (g: Branch): string[] => (folded(g) ? g.threads.flatMap(mapFolds) : [g.id, ...foldIds(g)]);
+export const groupIds = (g: Group): string[] => (folded(g) ? g.threads.flatMap(mapFolds) : [g.id, ...foldIds(g)]);
 
 /** The fold ids of the Map heads in a thread and its subthreads. A head folds under its own id. */
 const mapFolds = (t: ThreadNode): string[] => [...(t.map ? [t.id] : []), ...t.children.flatMap(mapFolds)];
 
 /** The fold ids of the rows in a project: its groups, its PR stacks and the Map heads of its threads. */
-export const foldIds = (project: Branch): string[] => [
-  ...stackRuns(project.branches).flatMap((run) =>
+export const foldIds = (project: Group): string[] => [
+  ...stackRuns(project.groups).flatMap((run) =>
     run[0].stack ? [`rail:${run[0].stack.id}`, ...run.flatMap(foldIds)] : groupIds(run[0]),
   ),
   ...project.threads.flatMap(mapFolds),

@@ -10,7 +10,7 @@ import {
   NO_KEY,
   REVIEWS,
   runsOf,
-  type Branch,
+  type Group,
   type Status,
   type ThreadNode,
 } from "../shared/tree.ts";
@@ -27,8 +27,8 @@ export function recency(t: ThreadNode): number {
 }
 
 /** The newest run, as a time, over all threads of a group, subthreads included. */
-const newestRun = (b: Branch) => Math.max(-Infinity, ...allThreads(b).map(recency));
-const threadsSorted = (b: Branch): Branch => ({ ...b, threads: byNewest(b.threads, recency) });
+const newestRun = (b: Group) => Math.max(-Infinity, ...allThreads(b).map(recency));
+const threadsSorted = (b: Group): Group => ({ ...b, threads: byNewest(b.threads, recency) });
 
 /** Stable sort, newest first. */
 const byNewest = <T>(items: T[], by: (t: T) => number): T[] =>
@@ -40,25 +40,25 @@ const byNewest = <T>(items: T[], by: (t: T) => number): T[] =>
  * its inner order. Subthreads keep their order. Ties keep the input order. The input is not changed.
  * A Linear tree keeps its project, milestone and PR stack order and sorts only the threads of each milestone and of the top-level group.
  */
-export function sortTree(projects: Branch[]): Branch[] {
+export function sortTree(projects: Group[]): Group[] {
   if (isLinear(projects))
     return projects.map((p) =>
       isLinearReviews(p)
-        ? { ...p, branches: byNewest(p.branches.map(threadsSorted), newestRun) }
-        : { ...threadsSorted(p), branches: isFallback(p) ? p.branches : p.branches.map(threadsSorted) },
+        ? { ...p, groups: byNewest(p.groups.map(threadsSorted), newestRun) }
+        : { ...threadsSorted(p), groups: isFallback(p) ? p.groups : p.groups.map(threadsSorted) },
     );
   return projects.map((p) => {
-    const keys = stackRuns(p.branches.filter((b) => !isPinned(b)));
+    const keys = stackRuns(p.groups.filter((b) => !isPinned(b)));
     return {
       ...p,
-      branches: [
-        ...p.branches
+      groups: [
+        ...p.groups
           .filter((b) => b.label === REVIEWS)
-          .map((r) => ({ ...r, branches: byNewest(r.branches.map(threadsSorted), newestRun) })),
+          .map((r) => ({ ...r, groups: byNewest(r.groups.map(threadsSorted), newestRun) })),
         ...byNewest(keys, (run) => Math.max(...run.map(newestRun))).flatMap((run) =>
           run[0].stack ? run : run.map(threadsSorted),
         ),
-        ...p.branches.filter((b) => b.label === NO_KEY).map(threadsSorted),
+        ...p.groups.filter((b) => b.label === NO_KEY).map(threadsSorted),
       ],
     };
   });
@@ -69,8 +69,8 @@ export const vtName = (kind: "t" | "s" | "sec", id: string): string => `${kind}-
 
 /** One row of the flat list: a thread, or a PR stack that moves as one block. */
 export type FlatUnit =
-  | { kind: "thread"; id: string; t: ThreadNode; project: Branch; review: boolean }
-  | { kind: "stack"; id: string; run: Branch[]; project: Branch };
+  | { kind: "thread"; id: string; t: ThreadNode; project: Group; review: boolean }
+  | { kind: "stack"; id: string; run: Group[]; project: Group };
 
 export type FlatItem =
   | FlatUnit
@@ -85,14 +85,14 @@ export type FlatItem =
       date?: string | null;
     };
 
-const stackUnit = (run: Branch[], project: Branch): FlatUnit => ({
+const stackUnit = (run: Group[], project: Group): FlatUnit => ({
   kind: "stack",
   id: `stack:${project.id}:${run[0].stack!.id}`,
   run,
   project,
 });
 
-const threadUnit = (t: ThreadNode, project: Branch, review: boolean): FlatUnit => ({
+const threadUnit = (t: ThreadNode, project: Group, review: boolean): FlatUnit => ({
   kind: "thread",
   id: `t:${t.id}`,
   t,
@@ -106,23 +106,23 @@ const threadUnit = (t: ThreadNode, project: Branch, review: boolean): FlatUnit =
  * A Linear top-level group walks each branch in order: a stack run (one unit), other subgroups, then the branch's
  * threads. Its own threads come last.
  */
-export function flatten(projects: Branch[]): FlatUnit[] {
+export function flatten(projects: Group[]): FlatUnit[] {
   return projects.flatMap((p) => {
     if (p.linear) {
-      const walk = (b: Branch): FlatUnit[] => [
-        ...stackRuns(b.branches).flatMap((run): FlatUnit[] => (run[0].stack ? [stackUnit(run, p)] : run.flatMap(walk))),
+      const walk = (b: Group): FlatUnit[] => [
+        ...stackRuns(b.groups).flatMap((run): FlatUnit[] => (run[0].stack ? [stackUnit(run, p)] : run.flatMap(walk))),
         ...b.threads.map((t) => threadUnit(t, p, isLinearReviews(p))),
       ];
       return walk(p);
     }
     return [
-      ...p.branches
+      ...p.groups
         .filter((b) => b.label === REVIEWS)
-        .flatMap((r) => r.branches.flatMap((g) => g.threads.map((t) => threadUnit(t, p, true)))),
-      ...stackRuns(p.branches.filter((b) => !isPinned(b))).flatMap((run): FlatUnit[] =>
+        .flatMap((r) => r.groups.flatMap((g) => g.threads.map((t) => threadUnit(t, p, true)))),
+      ...stackRuns(p.groups.filter((b) => !isPinned(b))).flatMap((run): FlatUnit[] =>
         run[0].stack ? [stackUnit(run, p)] : run.flatMap((g) => g.threads.map((t) => threadUnit(t, p, false))),
       ),
-      ...p.branches.filter((b) => b.label === NO_KEY).flatMap((g) => g.threads.map((t) => threadUnit(t, p, false))),
+      ...p.groups.filter((b) => b.label === NO_KEY).flatMap((g) => g.threads.map((t) => threadUnit(t, p, false))),
     ];
   });
 }
@@ -217,18 +217,18 @@ export function sections(units: FlatUnit[], snoozed = true): Section[] {
 }
 
 /** The top-level nodes of a branch and its subgroups. */
-const tops = (b: Branch): ThreadNode[] => [...b.branches.flatMap(tops), ...b.threads];
+const tops = (b: Group): ThreadNode[] => [...b.groups.flatMap(tops), ...b.threads];
 
 /**
  * The Linear sections of an arranged Linear tree, in tree order: one per milestone, labelled "Project · Milestone",
  * and one per fallback group, the loose keyless threads last. A section takes the units whose thread sits in it, in unit order. Empty sections drop.
  */
-export function linearSections(projects: Branch[], units: FlatUnit[]): Section[] {
+export function linearSections(projects: Group[], units: FlatUnit[]): Section[] {
   return projects
-    .flatMap((p): [Branch, string, string | null][] =>
+    .flatMap((p): [Group, string, string | null][] =>
       isFallback(p)
         ? [[p, p.label, null]]
-        : p.branches.map((m) => [m, `${p.label} · ${m.label}`, m.linear?.date ?? null]),
+        : p.groups.map((m) => [m, `${p.label} · ${m.label}`, m.linear?.date ?? null]),
     )
     .map(([b, label, date]) => {
       const held = new Set(tops(b).map((t) => t.id));
@@ -245,7 +245,7 @@ export function linearSections(projects: Branch[], units: FlatUnit[]): Section[]
     .filter((s) => s.units.length > 0);
 }
 
-const groupSections = (units: FlatUnit[], groupBy: GroupBy, snoozed: boolean, projects: Branch[]): Section[] =>
+const groupSections = (units: FlatUnit[], groupBy: GroupBy, snoozed: boolean, projects: Group[]): Section[] =>
   groupBy === "linear" ? linearSections(projects, units) : sections(units, snoozed);
 
 /** True when the thread is a context row in a section of `statuses`: it is settled or has another status. */
@@ -265,7 +265,7 @@ export const sequence = (
   groupBy: GroupBy,
   shut: ReadonlySet<string> = new Set(),
   snoozed = true,
-  projects: Branch[] = [],
+  projects: Group[] = [],
 ): FlatItem[] =>
   groupBy !== "none"
     ? groupSections(units, groupBy, snoozed, projects).flatMap((s): FlatItem[] => {
@@ -337,10 +337,10 @@ const mapHeadsTo = (t: ThreadNode, id: string): string[] =>
  * The fold ids to open so that the row of thread `id` shows in the tree: every branch on the path to it, from the
  * project down, the rail of each PR stack on the path, and the Map heads above it. Empty when the thread is not in `projects`.
  */
-export function pathFolds(projects: Branch[], id: string): string[] {
-  const walk = (b: Branch): Branch[] | null => {
+export function pathFolds(projects: Group[], id: string): string[] {
+  const walk = (b: Group): Group[] | null => {
     if (b.threads.some((t) => flat(t).some((x) => x.id === id))) return [b];
-    for (const c of b.branches) {
+    for (const c of b.groups) {
       const path = walk(c);
       if (path) return [b, ...path];
     }
@@ -363,7 +363,7 @@ export const sectionHolding = (
   snoozed: boolean,
   id: string,
   groupBy: GroupBy = "status",
-  projects: Branch[] = [],
+  projects: Group[] = [],
 ): string | null =>
   groupSections(units, groupBy, snoozed, projects).find((s) =>
     s.units.some((u) => everyThread(u).some((t) => t.id === id)),

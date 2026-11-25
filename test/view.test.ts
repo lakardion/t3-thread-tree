@@ -25,7 +25,7 @@ import {
   LINEAR_LOOSE,
   NO_KEY,
   REVIEWS,
-  type Branch,
+  type Group,
   type Status,
   type ThreadNode,
 } from "../src/shared/tree.ts";
@@ -56,15 +56,15 @@ const thread = (
   detail: {} as ThreadNode["detail"],
   children,
 });
-const branch = (id: string, threads: ThreadNode[] = [], branches: Branch[] = [], stack?: string): Branch => ({
+const branch = (id: string, threads: ThreadNode[] = [], groups: Group[] = [], stack?: string): Group => ({
   id,
   label: id,
   ...(stack && { stack: { id: stack, total: 2, base: null } }),
-  branches,
+  groups,
   threads,
 });
 const ids = (xs: { id: string }[]) => xs.map((x) => x.id);
-const project = (id: string, branches: Branch[]) => branch(id, [], branches);
+const project = (id: string, groups: Group[]) => branch(id, [], groups);
 
 describe("recency", () => {
   test("is the newest run of a thread and its subthreads", () => {
@@ -82,7 +82,7 @@ describe("sortTree", () => {
         branch("g", [thread("old", 1), thread("none"), thread("new", 9), thread("tie1", 4), thread("tie2", 4)]),
       ]),
     ]);
-    expect(ids(p.branches[0].threads)).toEqual(["new", "tie1", "tie2", "old", "none"]);
+    expect(ids(p.groups[0].threads)).toEqual(["new", "tie1", "tie2", "old", "none"]);
   });
 
   test("sorts groups by their newest thread, a subthread included", () => {
@@ -93,7 +93,7 @@ describe("sortTree", () => {
         branch("g3", [thread("d", 5)]),
       ]),
     ]);
-    expect(ids(p.branches)).toEqual(["g2", "g3", "g1"]);
+    expect(ids(p.groups)).toEqual(["g2", "g3", "g1"]);
   });
 
   test("keeps Reviews first and No issue key last, and sorts inside them", () => {
@@ -104,10 +104,10 @@ describe("sortTree", () => {
         branch(REVIEWS, [], [branch("r1", [thread("x", 1)]), branch("r2", [thread("y", 2), thread("z", 7)])]),
       ]),
     ]);
-    expect(ids(p.branches)).toEqual([REVIEWS, "g", NO_KEY]);
-    expect(ids(p.branches[0].branches)).toEqual(["r2", "r1"]);
-    expect(ids(p.branches[0].branches[0].threads)).toEqual(["z", "y"]);
-    expect(ids(p.branches[2].threads)).toEqual(["n2", "n1"]);
+    expect(ids(p.groups)).toEqual([REVIEWS, "g", NO_KEY]);
+    expect(ids(p.groups[0].groups)).toEqual(["r2", "r1"]);
+    expect(ids(p.groups[0].groups[0].threads)).toEqual(["z", "y"]);
+    expect(ids(p.groups[2].threads)).toEqual(["n2", "n1"]);
   });
 
   test("moves a stack run as one block and keeps its inner order", () => {
@@ -119,9 +119,9 @@ describe("sortTree", () => {
         branch("h", [thread("f", 4)]),
       ]),
     ]);
-    expect(ids(p.branches)).toEqual(["s1", "s2", "g", "h"]);
-    expect(ids(p.branches[0].threads)).toEqual(["a", "b"]);
-    expect(ids(p.branches[1].threads)).toEqual(["c", "d"]);
+    expect(ids(p.groups)).toEqual(["s1", "s2", "g", "h"]);
+    expect(ids(p.groups[0].threads)).toEqual(["a", "b"]);
+    expect(ids(p.groups[1].threads)).toEqual(["c", "d"]);
     const [q] = sortTree([
       project("p", [
         branch("g", [thread("e", 10)]),
@@ -129,7 +129,7 @@ describe("sortTree", () => {
         branch("s2", [thread("c", 3), thread("d", 9)], [], "st"),
       ]),
     ]);
-    expect(ids(q.branches)).toEqual(["g", "s1", "s2"]);
+    expect(ids(q.groups)).toEqual(["g", "s1", "s2"]);
     const [r] = sortTree([
       project("p", [
         branch("g", [thread("e", 2)]),
@@ -137,15 +137,15 @@ describe("sortTree", () => {
         branch("s2", [thread("c", 3), thread("d", 9)], [], "st"),
       ]),
     ]);
-    expect(ids(r.branches)).toEqual(["s1", "s2", "g"]);
+    expect(ids(r.groups)).toEqual(["s1", "s2", "g"]);
   });
 
   test("keeps the thread order in a stack run of one group", () => {
     const [p] = sortTree([
       project("p", [branch("g", [thread("e", 2)]), branch("s1", [thread("a", 1), thread("b", 9)], [], "st")]),
     ]);
-    expect(ids(p.branches)).toEqual(["s1", "g"]);
-    expect(ids(p.branches[0].threads)).toEqual(["a", "b"]);
+    expect(ids(p.groups)).toEqual(["s1", "g"]);
+    expect(ids(p.groups[0].threads)).toEqual(["a", "b"]);
   });
 
   test("keeps subthread order and project order", () => {
@@ -154,13 +154,13 @@ describe("sortTree", () => {
       project("p2", [branch("g", [thread("b", 9)])]),
     ]);
     expect(ids(out)).toEqual(["p1", "p2"]);
-    expect(ids(out[0].branches[0].threads[0].children)).toEqual(["c1", "c2"]);
+    expect(ids(out[0].groups[0].threads[0].children)).toEqual(["c1", "c2"]);
   });
 
   test("does not change the input", () => {
     const input = [project("p", [branch("g", [thread("a", 1), thread("b", 2)])])];
     sortTree(input);
-    expect(ids(input[0].branches[0].threads)).toEqual(["a", "b"]);
+    expect(ids(input[0].groups[0].threads)).toEqual(["a", "b"]);
   });
 });
 
@@ -481,7 +481,7 @@ describe("pathFolds", () => {
       branch("s1", [thread("b", null, [thread("c")])], [], "st"),
     ]),
   ];
-  test("lists the branches from the project down", () => expect(pathFolds(tree, "x")).toEqual(["p2", REVIEWS, "r"]));
+  test("lists the groups from the project down", () => expect(pathFolds(tree, "x")).toEqual(["p2", REVIEWS, "r"]));
   test("adds the rail of a stack, and finds a subthread", () =>
     expect(pathFolds(tree, "c")).toEqual(["p2", "s1", "rail:st"]));
   test("is empty for an unknown thread", () => expect(pathFolds(tree, "zz")).toEqual([]));
@@ -499,7 +499,7 @@ describe("sectionHolding", () => {
 });
 
 describe("Linear tree", () => {
-  const lin = (b: Branch): Branch => ({ ...b, linear: {} });
+  const lin = (b: Group): Group => ({ ...b, linear: {} });
   const tree = () => [
     lin(
       branch(
@@ -518,13 +518,13 @@ describe("Linear tree", () => {
   test("sortTree keeps project and milestone order and sorts threads newest first", () => {
     const out = sortTree(tree());
     expect(ids(out)).toEqual(["lp:a", "lp:b", "lf:reviews", "lf:none"]);
-    expect(ids(out[0].branches)).toEqual(["lm:m1", "lm:m2"]);
-    expect(ids(out[0].branches[0].threads)).toEqual(["new", "old"]);
+    expect(ids(out[0].groups)).toEqual(["lm:m1", "lm:m2"]);
+    expect(ids(out[0].groups[0].threads)).toEqual(["new", "old"]);
     expect(ids(out[3].threads)).toEqual(["n2", "n1"]);
   });
 
   test("sortTree sorts the Reviews subgroups newest first", () => {
-    expect(ids(sortTree(tree())[2].branches)).toEqual(["lf:reviews:L", "lf:reviews:K"]);
+    expect(ids(sortTree(tree())[2].groups)).toEqual(["lf:reviews:L", "lf:reviews:K"]);
   });
 
   const stacked = () =>
@@ -552,10 +552,10 @@ describe("Linear tree", () => {
         ],
       ),
     );
-    expect(ids(sortTree([p])[0].branches[0].branches)).toEqual(["lm:m:K1", "lm:m:K2"]);
+    expect(ids(sortTree([p])[0].groups[0].groups)).toEqual(["lm:m:K1", "lm:m:K2"]);
   });
 
-  test("sortTree keeps the stack branches of a fallback group as is", () => {
+  test("sortTree keeps the stack groups of a fallback group as is", () => {
     const fallback = (id: string) =>
       lin(
         branch(
@@ -569,8 +569,8 @@ describe("Linear tree", () => {
       );
     for (const id of ["lf:none", LINEAR_LOOSE]) {
       const [out] = sortTree([fallback(id)]);
-      expect(ids(out.branches)).toEqual([`${id}:K1`, `${id}:K2`]);
-      expect(ids(out.branches[0].threads)).toEqual(["a", "c"]);
+      expect(ids(out.groups)).toEqual([`${id}:K1`, `${id}:K2`]);
+      expect(ids(out.groups[0].threads)).toEqual(["a", "c"]);
     }
   });
 
@@ -587,9 +587,9 @@ describe("Linear tree", () => {
 });
 
 describe("Linear flat", () => {
-  const lin = (b: Branch, date?: string): Branch => ({ ...b, label: b.id, linear: date ? { date } : {} });
-  const named = (b: Branch, label: string): Branch => ({ ...b, label });
-  const tree = (): Branch[] => [
+  const lin = (b: Group, date?: string): Group => ({ ...b, label: b.id, linear: date ? { date } : {} });
+  const named = (b: Group, label: string): Group => ({ ...b, label });
+  const tree = (): Group[] => [
     named(
       lin(
         branch(
@@ -732,7 +732,7 @@ describe("runs in the flat view", () => {
   });
 
   test("linearSections keeps a run unit, also in a Reviews subgroup", () => {
-    const lin = (b: Branch): Branch => ({ ...b, linear: {} });
+    const lin = (b: Group): Group => ({ ...b, linear: {} });
     const projects = [
       lin(branch("lp:a", [], [lin(branch("lm:m1", [runNode("r", "working")]))])),
       lin(branch("lf:reviews", [], [branch("lf:reviews:K", [runNode("v", "working")])])),
@@ -752,7 +752,7 @@ describe("Map groups in the views", () => {
     ...thread(id, null, children, status),
     map,
   });
-  const lin = (b: Branch): Branch => ({ ...b, linear: {} });
+  const lin = (b: Group): Group => ({ ...b, linear: {} });
 
   test("a header is no thread: not in allThreads, not in a section count or placement", () => {
     const projects = [project("p", [branch(NO_KEY, [header("h", [thread("a"), thread("b", null, [], "done")])])])];
@@ -792,6 +792,6 @@ describe("Map groups in the views", () => {
         branch(NO_KEY, [thread("old", 1), { ...header("h", [thread("m", 7)]), lastRun: null }, thread("mid", 4)]),
       ]),
     ]);
-    expect(ids(p.branches[0].threads)).toEqual(["h", "mid", "old"]);
+    expect(ids(p.groups[0].threads)).toEqual(["h", "mid", "old"]);
   });
 });

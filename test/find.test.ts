@@ -2,7 +2,7 @@ import { describe, expect, test } from "bun:test";
 
 import { findRoutes } from "../src/server/find.ts";
 import { find, hits } from "../src/shared/find.ts";
-import type { Branch, ThreadNode } from "../src/shared/tree.ts";
+import type { Group, ThreadNode } from "../src/shared/tree.ts";
 
 const thread = (
   id: string,
@@ -18,10 +18,10 @@ const thread = (
     detail: { branch: o.branch ?? null },
     children,
   }) as unknown as ThreadNode;
-const branch = (id: string, threads: ThreadNode[] = [], branches: Branch[] = []): Branch => ({
+const branch = (id: string, threads: ThreadNode[] = [], groups: Group[] = []): Group => ({
   id,
   label: id,
-  branches,
+  groups,
   threads,
 });
 const ids = (list: { t: ThreadNode }[]) => list.map((h) => h.t.id);

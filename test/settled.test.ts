@@ -73,7 +73,7 @@ describe("settledPage", () => {
 
   test("pairs each thread with its project and a keyed chip source", () => {
     const item = page(null, 10).items.find((i) => i.t.id === "a")!;
-    expect(item.project).toMatchObject({ label: "Proj", branches: [], threads: [] });
+    expect(item.project).toMatchObject({ label: "Proj", groups: [], threads: [] });
     expect(item.t.key).toBe("TIB-1");
   });
 

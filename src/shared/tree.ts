@@ -117,24 +117,24 @@ export type ThreadNode = {
   /** Set on the head of a Map group. Its `children` are the members, or one Map header for each map of a map thread that anchors several. */
   map?: MapInfo;
   /** Set on a member that sits in a stack rail inside a Map group. Consecutive children with one `rail.id` share the rail. */
-  rail?: Branch["stack"];
+  rail?: Group["stack"];
 };
 
 /** `header`: a Map header, which is not a thread. `href` is the map thread link, null with no map thread. */
 export type MapInfo = { name: string; header: boolean; href: string | null };
 
-export type Branch = {
+export type Group = {
   id: string;
   label: string;
-  /** Project branches only: `owner/name`. */
+  /** Project groups only: `owner/name`. */
   repo?: string;
-  /** Project branches only: the workspace root. */
+  /** Project groups only: the workspace root. */
   path?: string;
   /** Key groups in a PR stack. Adjacent groups with the same `id` share one rail. */
   stack?: { id: string; total: number; base: string | null; number?: number };
-  /** Top-level and milestone branches of the Linear tree. `url`: project link. `date`: milestone target date. */
+  /** Top-level and milestone groups of the Linear tree. `url`: project link. `date`: milestone target date. */
   linear?: { url?: string; date?: string | null };
-  branches: Branch[];
+  groups: Group[];
   threads: ThreadNode[];
 };
 
@@ -146,10 +146,10 @@ export const NO_PROJECT = "No project";
 export const NO_MILESTONE = "No milestone";
 
 /** Fallback groups of the Linear tree have ids with the `lf:` prefix. */
-export const isFallback = (b: Branch): boolean => b.id.startsWith("lf:");
+export const isFallback = (b: Group): boolean => b.id.startsWith("lf:");
 /** The id of the Reviews group of the Linear tree. */
 export const LINEAR_REVIEWS = "lf:reviews";
-export const isLinearReviews = (b: Branch): boolean => b.id === LINEAR_REVIEWS;
+export const isLinearReviews = (b: Group): boolean => b.id === LINEAR_REVIEWS;
 /** The id of the keyless threads of the Linear tree. They show as loose rows, with no header. */
 export const LINEAR_LOOSE = "lf:loose";
 
@@ -165,7 +165,7 @@ export type Tree = {
   linearKey: LinearKeyState;
   /** Changes when the settled threads change, so the page refetches its Settled list. Empty with none. */
   settled: string;
-  projects: Branch[];
+  projects: Group[];
   /** Run questions and Paused runs. Null until the first workflows snapshot, so the page takes no empty list as its baseline. */
   runs: RunItem[] | null;
   /** The workflows that the server can start. Null until the first workflows snapshot. */
@@ -212,11 +212,11 @@ export const isThread = (t: ThreadNode): boolean => !t.run && !t.map?.header;
 
 /** The threads of a node, subthreads at any depth. A node that is not a thread adds only its children. */
 export const flat = (t: ThreadNode): ThreadNode[] => [...(isThread(t) ? [t] : []), ...t.children.flatMap(flat)];
-export const allThreads = (b: Branch): ThreadNode[] => [...b.branches.flatMap(allThreads), ...b.threads.flatMap(flat)];
+export const allThreads = (b: Group): ThreadNode[] => [...b.groups.flatMap(allThreads), ...b.threads.flatMap(flat)];
 /** The run nodes of a node and its children, at any depth. */
 export const runsOf = (t: ThreadNode): ThreadNode[] => [...(t.run ? [t] : []), ...t.children.flatMap(runsOf)];
 /** The run nodes of a branch, at any depth. */
-export const allRuns = (b: Branch): ThreadNode[] => [...b.branches.flatMap(allRuns), ...b.threads.flatMap(runsOf)];
+export const allRuns = (b: Group): ThreadNode[] => [...b.groups.flatMap(allRuns), ...b.threads.flatMap(runsOf)];
 
 /** Oldest `since` first, `null` last. ISO timestamps sort the same as text. */
 export const bySince = (a: string | null, b: string | null): number =>

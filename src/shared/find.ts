@@ -1,4 +1,4 @@
-import type { Branch, ThreadNode } from "./tree.ts";
+import type { Group, ThreadNode } from "./tree.ts";
 
 /** A thread with the context that Find shows and matches. `parent` is the title of the parent thread of a subthread. */
 export type Hit = { t: ThreadNode; project: string; parent: string | null };
@@ -9,13 +9,13 @@ const withChildren = (t: ThreadNode, project: string, parent: string | null): Hi
   ...t.children.flatMap((c) => withChildren(c, project, t.map?.header ? parent : t.title || t.id)),
 ];
 
-const inBranch = (b: Branch, project: string): Hit[] => [
-  ...b.branches.flatMap((c) => inBranch(c, project)),
+const inGroup = (b: Group, project: string): Hit[] => [
+  ...b.groups.flatMap((c) => inGroup(c, project)),
   ...b.threads.flatMap((t) => withChildren(t, project, null)),
 ];
 
 /** Every thread of the projects in tree order, subthreads included. */
-export const hits = (projects: Branch[]): Hit[] => projects.flatMap((p) => inBranch(p, p.label));
+export const hits = (projects: Group[]): Hit[] => projects.flatMap((p) => inGroup(p, p.label));
 
 /** Whether `i` in `s` starts the text or follows a character that is not a letter or a digit. */
 const startsWord = (s: string, i: number): boolean => i === 0 || !/[\p{L}\p{N}]/u.test(s[i - 1]);
