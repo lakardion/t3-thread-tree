@@ -29,5 +29,5 @@
       "rules": { "unicorn/consistent-function-scoping": "off" }
     }
   ],
-  "ignorePatterns": [".claude/**", ".playwright-mcp/**", ".wayfinder/**"]
+  "ignorePatterns": [".claude/**", ".worktrees/**", ".playwright-mcp/**", ".wayfinder/**"]
 }

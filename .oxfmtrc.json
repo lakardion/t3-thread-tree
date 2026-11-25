@@ -6,5 +6,5 @@
     "stylesheet": "./src/page/index.css",
     "functions": ["cn", "cva", "clsx"]
   },
-  "ignorePatterns": [".claude/**", ".playwright-mcp/**", ".wayfinder/**"]
+  "ignorePatterns": [".claude/**", ".worktrees/**", ".playwright-mcp/**", ".wayfinder/**"]
 }
