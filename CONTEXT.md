@@ -67,10 +67,6 @@ _Avoid_: mini window, small window, Needs-you window
 The tree served on a local port and opened in a browser tab, with no Dock badge, notifications or menu-bar entry.
 _Avoid_: web app, web version
 
-**Focus list**:
-Up to three threads that the user chose to continue, shown above the tree. It is opt-in: the strip is hidden until the user turns it on. The UI calls it Focus. The user adds a thread from a row or by drag. A settled or deleted thread leaves the list. It is local to this page: it changes no T3 state and does not reorder the tree.
-_Avoid_: Now and Next, pins, favorites, working set
-
 **Looks done**:
 A thread that is not settled, has no activity for more than 1 hour, and has a sign that its work is finished: all its PRs are merged or closed, or its **Catch-up** says it is done. The page offers to settle these threads in one step. The UI calls it "look done". The user can keep a thread out of the offer until its next run.
 _Avoid_: finished, stale, ready to close

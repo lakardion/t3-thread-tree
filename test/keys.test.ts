@@ -22,11 +22,9 @@ const ctx = (c: Partial<KeyContext> = {}): KeyContext => ({
 });
 
 describe("plain keys", () => {
-  test("n and 1 to 3 act on a free page", () => {
+  test("n acts on a free page, 1 does nothing", () => {
     expect(pageKey(ev("n"), ctx())).toBe("next");
-    expect(pageKey(ev("1"), ctx())).toBe(0);
-    expect(pageKey(ev("2"), ctx())).toBe(1);
-    expect(pageKey(ev("3"), ctx())).toBe(2);
+    expect(pageKey(ev("1"), ctx())).toBeNull();
   });
   test("t opens Triage", () => {
     expect(pageKey(ev("t"), ctx())).toBe("triage");

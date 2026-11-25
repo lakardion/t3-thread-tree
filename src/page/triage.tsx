@@ -1,15 +1,4 @@
-import {
-  ArrowRight,
-  CheckCheck,
-  CircleCheckBig,
-  Crosshair,
-  ExternalLink,
-  Inbox,
-  LoaderCircle,
-  Moon,
-  Send,
-  X,
-} from "lucide-react";
+import { ArrowRight, CheckCheck, CircleCheckBig, ExternalLink, Inbox, LoaderCircle, Moon, Send, X } from "lucide-react";
 import { useContext, useEffect, useRef, useState, type ReactNode } from "react";
 
 import { Button } from "@/components/ui/button";
@@ -31,10 +20,9 @@ import type { CliStatus, SendError } from "../shared/send.ts";
 import type { ThreadNode } from "../shared/tree.ts";
 import { hasCatchUpLine } from "./attention.ts";
 import { AsksLabel, NoAsk } from "./catch-up-line.tsx";
-import { FOCUS_FULL } from "./focus.ts";
-import { Focus } from "./focus.tsx";
 import { ago, stripKey } from "./format.ts";
 import { Hint } from "./key-hints.tsx";
+import { Reveal } from "./reveal.tsx";
 import { RunCard } from "./run-card.tsx";
 import { CliGate, LastMessage, SendErrorAlert, useLastMessage } from "./send-dialog.tsx";
 import { postSend, postSettle, postSnooze, type Result } from "./send.ts";
@@ -126,7 +114,6 @@ type CardProps = {
 
 /** One card. Keyed by thread, so each thread starts with an empty draft and no error. */
 function Card({ t, gone, pos, total, fresh, now, t3cli, upcoming, onSkip, onFinish, close }: CardProps) {
-  const focus = useContext(Focus);
   const [draft, setDraft] = useState("");
   const [more, setMore] = useState(false);
   const [menu, setMenu] = useState(false);
@@ -135,7 +122,6 @@ function Card({ t, gone, pos, total, fresh, now, t3cli, upcoming, onSkip, onFini
   const field = useRef<HTMLTextAreaElement>(null);
   const approval = isApproval(t);
   const picks = chips(t);
-  const inFocus = focus.ids.includes(t.id);
   const canSend = t3cli?.available !== false && draft.trim() !== "" && !busy;
 
   /** The disabled fieldset drops focus from the field, so a failure gives it back. */
@@ -155,7 +141,6 @@ function Card({ t, gone, pos, total, fresh, now, t3cli, upcoming, onSkip, onFini
   const send = () => canSend && void run(() => postSend(t.id, draft), "sent");
   const settle = () => void run(() => postSettle(t.id, true), "settled");
   const snooze = (at: Date) => void run(() => postSnooze(t.id, at.toISOString()), "snoozed");
-  const addFocus = () => !inFocus && !focus.full && focus.add(t.id);
   const open = () => {
     onSkip();
     location.assign(t.href);
@@ -181,7 +166,6 @@ function Card({ t, gone, pos, total, fresh, now, t3cli, upcoming, onSkip, onFini
       : {
           e: settle,
           z: () => setMenu(true),
-          f: addFocus,
           o: open,
           j: onSkip,
           ArrowRight: onSkip,
@@ -195,11 +179,6 @@ function Card({ t, gone, pos, total, fresh, now, t3cli, upcoming, onSkip, onFini
   });
 
   const since = t.since ? ago(t.since, now) : "";
-  const toFocus = (
-    <Button variant="ghost" size="xs" disabled={inFocus || focus.full} onClick={addFocus}>
-      <Crosshair /> {inFocus ? "In Focus" : "Focus"} <Cap>f</Cap>
-    </Button>
-  );
   return (
     <div className="flex flex-col gap-2.5">
       <div className="flex items-center gap-2 text-xs">
@@ -307,17 +286,6 @@ function Card({ t, gone, pos, total, fresh, now, t3cli, upcoming, onSkip, onFini
                   ))}
                 </DropdownMenuContent>
               </DropdownMenu>
-              {focus.full && !inFocus ? (
-                <Tooltip>
-                  <TooltipTrigger asChild>
-                    {/* oxlint-disable-next-line jsx-a11y/no-noninteractive-tabindex -- a disabled button gets no focus, so the wrapper takes it to show the tooltip */}
-                    <span tabIndex={0}>{toFocus}</span>
-                  </TooltipTrigger>
-                  <TooltipContent>{FOCUS_FULL}</TooltipContent>
-                </Tooltip>
-              ) : (
-                toFocus
-              )}
               {!approval && (
                 <Button variant="ghost" size="xs" onClick={open}>
                   <ExternalLink /> Open in T3 <Cap>o</Cap>
@@ -396,7 +364,7 @@ export function TriageCard({
   close: () => void;
   endExtra?: ReactNode;
 }) {
-  const { reveal } = useContext(Focus);
+  const reveal = useContext(Reveal);
   const revealRef = useRef(reveal);
   useEffect(() => {
     revealRef.current = reveal;

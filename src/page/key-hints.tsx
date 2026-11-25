@@ -6,11 +6,7 @@ import { cn } from "@/lib/utils";
 import { holdRule } from "./key-hints.ts";
 
 /** A key hint: hidden until the hold, floats over its host. */
-export function Hint({
-  surface,
-  className,
-  ...props
-}: ComponentProps<"kbd"> & { surface: "header" | "triage" | "slot" }) {
+export function Hint({ surface, className, ...props }: ComponentProps<"kbd"> & { surface: "header" | "triage" }) {
   return (
     <Kbd
       aria-hidden

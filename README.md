@@ -20,7 +20,7 @@ Use it as a Mac app or in a browser. The Mac app adds a Dock badge, notification
 - **Workflow runs.** An active T3 workflow run shows as a row with step pills. A rail under it lists each step with its thread.
 - **Map groups.** Threads that work on one Wayfinder map sit in one group, under an amber rail. The group has the map thread as its head, or a Map header when that thread is settled. A count shows the members. Fold the group to hide them. Mark any thread as a map thread from its Details, for a map that has no map file. The marks are in `~/.config/t3-thread-tree/map-threads` (env `MAP_THREADS_FILE`).
 - **Live.** Changes arrive as T3 streams them. No polling, no reload.
-- **Row toolbar.** Each row has a `⋯` button. Point at it, or click it, to open a toolbar with Settle, Send, Workflow and Focus. The row does not move when the toolbar opens.
+- **Row toolbar.** Each row has a `⋯` button. Point at it, or click it, to open a toolbar with Settle, Send and Workflow. The row does not move when the toolbar opens.
 - **Stream recovery.** When live updates stop, a banner tells you that the rows can be out of date and shows the time of the last update. The page reconnects by itself. Click **Reconnect now** to try at once.
 
 ### Know what needs you
@@ -31,7 +31,7 @@ Use it as a Mac app or in a browser. The Mac app adds a Dock badge, notification
 - **Last message preview.** Put the pointer over a Catch-up line to see the end of the last message with Markdown formatting.
 - **Needs you.** One filter keeps only the threads that wait for you. The browser tab title and the Dock badge show the count.
 - **Empty list.** When a filter hides every thread, the list says why and gives a button to show them again.
-- **Open next.** The "Open next" button, or the key `n`, opens the thread that has waited longest.
+- **Open next.** The key `n` opens the thread that has waited longest.
 - **Run questions and Paused runs.** A question from a T3 workflow, and a run that a failed step paused, also count as Needs you.
 - **Triage mode.** The key `t` shows one card at a time for the waiting threads and runs. Reply, pick a chip, settle or snooze, each with one key. Answer a Run question, or resume or cancel a Paused run, from the same card.
 
@@ -47,7 +47,6 @@ Use it as a Mac app or in a browser. The Mac app adds a Dock badge, notification
 - **Looks done:** finds threads that look finished and settles them in one step, with undo. The eye button on a row shows the last message of the thread in the same dialog, with Markdown formatting, so you can examine the thread before you settle it.
 - **Views:** Tree or Flat, group by T3 project, Linear project or status, and drag rows into your own order.
 - **Find and keys:** Cmd+K searches all threads. Hold Alt/Option to see the keys next to the controls. Settings lists all keys.
-- **Focus list:** pin up to three threads above the tree.
 
 [SPEC.md](SPEC.md) gives the full rules for each feature.
 

@@ -24,10 +24,7 @@ function reasonOf(t: ThreadNode): Reason | null {
  * Unsettled threads with status your-turn, done or idle, an old run, and a reason.
  * Subthreads are read from `children`, so they count only while the tree nests them.
  */
-export function looksDone(
-  projects: Branch[],
-  { focus, skip, now }: { focus: string[]; skip: Skip[]; now: number },
-): Offer[] {
+export function looksDone(projects: Branch[], { skip, now }: { skip: Skip[]; now: number }): Offer[] {
   return projects.flatMap((p) =>
     allThreads(p).flatMap((thread) => {
       const reason = reasonOf(thread);
@@ -40,7 +37,6 @@ export function looksDone(
         thread.lastRun !== null &&
         now - Date.parse(thread.lastRun) > AGE &&
         !thread.detail.pinned &&
-        !focus.includes(thread.id) &&
         !skip.some((s) => s.id === thread.id && s.lastRun === thread.lastRun);
       return ok ? [{ thread, reason, project: thread.t3Project?.label ?? p.label }] : [];
     }),
