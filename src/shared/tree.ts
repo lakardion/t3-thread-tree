@@ -123,9 +123,22 @@ export type ThreadNode = {
 /** `header`: a Map header, which is not a thread. `href` is the map thread link, null with no map thread. */
 export type MapInfo = { name: string; header: boolean; href: string | null };
 
+/** What a group holds, so that a reader does not match the label text. */
+export type GroupKind =
+  | "project"
+  | "linear-project"
+  | "milestone"
+  | "review"
+  | "key"
+  | "stack"
+  | "no-project"
+  | "loose";
+
 export type Group = {
   id: string;
   label: string;
+  /** Set by the server on every group it builds. Groups that the page builds leave it out. */
+  kind?: GroupKind;
   /** Project groups only: `owner/name`. */
   repo?: string;
   /** Project groups only: the workspace root. */
