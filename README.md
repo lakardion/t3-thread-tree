@@ -20,6 +20,7 @@ Use it as a Mac app or in a browser. The Mac app adds a Dock badge, notification
 - **Workflow runs.** An active T3 workflow run shows as a row with step pills. A rail under it lists each step with its thread.
 - **Map groups.** Threads that work on one Wayfinder map sit in one group, under an amber rail. The group has the map thread as its head, or a Map header when that thread is settled. A count shows the members. Fold the group to hide them. Mark any thread as a map thread from its Details, for a map that has no map file. The marks are in `~/.config/t3-thread-tree/map-threads` (env `MAP_THREADS_FILE`).
 - **Live.** Changes arrive as T3 streams them. No polling, no reload.
+- **Row toolbar.** Each row has a `⋯` button. Point at it, or click it, to open a toolbar with Settle, Send, Workflow and Focus. The row does not move when the toolbar opens.
 
 ### Know what needs you
 
