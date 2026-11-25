@@ -3,12 +3,12 @@ import { afterAll, afterEach, describe, expect, spyOn, test } from "bun:test";
 import { isBusy, postSend } from "../src/page/send.ts";
 import type { Status } from "../src/shared/tree.ts";
 
-test("isBusy is true for working, starting, waiting only", () => {
+test("isBusy is true for working, starting, blocked only", () => {
   const all: Status[] = [
     "needs-input",
     "working",
     "starting",
-    "waiting",
+    "blocked",
     "plan-ready",
     "your-turn",
     "done",
@@ -17,7 +17,7 @@ test("isBusy is true for working, starting, waiting only", () => {
     "snoozed",
     "idle",
   ];
-  expect(all.filter(isBusy)).toEqual(["working", "starting", "waiting"]);
+  expect(all.filter(isBusy)).toEqual(["working", "starting", "blocked"]);
 });
 
 describe("postSend", () => {

@@ -1,5 +1,7 @@
 import * as v from "valibot";
 
+import { NEEDS_YOU, NOTIFY, OPEN_NEXT } from "./status.ts";
+
 /** The Catch-up fields that cross the bridge. Unknown keys are dropped. */
 export const CatchUpLine = v.optional(
   v.object({
@@ -46,7 +48,7 @@ export const NeedsYouList = v.pipe(
       title: v.string(),
       environmentId: v.string(),
       since: v.nullable(v.string()),
-      status: v.picklist(["needs-input", "plan-ready", "run-question", "paused-run"]),
+      status: v.picklist([...NEEDS_YOU, "run-question", "paused-run"]),
       /** The page to open from the menu bar, for a run. A thread opens by `environmentId` and `id`. */
       url: v.optional(v.string()),
       catchUp: CatchUpLine,
@@ -67,7 +69,7 @@ export const UpNextList = v.object({
       v.object({
         id: v.string(),
         title: v.string(),
-        status: v.picklist(["needs-input", "plan-ready", "your-turn", "run-question", "paused-run"]),
+        status: v.picklist([...OPEN_NEXT, "run-question", "paused-run"]),
         phrase: v.string(),
         raw: v.string(),
         since: v.nullable(v.string()),
@@ -94,7 +96,7 @@ export const NotifyList = v.pipe(
         threadId: v.string(),
         environmentId: v.string(),
         title: v.string(),
-        status: v.picklist(["needs-input", "plan-ready", "failed"]),
+        status: v.picklist(NOTIFY),
         catchUp: CatchUpLine,
       }),
       v.object({

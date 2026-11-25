@@ -116,7 +116,7 @@ In `@theme inline`, register each `--status-*` token as `--color-status-*` and `
 Token use:
 
 - `--status-<name>` is for shapes: icons, edges, washes. `--status-<name>-fg` is for text.
-- Statuses share tokens: `working`, `starting` and `waiting` use `working`. `your-turn` and `done` use `done`. `failed` and `interrupted` use `failed`. `plan-ready` uses `plan`. `snoozed` and `idle` use `--status-idle` for the shape and `--muted-foreground` for the text.
+- Statuses share tokens: `working`, `starting` and `blocked` use `working`. `your-turn` and `done` use `done`. `failed` and `interrupted` use `failed`. `plan-ready` uses `plan`. `snoozed` and `idle` use `--status-idle` for the shape and `--muted-foreground` for the text.
 - Do not lower the opacity of text. A muted row uses `--muted-foreground`.
 
 ### Theme
@@ -155,7 +155,7 @@ Thread rows sit on the card. On `--muted`, the light `status-needs-input` shape 
 | ----- | ------------- | -------------------------------------------------------------------------------------------------------------- |
 | 1     | `needs-input` | `pendingRuntimeRequest` is set and its `blocking` is not `false`, or `pendingGuestMessageCount` is more than 0 |
 | 2     | `snoozed`     | `snoozedUntil` is in the future                                                                                |
-| 3     | `waiting`     | The run status is `running` or `waiting`, and `blockedOnThreadWait` is true                                    |
+| 3     | `blocked`     | The run status is `running` or `waiting`, and `blockedOnThreadWait` is true                                    |
 | 4     | `working`     | The run status is `running` or `waiting`                                                                       |
 | 5     | `starting`    | The run status is `queued`, `preparing` or `starting`                                                          |
 | 6     | `plan-ready`  | `completed`, `interactionMode` is `plan`, and `hasActionableProposedPlan` is true                              |
@@ -178,7 +178,7 @@ The backend sends `phrase` and `since`. The page adds the elapsed time from `sin
 | `needs-input` | `Diamond`, filled     | See the request table                         | `pendingRuntimeRequest.createdAt`                 | The left edge breathes |
 | `working`     | `LoaderCircle`        | "Working"                                     | `activityRunStartedAt`, else `latestRunStartedAt` | The icon turns         |
 | `starting`    | `CircleDashed`        | "Queued" for `queued`, else "Starting"        | none                                              | none                   |
-| `waiting`     | `CirclePause`         | "Waiting"                                     | none                                              | none                   |
+| `blocked`     | `CirclePause`         | "Waiting"                                     | none                                              | none                   |
 | `plan-ready`  | `ListChecks`          | "Plan ready"                                  | `latestRunCompletedAt`                            | none                   |
 | `your-turn`   | `CircleCheck`         | "Your turn"                                   | `latestRunCompletedAt`                            | none                   |
 | `done`        | `Check`               | "Done"                                        | none                                              | none                   |
@@ -344,7 +344,7 @@ The hover background of a row is `--accent`. It replaces the wash while the poin
 | Chip          | Counts                           | Style                                                         |
 | ------------- | -------------------------------- | ------------------------------------------------------------- |
 | "N need you"  | `needs-input`, `plan-ready`      | Amber wash and `--status-needs-input-fg`. Hidden when N is 0. |
-| "N working"   | `working`, `starting`, `waiting` | Outline                                                       |
+| "N working"   | `working`, `starting`, `blocked` | Outline                                                       |
 | "N your turn" | `your-turn`                      | Outline                                                       |
 | "N stopped"   | `failed`, `interrupted`          | Outline                                                       |
 
@@ -575,7 +575,7 @@ export type Status =
   | "needs-input"
   | "working"
   | "starting"
-  | "waiting"
+  | "blocked"
   | "plan-ready"
   | "your-turn"
   | "done"

@@ -1,9 +1,9 @@
+import { BUSY, isIn, NEEDS_YOU } from "../shared/status.ts";
 import { allThreads, flat, type Branch, type Conn, type Status, type ThreadNode } from "../shared/tree.ts";
 
 export const SKIP_KEY = "thread-tree:looks-done-skip";
 
 const OFFERED: Status[] = ["your-turn", "done", "idle"];
-const BUSY: Status[] = ["working", "starting", "waiting", "needs-input", "plan-ready"];
 const AGE = 3_600_000;
 
 export type Reason = { kind: "prs"; n: number; merged: boolean } | { kind: "catch-up"; did: string };
@@ -33,7 +33,7 @@ export function looksDone(projects: Branch[], { skip, now }: { skip: Skip[]; now
         thread.step === undefined &&
         !thread.settled &&
         OFFERED.includes(thread.status) &&
-        !thread.children.flatMap(flat).some((c) => BUSY.includes(c.status)) &&
+        !thread.children.flatMap(flat).some((c) => isIn(BUSY, c.status) || isIn(NEEDS_YOU, c.status)) &&
         thread.lastRun !== null &&
         now - Date.parse(thread.lastRun) > AGE &&
         !thread.detail.pinned &&

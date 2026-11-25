@@ -541,7 +541,7 @@ describe("status", () => {
     ["request", { pendingRuntimeRequest: req("user_input") }, "needs-input"],
     ["guest message", { pendingGuestMessageCount: 2 }, "needs-input"],
     ["snooze", { status: "completed", snoozedUntil: SNOOZE }, "snoozed"],
-    ["waiting", { status: "running", blockedOnThreadWait: true }, "waiting"],
+    ["blocked", { status: "running", blockedOnThreadWait: true }, "blocked"],
     ["working", { status: "running" }, "working"],
     ["waiting run status", { status: "waiting" }, "working"],
     ["starting", { status: "preparing" }, "starting"],

@@ -18,7 +18,7 @@ import {
   type Status,
   type ThreadNode,
 } from "../shared/tree.ts";
-import { waiting } from "./catch-up.ts";
+import { catchUpThreads } from "./catch-up.ts";
 import { mapName, mapsOf, markedKey } from "./maps.ts";
 import { suggestedReplies } from "./replies.ts";
 import type { Pr, Project, RunStepsRaw, RunsSnapshot, Thread } from "./t3.ts";
@@ -47,7 +47,7 @@ export function statusOf(t: Thread, now: number): { status: Status; phrase: stri
   if (t.snoozedUntil && Date.parse(t.snoozedUntil) > now) return verdict("snoozed", "Snoozed");
   if (run === "running" || run === "waiting")
     return t.blockedOnThreadWait
-      ? verdict("waiting", "Waiting")
+      ? verdict("blocked", "Waiting")
       : verdict("working", "Working", t.activityRunStartedAt ?? t.latestRunStartedAt);
   if (run === "queued" || run === "preparing" || run === "starting")
     return verdict("starting", run === "queued" ? "Queued" : "Starting");
@@ -239,7 +239,7 @@ const STEP_STATE = new Map<string, RunStep["state"]>([
 
 /** The step line state of a child by its status. */
 const lineState = (c: ThreadNode): RunStep["state"] =>
-  c.status === "failed" ? "failed" : [...BUSY_THREAD, "waiting"].includes(c.status) ? "now" : "done";
+  c.status === "failed" ? "failed" : [...BUSY_THREAD, "blocked"].includes(c.status) ? "now" : "done";
 
 /**
  * The root run nodes of the step threads. A run is a candidate when it has a step thread. It shows when it is active or a step
@@ -424,7 +424,9 @@ function prepare(input: BuildInput) {
   for (const t of visible.values()) nodes.set(t.id, nodeOf(t));
 
   if (input.lastMessagesOf) {
-    const asks = waiting([...nodes.values()]).filter((n) => !(n.status === "needs-input" && n.phrase === "Approval"));
+    const asks = catchUpThreads([...nodes.values()]).filter(
+      (n) => !(n.status === "needs-input" && n.phrase === "Approval"),
+    );
     const texts = input.lastMessagesOf(asks.map((n) => n.id));
     for (const n of asks) {
       const text = texts.get(n.id);

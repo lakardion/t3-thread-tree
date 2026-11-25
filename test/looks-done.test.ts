@@ -48,7 +48,7 @@ describe("looksDone candidates", () => {
     for (const status of [
       "working",
       "starting",
-      "waiting",
+      "blocked",
       "needs-input",
       "plan-ready",
       "failed",
@@ -58,7 +58,7 @@ describe("looksDone candidates", () => {
       expect(offered(node({ status }))).toBe(false);
   });
   test("a busy subthread excludes", () => {
-    for (const status of ["working", "starting", "waiting", "needs-input", "plan-ready"] as const)
+    for (const status of ["working", "starting", "blocked", "needs-input", "plan-ready"] as const)
       expect(offered(node({ children: [node({ status, prs: [] })] }))).toBe(false);
   });
   test("a finished subthread does not exclude", () => {
