@@ -205,7 +205,7 @@ import {
   type SortBy,
 } from "./view.ts";
 import { prChoices, stackPoint } from "./workflow-start.ts";
-import { Launcher, StartDialog, StartedToast, StartMenu, type StartRequest } from "./workflow-start.tsx";
+import { WorkflowStarter, StartDialog, StartedToast, StartMenu, type StartRequest } from "./workflow-start.tsx";
 
 /** The tab icon; its href follows the needs-you count. */
 const iconLink = document.head.appendChild(
@@ -3231,7 +3231,7 @@ function App() {
     show: (id: string) => setShown((s) => new Set(s).add(id)),
   };
   const sendToApi = { t3cli, open: (id: string) => setSendTo({ id, open: true }) };
-  const launcher = {
+  const workflowStarter = {
     workflows: tree?.workflows ?? [],
     t3cli,
     open: (req: StartRequest) => setWfStart({ req, open: true }),
@@ -3675,7 +3675,7 @@ function App() {
                               <Card className="gap-0 overflow-clip rounded-[12px] px-2 py-0 shadow-none">
                                 <ul className={cn("m-0 list-none p-0", layout === "flat" && "p-1")}>
                                   <SendTo value={sendToApi}>
-                                    <Launcher value={launcher}>
+                                    <WorkflowStarter value={workflowStarter}>
                                       <Folds value={{ closed, toggle, fold }}>
                                         {layout === "flat" ? (
                                           <Presence key="flat" items={view.flat ?? []} keyOf={(i) => i.id}>
@@ -3698,7 +3698,7 @@ function App() {
                                           </Presence>
                                         )}
                                       </Folds>
-                                    </Launcher>
+                                    </WorkflowStarter>
                                   </SendTo>
                                 </ul>
                               </Card>
@@ -3722,9 +3722,9 @@ function App() {
                             ) : null}
                             {settled && projects && (
                               <SendTo value={sendToApi}>
-                                <Launcher value={launcher}>
+                                <WorkflowStarter value={workflowStarter}>
                                   <SettledList signature={tree?.settled ?? ""} scrollRoot={listRef} />
-                                </Launcher>
+                                </WorkflowStarter>
                               </SendTo>
                             )}
                           </div>
@@ -3785,9 +3785,9 @@ function App() {
         reveal={reveal}
         now={now}
         workflows={tree?.workflows ?? null}
-        start={(workflow) => launcher.open({ workflow, point: { kind: "none" } })}
+        start={(workflow) => workflowStarter.open({ workflow, point: { kind: "none" } })}
       />
-      <Launcher value={launcher}>
+      <WorkflowStarter value={workflowStarter}>
         <LooksDoneDialog
           open={doneOpen}
           items={lookDone}
@@ -3797,7 +3797,7 @@ function App() {
             if (settledIds.length > 0) setUndoIds((u) => [...(u ?? []), ...settledIds]);
           }}
         />
-      </Launcher>
+      </WorkflowStarter>
       <StartDialog
         req={wfStart.req}
         open={wfStart.open}
