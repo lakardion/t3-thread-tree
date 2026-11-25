@@ -19,6 +19,7 @@ import {
   CircleCheckBig,
   Contrast,
   Crosshair,
+  Ellipsis,
   ExternalLink,
   Eye,
   Rows3,
@@ -184,6 +185,7 @@ import {
 } from "./order.ts";
 import { Presence, useMotion } from "./presence.tsx";
 import { ProjectIcon, projectHex } from "./project-icon.tsx";
+import { REVEAL, ToolbarMenu, useHoverOpen, VARIANT } from "./prototype-row-actions.tsx";
 import { ProviderIcon } from "./provider-icon.tsx";
 import { RunRow } from "./run-row.tsx";
 import { CliGate, LastMessage, SendDialog, useLastMessage } from "./send-dialog.tsx";
@@ -1886,6 +1888,48 @@ function ThreadRow({
   const chipHref = chip ? linearHref(chip, linear) : null;
   const pulse = useChanges(t.status);
   const noPrLabel = t.stack ? `PR stack · ${t.stack.total} PRs · no PR from this thread` : undefined;
+  const bar = useHoverOpen();
+  const actions = (
+    <>
+      <SettleButton key={String(t.settled)} t={t} />
+      {sendTo && (
+        <CliGate t3cli={sendTo.t3cli}>
+          <Tooltip>
+            <TooltipTrigger asChild>
+              <Button
+                variant="ghost"
+                size="icon"
+                className={ROW_BUTTON}
+                aria-label="Send message"
+                disabled={sendTo.t3cli?.available === false}
+                onClick={(e) => {
+                  e.stopPropagation();
+                  sendTo.open(t.id);
+                }}
+              >
+                <Send className="size-3.5" />
+              </Button>
+            </TooltipTrigger>
+            <TooltipContent>Send message</TooltipContent>
+          </Tooltip>
+        </CliGate>
+      )}
+      <StartMenu
+        point={{ kind: "row", threadId: t.id, prs: prChoices(t.prs) }}
+        project={projectPath}
+        forTitle={t.title || t.id}
+        className={ROW_BUTTON}
+      />
+      <FocusMark t={t} pressed={false} />
+    </>
+  );
+  const details = end ?? (
+    <CollapsibleTrigger asChild>
+      <Button variant="ghost" size="icon" className={cn(ROW_BUTTON, "group")} aria-label="Details">
+        <ChevronDown className="size-3.5 transition-transform duration-200 group-data-[state=open]:rotate-180 motion-reduce:transition-none" />
+      </Button>
+    </CollapsibleTrigger>
+  );
   const render = (ref: RefFn, handleRef?: RefFn) => (
     <Collapsible asChild open={!end && open.has(t.id)} onOpenChange={() => toggle(t.id)}>
       <li
@@ -1894,9 +1938,15 @@ function ThreadRow({
         style={{ viewTransitionName: vtName("t", t.id), borderLeftColor: project && projectHex(project.label) }}
       >
         <div
-          className="thread-row group/row flex min-h-9 min-w-0 items-center gap-x-2 rounded-[8px] px-2 py-1 text-[13px] leading-5 max-[720px]:flex-wrap"
+          className={cn(
+            "thread-row group/row flex min-h-9 min-w-0 items-center gap-x-2 rounded-[8px] px-2 py-1 text-[13px] leading-5 max-[720px]:flex-wrap",
+            VARIANT === "D" && "flex-wrap",
+            VARIANT === "E" && "focus-within:z-40 hover:z-40",
+          )}
           data-status={t.status}
           data-thread={t.id}
+          onPointerEnter={VARIANT === "G" ? bar.hold : undefined}
+          onPointerLeave={VARIANT === "G" ? bar.drop : undefined}
         >
           {handle ?? (!inStack && !nested && <DragHandle handleRef={handleRef} name={t.title || t.id} />)}
           <StatusCell t={t} now={now} />
@@ -1946,7 +1996,8 @@ function ThreadRow({
           <CatchUpTitle t={t}>
             <a
               className={cn(
-                "min-w-0 flex-1 break-words group-focus-within/row:truncate group-hover/row:truncate hover:underline",
+                "min-w-0 flex-1 break-words hover:underline",
+                VARIANT === "now" && "group-focus-within/row:truncate group-hover/row:truncate",
                 t.status === "your-turn" ? "font-[650]" : "font-medium",
                 (t.status === "snoozed" || t.settled || dim) && "text-muted-foreground",
                 "max-[720px]:basis-full max-[720px]:pl-5",
@@ -1957,7 +2008,7 @@ function ThreadRow({
               {(chip ? stripKey(t.title, chip) : t.title) || t.id}
             </a>
           </CatchUpTitle>
-          <span className="ml-auto flex flex-none items-center gap-1.5 max-[720px]:ml-0 max-[720px]:basis-full max-[720px]:flex-wrap max-[720px]:pl-5">
+          <span className="relative ml-auto flex flex-none items-center gap-1.5 max-[720px]:ml-0 max-[720px]:basis-full max-[720px]:flex-wrap max-[720px]:pl-5">
             {t.input && (
               <Badge variant="outline" className={CHIP}>
                 Input
@@ -2008,48 +2059,59 @@ function ThreadRow({
               <TooltipContent>Updated {new Date(t.updatedAt).toLocaleString()}</TooltipContent>
             </Tooltip>
             <FocusMark t={t} pressed />
-            <span className={DRAWER}>
-              <span className="flex min-w-0 items-center gap-1.5 overflow-hidden focus-within:overflow-visible">
-                <SettleButton key={String(t.settled)} t={t} />
-                {sendTo && (
-                  <CliGate t3cli={sendTo.t3cli}>
-                    <Tooltip>
-                      <TooltipTrigger asChild>
-                        <Button
-                          variant="ghost"
-                          size="icon"
-                          className={ROW_BUTTON}
-                          aria-label="Send message"
-                          disabled={sendTo.t3cli?.available === false}
-                          onClick={(e) => {
-                            e.stopPropagation();
-                            sendTo.open(t.id);
-                          }}
-                        >
-                          <Send className="size-3.5" />
-                        </Button>
-                      </TooltipTrigger>
-                      <TooltipContent>Send message</TooltipContent>
-                    </Tooltip>
-                  </CliGate>
-                )}
-                <StartMenu
-                  point={{ kind: "row", threadId: t.id, prs: prChoices(t.prs) }}
-                  project={projectPath}
-                  forTitle={t.title || t.id}
-                  className={ROW_BUTTON}
-                />
-                <FocusMark t={t} pressed={false} />
+            {VARIANT === "now" && (
+              <span className={DRAWER}>
+                <span className="flex min-w-0 items-center gap-1.5 overflow-hidden focus-within:overflow-visible">
+                  {actions}
+                </span>
               </span>
-            </span>
-            {end ?? (
-              <CollapsibleTrigger asChild>
-                <Button variant="ghost" size="icon" className={cn(ROW_BUTTON, "group")} aria-label="Details">
-                  <ChevronDown className="size-3.5 transition-transform duration-200 group-data-[state=open]:rotate-180 motion-reduce:transition-none" />
-                </Button>
-              </CollapsibleTrigger>
             )}
+            {VARIANT === "A" && <span className={cn("flex items-center gap-1.5", REVEAL)}>{actions}</span>}
+            {VARIANT === "B" && (
+              <span
+                className={cn(
+                  "absolute top-1/2 right-full flex -translate-y-1/2 items-center gap-1.5 bg-linear-to-r from-transparent to-accent to-[1.5rem] py-1 pr-1.5 pl-6 max-[720px]:static max-[720px]:bg-none max-[720px]:p-0 [@media(hover:none)]:static [@media(hover:none)]:bg-none [@media(hover:none)]:p-0",
+                  REVEAL,
+                )}
+              >
+                {actions}
+              </span>
+            )}
+            {VARIANT === "C" && (
+              <DropdownMenu>
+                <DropdownMenuTrigger asChild>
+                  <Button variant="ghost" size="icon" className={ROW_BUTTON} aria-label="Row actions">
+                    <Ellipsis className="size-3.5" />
+                  </Button>
+                </DropdownMenuTrigger>
+                <DropdownMenuContent align="end" className="flex min-w-0 items-center gap-1 p-1">
+                  {actions}
+                </DropdownMenuContent>
+              </DropdownMenu>
+            )}
+            {VARIANT === "E" && (
+              <span
+                className={cn(
+                  "absolute top-full right-0 z-30 flex items-center gap-1 rounded-md border bg-popover p-1 shadow-md",
+                  REVEAL,
+                )}
+              >
+                {actions}
+              </span>
+            )}
+            {(VARIANT === "F" || VARIANT === "G") && (
+              <ToolbarMenu ctl={bar} hoverTrigger={VARIANT === "F"} className={ROW_BUTTON}>
+                {actions}
+              </ToolbarMenu>
+            )}
+            {VARIANT !== "D" && details}
           </span>
+          {VARIANT === "D" && (
+            <div className="flex basis-full items-center justify-end gap-1.5">
+              <span className={cn("flex items-center gap-1.5", REVEAL)}>{actions}</span>
+              {details}
+            </div>
+          )}
         </div>
         <CollapsibleContent>
           <DetailBlock t={t} />
