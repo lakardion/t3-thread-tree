@@ -31,7 +31,7 @@ A thread put aside until a set time. Until then its **Status** is snoozed, unles
 _Avoid_: muted, deferred
 
 **Review thread**:
-A thread that reviews a PR, with a title that starts with "Review #". It shows in the Reviews group of its project.
+A thread that reviews a PR, with a title that starts with "Review #". The Reviews **Placement rule** puts it in the Reviews group.
 _Avoid_: reviewer thread
 
 **Subthread**:
@@ -61,11 +61,11 @@ _Avoid_: ticket id, slug
 A chain of dependent PRs. T3 reports every PR in a thread's stack.
 
 **Group**:
-A named set of rows in the tree: a **Project**, an **Issue key**, a **PR stack**, the Reviews group, or a Linear project or milestone.
+A named set of rows in the tree: a **Project**, an **Issue key**, a **PR stack**, a **Map group**, the Reviews group, No project, or a Linear project or milestone.
 _Avoid_: branch (that word is for git)
 
 **Launch nesting**:
-A user setting that shows a keyless **Launched thread** under its visible spawner, instead of in the "No issue key" group of its project. It is off by default.
+The last **Placement rule**: it shows a keyless **Launched thread** under its visible spawner when both have the same **Home**. It is off by default.
 _Avoid_: launcher nesting, lineage view
 
 **Status section**:
@@ -75,6 +75,46 @@ _Avoid_: status group, bucket
 **Context row**:
 A row that shows only to give context: a thread outside the statuses of its **Status section**, a settled thread, or a kept spawner in the "Needs you" filter. It shows muted and does not count.
 
+### Placement
+
+**Placement rule**:
+One step of the ordered chain that decides where a thread goes: Map group, Reviews, PR stack, Issue key or **Launch nesting**. The user can switch each one on or off and reorder the middle three.
+_Avoid_: grouping, group rule, placement mode
+
+**Pool**:
+The threads that no earlier **Placement rule** has claimed.
+_Avoid_: queue, remaining threads
+
+**Claim**:
+A **Placement rule** taking a thread from the **Pool**, into a **Group** or under a row. The first claim wins.
+_Avoid_: match, assign
+
+**Layout**:
+The shape that turns the claims into groups: the project layout (the T3 tree) or the Linear layout (the Linear tree).
+_Avoid_: view (the flat view uses a layout and places nothing)
+
+**Home**:
+The container that a thread's own **Issue key** and review title give it in a **Layout**.
+_Avoid_: parent, slot
+
+**Loose thread**:
+A thread that no **Placement rule** claims. It sits directly under its **Project**, or at the top level of the Linear tree.
+_Avoid_: No issue key, ungrouped thread, loose row
+
+### Order
+
+**Last run**:
+The one time a row sorts by and shows: the start or end of the newest run of the thread, else its creation time. A row that heads a block shows the newest Last run of the threads that the view shows.
+_Avoid_: last updated, updated, activity
+
+**Pin**:
+A mark the user puts on a row or a header so that it leads its own list, whatever the sort. It is local to the page, and is not T3's own pin ("Pinned in T3").
+_Avoid_: favorite, star, sticky
+
+**Sleeping pin**:
+A **Pin** whose item is not in the view now. It wakes when the item comes back.
+_Avoid_: stale pin, orphan pin
+
 ### Waiting on the user
 
 **Needs you**:
@@ -83,7 +123,7 @@ _Avoid_: attention, unread
 
 **Wait**:
 The time since a thread or a run started to wait on the user.
-_Avoid_: age (age is the time since the last update)
+_Avoid_: age (age is the time since the **Last run**)
 
 **Open next queue**:
 The **Needs you** items, subthreads included, in the order that "Open next" opens them: oldest **Wait** first.
@@ -164,7 +204,7 @@ One execution of a **Workflow**. The tree shows an active run as a run row, with
 _Avoid_: job, execution, instance
 
 **Step thread**:
-A thread that an agent step of a **Run** runs in. It shows only under its run, never as a loose row.
+A thread that an agent step of a **Run** runs in. It shows only under its run, never as a **Loose thread**.
 _Avoid_: run thread, workflow thread
 
 **Run question**:
@@ -224,7 +264,8 @@ _Avoid_: mini window, small window, Needs-you window
 - A **Project** holds many **Issue keys**; an **Issue key** holds one or more **Spawn lineage** trees.
 - A **Thread** has zero or one parent and zero or more **Subthreads**.
 - A **PR stack** can span threads of more than one **Issue key**.
-- A thread in a **PR stack** always shows in its stack block, whatever its **Issue key**, spawner or **Launch nesting**. A **Review thread** is the exception: it stays in Reviews. A **Map member** is the other exception: it shows in its **Map group**, with its stack mates inside the group.
+- A thread goes to the first **Placement rule** that **Claims** it. With the default order, a thread in a **PR stack** shows in its stack block, whatever its **Issue key**, spawner or **Launch nesting**; a **Review thread** stays in Reviews, and a **Map member** shows in its **Map group**, with its stack mates inside the group.
+- A **Pin** orders a list that the **Placement rules** already built. It never moves an item to another list.
 - A **Map thread** heads one **Map group** for each map it launched. A **Map group** can hold the **Map group** of a sub-map, at the place of its **Map thread**.
 - The keyless threads of one **PR stack** share one group, named after the bottom PR (`PR stack #61`).
 

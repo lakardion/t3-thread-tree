@@ -368,7 +368,7 @@ The hover background of a row is `--accent`. It replaces the wash while the poin
 
 - A key group with two or more top-level threads has a header row: 28 px high, chevron, key in mono 12 px semibold. Its threads indent 10 px.
 - A key group with one top-level thread folds: it has no header row. The thread row shows the key as a chip, and the title loses its key prefix (the key and the separators after it: spaces, `·`, `:`, `-`). This also applies to a key group inside Reviews. The fold runs on the page; the backend tree does not change.
-- "Reviews" and "No issue key" have a muted header row (12 px, semibold) and do not fold.
+- "Reviews" has a muted header row (12 px, semibold) and does not fold. Loose threads have no header row.
 - A closed group shows one status icon for each thread.
 - Nested launched threads indent 10 px for each level.
 
@@ -403,7 +403,7 @@ One line when the title fits, `min-height: 36px`, radius 8 px, 13 px text with a
 | Stack chip         | `.chip-stack`, the `Layers` icon and "2/4", or the icon alone when the thread created no PR in the stack, with the tooltip and accessible name "PR stack · 4 PRs · no PR from this thread". Not shown on rows in a stack block.                                                                                                                                                                                                                         |
 | Label pill         | One pill, before the PR chips. Only when an open PR of the row has a Watched label. A `Badge` with the `Tag` icon and the initials of the first matching name (mono, 11 px), filled with the label color; black or white text by luminance. "+N" shows the other matching names. The tooltip lists each match as "name: #PR".                                                                                                                           |
 | PR chips           | The first two PRs, then a "+N" button that opens the details block.                                                                                                                                                                                                                                                                                                                                                                                     |
-| Age                | Relative age of `updatedAt`, mono 11 px, muted, `tabular-nums`. The tooltip shows "Updated" and the exact time.                                                                                                                                                                                                                                                                                                                                         |
+| Age                | Relative age of the **Last run** or block time (SPEC.md › "Row time"), mono 11 px, muted, `tabular-nums`. The tooltip shows "Last run" and the exact time.                                                                                                                                                                                                                                                                                              |
 | Row actions button | Ghost icon button with `Ellipsis` at the end of the row. It morphs to `X` (`MorphIcon`) while its toolbar is open. The toolbar is a popover in a portal, with a border, `bg-popover` and `shadow-md`.                                                                                                                                                                                                                                                   |
 | Settle button      | Ghost icon button with `CircleCheckBig`, or `Undo2` on a settled row, just before the send icon, in the row toolbar. It turns `text-destructive` after a failure.                                                                                                                                                                                                                                                                                       |
 | Map thread button  | Ghost `xs` text button "Mark as map thread" or "Unmark map thread", muted text, with the amber `Map` icon (14 px) before the label and `pt-2` above it. It is the last line of the details block and spans both columns. It shows only on thread rows that are not step threads. After a failure it turns `text-destructive` and a tooltip shows the error.                                                                                             |
@@ -433,8 +433,8 @@ An absent value shows no mark. Each mark has a `title` with its meaning.
 
 A ghost `icon-sm` button with the `ArrowDownUp` icon, before fold all. Its label is "Sort" and its tooltip is "Sort: Manual" or "Sort: Last updated". It opens a dropdown menu with a radio group: "Manual" and "Last updated". The choice is in `localStorage` under `thread-tree:sort`.
 
-- "Last updated" sorts by `lastRun`, newest first. A thread with no `lastRun` is last. A thread counts its subthreads. A group or PR stack counts its newest thread.
-- Projects keep their order. Reviews stays first and No issue key stays last. A PR stack moves as one block and keeps its inner order. Subthreads keep their order. Ties keep the manual order.
+- "Last updated" sorts by the **Last run**, newest first (SPEC.md › "Row time"). A thread counts its counted subthreads. A group or PR stack counts its newest counted thread.
+- Projects keep their order. Pins lead each list. A PR stack moves as one block and keeps its inner order. Subthreads keep their order. Ties keep the manual order.
 - Drag is off: no row has a handle, and the empty handle space stays so rows line up. This holds in the flat view too.
 
 ### Flat view
@@ -453,7 +453,7 @@ With "Show settled threads" on, a card below the tree or flat list holds the Set
 
 ### Drag to reorder
 
-The user reorders projects, key groups (a stack run is one block), review groups and top-level threads. A list with fewer than two visible items has no handle. Subthreads, groups inside a stack rail, Reviews and No issue key have no handle. No drag crosses lists. The flat list is one list, or one list for each status section when grouped; a row drags only inside its section, and all sections share one stored order. Needs input, Plan ready and Your turn have no drag.
+The user reorders projects, groups (a stack run is one block), Reviews, review groups and top-level threads. A list with fewer than two visible items has no handle. Subthreads and groups inside a stack rail have no handle. A drag stays inside the pinned part or the unpinned part of a list (SPEC.md › "Pins"). No drag crosses lists. The flat list is one list, or one list for each status section when grouped; a row drags only inside its section, and all sections share one stored order. Needs input, Plan ready and Your turn have no drag.
 
 - **Handle.** A ghost icon `Button` with the `GripVertical` icon, `cursor-grab`, label "Move <name>". It sits at the start of the row: before the status icon on a thread row, and before the chevron or icon on a group header, a stack rail label row and a project. It keeps its space, so nothing shifts on hover. A row with no handle keeps an empty space of the same size, so the status icons and titles line up.
 - **Visibility.** The handle is hidden until the pointer is over its own row, or the handle has focus. It always shows on a touch screen. A hover on a parent does not show the handles of child rows.
@@ -483,10 +483,11 @@ The block is a two-column list of label and value, 12 px. It shows a line only w
 | Launched by  | The title of the spawner, as a link to that thread in T3. Only when the thread has a spawner and does not nest under it.                                      |
 | Origin       | "Fork of `<title>`" from `forkedFrom` when the source thread is known, "Delegated from `<title>`" from `delegatedFrom`, or "via `<label>`" from `linkOrigin`. |
 | Started by   | `createdBy` and `creationSource`: "agent via mcp".                                                                                                            |
-| Updated      | Relative age of `updatedAt`, the same as the row end.                                                                                                         |
+| Updated      | Relative age of `updatedAt`.                                                                                                                                  |
+| Last run     | Relative age of the **Last run** of the thread.                                                                                                               |
 | Created      | Relative age of `createdAt`.                                                                                                                                  |
 | Goal         | `goal.objective` and `goal.status`.                                                                                                                           |
-| Tags         | `tags` as plain text. "Pinned" when `pinnedAt` is set.                                                                                                        |
+| Tags         | `tags` as plain text. "Pinned in T3" when `pinnedAt` is set.                                                                                                  |
 | PRs          | One line for each PR, all PRs of the row: number, title, state, checks, review, "+212 -40 · 9 files".                                                         |
 
 ### Catch-up row line
