@@ -9,7 +9,7 @@ import {
 } from "@dnd-kit/dom";
 import { DragDropProvider } from "@dnd-kit/react";
 import { isSortable, useSortable } from "@dnd-kit/react/sortable";
-import { ChevronsDownUp, ChevronsUpDown } from "lucide";
+import { ChevronsDownUp, ChevronsUpDown, Ellipsis, X as XGlyph } from "lucide";
 import {
   ArrowDownUp,
   Check,
@@ -40,6 +40,7 @@ import {
   X,
 } from "lucide-react";
 import { MorphIcon } from "morphicons/react";
+import { Popover } from "radix-ui";
 import {
   createContext,
   Fragment,
@@ -1457,9 +1458,6 @@ function LabelPill({ t }: { t: ThreadNode }) {
 const CHIP = "gap-1 rounded-[6px] px-1.5 py-0 text-[11px] font-normal text-muted-foreground";
 const ROW_BUTTON =
   "size-5 rounded-[6px] text-muted-foreground motion-reduce:transition-none pointer-coarse:min-h-11 pointer-coarse:min-w-11 focus-visible:border-transparent focus-visible:ring-0 focus-visible:outline-2 focus-visible:outline-solid focus-visible:outline-offset-2 focus-visible:outline-ring";
-/** Opens on hover or focus, always on touch, and stays open while it holds a settle error. Shut, it takes no width. */
-const DRAWER =
-  "grid grid-cols-[0fr] transition-[grid-template-columns] duration-150 motion-reduce:transition-none group-hover/row:grid-cols-[1fr] group-focus-within/row:grid-cols-[1fr] has-data-err:grid-cols-[1fr] [@media(hover:none)]:grid-cols-[1fr]";
 const FILTER_ITEM =
   "pointer-coarse:min-h-11 pointer-coarse:min-w-11 focus-visible:ring-0 focus-visible:outline-solid focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring";
 
@@ -1819,7 +1817,7 @@ function SettleButton({ t }: { t: ThreadNode }) {
     <Tooltip>
       <TooltipTrigger asChild>
         {/** A disabled button gets no hover, so the wrapper keeps the tooltip. */}
-        <span className="inline-flex" data-err={err ? "" : undefined}>
+        <span className="inline-flex" data-err={err ? "" : undefined} data-busy={busy ? "" : undefined}>
           <Button
             variant="ghost"
             size="icon"
@@ -1841,6 +1839,129 @@ function SettleButton({ t }: { t: ThreadNode }) {
       </TooltipTrigger>
       <TooltipContent>{err ?? label}</TooltipContent>
     </Tooltip>
+  );
+}
+
+/** The one open row toolbar's close; opening another toolbar shuts it first. */
+let openBar: (() => void) | null = null;
+
+/** Grace for the pointer to cross the gap between the `⋯` button and its toolbar. */
+const BAR_GRACE_MS = 180;
+
+/**
+ * The row's actions in a toolbar that the `⋯` button opens, so hover never changes the row layout.
+ * A mouse hover or a click opens it, a tap opens it on touch. The toolbar renders in a portal, outside the row's stacking context.
+ */
+function RowActions({ t, projectPath }: { t: ThreadNode; projectPath?: string }) {
+  const sendTo = useContext(SendTo);
+  const [open, setOpen] = useState(false);
+  const byKey = useRef(false);
+  const timer = useRef<number>(undefined);
+  const bar = useRef<HTMLDivElement>(null);
+  const [close] = useState(() => {
+    const fn = () => {
+      clearTimeout(timer.current);
+      setOpen(false);
+      if (openBar === fn) openBar = null;
+    };
+    return fn;
+  });
+  useEffect(() => () => close(), [close]);
+  const show = () => {
+    clearTimeout(timer.current);
+    if (openBar && openBar !== close) openBar();
+    openBar = close;
+    setOpen(true);
+  };
+  const openOnHover = (e: { pointerType: string }) => {
+    if (e.pointerType !== "mouse") return;
+    byKey.current = false;
+    show();
+  };
+  /** A nested menu, a settle in flight or a settle error keeps the toolbar open. */
+  const closeSoon = (e: { pointerType: string }) => {
+    if (e.pointerType !== "mouse") return;
+    clearTimeout(timer.current);
+    timer.current = window.setTimeout(() => {
+      if (!bar.current?.querySelector("[data-state=open], [data-busy], [data-err]")) close();
+    }, BAR_GRACE_MS);
+  };
+  return (
+    <Popover.Root open={open} onOpenChange={(o) => (o ? show() : close())}>
+      <Popover.Trigger asChild>
+        <Button
+          variant="ghost"
+          size="icon"
+          className={ROW_BUTTON}
+          aria-label="Row actions"
+          onPointerEnter={openOnHover}
+          onPointerLeave={closeSoon}
+          onClick={(e) => {
+            byKey.current = e.detail === 0;
+          }}
+        >
+          <MorphIcon icon={open ? XGlyph : Ellipsis} size={14} reducedMotion="user" />
+        </Button>
+      </Popover.Trigger>
+      <Popover.Portal>
+        <Popover.Content
+          ref={bar}
+          side="left"
+          align="center"
+          sideOffset={2}
+          collisionPadding={8}
+          onOpenAutoFocus={(e) => {
+            if (!byKey.current) e.preventDefault();
+          }}
+          onCloseAutoFocus={(e) => {
+            if (!byKey.current) e.preventDefault();
+          }}
+          onPointerEnter={openOnHover}
+          onPointerLeave={closeSoon}
+          /** The toolbar sits in a portal, so Tab out of either end closes it and returns focus to `⋯`. */
+          onKeyDown={(e) => {
+            if (e.key !== "Tab") return;
+            const items = [...e.currentTarget.querySelectorAll<HTMLElement>("button:not(:disabled)")];
+            if (e.target !== items[e.shiftKey ? 0 : items.length - 1]) return;
+            e.preventDefault();
+            byKey.current = true;
+            close();
+          }}
+          className="z-50 flex items-center gap-1 rounded-md border bg-popover p-1 text-popover-foreground shadow-md data-[state=open]:animate-in data-[state=open]:fade-in-0 motion-reduce:animate-none"
+        >
+          <SettleButton key={String(t.settled)} t={t} />
+          {sendTo && (
+            <CliGate t3cli={sendTo.t3cli}>
+              <Tooltip>
+                <TooltipTrigger asChild>
+                  <Button
+                    variant="ghost"
+                    size="icon"
+                    className={ROW_BUTTON}
+                    aria-label="Send message"
+                    disabled={sendTo.t3cli?.available === false}
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      sendTo.open(t.id);
+                    }}
+                  >
+                    <Send className="size-3.5" />
+                  </Button>
+                </TooltipTrigger>
+                <TooltipContent>Send message</TooltipContent>
+              </Tooltip>
+            </CliGate>
+          )}
+          <StartMenu
+            point={{ kind: "row", threadId: t.id, prs: prChoices(t.prs) }}
+            project={projectPath}
+            forTitle={t.title || t.id}
+            className={ROW_BUTTON}
+          />
+          <FocusMark t={t} pressed={false} />
+        </Popover.Content>
+      </Popover.Portal>
+    </Popover.Root>
   );
 }
 
@@ -1946,7 +2067,7 @@ function ThreadRow({
           <CatchUpTitle t={t}>
             <a
               className={cn(
-                "min-w-0 flex-1 break-words group-focus-within/row:truncate group-hover/row:truncate hover:underline",
+                "min-w-0 flex-1 break-words hover:underline",
                 t.status === "your-turn" ? "font-[650]" : "font-medium",
                 (t.status === "snoozed" || t.settled || dim) && "text-muted-foreground",
                 "max-[720px]:basis-full max-[720px]:pl-5",
@@ -2008,40 +2129,7 @@ function ThreadRow({
               <TooltipContent>Updated {new Date(t.updatedAt).toLocaleString()}</TooltipContent>
             </Tooltip>
             <FocusMark t={t} pressed />
-            <span className={DRAWER}>
-              <span className="flex min-w-0 items-center gap-1.5 overflow-hidden focus-within:overflow-visible">
-                <SettleButton key={String(t.settled)} t={t} />
-                {sendTo && (
-                  <CliGate t3cli={sendTo.t3cli}>
-                    <Tooltip>
-                      <TooltipTrigger asChild>
-                        <Button
-                          variant="ghost"
-                          size="icon"
-                          className={ROW_BUTTON}
-                          aria-label="Send message"
-                          disabled={sendTo.t3cli?.available === false}
-                          onClick={(e) => {
-                            e.stopPropagation();
-                            sendTo.open(t.id);
-                          }}
-                        >
-                          <Send className="size-3.5" />
-                        </Button>
-                      </TooltipTrigger>
-                      <TooltipContent>Send message</TooltipContent>
-                    </Tooltip>
-                  </CliGate>
-                )}
-                <StartMenu
-                  point={{ kind: "row", threadId: t.id, prs: prChoices(t.prs) }}
-                  project={projectPath}
-                  forTitle={t.title || t.id}
-                  className={ROW_BUTTON}
-                />
-                <FocusMark t={t} pressed={false} />
-              </span>
-            </span>
+            <RowActions t={t} projectPath={projectPath} />
             {end ?? (
               <CollapsibleTrigger asChild>
                 <Button variant="ghost" size="icon" className={cn(ROW_BUTTON, "group")} aria-label="Details">
@@ -3279,9 +3367,9 @@ function App() {
       layout === "flat" ? (v.flat ?? []).flatMap(itemIds) : v.projects.flatMap(allThreads).map((t) => t.id)
     ).join();
   };
-  const latest = useRef({ full, view, rows, projects: tree?.projects ?? [], connecting, focus, live });
+  const latest = useRef({ full, view, rows, projects: tree?.projects ?? [], connecting, focus, live, t3cli });
   useEffect(() => {
-    latest.current = { full, view, rows, projects: tree?.projects ?? [], connecting, focus, live };
+    latest.current = { full, view, rows, projects: tree?.projects ?? [], connecting, focus, live, t3cli };
   });
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
@@ -3329,10 +3417,8 @@ function App() {
         const expanded = btn?.getAttribute("aria-expanded") === "true";
         if (btn instanceof HTMLElement && (action === "toggle" || expanded === (action === "collapse"))) btn.click();
       } else if (action === "send") {
-        active
-          ?.closest(".thread-row")
-          ?.querySelector<HTMLElement>('[aria-label="Send message"]:not(:disabled)')
-          ?.click();
+        const id = active?.closest<HTMLElement>(".thread-row")?.dataset.thread;
+        if (id && latest.current.t3cli?.available !== false) setSendTo({ id, open: true });
       } else {
         const { focus: ids, live: threads } = latest.current;
         const t = threads.get(ids[action]);

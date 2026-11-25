@@ -252,7 +252,7 @@ The user can start a **Workflow** from the page. The start opens a dialog, and n
 Each start point lists only the workflows that fit it.
 
 - **Find.** The footer says "Type `>` to start a workflow". When the query starts with `>`, Find shows only the group "Start a workflow": every workflow that is not `webhookOnly`, filtered by the text after `>`. An item shows the `Workflow` icon, the name in mono, the version and the triggers. With no workflow, the text is "No workflows. Turn on Workflows in T3 Settings → Labs, or add a workflow file." A pick closes Find and opens the dialog with nothing filled.
-- **Thread row.** A `Workflow` icon button sits in the hover drawer, between Send and Focus. Its menu is labelled "Start a workflow". It lists the workflows with `threadId`, and the workflows with `pr` when the row has a PR. It fills `threadId`, `pr` (the newest open PR, else the newest PR) and `project` (the path of the row's project, when it has one).
+- **Thread row.** A `Workflow` icon button sits in the row toolbar (see "Row toolbar"), between Send and Focus. Its menu is labelled "Start a workflow". It lists the workflows with `threadId`, and the workflows with `pr` when the row has a PR. It fills `threadId`, `pr` (the newest open PR, else the newest PR) and `project` (the path of the row's project, when it has one).
 - **PR stack rail.** The same button in the rail header, for the workflows with `stack`. It fills `stack` with the repo and the PRs of the rail stops, bottom first.
 - **Looks done.** A "Start a workflow" button in the dialog footer, for the workflows with `threadIds`. It fills `threadIds` with the checked threads and closes the dialog. It is off when no thread is checked.
 - The button is disabled when the `t3` CLI is missing, as the send controls are.
@@ -384,7 +384,7 @@ The flat view lists all threads of all projects in one list. The switch keeps it
 
 **Page keys.** One `keydown` handler holds all page keys (`pageKey` in `src/page/keys.ts` decides). A plain key does nothing with a modifier, on key repeat (except `j`, `k`, ↑ and ↓), when the event is handled, while focus is in an input, a textarea or a contenteditable element, while the Settings panel is open, and while Find, a dialog, an alert dialog, a menu or a listbox is open.
 
-**Row keys.** A stop is an element with `data-stop`: the title link of each visible thread row, and the fold button of each project, group, PR stack, map header and flat section. Focus is real DOM focus, and the tab order does not change. The stop list is the stops in DOM order inside the list. It skips an inert row, a row in a closed fold and a hidden row. `j` and `k` focus the next or previous stop, and do nothing at the ends. With no stop focused, the first one focuses the first stop that lies inside the list view. ↑ and ↓ do the same only when a stop has focus, and call `preventDefault` only when they move, so the page scrolls otherwise. A move scrolls the stop into view only as needed. On a thread stop, Enter opens the thread (the link), and `s` clicks its Send button when the button shows and is not disabled. On a header, Enter folds or unfolds, and `s` does nothing. `o` toggles the details of a thread (the map fold on a map thread row) or the fold of a header, `l` opens them and `h` closes them, as in vim. `l` on an open fold and `h` on a closed fold do nothing. The drag handle is not a stop. While a stop has focus, the page keeps its id and index. When a render moves the row and focus is lost, focus returns to the row. When the row leaves, focus goes to the stop at the old index, or to the page when no stop is left. When a fold closes with focus inside it, focus goes to its header. The focus ring is an inset outline on the row or header, not only on the link or button.
+**Row keys.** A stop is an element with `data-stop`: the title link of each visible thread row, and the fold button of each project, group, PR stack, map header and flat section. Focus is real DOM focus, and the tab order does not change. The stop list is the stops in DOM order inside the list. It skips an inert row, a row in a closed fold and a hidden row. `j` and `k` focus the next or previous stop, and do nothing at the ends. With no stop focused, the first one focuses the first stop that lies inside the list view. ↑ and ↓ do the same only when a stop has focus, and call `preventDefault` only when they move, so the page scrolls otherwise. A move scrolls the stop into view only as needed. On a thread stop, Enter opens the thread (the link), and `s` opens the Send dialog for the row when the `t3` CLI is available. On a header, Enter folds or unfolds, and `s` does nothing. `o` toggles the details of a thread (the map fold on a map thread row) or the fold of a header, `l` opens them and `h` closes them, as in vim. `l` on an open fold and `h` on a closed fold do nothing. The drag handle is not a stop. While a stop has focus, the page keeps its id and index. When a render moves the row and focus is lost, focus returns to the row. When the row leaves, focus goes to the stop at the old index, or to the page when no stop is left. When a fold closes with focus inside it, focus goes to its header. The focus ring is an inset outline on the row or header, not only on the link or button.
 
 - **`n`.** Open next.
 - **`t`.** Opens Triage mode. While Triage mode is open, the page keys stop, except Cmd+K.
@@ -681,22 +681,33 @@ The wrapper exit code 127 ("T3 Code has moved…") is a `502`, so the user sees 
 
 The page reads `GET /t3/cli` once at load. When `available` is false, every send control shows disabled, with the tooltip "No t3 CLI at <path>. Set T3_BIN in .env."
 
+### Row toolbar
+
+A thread row has an always-visible `⋯` button (label "Row actions") before the details chevron. It opens a toolbar with Settle, Send, Workflow and Focus. Opening the toolbar never moves the row.
+
+- **Open:** a mouse hover on the button opens it. A click, a tap or Enter toggles it. On touch it opens only on a tap.
+- **Icon:** the `⋯` morphs to `X` while the toolbar is open.
+- **Place:** the toolbar renders in a portal to the left of the button, centered on the row. It covers the row's own PR pill and time, never the next row, and flips when there is no room. No row or divider covers it.
+- **Close:** the pointer leaves the button and the toolbar for 180 ms, a click outside, or Escape. It stays open while a menu of the toolbar is open, while a settle request runs and after a settle failure.
+- **One at a time:** opening a toolbar closes the one that is open.
+- **Focus:** a hover open does not move focus. A keyboard open moves focus into the toolbar. Tab past the last action, or Shift+Tab past the first, closes it and focuses `⋯`. Escape closes the toolbar. After a keyboard open, focus goes back to `⋯`. After a hover open, focus does not move.
+
 ### Settle icon
 
 A thread row, top-level or subthread, in the tree and in the flat list, has a settle icon at its end, just before the send icon. It does not depend on the `t3` CLI.
 
 - **Icon:** `CircleCheckBig` with the label "Settle thread". On a settled row (in the Settled list): `Undo2` with the label "Unsettle thread". The tooltip shows the label.
-- **Reveal:** like the send icon. It shows on hover and on keyboard focus within the row, and always on `(hover: none)`.
+- **Reveal:** it sits in the row toolbar (see "Row toolbar"), so it shows when the toolbar is open.
 - **Click:** one click, with no dialog. The icon stops propagation, so it does not open the thread and does not start a drag. It is disabled while the request runs.
 - **Request:** `POST /t3/settle` with `{ threadId, settled }` and a JSON content type. The server sends `thread.settle` or `thread.unsettle` to T3 over the stream socket. This needs the `orchestration:operate` scope.
 - **Result:** the row changes through the stream: it leaves the live list. With "Show settled threads" on, it shows in the Settled list with the "Settled" chip after the next fetch.
-- **Failure:** the icon turns red and stays visible. The tooltip shows the error until the next click. A token without the `orchestration:operate` scope gives the error "The T3 token cannot settle. Issue a new token with the command in Settings."
+- **Failure:** the icon turns red. The toolbar stays open while a request runs and after a failure, until a click outside or Escape. The tooltip shows the error until the next click. A token without the `orchestration:operate` scope gives the error "The T3 token cannot settle. Issue a new token with the command in Settings."
 
 ### Send dialog
 
 One reusable component on the shadcn Dialog (Radix).
 
-- **Opens from:** a thread row, top-level or subthread: a send icon at the row end, next to the details chevron, after the settle icon (see "Settle icon"). Its tooltip says "Send message". It shows on hover and on keyboard focus within the row. On touch devices (`(hover: none)`), at every width, it always shows. The icon stops propagation, so it does not open the thread and does not start a drag.
+- **Opens from:** a thread row, top-level or subthread: a send icon in the row toolbar that the `⋯` button opens (see "Row toolbar"), after the settle icon (see "Settle icon"). Its tooltip says "Send message". The icon stops propagation, so it does not open the thread and does not start a drag.
 - **Target:** fixed. The dialog shows the icon and title of the row, with no picker.
 - **Message:** a textarea, editable. It starts empty. Confirm send is disabled while the message is empty after trim.
 - **Busy note:** when the target status is `working`, `starting` or `waiting`, a muted line under the target says "This thread is working. The message waits for its next turn." Other statuses show no note.
