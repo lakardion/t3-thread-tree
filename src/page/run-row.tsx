@@ -5,7 +5,7 @@ import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
 
 import type { RunInfo, RunStep, ThreadNode } from "../shared/tree.ts";
-import { ago, phraseWith } from "./format.ts";
+import { agoAt, phraseWith } from "./format.ts";
 
 const LOOK: Record<RunInfo["state"], { icon: LucideIcon; color: string }> = {
   running: { icon: LoaderCircle, color: "text-status-working" },
@@ -44,6 +44,7 @@ const Strip = ({ steps }: { steps: RunStep[] }) => (
 export function RunRow({
   t,
   now,
+  at,
   Row,
   liRef,
   liClass,
@@ -52,6 +53,8 @@ export function RunRow({
 }: {
   t: ThreadNode;
   now: number;
+  /** The row time: the newest of the run and its step threads. */
+  at: number;
   Row: ComponentType<{ t: ThreadNode; inStack?: boolean; nested?: boolean }>;
   liRef: Ref<HTMLLIElement>;
   liClass?: string;
@@ -84,8 +87,11 @@ export function RunRow({
           {phraseWith(t, now)}
         </span>
         <span className="flex-none font-mono text-[11px] text-muted-foreground">{run.workflow}</span>
-        <span className="flex-none font-mono text-[11px] text-muted-foreground tabular-nums">
-          {ago(t.updatedAt, now)}
+        <span
+          className="flex-none font-mono text-[11px] text-muted-foreground tabular-nums"
+          title={`Last activity ${new Date(at).toLocaleString()}`}
+        >
+          {at > -Infinity && agoAt(at, now)}
         </span>
         <Button asChild variant="ghost" size="icon" className="size-6 flex-none text-muted-foreground">
           <a href={t.href} target="_blank" rel="noreferrer" aria-label="Open run in T3">
