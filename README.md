@@ -16,7 +16,7 @@ Use it as a Mac app or in a browser. The Mac app adds a Dock badge, notification
 
 - **One tree for all projects.** Threads group by project, then by the first issue key in the title. Review threads go in a Reviews group at the top.
 - **Status at a glance.** Each row starts with a status icon. Rows that wait for you show the wait time and a phrase, such as "Approval" or "Your turn".
-- **PR marks and stacks.** Each row shows its PRs with checks, review, conflicts and merge marks. Threads in one PR stack sit in one block, with numbered stops from the base branch to the top PR.
+- **PR marks and stacks.** Each row shows its PRs with checks, review, conflicts and merge marks. Threads in one PR stack sit in one block, with numbered stops from the base branch to the top PR. The block shows the GitHub stack number at the far right. Click it to copy the number.
 - **Workflow runs.** An active T3 workflow run shows as a row with step pills. A rail under it lists each step with its thread.
 - **Map groups.** Threads that work on one Wayfinder map sit in one group, under an amber rail. The group has the map thread as its head, or a Map header when that thread is settled. A count shows the members. Fold the group to hide them. Mark any thread as a map thread from its Details, for a map that has no map file. The marks are in `~/.config/t3-thread-tree/map-threads` (env `MAP_THREADS_FILE`).
 - **Live.** Changes arrive as T3 streams them. No polling, no reload.

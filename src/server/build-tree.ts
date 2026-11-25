@@ -572,8 +572,10 @@ const byPos = (a: Node, b: Node) => (a.stack?.pos ?? Infinity) - (b.stack?.pos ?
 /** The rail data of a stack. */
 const railOf = (st: Stack | undefined): Branch["stack"] => {
   if (!st) return undefined;
-  const base = st.threads.flatMap((t) => t.prs).find((p) => st.set.has(p.n) && p.stackBase)?.stackBase ?? null;
-  return { id: `s${st.order[0]}`, total: st.order.length, base };
+  const prs = st.threads.flatMap((t) => t.prs);
+  const base = prs.find((p) => st.set.has(p.n) && p.stackBase)?.stackBase ?? null;
+  const number = prs.find((p) => st.set.has(p.n) && p.stackNumber)?.stackNumber;
+  return { id: `s${st.order[0]}`, total: st.order.length, base, ...(number && { number }) };
 };
 
 /** The creation key of a node is the oldest of its own and its nested threads'. Sorts children on the way, with the stack mates of a Map group together. */

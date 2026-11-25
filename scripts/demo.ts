@@ -100,6 +100,7 @@ const pr = (n: number, source: string, state = "open", over: Partial<Pr> = {}): 
   review: null,
   mergeability: null,
   stackBase: null,
+  stackNumber: null,
   stackLayers: null,
   title: null,
   additions: null,
@@ -108,7 +109,7 @@ const pr = (n: number, source: string, state = "open", over: Partial<Pr> = {}): 
   ...over,
 });
 const stacked = (own: number, over: Partial<Pr> = {}) => [
-  pr(own, "created", "open", { stackBase: "main", ...over }),
+  pr(own, "created", "open", { stackBase: "main", stackNumber: 87, ...over }),
   ...STACK.filter((n) => n !== own).map((n) => pr(n, "stack")),
 ];
 const request = (kind: string, blocking: boolean | null = null) => ({ kind, createdAt: ago(12), blocking });
