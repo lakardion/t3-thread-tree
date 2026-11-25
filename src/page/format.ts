@@ -82,11 +82,12 @@ export function stripKey(title: string, key: string): string {
   return title.slice(key.length).replace(/^[\s·:-]+/, "") || title;
 }
 
-/** True for a group whose top-level threads all carry the group label as their key. "Reviews" and "No issue key" are not key groups. */
+/** True for a group whose top-level threads all carry the group label as their key. "Reviews" is not a key group. */
 export const isKeyGroup = (b: Group): boolean => b.threads.length > 0 && b.threads.every((t) => t.key === b.label);
 
-/** The one thread of a key group that folds into its row, else null. */
-export const folded = (b: Group): ThreadNode | null => (isKeyGroup(b) && b.threads.length === 1 ? b.threads[0] : null);
+/** The one thread of a key group or loose group that folds into its row, else null. */
+export const folded = (b: Group): ThreadNode | null =>
+  (b.kind === "loose" || isKeyGroup(b)) && b.threads.length === 1 ? b.threads[0] : null;
 
 /** The Linear issue URL, else null. With teams set, only a key of a listed team links. */
 export function linearHref(key: string, linear: Tree["linear"]): string | null {
@@ -95,7 +96,8 @@ export function linearHref(key: string, linear: Tree["linear"]): string | null {
 }
 
 /** The fold ids of a group and of the groups and PR stacks in it. A group that folds into its one thread has none. */
-export const groupIds = (g: Group): string[] => (folded(g) ? g.threads.flatMap(mapFolds) : [g.id, ...foldIds(g)]);
+export const groupIds = (g: Group): string[] =>
+  g.kind === "loose" ? foldIds(g) : folded(g) ? g.threads.flatMap(mapFolds) : [g.id, ...foldIds(g)];
 
 /** The fold ids of the Map heads in a thread and its subthreads. A head folds under its own id. */
 const mapFolds = (t: ThreadNode): string[] => [...(t.map ? [t.id] : []), ...t.children.flatMap(mapFolds)];

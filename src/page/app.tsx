@@ -92,13 +92,9 @@ import type { CliStatus } from "../shared/send.ts";
 import { CATCH_UP, isIn } from "../shared/status.ts";
 import {
   allThreads,
-  isFallback,
-  LINEAR_LOOSE,
-  isLinearReviews,
   isThread,
   parseLabels,
   parseLinear,
-  REVIEWS,
   type Group,
   type LinearKeyState,
   type PrNode,
@@ -156,7 +152,6 @@ import {
   PROJECTS,
   arrange,
   isLinear,
-  isPinned,
   applyOrder,
   parseOrders,
   prune,
@@ -2243,7 +2238,11 @@ function Groups({ b, closed, toggle, fold }: { b: Group } & Fold) {
           lists,
           groupsKey(b.id),
           runUnitId(b.id, run),
-          run[0].stack ? `PR stack of ${run[0].label}` : run[0].label,
+          run[0].stack
+            ? `PR stack of ${run[0].label}`
+            : run[0].kind === "loose"
+              ? run[0].threads[0].title || run[0].threads[0].id
+              : run[0].label,
         );
         return run[0].stack ? (
           <StackRail run={run} closed={closed} toggle={toggle} fold={fold} sort={sort} />
@@ -2278,11 +2277,11 @@ function GroupRow({ b, closed, toggle, fold, sort }: { b: Group; sort?: Sort } &
             className="flex min-w-0 items-center gap-2 select-none after:absolute after:inset-0 max-[720px]:min-h-11"
           >
             <Chevron open={open} />
-            {b.label === REVIEWS && <Eye className="size-3.5 flex-none text-review" aria-hidden />}
+            {b.kind === "review" && <Eye className="size-3.5 flex-none text-review" aria-hidden />}
             <span
               className={cn(
                 "truncate text-xs font-semibold",
-                b.label === REVIEWS ? "text-review" : isKeyGroup(b) ? "font-mono" : "text-muted-foreground",
+                b.kind === "review" ? "text-review" : isKeyGroup(b) ? "font-mono" : "text-muted-foreground",
               )}
             >
               {b.label}
@@ -2310,7 +2309,7 @@ function GroupRow({ b, closed, toggle, fold, sort }: { b: Group; sort?: Sort } &
           <FoldAll inner={foldIds(b)} self={b.id} name={b.label} closed={closed} fold={fold} className={ROW_FOLD} />
         </div>
         <CollapsibleContent asChild>
-          <ul className={cn("m-0 list-none", isPinned(b) ? "pl-6" : "pl-2.5")}>
+          <ul className={cn("m-0 list-none", b.kind === "review" ? "pl-6" : "pl-2.5")}>
             <Groups b={b} closed={closed} toggle={toggle} fold={fold} />
             <Presence items={b.threads} keyOf={(t) => t.id}>
               {(t) => (
@@ -2595,14 +2594,14 @@ function FlatRow({
   /** The section list that holds the unit, or the whole flat list when ungrouped. */
   const list = [...lists.keys()].find((k) => k !== FLAT && lists.get(k)?.includes(i.id)) ?? FLAT;
   /** Rows under a Linear section header sit one chevron to the right of it. */
-  const indent = linear && i.kind !== "section" && i.project.id !== LINEAR_LOOSE ? "ml-6" : undefined;
+  const indent = linear && i.kind !== "section" && i.project.kind !== "loose" ? "ml-6" : undefined;
   if (i.kind === "thread")
     return (
       <Section value={section}>
         <NodeRow
           t={i.t}
           chip={i.t.key ?? undefined}
-          project={i.project.linear ? undefined : i.project}
+          project={i.project.kind === "project" ? i.project : undefined}
           corners={indent ?? corners}
           review={i.review}
           sort={sortOf(lists, list, i.id, i.t.title || i.t.id)}
@@ -2614,7 +2613,7 @@ function FlatRow({
       <Section value={section}>
         <StackRail
           run={i.run}
-          project={i.project.linear ? undefined : i.project}
+          project={i.project.kind === "project" ? i.project : undefined}
           flat
           className={indent}
           closed={closed}
@@ -2624,7 +2623,7 @@ function FlatRow({
         />
       </Section>
     );
-  if (i.key === LINEAR_LOOSE) return <li aria-hidden className="mx-2 my-1 border-t" />;
+  if (i.loose) return <li aria-hidden className="mx-2 my-1 border-t" />;
   return (
     <MotionHook>
       {(ref) => (
@@ -2652,29 +2651,24 @@ function ProjectBlock({ b, closed, toggle, fold }: { b: Group } & Fold) {
   const open = !closed.has(b.id);
   const lists = useContext(Lists);
   const snoozed = useContext(ShowSnoozed);
-  const reviewsTip = isLinearReviews(b) ? headerTip(groupTime([b], snoozed)) : undefined;
-  const fallback = isFallback(b);
-  const color = fallback ? "var(--border)" : projectHex(b.label);
-  const threads = (
-    <Presence items={b.threads} keyOf={(t) => t.id}>
-      {(t) => (
-        <NodeRow
-          t={t}
-          chip={t.key ?? undefined}
-          sort={sortOf(lists, threadsKey(b.id), threadUnitId(t), t.title || t.id)}
-        />
-      )}
-    </Presence>
-  );
-  if (b.id === LINEAR_LOOSE)
+  const reviewsTip = b.kind === "review" ? headerTip(groupTime([b], snoozed)) : undefined;
+  const fallback = b.kind === "review" || b.kind === "no-project";
+  const color = fallback || b.kind === "loose" ? "var(--border)" : projectHex(b.label);
+  if (b.kind === "loose") {
+    const one = folded(b);
+    const sort = sortOf(lists, PROJECTS, b.id, one ? one.title || one.id : `PR stack of ${b.groups[0].label}`);
     return (
       <li className="border-l-[3px] px-1 py-1" style={{ borderLeftColor: color }}>
         <ul className="m-0 list-none p-0">
-          <Groups b={b} closed={closed} toggle={toggle} fold={fold} />
-          {threads}
+          {one ? (
+            <NodeRow t={one} chip={one.key ?? undefined} sort={sort} />
+          ) : (
+            <StackRail run={b.groups} closed={closed} toggle={toggle} fold={fold} sort={sort} />
+          )}
         </ul>
       </li>
     );
+  }
   const render = (ref: RefFn, handleRef?: RefFn) => (
     <li ref={ref} className="border-l-[3px] not-last:border-b" style={{ borderLeftColor: color }}>
       <Collapsible asChild open={open} onOpenChange={() => toggle(b.id)}>
@@ -2690,7 +2684,7 @@ function ProjectBlock({ b, closed, toggle, fold }: { b: Group } & Fold) {
               className="flex min-w-0 items-center gap-1.5 select-none after:absolute after:inset-0"
             >
               <Chevron open={open} />
-              {isLinearReviews(b) && <Eye className="size-3.5 flex-none text-review" aria-hidden />}
+              {b.kind === "review" && <Eye className="size-3.5 flex-none text-review" aria-hidden />}
               {!fallback && <ProjectIcon name={b.label} />}
               <span className="min-w-0 truncate text-[13px] font-semibold" title={b.repo ?? b.label}>
                 {b.label}
@@ -2720,7 +2714,6 @@ function ProjectBlock({ b, closed, toggle, fold }: { b: Group } & Fold) {
             <CollapsibleContent asChild>
               <ul className="m-0 list-none p-0">
                 <Groups b={b} closed={closed} toggle={toggle} fold={fold} />
-                {threads}
               </ul>
             </CollapsibleContent>
           </div>

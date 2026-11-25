@@ -14,7 +14,7 @@ Use it as a Mac app or in a browser. The Mac app adds a Dock badge, notification
 
 ### See all your work in one tree
 
-- **One tree for all projects.** Threads group by project, then by the first issue key in the title. Review threads go in a Reviews group at the top.
+- **One tree for all projects.** Threads group by project, then by the first issue key in the title. Review threads go in a Reviews group. A thread with no group sits directly in its project. You can drag every group, the Reviews group and every loose thread, and "Last updated" sorts them together.
 - **Status at a glance.** Each row starts with a status icon. Rows that wait for you show the wait time and a phrase, such as "Approval" or "Your turn".
 - **PR marks and stacks.** Each row shows its PRs with checks, review, conflicts and merge marks. Threads in one PR stack sit in one block, with numbered stops from the base branch to the top PR. A thread with a merged PR stays at its place in the stack, with a purple dot that has no number. In a long stack the stops overlap. They spread out when you point at them or move focus to them. The block shows the GitHub stack number at the far right. Click it to copy the number.
 - **Workflow runs.** An active T3 workflow run shows as a row with step pills. A rail under it lists each step with its thread.

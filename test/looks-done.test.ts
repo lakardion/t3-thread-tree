@@ -32,6 +32,7 @@ const node = (over: Partial<ThreadNode> = {}): ThreadNode => {
 const branch = (threads: ThreadNode[], over: Partial<Group> = {}): Group => ({
   id: "b",
   label: "Storefront",
+  kind: "key",
   groups: [],
   threads,
   ...over,

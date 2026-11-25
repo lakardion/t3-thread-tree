@@ -68,6 +68,7 @@ describe("folded", () => {
   const group = (label: string, threads: ThreadNode[], groups: Group[] = []): Group => ({
     id: label,
     label,
+    kind: "key",
     groups,
     threads,
   });
@@ -79,8 +80,14 @@ describe("folded", () => {
   test("a key group with two threads does not fold", () => {
     expect(folded(group("SHOP-1", [thread("SHOP-1"), thread("SHOP-1")]))).toBeNull();
   });
-  test("No issue key does not fold", () => {
-    expect(folded(group("No issue key", [thread(null)]))).toBeNull();
+  test("a loose group folds into its one thread, keyed or not", () => {
+    const keyless = thread(null);
+    expect(folded({ ...group("", [keyless]), kind: "loose" })).toBe(keyless);
+    const keyed = thread("SHOP-1");
+    expect(folded({ ...group("SHOP-1", [keyed]), kind: "loose" })).toBe(keyed);
+  });
+  test("a group with threads of other keys does not fold", () => {
+    expect(folded(group("Reviews", [thread(null)]))).toBeNull();
   });
   test("a group with groups and no threads does not fold", () => {
     expect(folded(group("Reviews", [], [group("SHOP-1", [thread("SHOP-1")])]))).toBeNull();
@@ -91,6 +98,7 @@ describe("stackRuns", () => {
   const b = (label: string, stack?: string): Group => ({
     id: label,
     label,
+    kind: "key",
     groups: [],
     threads: [],
     ...(stack && { stack: { id: stack, total: 2, base: null } }),
@@ -112,7 +120,7 @@ describe("railRows", () => {
   const pr = (n: number) => ({ n }) as PrNode;
   const t = (id: string, pos: number | null, key: string | null = null) =>
     ({ id, key, stack: { pos, total: 3 }, prs: pos ? [pr(100 + pos)] : [], children: [] }) as unknown as ThreadNode;
-  const g = (label: string, threads: ThreadNode[]): Group => ({ id: label, label, groups: [], threads });
+  const g = (label: string, threads: ThreadNode[]): Group => ({ id: label, label, kind: "key", groups: [], threads });
   const show = (run: Group[]) => {
     const { stops, rows } = railRows(run);
     return { stops: stops.map((s) => s.p?.n ?? null), rows: rows.map((r) => [r.t.id, r.n ?? null, r.chip ?? null]) };
@@ -153,6 +161,7 @@ describe("foldIds", () => {
   const b = (id: string, threads: ThreadNode[], groups: Group[] = [], stack?: string): Group => ({
     id,
     label: id,
+    kind: "key",
     groups,
     threads,
     ...(stack && { stack: { id: stack, total: 2, base: null } }),
@@ -171,10 +180,10 @@ describe("foldIds", () => {
         nested,
         b("API-1", [thread("API-1")], [], "s1"),
         b("API-2", [thread("API-2")], [], "s1"),
-        b("No issue key", [thread(null)]),
+        { ...b("t:loose", [thread(null)]), kind: "loose" },
       ],
     );
-    expect(foldIds(p)).toEqual(["Reviews", "SHOP-1", "rail:s1", "No issue key"]);
+    expect(foldIds(p)).toEqual(["Reviews", "SHOP-1", "rail:s1"]);
     expect(groupIds(nested)).toEqual(["Reviews", "SHOP-1"]);
   });
   test("a stack rail inside a group has its fold id", () => {
@@ -260,7 +269,7 @@ describe("prTone", () => {
 describe("ownPos", () => {
   const t = (pos: number | null, children: ThreadNode[] = []) =>
     ({ id: `t${pos}`, stack: { pos, total: 4 }, prs: [], children }) as unknown as ThreadNode;
-  const g = (threads: ThreadNode[]): Group => ({ id: "g", label: "g", groups: [], threads });
+  const g = (threads: ThreadNode[]): Group => ({ id: "g", label: "g", kind: "key", groups: [], threads });
 
   test("is the position of the thread that made the stack PR", () => {
     expect(ownPos(g([t(null), t(2)]))).toBe(2);

@@ -3,7 +3,7 @@ import { describe, expect, test } from "bun:test";
 import { defaultRules, place, type BuildInput } from "../src/server/build-tree.ts";
 import { decodeThread } from "../src/server/t3.ts";
 import { RULES, type RuleId } from "../src/shared/rules.ts";
-import { NO_KEY, type Group, type LinearIssue, type ThreadNode } from "../src/shared/tree.ts";
+import type { Group, LinearIssue, ThreadNode } from "../src/shared/tree.ts";
 
 const NOW = Date.parse("2026-11-12T12:00:00.000Z");
 let clock = 0;
@@ -139,8 +139,8 @@ describe("Map group rule", () => {
   test("a member goes under its head, not in a key group; a map thread is not a spawner", () => {
     const raws = [shell("chart", "Wayfinder"), shell("t1", "WEB-1 a"), shell("other", "other")];
     const tree = projectOf(raws, { t1: "chart", other: "chart" }, keys({ t1: "/m/x" }));
-    expect(labels(tree[0].groups)).toEqual([NO_KEY]);
-    const [head, other] = tree[0].groups[0].threads;
+    expect(tree[0].groups).toEqual([]);
+    const [head, other] = tree[0].threads;
     expect(titles(head.children)).toEqual(["WEB-1 a"]);
     expect(other.title).toBe("other");
   });
@@ -165,7 +165,7 @@ describe("Map group rule", () => {
       { t: "chart", u: "chart", s: "t" },
       { ...keys({ t: "/m/p", u: "/m/p", s: "/m/s" }), settled: false },
     );
-    const [head] = tree[0].groups[0].threads;
+    const [head] = tree[0].threads;
     const sub = head.children.find((c) => c.map?.header)!;
     expect(sub.detail.launchedBy).toBeNull();
     expect(sub.children[0].detail.launchedBy).toMatchObject({ title: "ticket" });
@@ -242,13 +242,13 @@ describe("Launch nesting rule", () => {
 
   test("off by default: a launched thread is loose and names its spawner", () => {
     const tree = place(inputOf(raws, { kid: "lead" }), OFF, "project");
-    expect(titles(tree[0].groups[0].threads)).toEqual(["lead", "kid"]);
-    expect(tree[0].groups[0].threads[1].detail.launchedBy).toMatchObject({ title: "lead" });
+    expect(titles(tree[0].threads)).toEqual(["lead", "kid"]);
+    expect(tree[0].threads[1].detail.launchedBy).toMatchObject({ title: "lead" });
   });
 
   test("on: the child nests, with no launchedBy", () => {
     const tree = place(inputOf(raws, { kid: "lead" }), ON, "project");
-    const [lead] = tree[0].groups[0].threads;
+    const [lead] = tree[0].threads;
     expect(titles(lead.children)).toEqual(["kid"]);
     expect(lead.children[0].detail.launchedBy).toBeNull();
   });
@@ -259,7 +259,7 @@ describe("Launch nesting rule", () => {
       shell("st", "step", { workflowRun: { runId: "r1", workflow: "ship", step: "go" } }),
     ];
     const tree = projectOf(all, { st: "lead" }, { runs: runsOf("Nightly") });
-    const threads = tree[0].groups[0].threads;
+    const threads = tree[0].threads;
     expect(threads.map((t) => t.id).toSorted()).toEqual(["lead", "run:r1"]);
     expect(threads.find((t) => t.id === "lead")!.children).toEqual([]);
   });
@@ -274,7 +274,8 @@ describe("chain order", () => {
 
   test("a rule that is not in the list claims nothing", () => {
     const tree = place(inputOf([shell("a", "WEB-1 a")]), [] as RuleId[], "project");
-    expect(labels(tree[0].groups)).toEqual([NO_KEY]);
+    expect(tree[0].groups).toEqual([]);
+    expect(titles(tree[0].threads)).toEqual(["WEB-1 a"]);
   });
 });
 
@@ -292,7 +293,7 @@ describe("Home", () => {
     const front = tree.find((b) => b.label === "frontend")!;
     expect(titles(child([front], "frontend", "WEB-1").threads[0].children)).toEqual(["k1"]);
     expect(titles(child([front], "frontend", "Reviews", "WEB-2").threads[0].children)).toEqual(["k2"]);
-    expect(titles(child([front], "frontend", NO_KEY).threads)).toEqual(["k3"]);
+    expect(titles(front.threads)).toEqual(["k3"]);
   });
 
   test("Linear: a keyless child nests under a keyless spawner that a stack mate placed", () => {
@@ -335,7 +336,6 @@ describe("kind", () => {
       "g:p1:WEB-2": "key",
       "g:p1:WEB-3": "key",
       "g:p1:PR stack #10": "stack",
-      "g:p1:No issue key": "loose",
     });
   });
 

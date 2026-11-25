@@ -6,12 +6,10 @@ import { buildLinearTree, buildTree, issueKey, statusOf, type BuildInput } from 
 import { launchedIds } from "../src/server/lineage.ts";
 import { decodeItem, decodeThread, type RunsSnapshot, type Thread } from "../src/server/t3.ts";
 import {
-  NO_KEY,
   NO_MILESTONE,
   NO_PROJECT,
   allRuns,
   allThreads,
-  isFallback,
   type Group,
   type LinearIssue,
   type Status,
@@ -193,7 +191,7 @@ describe("project repository", () => {
 });
 
 describe("placement", () => {
-  test("Reviews first and grouped by key, then keyed groups, No issue key last", () => {
+  test("Reviews groups by key at its creation slot; keyless reviews and loose threads sit directly in their parent", () => {
     const tree = build([
       shell("r1", "Review #15708 SHOP-4319"),
       shell("r2", "Review #15709 without key"),
@@ -201,9 +199,22 @@ describe("placement", () => {
       shell("n", "loose thread"),
     ]);
     const p = tree[0];
-    expect(labels(p.groups)).toEqual(["Reviews", "SHOP-4319", "No issue key"]);
-    expect(labels(child(tree, "frontend", "Reviews").groups)).toEqual(["SHOP-4319", "No issue key"]);
+    expect(labels(p.groups)).toEqual(["Reviews", "SHOP-4319"]);
+    expect(labels(child(tree, "frontend", "Reviews").groups)).toEqual(["SHOP-4319"]);
+    expect(titles(child(tree, "frontend", "Reviews").threads)).toEqual(["Review #15709 without key"]);
+    expect(titles(p.threads)).toEqual(["loose thread"]);
     expect(titles(child(tree, "frontend", "Reviews", "SHOP-4319").threads)).toEqual(["Review #15708 SHOP-4319"]);
+  });
+
+  test("a review newer than a key group comes after it", () => {
+    const tree = build([shell("k", "SHOP-1 first"), shell("r", "Review #1 SHOP-2")]);
+    expect(labels(tree[0].groups)).toEqual(["SHOP-1", "Reviews"]);
+  });
+
+  test("a project with only loose threads shows", () => {
+    const tree = build([shell("n", "loose thread")]);
+    expect(tree[0].groups).toEqual([]);
+    expect(titles(tree[0].threads)).toEqual(["loose thread"]);
   });
 
   test("keyless thread nests under its visible spawner, skipping a settled launcher", () => {
@@ -215,18 +226,18 @@ describe("placement", () => {
       ],
       { "mcp:t1": "launcher", launcher: "map" },
     );
-    const [map] = child(tree, "frontend", "No issue key").threads;
+    const [map] = child(tree, "frontend").threads;
     expect(map.title).toBe("Wayfinder map");
     expect(titles(map.children)).toEqual(["ticket 001"]);
   });
 
-  test("with nesting off, a launched thread sits in No issue key and names its spawner", () => {
+  test("with nesting off, a launched thread sits directly in its project and names its spawner", () => {
     const tree = build(
       [shell("map", "Wayfinder map"), shell("mcp:t1", "ticket 001")],
       { "mcp:t1": "map" },
       { nest: false },
     );
-    const ts = child(tree, "frontend", "No issue key").threads;
+    const ts = child(tree, "frontend").threads;
     expect(titles(ts)).toEqual(["Wayfinder map", "ticket 001"]);
     expect(ts[0].children).toEqual([]);
     expect(ts[1].detail.launchedBy).toEqual({ title: "Wayfinder map", href: "t3code://threads/env-1/map" });
@@ -242,14 +253,14 @@ describe("placement", () => {
       "mcp:b": "a",
     });
     expect(labels(tree).toSorted()).toEqual(["backend", "frontend"]);
-    expect(titles(child(tree, "backend", "No issue key").threads)).toEqual(["t3exp work"]);
+    expect(titles(child(tree, "backend").threads)).toEqual(["t3exp work"]);
   });
 
-  test("no visible spawner in the chain → No issue key", () => {
+  test("no visible spawner in the chain → directly in the project", () => {
     const tree = build([shell("x", "gone", { settledAt: "2026-11-12T09:00:00.000Z" }), shell("mcp:b", "orphan")], {
       "mcp:b": "x",
     });
-    expect(titles(child(tree, "frontend", "No issue key").threads)).toEqual(["orphan"]);
+    expect(titles(child(tree, "frontend").threads)).toEqual(["orphan"]);
   });
 
   test("a spawner cycle does not hang", () => {
@@ -261,7 +272,7 @@ describe("placement", () => {
         y: "x",
       },
     );
-    expect(child(tree, "frontend", "No issue key").threads.length).toBe(2);
+    expect(child(tree, "frontend").threads.length).toBe(2);
   });
 });
 
@@ -277,7 +288,7 @@ describe("order", () => {
       { "mcp:kid": "old" },
     );
     expect(labels(tree)).toEqual(["backend", "frontend"]);
-    expect(titles(child(tree, "frontend", "No issue key").threads)).toEqual(["old root", "new root"]);
+    expect(titles(child(tree, "frontend").threads)).toEqual(["old root", "new root"]);
   });
 
   test("lastRun is the latest of activity run start, run start and run end, and null when all are null", () => {
@@ -324,12 +335,12 @@ describe("order", () => {
   test("same createdAt: the thread id breaks the tie", () => {
     const at = { createdAt: "2026-11-12T08:00:00.000Z" };
     const tree = build([shell("b", "second", at), shell("a", "first", at)]);
-    expect(titles(child(tree, "frontend", "No issue key").threads)).toEqual(["first", "second"]);
+    expect(titles(child(tree, "frontend").threads)).toEqual(["first", "second"]);
   });
 
   test("a new thread appends at the end of its group", () => {
     const tree = build([shell("5", "old root"), shell("0", "new root")]);
-    expect(titles(child(tree, "frontend", "No issue key").threads)).toEqual(["old root", "new root"]);
+    expect(titles(child(tree, "frontend").threads)).toEqual(["old root", "new root"]);
   });
 
   test("a new group appends at the end of its section", () => {
@@ -339,7 +350,7 @@ describe("order", () => {
       shell("k1", "SHOP-1 first"),
       shell("k2", "SHOP-2 second"),
     ]);
-    expect(labels(tree[0].groups)).toEqual(["Reviews", "SHOP-1", "SHOP-2", "No issue key"]);
+    expect(labels(tree[0].groups)).toEqual(["Reviews", "SHOP-1", "SHOP-2"]);
   });
 });
 
@@ -397,10 +408,10 @@ describe("PR stack", () => {
       shell("loose", "loose thread", { pullRequests: [pr(12, "stack"), pr(10, "stack")] }),
       shell("plain", "plain thread"),
     ]);
-    expect(labels(tree[0].groups)).toEqual(["WEB-1", "WEB-2", "WEB-3", "PR stack #10", "WEB-9", "No issue key"]);
+    expect(labels(tree[0].groups)).toEqual(["WEB-1", "WEB-2", "WEB-3", "PR stack #10", "WEB-9"]);
     expect(child(tree, "frontend", "PR stack #10").stack).toEqual({ id: "s10", total: 3, base: "main" });
-    expect(titles(child(tree, "frontend", "No issue key").threads)).toEqual(["plain thread"]);
-    expect("stack" in child(tree, "frontend", "No issue key")).toBe(false);
+    expect(titles(child(tree, "frontend").threads)).toEqual(["plain thread"]);
+    expect("stack" in child(tree, "frontend")).toBe(false);
   });
 
   test("keyless launched stack threads share one stack group instead of nesting", () => {
@@ -413,7 +424,7 @@ describe("PR stack", () => {
       ],
       { a: "lead", b: "a", c: "b" },
     );
-    expect(labels(tree[0].groups)).toEqual(["PR stack #61", "No issue key"]);
+    expect(labels(tree[0].groups)).toEqual(["PR stack #61"]);
     const g = child(tree, "frontend", "PR stack #61");
     expect(g.stack).toEqual({ id: "s61", total: 3, base: null });
     expect(g.threads.map((t) => [t.title, t.stack?.pos, t.children.length])).toEqual([
@@ -421,7 +432,7 @@ describe("PR stack", () => {
       ["wait-time-05 two", 2, 0],
       ["wait-time-06 three", 3, 0],
     ]);
-    expect(child(tree, "frontend", "No issue key").threads[0].children).toEqual([]);
+    expect(child(tree, "frontend").threads[0].children).toEqual([]);
   });
 
   test("T3 stack layers set the order; an agent-linked PR is the thread's own", () => {
@@ -496,7 +507,7 @@ describe("PR stack", () => {
       ...stacked(),
       shell("r", "Review #10 notes", { pullRequests: [pr(10, "stack"), pr(11, "stack")] }),
     ]);
-    expect(titles(child(tree, "frontend", "Reviews", "No issue key").threads)).toEqual(["Review #10 notes"]);
+    expect(titles(child(tree, "frontend", "Reviews").threads)).toEqual(["Review #10 notes"]);
   });
 
   test("node PRs leave out stack links; closed PRs are not stack members", () => {
@@ -795,7 +806,7 @@ describe("details", () => {
         spawner,
       );
     });
-    test("set under No issue key when the spawner is in another project", () => {
+    test("set on a loose thread when the spawner is in another project", () => {
       const raws = [shell("sp", "Spawner", { projectId: "p2" }), shell("k", "keyless")];
       expect(node(raws, "k", { k: "sp" }).detail.launchedBy).toEqual(spawner);
     });
@@ -874,8 +885,10 @@ describe("linearOf", () => {
     milestone: null,
   };
   const linearOf = (key: string) => (key === "SHOP-1" ? ISSUE : undefined);
-  const nodeOf = (title: string, over: Partial<BuildInput> = {}) =>
-    build([shell("a", title)], {}, over)[0].groups[0].threads[0];
+  const nodeOf = (title: string, over: Partial<BuildInput> = {}) => {
+    const [p] = build([shell("a", title)], {}, over);
+    return [...p.groups.flatMap((g) => g.threads), ...p.threads][0];
+  };
 
   test("a node gets the Linear data of the first key in its title", () => {
     expect(nodeOf("SHOP-1 and SHOP-2 x", { linearOf }).linear).toEqual(ISSUE);
@@ -925,9 +938,9 @@ describe("buildLinearTree", () => {
       "SHOP-2": issue(null),
       "SHOP-3": issue("x"),
     });
-    expect(ids(tree)).toEqual(["lp:x", "lf:none"]);
-    expect(tree[1].label).toBe(NO_PROJECT);
-    expect(titles(tree[1].threads)).toEqual(["SHOP-1 x", "SHOP-2 y"]);
+    expect(ids(tree)).toEqual(["lf:none", "lp:x"]);
+    expect(tree[0].label).toBe(NO_PROJECT);
+    expect(titles(tree[0].threads)).toEqual(["SHOP-1 x", "SHOP-2 y"]);
   });
 
   test("Reviews keeps key subgroups, as the T3 tree does", () => {
@@ -936,11 +949,8 @@ describe("buildLinearTree", () => {
     });
     expect(tree[0].id).toBe("lf:reviews");
     expect(tree[0].label).toBe("Reviews");
-    expect(tree[0].threads).toEqual([]);
-    expect(tree[0].groups.map((b) => [b.id, b.label, b.threads.length])).toEqual([
-      ["lf:reviews:SHOP-1", "SHOP-1", 2],
-      [`lf:reviews:${NO_KEY}`, NO_KEY, 1],
-    ]);
+    expect(titles(tree[0].threads)).toEqual(["Review #6"]);
+    expect(tree[0].groups.map((b) => [b.id, b.label, b.threads.length])).toEqual([["lf:reviews:SHOP-1", "SHOP-1", 2]]);
   });
 
   test("a keyless thread is a loose row, with no header label", () => {
@@ -970,7 +980,7 @@ describe("buildLinearTree", () => {
     expect(ids(tree[0].groups)).toEqual(["lm:second", "lm:first"]);
   });
 
-  test("projects sort by oldest thread, then Reviews, No project, loose rows; empty fallbacks go", () => {
+  test("projects, Reviews and No project sort together by oldest thread; loose rows come last; empty fallbacks go", () => {
     const raws = [
       shell("k", "no key"),
       shell("n", "SHOP-9 none"),
@@ -979,7 +989,7 @@ describe("buildLinearTree", () => {
       shell("a", "SHOP-1 alpha"),
     ];
     const answers = { "SHOP-1": issue("alpha"), "SHOP-2": issue("beta") };
-    expect(ids(buildL(raws, answers))).toEqual(["lp:beta", "lp:alpha", "lf:reviews", "lf:none", "lf:loose"]);
+    expect(ids(buildL(raws, answers))).toEqual(["lf:none", "lf:reviews", "lp:beta", "lp:alpha", "lf:loose"]);
     expect(ids(buildL([shell("a", "SHOP-1 alpha")], answers))).toEqual(["lp:alpha"]);
   });
 
@@ -1082,7 +1092,7 @@ describe("buildLinearTree", () => {
     );
     expect(ids(tree)).toEqual(["lp:x", "lf:reviews", "lf:loose"]);
     expect(ids(tree[0].groups)).toEqual(["lm:m", "lm:x:none"]);
-    expect(tree.map(isFallback)).toEqual([false, true, true]);
+    expect(tree.map((b) => b.kind)).toEqual(["linear-project", "review", "loose"]);
     expect(tree[0].linear).toEqual({ url: "https://linear.app/w/project/x" });
     expect(tree[0].groups[0].linear).toEqual({ date: "2026-12-04" });
     expect(tree[0].groups[1].linear).toEqual({ date: null });
@@ -1273,14 +1283,14 @@ describe("runs", () => {
       expect(labels(tree[0].groups)).toEqual(["SHOP-7"]);
     });
 
-    test("a Review run goes to Reviews; a keyless run to No issue key", () => {
+    test("a Review run goes to Reviews; a keyless run is loose in its project", () => {
       const tree = build(
         [step("a", "Review thread", "r1", "review"), step("b", "Work", "r2")],
         {},
         snap([run("r1", { title: "Review #12 SHOP-3 x" }), run("r2", { title: "Nightly" })]),
       );
       expect(child(tree, "frontend", "Reviews", "SHOP-3").threads[0].id).toBe("run:r1");
-      expect(child(tree, "frontend", NO_KEY).threads[0].id).toBe("run:r2");
+      expect(child(tree, "frontend").threads[0].id).toBe("run:r2");
     });
 
     test("step threads never show as loose rows, in any tree", () => {
@@ -1487,7 +1497,7 @@ describe("Map groups", () => {
   const keys = (m: Record<string, string>) => ({ mapKeyOf: (id: string) => m[id] ?? null });
   const mapped = (raws: object[], m: Record<string, string>, spawners: Record<string, string> = {}) =>
     build(raws, spawners, keys(m));
-  const loose = (tree: Group[]) => child(tree, "frontend", NO_KEY).threads;
+  const loose = (tree: Group[]) => child(tree, "frontend").threads;
   const hrefOf = (id: string) => `t3code://threads/env-1/${id}`;
 
   test("a member leaves its key group and nests under the map thread", () => {
@@ -1496,7 +1506,7 @@ describe("Map groups", () => {
       { t1: "/m/search", t2: "/m/search" },
       { t1: "chart", t2: "chart" },
     );
-    expect(labels(tree[0].groups)).toEqual([NO_KEY]);
+    expect(tree[0].groups).toEqual([]);
     const [head] = loose(tree);
     expect(head.map).toEqual({ name: "Search", header: false, href: null });
     expect(titles(head.children)).toEqual(["SHOP-1 a", "SHOP-2 b"]);
@@ -1627,7 +1637,7 @@ describe("Map groups", () => {
       { id: "s10", total: 3, base: null },
       { id: "s10", total: 3, base: null },
     ]);
-    expect(labels(tree[0].groups)).toEqual(["WEB-9", NO_KEY]);
+    expect(labels(tree[0].groups)).toEqual(["WEB-9"]);
   });
 
   test("in a stack of two maps, each member stays and mates go to the lowest member", () => {

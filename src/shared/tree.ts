@@ -137,8 +137,8 @@ export type GroupKind =
 export type Group = {
   id: string;
   label: string;
-  /** Set by the server on every group it builds. Groups that the page builds leave it out. */
-  kind?: GroupKind;
+  /** Set on every group. The page reads it and never the label. */
+  kind: GroupKind;
   /** Project groups only: `owner/name`. */
   repo?: string;
   /** Project groups only: the workspace root. */
@@ -151,18 +151,14 @@ export type Group = {
   threads: ThreadNode[];
 };
 
-/** Labels of the two project groups that stay after the key groups. */
+/** The label of the Reviews group. */
 export const REVIEWS = "Reviews";
-export const NO_KEY = "No issue key";
 /** Labels of the Linear tree: the fallback project and the fallback milestone. */
 export const NO_PROJECT = "No project";
 export const NO_MILESTONE = "No milestone";
 
-/** Fallback groups of the Linear tree have ids with the `lf:` prefix. */
-export const isFallback = (b: Group): boolean => b.id.startsWith("lf:");
 /** The id of the Reviews group of the Linear tree. */
 export const LINEAR_REVIEWS = "lf:reviews";
-export const isLinearReviews = (b: Group): boolean => b.id === LINEAR_REVIEWS;
 /** The id of the keyless threads of the Linear tree. They show as loose rows, with no header. */
 export const LINEAR_LOOSE = "lf:loose";
 

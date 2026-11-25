@@ -1,7 +1,7 @@
 import { describe, expect, test } from "bun:test";
 
 import { foldIds } from "../src/page/format.ts";
-import { applyOrder } from "../src/page/order.ts";
+import { applyOrder, arrange } from "../src/page/order.ts";
 import {
   ageTip,
   blockTime,
@@ -25,15 +25,7 @@ import {
   sortTree,
   vtName,
 } from "../src/page/view.ts";
-import {
-  allThreads,
-  LINEAR_LOOSE,
-  NO_KEY,
-  REVIEWS,
-  type Group,
-  type Status,
-  type ThreadNode,
-} from "../src/shared/tree.ts";
+import { allThreads, REVIEWS, type Group, type GroupKind, type Status, type ThreadNode } from "../src/shared/tree.ts";
 
 const T = (n: number) => `2026-11-12T12:00:${String(n).padStart(2, "0")}.000Z`;
 const thread = (
@@ -61,15 +53,24 @@ const thread = (
   detail: {} as ThreadNode["detail"],
   children,
 });
-const branch = (id: string, threads: ThreadNode[] = [], groups: Group[] = [], stack?: string): Group => ({
+const branch = (
+  id: string,
+  threads: ThreadNode[] = [],
+  groups: Group[] = [],
+  stack?: string,
+  kind: GroupKind = "key",
+): Group => ({
   id,
   label: id,
+  kind,
   ...(stack && { stack: { id: stack, total: 2, base: null } }),
   groups,
   threads,
 });
 const ids = (xs: { id: string }[]) => xs.map((x) => x.id);
-const project = (id: string, groups: Group[]) => branch(id, [], groups);
+const project = (id: string, groups: Group[]) => branch(id, [], groups, undefined, "project");
+/** A one-thread headerless group, as the page builds it for a loose thread. */
+const loose = (t: ThreadNode) => branch(`t:${t.id}`, [t], [], undefined, "loose");
 
 /** A thread with no run, created at second `n`. */
 const created = (id: string, n: number, children: ThreadNode[] = []): ThreadNode => {
@@ -211,7 +212,7 @@ describe("sortTree", () => {
     expect(ids(sortTree(tree(), false)[0].groups[0].threads)).toEqual(["b", "a"]);
   });
 
-  test("sorts the stack runs of a milestone by block time", () => {
+  test("sorts the stack runs and loose threads of a milestone together by block time", () => {
     const lin = (b: Group): Group => ({ ...b, linear: {} });
     const p = lin(
       branch(
@@ -222,27 +223,40 @@ describe("sortTree", () => {
             branch(
               "lm:m",
               [],
-              [branch("lm:m:K1", [thread("a", 1)], [], "s1"), branch("lm:m:K2", [thread("b", 9)], [], "s2")],
+              [
+                branch("lm:m:K1", [thread("a", 1)], [], "s1"),
+                loose(thread("l", 5)),
+                branch("lm:m:K2", [thread("b", 9)], [], "s2"),
+              ],
+              undefined,
+              "milestone",
             ),
           ),
         ],
+        undefined,
+        "linear-project",
       ),
     );
-    expect(ids(sortTree([p])[0].groups[0].groups)).toEqual(["lm:m:K2", "lm:m:K1"]);
+    expect(ids(sortTree([p])[0].groups[0].groups)).toEqual(["lm:m:K2", "t:l", "lm:m:K1"]);
   });
 
-  test("keeps Reviews first and No issue key last, and sorts inside them", () => {
+  test("sorts Reviews, key groups and loose threads together, and sorts inside them", () => {
     const [p] = sortTree([
       project("p", [
-        branch(NO_KEY, [thread("n1", 1), thread("n2", 9)]),
+        loose(thread("n", 9)),
         branch("g", [thread("a", 5)]),
-        branch(REVIEWS, [], [branch("r1", [thread("x", 1)]), branch("r2", [thread("y", 2), thread("z", 7)])]),
+        branch(
+          REVIEWS,
+          [],
+          [branch("r1", [thread("x", 1)]), branch("r2", [thread("y", 2), thread("z", 7)])],
+          undefined,
+          "review",
+        ),
       ]),
     ]);
-    expect(ids(p.groups)).toEqual([REVIEWS, "g", NO_KEY]);
-    expect(ids(p.groups[0].groups)).toEqual(["r2", "r1"]);
-    expect(ids(p.groups[0].groups[0].threads)).toEqual(["z", "y"]);
-    expect(ids(p.groups[2].threads)).toEqual(["n2", "n1"]);
+    expect(ids(p.groups)).toEqual(["t:n", REVIEWS, "g"]);
+    expect(ids(p.groups[1].groups)).toEqual(["r2", "r1"]);
+    expect(ids(p.groups[1].groups[0].threads)).toEqual(["z", "y"]);
   });
 
   test("moves a stack run as one block and keeps its inner order", () => {
@@ -309,18 +323,18 @@ describe("vtName", () => {
 describe("flatten", () => {
   const sample = () => [
     project("p1", [
-      branch(REVIEWS, [], [branch("r1", [thread("rv")])]),
+      branch(REVIEWS, [], [branch("r1", [thread("rv")])], undefined, "review"),
       branch("g1", [thread("a", 1, [thread("sub")]), thread("b")]),
       branch("s1", [thread("c")], [], "st"),
       branch("s2", [thread("d")], [], "st"),
       branch("g2", [thread("e")]),
-      branch(NO_KEY, [thread("n")]),
+      loose(thread("n")),
     ]),
     project("p2", [branch("g3", [thread("f")])]),
   ];
   const out = flatten(sample());
 
-  test("goes project, then Reviews, groups and No issue key, in order", () => {
+  test("goes project by project, each list in order", () => {
     expect(ids(out)).toEqual(["t:rv", "t:a", "t:b", "stack:p1:st", "t:e", "t:n", "t:f"]);
   });
   test("flags review threads and names the project", () => {
@@ -612,7 +626,7 @@ describe("pathFolds", () => {
   const tree = [
     project("p1", [branch("g1", [thread("a")])]),
     project("p2", [
-      branch(REVIEWS, [], [branch("r", [thread("x")])]),
+      branch(REVIEWS, [], [branch("r", [thread("x")])], undefined, "review"),
       branch("s1", [thread("b", null, [thread("c")])], [], "st"),
     ]),
   ];
@@ -620,6 +634,14 @@ describe("pathFolds", () => {
   test("adds the rail of a stack, and finds a subthread", () =>
     expect(pathFolds(tree, "c")).toEqual(["p2", "s1", "rail:st"]));
   test("is empty for an unknown thread", () => expect(pathFolds(tree, "zz")).toEqual([]));
+  test("leaves out a loose wrapper but keeps the Map heads of its thread", () => {
+    const head: ThreadNode = {
+      ...thread("h", null, [thread("deep")]),
+      map: { name: "m", header: false, href: null },
+    };
+    expect(pathFolds([project("p", [loose(head)])], "deep")).toEqual(["p", "h"]);
+    expect(pathFolds([project("p", [loose(thread("a"))])], "a")).toEqual(["p"]);
+  });
 });
 
 describe("sectionHolding", () => {
@@ -635,78 +657,72 @@ describe("sectionHolding", () => {
 
 describe("Linear tree", () => {
   const lin = (b: Group): Group => ({ ...b, linear: {} });
+  const ms = (id: string, threads: ThreadNode[], groups: Group[] = []) =>
+    lin(branch(id, threads, groups, undefined, "milestone"));
+  const proj = (id: string, groups: Group[]) => lin(branch(id, [], groups, undefined, "linear-project"));
   const tree = () => [
+    proj("lp:a", [ms("lm:m1", [thread("old", 1), thread("new", 5)]), ms("lm:m2", [thread("x", 9)])]),
+    proj("lp:b", [ms("lm:m3", [thread("y", 20)])]),
     lin(
       branch(
-        "lp:a",
+        "lf:reviews",
         [],
-        [lin(branch("lm:m1", [thread("old", 1), thread("new", 5)])), lin(branch("lm:m2", [thread("x", 9)]))],
+        [branch("lf:reviews:K", [thread("r1", 2)]), branch("lf:reviews:L", [thread("r2", 8)])],
+        undefined,
+        "review",
       ),
     ),
-    lin(branch("lp:b", [], [lin(branch("lm:m3", [thread("y", 20)]))])),
-    lin(
-      branch("lf:reviews", [], [branch("lf:reviews:K", [thread("r1", 2)]), branch("lf:reviews:L", [thread("r2", 8)])]),
-    ),
-    lin(branch("lf:none", [thread("n1", 3), thread("n2", 7)])),
+    lin(branch("lf:none", [thread("n1", 3), thread("n2", 7)], [], undefined, "no-project")),
   ];
+  const sorted = () => sortTree(arrange(tree(), {}).projects);
 
-  test("sortTree keeps project and milestone order and sorts threads newest first", () => {
-    const out = sortTree(tree());
+  test("sortTree keeps project and milestone order and sorts loose threads newest first", () => {
+    const out = sorted();
     expect(ids(out)).toEqual(["lp:a", "lp:b", "lf:reviews", "lf:none"]);
     expect(ids(out[0].groups)).toEqual(["lm:m1", "lm:m2"]);
-    expect(ids(out[0].groups[0].threads)).toEqual(["new", "old"]);
-    expect(ids(out[3].threads)).toEqual(["n2", "n1"]);
+    expect(ids(out[0].groups[0].groups)).toEqual(["t:new", "t:old"]);
+    expect(ids(out[3].groups)).toEqual(["t:n2", "t:n1"]);
   });
 
   test("sortTree sorts the Reviews subgroups newest first", () => {
-    expect(ids(sortTree(tree())[2].groups)).toEqual(["lf:reviews:L", "lf:reviews:K"]);
+    expect(ids(sorted()[2].groups)).toEqual(["lf:reviews:L", "lf:reviews:K"]);
   });
 
   const stacked = () =>
-    lin(
-      branch(
-        "lp:s",
-        [],
-        [lin(branch("lm:m", [thread("p", 1)], [branch("lm:m:K", [thread("a", 3), thread("b", 2)], [], "st")]))],
-      ),
-    );
+    proj("lp:s", [ms("lm:m", [thread("p", 1)], [branch("lm:m:K", [thread("a", 3), thread("b", 2)], [], "st")])]);
 
   test("sortTree keeps the stack key groups of a milestone in stack order, against recency", () => {
-    const p = lin(
-      branch(
-        "lp:s",
-        [],
-        [
-          lin(
-            branch(
-              "lm:m",
-              [thread("p", 1)],
-              [branch("lm:m:K1", [thread("a", 1)], [], "st"), branch("lm:m:K2", [thread("b", 9)], [], "st")],
-            ),
-          ),
-        ],
+    const p = proj("lp:s", [
+      ms(
+        "lm:m",
+        [thread("p", 1)],
+        [branch("lm:m:K1", [thread("a", 1)], [], "st"), branch("lm:m:K2", [thread("b", 9)], [], "st")],
       ),
-    );
+    ]);
     expect(ids(sortTree([p])[0].groups[0].groups)).toEqual(["lm:m:K1", "lm:m:K2"]);
   });
 
-  test("sortTree keeps the stack groups of a fallback group as is", () => {
-    const fallback = (id: string) =>
-      lin(
-        branch(
-          id,
-          [],
-          [
-            branch(`${id}:K1`, [thread("a", 1), thread("c", 5)], [], "st"),
-            branch(`${id}:K2`, [thread("b", 9)], [], "st"),
-          ],
-        ),
-      );
-    for (const id of ["lf:none", LINEAR_LOOSE]) {
-      const [out] = sortTree([fallback(id)]);
-      expect(ids(out.groups)).toEqual([`${id}:K1`, `${id}:K2`]);
-      expect(ids(out.groups[0].threads)).toEqual(["a", "c"]);
-    }
+  test("sortTree keeps the stack groups of No project as is", () => {
+    const none = lin(
+      branch(
+        "lf:none",
+        [],
+        [
+          branch("lf:none:K1", [thread("a", 1), thread("c", 5)], [], "st"),
+          branch("lf:none:K2", [thread("b", 9)], [], "st"),
+        ],
+        undefined,
+        "no-project",
+      ),
+    );
+    const [out] = sortTree([none]);
+    expect(ids(out.groups)).toEqual(["lf:none:K1", "lf:none:K2"]);
+    expect(ids(out.groups[0].threads)).toEqual(["a", "c"]);
+  });
+
+  test("sortTree keeps the top level order and does not sort a loose item", () => {
+    const top = [loose(thread("l1", 1)), ...tree(), loose(thread("l2", 9))];
+    expect(ids(sortTree(top))).toEqual(["t:l1", "lp:a", "lp:b", "lf:reviews", "lf:none", "t:l2"]);
   });
 
   test("foldIds and pathFolds reach the rail of a stack in a milestone", () => {
@@ -724,33 +740,48 @@ describe("Linear tree", () => {
 describe("Linear flat", () => {
   const lin = (b: Group, date?: string): Group => ({ ...b, label: b.id, linear: date ? { date } : {} });
   const named = (b: Group, label: string): Group => ({ ...b, label });
+  const kindOf = (b: Group, kind: GroupKind): Group => ({ ...b, kind });
+  /** A loose item of the top level: a headerless group with no label. */
+  const looseTop = (...ts: ThreadNode[]): Group[] => ts.map((t) => named(lin(loose(t)), ""));
   const tree = (): Group[] => [
     named(
-      lin(
-        branch(
-          "lp:a",
-          [],
-          [
-            named(lin(branch("lm:m1", [thread("old", 1), thread("new", 5, [thread("kid")])]), "2026-12-04"), "M1"),
-            named(lin(branch("lm:a:none", [thread("x", 9)])), "No milestone"),
-            named(lin(branch("lm:m9", [])), "Empty"),
-          ],
+      kindOf(
+        lin(
+          branch(
+            "lp:a",
+            [],
+            [
+              named(
+                kindOf(
+                  lin(branch("lm:m1", [thread("old", 1), thread("new", 5, [thread("kid")])]), "2026-12-04"),
+                  "milestone",
+                ),
+                "M1",
+              ),
+              named(kindOf(lin(branch("lm:a:none", [thread("x", 9)])), "milestone"), "No milestone"),
+              named(kindOf(lin(branch("lm:m9", [])), "milestone"), "Empty"),
+            ],
+          ),
         ),
+        "linear-project",
       ),
       "P",
     ),
     named(
-      lin(
-        branch(
-          "lf:reviews",
-          [],
-          [branch("lf:reviews:K", [thread("r1", 2)]), branch("lf:reviews:L", [thread("r2", 8)])],
+      kindOf(
+        lin(
+          branch(
+            "lf:reviews",
+            [],
+            [branch("lf:reviews:K", [thread("r1", 2)]), branch("lf:reviews:L", [thread("r2", 8)])],
+          ),
         ),
+        "review",
       ),
       "Reviews",
     ),
-    named(lin(branch("lf:none", [thread("n1", 3), thread("n2", 7)])), "No project"),
-    named(lin(branch(LINEAR_LOOSE, [thread("k1", 4)])), ""),
+    named(kindOf(lin(branch("lf:none", [thread("n1", 3), thread("n2", 7)])), "no-project"), "No project"),
+    ...looseTop(thread("k1", 4)),
   ];
   const seq = (shut: string[] = [], units = flatten(tree())) => sequence(units, "linear", new Set(shut), true, tree());
   const heads = (items: ReturnType<typeof seq>) =>
@@ -763,8 +794,20 @@ describe("Linear flat", () => {
   test("a stack in a milestone or in No project is one stack unit under its section", () => {
     const rail = (id: string, t: string) => branch(id, [thread(t, 4)], [], "st");
     const projects = [
-      named(lin(branch("lp:s", [], [named(lin(branch("lm:m", [thread("p", 1)], [rail("lm:m:K", "a")])), "M")])), "P"),
-      named(lin(branch("lf:none", [], [rail("lf:none:K", "n")])), "No project"),
+      named(
+        kindOf(
+          lin(
+            branch(
+              "lp:s",
+              [],
+              [named(kindOf(lin(branch("lm:m", [thread("p", 1)], [rail("lm:m:K", "a")])), "milestone"), "M")],
+            ),
+          ),
+          "linear-project",
+        ),
+        "P",
+      ),
+      named(kindOf(lin(branch("lf:none", [], [rail("lf:none:K", "n")])), "no-project"), "No project"),
     ];
     const units = flatten(projects);
     expect(units.map((u) => [u.kind, u.id])).toEqual([
@@ -788,7 +831,10 @@ describe("Linear flat", () => {
   });
 
   test("flatten ignores a milestone named like a fallback", () => {
-    const p = lin(branch("lp:z", [], [named(lin(branch("lm:z", [thread("w")])), REVIEWS)]));
+    const p = kindOf(
+      lin(branch("lp:z", [], [named(kindOf(lin(branch("lm:z", [thread("w")])), "milestone"), REVIEWS)])),
+      "linear-project",
+    );
     expect(flatten([p]).map((u) => u.kind === "thread" && u.review)).toEqual([false]);
   });
 
@@ -796,11 +842,56 @@ describe("Linear flat", () => {
     expect(heads(seq())).toEqual(["P · M1|3|2026-12-04", "P · No milestone|1|", "Reviews|2|", "No project|2|"]);
   });
 
-  test("keyless threads come last as loose rows: a section with no label that a fold never shuts", () => {
-    const items = seq([LINEAR_LOOSE]);
-    expect(items.at(-2)).toMatchObject({ kind: "section", key: LINEAR_LOOSE, label: "", open: true });
+  test("a loose thread is a section with no label that a fold never shuts", () => {
+    const items = seq(["t:k1"]);
+    expect(items.at(-2)).toMatchObject({ kind: "section", key: "t:k1", label: "", open: true, loose: true });
     expect(ids(items).at(-1)).toBe("t:k1");
-    expect(flatLists(items).get(sectionList(LINEAR_LOOSE))).toEqual(["t:k1"]);
+    expect(flatLists(items).get(sectionList("t:k1"))).toEqual(["t:k1"]);
+  });
+
+  test("adjacent loose items share one section; a loose item between projects keeps its place", () => {
+    const [p, reviews, none] = tree();
+    const top = [p, ...looseTop(thread("k2", 1)), reviews, ...looseTop(thread("k3", 2), thread("k4", 3)), none];
+    const items = sequence(flatten(top), "linear", new Set(), true, top);
+    expect(items.map((i) => (i.kind === "section" ? `sec:${i.loose ? "loose" : i.label}` : i.id))).toEqual([
+      "sec:P · M1",
+      "t:old",
+      "t:new",
+      "sec:P · No milestone",
+      "t:x",
+      "sec:loose",
+      "t:k2",
+      "sec:Reviews",
+      "t:r1",
+      "t:r2",
+      "sec:loose",
+      "t:k3",
+      "t:k4",
+      "sec:No project",
+      "t:n1",
+      "t:n2",
+    ]);
+  });
+
+  test("a keyless PR stack of the loose branch is one stack unit in the loose section", () => {
+    const stack = named(
+      lin(
+        branch(
+          "stack:lf:loose:st",
+          [],
+          [branch("a", [thread("sa", 5)], [], "st", "stack"), branch("b", [thread("sb", 6)], [], "st", "stack")],
+          undefined,
+          "loose",
+        ),
+      ),
+      "",
+    );
+    const top = [...looseTop(thread("k1", 4)), stack];
+    const units = flatten(top);
+    expect(units.map((u) => u.kind)).toEqual(["thread", "stack"]);
+    const items = sequence(units, "linear", new Set(), true, top);
+    expect(items.map((i) => i.kind)).toEqual(["section", "thread", "stack"]);
+    expect(items[0]).toMatchObject({ loose: true, key: "t:k1" });
   });
 
   test("sequence keeps the unit order inside a section, for manual and updated sort", () => {
@@ -827,6 +918,10 @@ describe("Linear flat", () => {
     expect(lists.get(FLAT)).toHaveLength(8);
     expect(lists.get(sectionList("lm:m1"))).toEqual(["t:old", "t:new"]);
     expect(lists.get(sectionList("lf:reviews"))).toEqual(["t:r1", "t:r2"]);
+  });
+
+  test("a section with no loose item is not loose", () => {
+    expect(seq()[0]).not.toHaveProperty("loose");
   });
 
   test("sectionHolding finds the milestone of a subthread", () => {
@@ -867,10 +962,10 @@ describe("runs in the flat view", () => {
   });
 
   test("linearSections keeps a run unit, also in a Reviews subgroup", () => {
-    const lin = (b: Group): Group => ({ ...b, linear: {} });
+    const lin = (b: Group, kind: GroupKind): Group => ({ ...b, kind, linear: {} });
     const projects = [
-      lin(branch("lp:a", [], [lin(branch("lm:m1", [runNode("r", "working")]))])),
-      lin(branch("lf:reviews", [], [branch("lf:reviews:K", [runNode("v", "working")])])),
+      lin(branch("lp:a", [], [lin(branch("lm:m1", [runNode("r", "working")]), "milestone")]), "linear-project"),
+      lin(branch("lf:reviews", [], [branch("lf:reviews:K", [runNode("v", "working")])]), "review"),
     ];
     const items = sequence(flatten(projects), "linear", new Set(), true, projects);
     expect(items.filter((i) => i.kind === "thread").map((i) => i.id)).toEqual(["t:r", "t:v"]);
@@ -887,10 +982,10 @@ describe("Map groups in the views", () => {
     ...thread(id, null, children, status),
     map,
   });
-  const lin = (b: Group): Group => ({ ...b, linear: {} });
+  const lin = (b: Group, kind: GroupKind): Group => ({ ...b, kind, linear: {} });
 
   test("a header is no thread: not in allThreads, not in a section count or placement", () => {
-    const projects = [project("p", [branch(NO_KEY, [header("h", [thread("a"), thread("b", null, [], "done")])])])];
+    const projects = [project("p", [loose(header("h", [thread("a"), thread("b", null, [], "done")]))])];
     expect(allThreads(projects[0]).map((t) => t.id)).toEqual(["a", "b"]);
     const items = sequence(flatten(projects), "status");
     expect(items.filter((i) => i.kind === "section").map((i) => [i.key, i.count])).toEqual([["working", 1]]);
@@ -898,7 +993,7 @@ describe("Map groups in the views", () => {
 
   test("a status unit goes to its most urgent member and folds context rows by thread", () => {
     const h = head("m", [thread("a", null, [], "done"), thread("b", null, [], "working")]);
-    const [first] = sections(flatten([project("p", [branch(NO_KEY, [h])])]));
+    const [first] = sections(flatten([project("p", [loose(h)])]));
     expect(first.key).toBe("working");
     expect(folds(h.children[0], ["working"])).toBe(true);
     expect(folds(h.children[1], ["working"])).toBe(false);
@@ -906,8 +1001,8 @@ describe("Map groups in the views", () => {
 
   test("Group by Linear project keeps a unit that a header heads", () => {
     const projects = [
-      lin(branch("lp:a", [], [lin(branch("lm:m1", [header("h", [thread("a")])]))])),
-      lin(branch("lf:loose", [header("g", [thread("b")])])),
+      lin(branch("lp:a", [], [lin(branch("lm:m1", [header("h", [thread("a")])]), "milestone")]), "linear-project"),
+      lin(branch("lf:loose", [header("g", [thread("b")])]), "loose"),
     ];
     const items = sequence(flatten(projects), "linear", new Set(), true, projects);
     expect(items.filter((i) => i.kind === "thread").map((i) => i.id)).toEqual(["t:h", "t:g"]);
@@ -924,7 +1019,7 @@ describe("Map groups in the views", () => {
   test("a header adds no run to Last updated: the group sorts by its members", () => {
     const [p] = sortTree([
       project("p", [
-        branch(NO_KEY, [thread("old", 1), { ...header("h", [thread("m", 7)]), lastRun: null }, thread("mid", 4)]),
+        branch("g", [thread("old", 1), { ...header("h", [thread("m", 7)]), lastRun: null }, thread("mid", 4)]),
       ]),
     ]);
     expect(ids(p.groups[0].threads)).toEqual(["h", "mid", "old"]);
