@@ -36,7 +36,7 @@ const branch = (threads: ThreadNode[], over: Partial<Branch> = {}): Branch => ({
   threads,
   ...over,
 });
-const ctx = { focus: [] as string[], skip: [] as Skip[], now: NOW };
+const ctx = { skip: [] as Skip[], now: NOW };
 const ids = (projects: Branch[], c = ctx) => looksDone(projects, c).map((o) => o.thread.id);
 const offered = (t: ThreadNode, c = ctx) => ids([branch([t])], c).includes(t.id);
 
@@ -69,11 +69,9 @@ describe("looksDone candidates", () => {
     expect(offered(node({ lastRun: ago(61) }))).toBe(true);
     expect(offered(node({ lastRun: null }))).toBe(false);
   });
-  test("pinned, Focus and settled threads are excluded", () => {
+  test("pinned and settled threads are excluded", () => {
     expect(offered(node({ detail: { pinned: true } as ThreadNode["detail"] }))).toBe(false);
     expect(offered(node({ settled: true }))).toBe(false);
-    const t = node();
-    expect(offered(t, { ...ctx, focus: [t.id] })).toBe(false);
   });
   test("a nested thread is offered on its own", () => {
     const child = node();

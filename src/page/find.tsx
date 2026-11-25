@@ -23,14 +23,11 @@ export const FIND_KEY = MAC ? "⌘K" : "Ctrl+K";
 const RECENT_MAX = 8;
 const SETTLED_ROW = "find:settled-search";
 
-/** The recent threads of the empty query: the Focus threads, then the newest updated. */
-const recent = (list: Hit[], focus: string[]): Hit[] => {
-  const slots = focus.flatMap((id) => list.filter((h) => h.t.id === id));
-  const rest = list
-    .filter((h) => !focus.includes(h.t.id))
-    .toSorted((a, b) => Number(b.t.updatedAt > a.t.updatedAt) - Number(b.t.updatedAt < a.t.updatedAt));
-  return [...slots, ...rest].slice(0, RECENT_MAX);
-};
+/** The recent threads of the empty query: the newest updated. */
+const recent = (list: Hit[]): Hit[] =>
+  list
+    .toSorted((a, b) => Number(b.t.updatedAt > a.t.updatedAt) - Number(b.t.updatedAt < a.t.updatedAt))
+    .slice(0, RECENT_MAX);
 
 type RowProps = {
   h: Hit;
@@ -88,7 +85,6 @@ function Row({ h, now, canShow, open, show }: RowProps) {
 
 type BodyProps = {
   list: Hit[];
-  focus: string[];
   canShow: (id: string) => boolean;
   now: number;
   open: (h: Hit) => void;
@@ -136,7 +132,7 @@ function StartGroup({
 }
 
 /** The search and the results. It mounts with the dialog, so the query and the settled search reset on close. */
-function FindBody({ list, focus, canShow, now, open, show, workflows, start }: BodyProps) {
+function FindBody({ list, canShow, now, open, show, workflows, start }: BodyProps) {
   const [q, setQ] = useState("");
   const [sel, setSel] = useState("");
   const [settledMode, setSettledMode] = useState(false);
@@ -162,7 +158,7 @@ function FindBody({ list, focus, canShow, now, open, show, workflows, start }: B
     };
   }, [settledMode, query, startMode]);
 
-  const active = query ? find(list, query) : recent(list, focus);
+  const active = query ? find(list, query) : recent(list);
   const settled = settledMode && query && settledHits.q === query ? settledHits.hits : [];
   const offerSettled = query !== "" && !settledMode;
   const byValue = new Map([...active, ...settled].map((h) => [h.t.id, h]));
@@ -249,7 +245,6 @@ export function FindDialog({
   open,
   setOpen,
   list,
-  focus,
   canShow,
   reveal,
   now,
@@ -259,7 +254,6 @@ export function FindDialog({
   open: boolean;
   setOpen: (o: boolean) => void;
   list: Hit[];
-  focus: string[];
   canShow: (id: string) => boolean;
   reveal: (id: string) => Promise<boolean>;
   now: number;
@@ -285,7 +279,6 @@ export function FindDialog({
         </DialogHeader>
         <FindBody
           list={list}
-          focus={focus}
           canShow={canShow}
           now={now}
           workflows={workflows}

@@ -19,7 +19,6 @@ import {
   CircleArrowUp,
   CircleCheckBig,
   Contrast,
-  Crosshair,
   ExternalLink,
   Eye,
   Rows3,
@@ -34,7 +33,6 @@ import {
   Moon,
   Send,
   Settings,
-  SkipForward,
   Sun,
   Tag,
   TriangleAlert,
@@ -125,7 +123,6 @@ import {
   openNextQueue,
   releaseHeld,
   remember,
-  runPhrase,
   tabTitle,
   upNextList,
   waits,
@@ -135,19 +132,6 @@ import { effectivePick, foldValue, switchBody } from "./catch-up-fold.ts";
 import { CatchUpTitle } from "./catch-up-line.tsx";
 import { CopyPrompt } from "./copy-prompt.tsx";
 import { FindDialog, FIND_KEY, MAC } from "./find.tsx";
-import {
-  addFocus,
-  FOCUS_FULL,
-  FOCUS_KEY,
-  FOCUS_MAX,
-  FOCUS_SHOW_KEY,
-  focusDrop,
-  parseFocus,
-  pruneFocus,
-  removeFocus,
-  replaceFocus,
-} from "./focus.ts";
-import { Focus, FocusButton, FocusStrip, revealRow, slotOf, type Pending } from "./focus.tsx";
 import {
   ago,
   folded,
@@ -165,7 +149,7 @@ import {
   stripKey,
 } from "./format.ts";
 import { IconState } from "./icon-state.tsx";
-import { Hint, useKeyHints } from "./key-hints.tsx";
+import { useKeyHints } from "./key-hints.tsx";
 import { pageKey } from "./keys.ts";
 import { liveStream, type LiveState } from "./live.ts";
 import { SetupDialog } from "./local-setup-dialog.tsx";
@@ -192,6 +176,7 @@ import {
 import { Presence, useMotion } from "./presence.tsx";
 import { ProjectIcon, projectHex } from "./project-icon.tsx";
 import { ProviderIcon } from "./provider-icon.tsx";
+import { Reveal, revealRow } from "./reveal.tsx";
 import { RunRow } from "./run-row.tsx";
 import { CliGate, LastMessage, SendDialog, useLastMessage } from "./send-dialog.tsx";
 import { postMapThread, postSettle } from "./send.ts";
@@ -879,48 +864,6 @@ function ViewMenu({
   );
 }
 
-/** Opens the next thread that waits on the user. Disabled with no target. */
-function OpenNextButton({
-  target,
-  title,
-  now,
-  open,
-}: {
-  target: ThreadNode | RunItem | null;
-  title: string | null;
-  now: number;
-  open: () => void;
-}) {
-  const button = (
-    <Button variant="outline" size="sm" aria-label="Open next" aria-keyshortcuts="n" disabled={!target} onClick={open}>
-      <SkipForward />
-      <span className="max-[720px]:hidden">Open next</span>
-      <Hint surface="header" className="-top-2 -right-2">
-        n
-      </Hint>
-    </Button>
-  );
-  return (
-    <Tooltip>
-      <TooltipTrigger asChild>
-        {target ? (
-          button
-        ) : (
-          /* oxlint-disable-next-line jsx-a11y/no-noninteractive-tabindex -- a disabled button gets no focus, so the wrapper takes it to show the tooltip */
-          <span tabIndex={0}>{button}</span>
-        )}
-      </TooltipTrigger>
-      <TooltipContent>
-        {target
-          ? [isRun(target) ? runPhrase(target) : target.phrase, title, target.since && ago(target.since, now)]
-              .filter(Boolean)
-              .join(" · ")
-          : "Nothing waits"}
-      </TooltipContent>
-    </Tooltip>
-  );
-}
-
 /** Follows the update state of the main process. Undefined in the browser. */
 function useUpdate(): UpdateState | undefined {
   const [state, setState] = useState<UpdateState>();
@@ -1474,8 +1417,7 @@ const Mark = ({ title, children }: { title: string; children: ReactNode }) => (
 );
 
 type RefFn = (el: Element | null) => void;
-/** `thread`: the id of the thread that the unit shows, which a drop on the Focus strip adds. */
-type Sort = { id: string; list: string; index: number; name: string; thread?: string };
+type Sort = { id: string; list: string; index: number; name: string };
 
 /** A unit gets sort props only when its list has two or more units and it is in the list. */
 const sortOf = (lists: Map<string, string[]>, list: string, id: string, name: string): Sort | undefined => {
@@ -1519,7 +1461,7 @@ function SortHook({ sort, children }: { sort: Sort; children: (ref: RefFn, handl
     group: sort.list,
     type: sort.list,
     accept: sort.list,
-    data: { name: sort.name, thread: sort.thread },
+    data: { name: sort.name },
     collisionDetector: leadingEdge,
   });
   const both = useCallback<RefFn>(
@@ -1779,42 +1721,6 @@ function PhraseCell({ t, now }: { t: ThreadNode; now: number }) {
   );
 }
 
-/**
- * Adds the thread to the Focus list, or removes it. Settled threads leave the list, so they get no button.
- * `pressed`: render only when the thread is (true) or is not (false) in the list, so a pressed mark can sit outside the drawer.
- */
-function FocusMark({ t, pressed }: { t: ThreadNode; pressed: boolean }) {
-  const { ids, add, remove, full } = useContext(Focus);
-  const on = ids.includes(t.id);
-  if (t.settled || on !== pressed) return null;
-  const label = on ? "Remove from Focus" : "Add to Focus";
-  return (
-    <Tooltip>
-      <TooltipTrigger asChild>
-        {/** A disabled button gets no hover, so the wrapper keeps the tooltip. */}
-        <span className="inline-flex">
-          <Button
-            variant="ghost"
-            size="icon"
-            className={cn(ROW_BUTTON, on && "text-foreground")}
-            aria-label={label}
-            aria-pressed={on}
-            disabled={!on && full}
-            onClick={(e) => {
-              e.stopPropagation();
-              if (on) remove(t.id);
-              else add(t.id);
-            }}
-          >
-            <Crosshair className={cn("size-3.5", on && "stroke-[2.5]")} />
-          </Button>
-        </span>
-      </TooltipTrigger>
-      <TooltipContent>{!on && full ? FOCUS_FULL : label}</TooltipContent>
-    </Tooltip>
-  );
-}
-
 function SettleButton({ t }: { t: ThreadNode }) {
   const [busy, setBusy] = useState(false);
   const [err, setErr] = useState<string>();
@@ -1964,7 +1870,6 @@ function RowActions({ t, projectPath }: { t: ThreadNode; projectPath?: string })
             forTitle={t.title || t.id}
             className={ROW_BUTTON}
           />
-          <FocusMark t={t} pressed={false} />
         </Popover.Content>
       </Popover.Portal>
     </Popover.Root>
@@ -2134,7 +2039,6 @@ function ThreadRow({
               </TooltipTrigger>
               <TooltipContent>Updated {new Date(t.updatedAt).toLocaleString()}</TooltipContent>
             </Tooltip>
-            <FocusMark t={t} pressed />
             <RowActions t={t} projectPath={projectPath} />
             {end ?? (
               <CollapsibleTrigger asChild>
@@ -2158,7 +2062,7 @@ function ThreadRow({
       </li>
     </Collapsible>
   );
-  return <Sortable sort={sort && { ...sort, thread: t.id }}>{render}</Sortable>;
+  return <Sortable sort={sort}>{render}</Sortable>;
 }
 
 /** The PR stack rail of consecutive members in a Map group: no fold, no drag. */
@@ -2175,7 +2079,7 @@ function NodeRow(p: ComponentProps<typeof ThreadRow>) {
   const { t, sort, inStack, nested, project, corners } = p;
   if (t.map)
     return (
-      <Sortable sort={sort && { ...sort, thread: t.id }}>
+      <Sortable sort={sort}>
         {(ref, handleRef) => (
           <MapGroup
             t={t}
@@ -2200,7 +2104,7 @@ function NodeRow(p: ComponentProps<typeof ThreadRow>) {
     );
   if (!t.run) return <ThreadRow {...p} />;
   return (
-    <Sortable sort={sort && { ...sort, thread: t.id }}>
+    <Sortable sort={sort}>
       {(ref, handleRef) => (
         <RunRow
           t={t}
@@ -2831,7 +2735,6 @@ const KEYS: [keys: string, action: string][] = [
   ["n", "Open next"],
   ["t", "Triage"],
   [FIND_KEY, "Find"],
-  ["1–3", "Open a Focus slot"],
 ];
 
 /** The page keys. */
@@ -3067,17 +2970,12 @@ function App() {
   const [wfStarted, setWfStarted] = useState<{ name: string; runId: string } | null>(null);
   const [orders, setOrders] = useState(() => parseOrders(load(ORDER_KEY)));
   const [linearOrders, setLinearOrders] = useState(() => parseOrders(load(ORDER_LINEAR_KEY)));
-  const [focus, setFocus] = useState(() => parseFocus(load(FOCUS_KEY)));
-  const [focusShow, setFocusShow] = useState(load(FOCUS_SHOW_KEY) === "1");
   const [skip, setSkip] = useState(() => parseSkip(load(SKIP_KEY)));
   const [doneOpen, setDoneOpen] = useState(false);
   const [undoIds, setUndoIds] = useState<string[] | null>(null);
-  const [pending, setPending] = useState<Pending | null>(null);
   const [findOpen, setFindOpen] = useState(false);
   const [triage, setTriage] = useState(false);
   const triageRef = useRef(triage);
-  /** A new key remounts the tree list, which drops the row moves that dnd-kit made during a drag onto the strip. */
-  const [listKey, setListKey] = useState(0);
   /** The page setting wins over the server's `.env` config. */
   const [linearSet, setLinearSet] = useState<Tree["linear"]>(() => {
     try {
@@ -3259,14 +3157,8 @@ function App() {
     save(SNOOZED_KEY, snoozed ? "1" : "0");
   }, [snoozed]);
   useEffect(() => {
-    save(FOCUS_KEY, JSON.stringify(focus));
-  }, [focus]);
-  useEffect(() => {
     save(SKIP_KEY, JSON.stringify(skip));
   }, [skip]);
-  useEffect(() => {
-    save(FOCUS_SHOW_KEY, focusShow ? "1" : "0");
-  }, [focusShow]);
 
   useEffect(() => {
     save(THEME_KEY, theme);
@@ -3355,22 +3247,12 @@ function App() {
     void putPick(body).then((saved) => saved !== null && setCatchUpOn(saved));
   };
   const live = new Map((tree?.projects ?? []).flatMap(allThreads).map((t) => [t.id, t]));
-  /** Threads and run items, for Triage. Focus, Skip and Send use `live`, which holds threads only. */
+  /** Threads and run items, for Triage. Skip and Send use `live`, which holds threads only. */
   const triageLive = new Map<string, ThreadNode | RunItem>([...live, ...runs.map((r) => [r.id, r] as const)]);
-  const kept = tree ? pruneFocus(focus, live, tree.conn) : focus;
-  if (kept !== focus) setFocus(kept);
   const keptSkip = tree ? pruneSkip(skip, live, tree.conn) : skip;
   if (keptSkip !== skip) setSkip(keptSkip);
-  const lookDone = looksDone(tree?.projects ?? [], { focus, skip, now });
+  const lookDone = looksDone(tree?.projects ?? [], { skip, now });
   const lookDoneButton = <LooksDoneButton count={lookDone.length} onOpen={() => setDoneOpen(true)} />;
-  const pend =
-    pending &&
-    focus[pending.slot] === pending.over &&
-    !focus.includes(pending.id) &&
-    live.get(pending.id)?.settled === false
-      ? pending
-      : null;
-  if (pending && !pend) setPending(null);
   /** Opens the folds on the way to the row of thread `id`, stores them, then scrolls to the row and flashes it. */
   const reveal = (id: string): Promise<boolean> => {
     flushSync(() => {
@@ -3383,14 +3265,6 @@ function App() {
     });
     return new Promise((done) => requestAnimationFrame(() => done(revealRow(id))));
   };
-  const focusApi = {
-    reveal,
-    ids: focus,
-    full: focus.length >= FOCUS_MAX,
-    add: (id: string) => setFocus((ids) => addFocus(ids, id)),
-    remove: (id: string) => setFocus((ids) => removeFocus(ids, id)),
-  };
-  const cancelReplace = useCallback(() => setPending(null), []);
   const counts = countAttention(tree?.projects ?? [], runs);
   const needsTip = needsYouTip(counts);
   const connecting = !tree || tree.conn === "connecting";
@@ -3413,9 +3287,9 @@ function App() {
       layout === "flat" ? (v.flat ?? []).flatMap(itemIds) : v.projects.flatMap(allThreads).map((t) => t.id)
     ).join();
   };
-  const latest = useRef({ full, view, rows, projects: tree?.projects ?? [], connecting, focus, live, t3cli });
+  const latest = useRef({ full, view, rows, projects: tree?.projects ?? [], connecting, t3cli });
   useEffect(() => {
-    latest.current = { full, view, rows, projects: tree?.projects ?? [], connecting, focus, live, t3cli };
+    latest.current = { full, view, rows, projects: tree?.projects ?? [], connecting, t3cli };
   });
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
@@ -3465,10 +3339,6 @@ function App() {
       } else if (action === "send") {
         const id = active?.closest<HTMLElement>(".thread-row")?.dataset.thread;
         if (id && latest.current.t3cli?.available !== false) setSendTo({ id, open: true });
-      } else {
-        const { focus: ids, live: threads } = latest.current;
-        const t = threads.get(ids[action]);
-        if (t) location.assign(t.href);
       }
     };
     addEventListener("keydown", onKey);
@@ -3559,12 +3429,7 @@ function App() {
           dragend: ({ operation, canceled }: DragEndEvent) => {
             const s = spot(operation.source);
             if (!s || canceled) return s && `Move canceled. ${s.name} is back at ${s.at}.`;
-            const slot = slotOf(operation.target?.id);
-            if (slot === null) return `${s.name} dropped at ${s.at}.`;
-            const cur = latest.current;
-            const drop = focusDrop(cur.focus, cur.live, slot, operation.source?.data?.thread);
-            if (drop === "add") return `Added ${s.name} to Focus.`;
-            return drop === "ask" ? `Replace with ${s.name}?` : `${s.name} dropped. Focus is unchanged.`;
+            return `${s.name} dropped at ${s.at}.`;
           },
         },
       }),
@@ -3580,20 +3445,10 @@ function App() {
       setFreeze({ list: FLAT, ids: latest.current.view.lists.get(FLAT) ?? [], units: new Map() });
     else if (ids && units) setFreeze({ list, ids, units });
   };
-  const dragEnd = ({ operation: { source, target: drop }, canceled }: DragEndEvent) => {
+  const dragEnd = ({ operation: { source }, canceled }: DragEndEvent) => {
     drag.on = false;
     setFreeze(undefined);
     if (canceled || !isSortable(source)) return;
-    const slot = slotOf(drop?.id);
-    if (slot !== null) {
-      const id = String(source.data.thread);
-      const ids = latest.current.focus;
-      const action = focusDrop(ids, latest.current.live, slot, id);
-      if (action === "ask") setPending({ slot, id, over: ids[slot] });
-      else if (action === "add") setFocus((xs) => addFocus(xs, id));
-      setListKey((k) => k + 1);
-      return;
-    }
     const list = String(source.sortable.group);
     const store = list.startsWith(FLAT) ? FLAT : list;
     const all = latest.current.full.lists.get(store);
@@ -3690,8 +3545,6 @@ function App() {
             </span>
           </ToggleGroupItem>
         </ToggleGroup>
-        <OpenNextButton target={target} title={openNextTitle} now={now} open={openNext} />
-        <FocusButton count={focus.length} shown={focusShow} setShown={setFocusShow} />
         <TriageButton count={queue.length} open={triage} toggle={() => setTriage((o) => !o)} />
         {lookDoneButton}
         <div className="ml-auto flex items-center gap-1">
@@ -3730,7 +3583,7 @@ function App() {
         </div>
       </header>
       <div ref={listRef} className={cn("min-h-0 flex-1 overflow-y-auto", projects?.length === 0 && "flex flex-col")}>
-        <Focus value={focusApi}>
+        <Reveal value={reveal}>
           {lost && (
             <Alert className="mb-3 border-l-[3px] border-l-status-needs-input">
               <AlertDescription className="flex flex-wrap items-center gap-x-2 text-foreground">
@@ -3796,21 +3649,6 @@ function App() {
                 endExtra={lookDoneButton}
               />
             )}
-            {focusShow && (
-              <FocusStrip
-                ids={focus}
-                live={live}
-                now={now}
-                remove={focusApi.remove}
-                pending={pend}
-                replace={() => {
-                  if (!pend) return;
-                  setFocus((ids) => replaceFocus(ids, pend.slot, pend.id));
-                  setPending(null);
-                }}
-                cancel={cancelReplace}
-              />
-            )}
             <Details value={details}>
               <NeedsOnly value={needsOnly}>
                 <ProjectNames value={projectNames}>
@@ -3835,7 +3673,7 @@ function App() {
                             )}
                             {projects && projects.length > 0 ? (
                               <Card className="gap-0 overflow-clip rounded-[12px] px-2 py-0 shadow-none">
-                                <ul key={listKey} className={cn("m-0 list-none p-0", layout === "flat" && "p-1")}>
+                                <ul className={cn("m-0 list-none p-0", layout === "flat" && "p-1")}>
                                   <SendTo value={sendToApi}>
                                     <Launcher value={launcher}>
                                       <Folds value={{ closed, toggle, fold }}>
@@ -3898,7 +3736,7 @@ function App() {
               </NeedsOnly>
             </Details>
           </DragDropProvider>
-        </Focus>
+        </Reveal>
       </div>
       {settingsOpen && (
         <SettingsPanel
@@ -3943,7 +3781,6 @@ function App() {
         open={findOpen}
         setOpen={setFindOpen}
         list={hits(full.projects)}
-        focus={focus}
         canShow={(id) => inView.has(id)}
         reveal={reveal}
         now={now}

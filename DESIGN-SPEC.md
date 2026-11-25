@@ -502,7 +502,7 @@ A thread row with a Catch-up has a line under the title. The title keeps its pla
 
 ### Triage card
 
-The card sits at the top of the list, inside the list scroller, before the Focus strip. It is `sticky top-0 z-30 mb-3` on the page background, so it stays over the project headers. It has `rounded-lg border bg-card p-3 shadow-sm`.
+The card sits at the top of the list, inside the list scroller, before the tree. It is `sticky top-0 z-30 mb-3` on the page background, so it stays over the project headers. It has `rounded-lg border bg-card p-3 shadow-sm`.
 
 - **Head row:** the status icon, the status title in the status color and semibold, the phrase, the Wait in the status color, then "N of M" (and "+K new" in the needs-input color) and a close button on the right.
 - **Title:** a link, semibold, with the issue key in mono before it.

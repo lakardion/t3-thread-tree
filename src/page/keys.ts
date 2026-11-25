@@ -17,11 +17,11 @@ export type KeyContext = {
   stop: "thread" | "header" | null;
 };
 
-/** The action of a key press, or null when the page does nothing. A number is a Focus slot index. */
+/** The action of a key press, or null when the page does nothing. */
 export function pageKey(
   e: KeyEvent,
   ctx: KeyContext,
-): "next" | "triage" | "find" | "down" | "up" | "toggle" | "expand" | "collapse" | "send" | 0 | 1 | 2 | null {
+): "next" | "triage" | "find" | "down" | "up" | "toggle" | "expand" | "collapse" | "send" | null {
   if (
     e.key.toLowerCase() === "k" &&
     !e.altKey &&
@@ -41,6 +41,5 @@ export function pageKey(
   if (ctx.stop && e.key === "h") return "collapse";
   if (ctx.stop === "thread" && e.key === "s") return "send";
   if (e.key === "n") return "next";
-  if (e.key === "t") return "triage";
-  return e.key === "1" ? 0 : e.key === "2" ? 1 : e.key === "3" ? 2 : null;
+  return e.key === "t" ? "triage" : null;
 }
