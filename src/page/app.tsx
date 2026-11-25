@@ -50,8 +50,10 @@ import {
   useRef,
   useState,
   type ComponentProps,
+  type Dispatch,
   type ReactNode,
   type RefObject,
+  type SetStateAction,
 } from "react";
 import { flushSync } from "react-dom";
 import { createRoot } from "react-dom/client";
@@ -124,6 +126,7 @@ import {
   stopLabel,
   stripKey,
 } from "./format.ts";
+import { GroupingSection } from "./grouping.tsx";
 import { IconState } from "./icon-state.tsx";
 import { useKeyHints } from "./key-hints.tsx";
 import { pageKey } from "./keys.ts";
@@ -164,7 +167,19 @@ import {
   type Freeze,
   type Orders,
 } from "./order.ts";
-import { flag, forget, idSet, load, oneOf, ruleList, rulesParam, save, usePref, type Codec } from "./prefs.ts";
+import {
+  flag,
+  forget,
+  idSet,
+  load,
+  oneOf,
+  ruleList,
+  rulesParam,
+  save,
+  usePref,
+  type Codec,
+  type Rule,
+} from "./prefs.ts";
 import { Presence, useMotion } from "./presence.tsx";
 import { ProjectIcon, projectHex } from "./project-icon.tsx";
 import { ProviderIcon } from "./provider-icon.tsx";
@@ -1134,8 +1149,9 @@ type PanelProps = LinearProps &
     setSettled: (v: boolean) => void;
     snoozed: boolean;
     setSnoozed: (v: boolean) => void;
-    nest: boolean;
-    setNest: (v: boolean) => void;
+    rules: Rule[];
+    setRules: Dispatch<SetStateAction<Rule[]>>;
+    linearOn: boolean;
     statusText: boolean;
     setStatusText: (v: boolean) => void;
     keyHints: boolean;
@@ -1169,7 +1185,8 @@ function SettingsPanel(p: PanelProps) {
   const { close, buttonRef } = p;
   const panelRef = useRef<HTMLElement>(null);
   useEffect(() => {
-    const onKey = (e: KeyboardEvent) => e.key === "Escape" && close();
+    /** Skips the Escape that cancels a keyboard drag. */
+    const onKey = (e: KeyboardEvent) => e.key === "Escape" && !e.defaultPrevented && close();
     const onClick = (e: MouseEvent) => {
       const target = e.target;
       if (target instanceof Node && !panelRef.current?.contains(target) && !buttonRef.current?.contains(target)) {
@@ -1221,9 +1238,6 @@ function SettingsPanel(p: PanelProps) {
           <Row label="Show snoozed threads" htmlFor="snoozed">
             <Switch id="snoozed" checked={p.snoozed} onCheckedChange={p.setSnoozed} />
           </Row>
-          <Row label="Nest launched threads" htmlFor="nest">
-            <Switch id="nest" checked={p.nest} onCheckedChange={p.setNest} />
-          </Row>
           <Row label="Show status text in rows" htmlFor="status-text">
             <Switch id="status-text" checked={p.statusText} onCheckedChange={p.setStatusText} />
           </Row>
@@ -1242,6 +1256,7 @@ function SettingsPanel(p: PanelProps) {
             <ThemeToggle theme={p.theme} setTheme={p.setTheme} />
           </Row>
         </SettingsGroup>
+        <GroupingSection rules={p.rules} setRules={p.setRules} linear={p.linearOn} />
         <SettingsGroup title="Setup">
           <Fold label="T3 token" value={token} tone={token === "Connected" ? "ok" : "warn"} defaultOpen={p.tokenOpen}>
             <div className="grid gap-2">
@@ -2951,8 +2966,6 @@ function App() {
   const [settled, setSettled] = usePref(SETTLED_KEY, flag(false));
   const [snoozed, setSnoozed] = usePref(SNOOZED_KEY, flag(true));
   const [rules, setRules] = usePref(RULES_KEY, ruleList(load(NEST_KEY) === "1"));
-  const nest = rules.find((r) => r.id === "nest")!.on;
-  const setNest = (on: boolean) => setRules((rs) => rs.map((r) => (r.id === "nest" ? { ...r, on } : r)));
   const rulesQuery = rulesParam(rules);
   const [projectNames, setProjectNames] = usePref(PROJECT_NAMES_KEY, flag(true));
   const [statusText, setStatusText] = usePref(STATUS_TEXT_KEY, flag(true));
@@ -3664,8 +3677,9 @@ function App() {
           setSettled={setSettled}
           snoozed={snoozed}
           setSnoozed={setSnoozed}
-          nest={nest}
-          setNest={setNest}
+          rules={rules}
+          setRules={setRules}
+          linearOn={linearOn}
           statusText={statusText}
           setStatusText={setStatusText}
           keyHints={keyHints}
