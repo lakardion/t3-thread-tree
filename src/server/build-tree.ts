@@ -71,8 +71,6 @@ export type BuildInput = {
   spawnerOf: (id: string) => string | null | undefined;
   environmentId: string;
   settled: boolean;
-  /** Launch nesting: a keyless thread nests under its visible spawner. */
-  nest: boolean;
   now: number;
   /** Watched label names. Empty: no PR gets labels. */
   labels?: string[];
@@ -631,9 +629,9 @@ const CHAIN: Record<RuleId, Rule> = {
         const si = siOf(n);
         return si !== undefined && (!n.key || !f.rules.includes("key")) ? { into: "stack", si } : null;
       });
-    /** A stack stays whole where its lowest member with a key goes. */
+    /** A stack stays whole where its lowest member with a key goes. With Issue key off, no group is a key group. */
     const placer = new Map<number, Node>();
-    for (const n of pool.toSorted(byPos)) {
+    for (const n of f.rules.includes("key") ? pool.toSorted(byPos) : []) {
       const si = siOf(n);
       if (si !== undefined && n.key && !isReview(n) && !placer.has(si)) placer.set(si, n);
     }
@@ -657,6 +655,15 @@ const CHAIN: Record<RuleId, Rule> = {
 /** The default chain; `nest` turns Launch nesting on. */
 export const defaultRules = (nest: boolean): RuleId[] =>
   RULES.filter((r) => r.on || (nest && r.id === "nest")).map((r) => r.id);
+
+/** The rule list of a `rules` stream parameter. No parameter: the default chain. Unknown and repeated ids drop; `map` goes first and `nest` last. */
+export function parseRules(raw: string | null): RuleId[] {
+  if (raw === null) return defaultRules(false);
+  const ids = RULES.map((r) => r.id);
+  const given = [...new Set(raw.split(","))].filter((id): id is RuleId => ids.includes(id as RuleId));
+  const middle = given.filter((id) => id !== "map" && id !== "nest");
+  return [...given.filter((id) => id === "map"), ...middle, ...given.filter((id) => id === "nest")];
+}
 
 /** Runs the rules on the pool in order, then lays the claims out as groups. */
 export function place(input: BuildInput, rules: RuleId[], layout: Layout): Group[] {
@@ -713,8 +720,8 @@ export function place(input: BuildInput, rules: RuleId[], layout: Layout): Group
   return LAYOUTS[layout](entered, claims, f);
 }
 
-export const buildTree = (input: BuildInput) => place(input, defaultRules(input.nest), "project");
-export const buildLinearTree = (input: BuildInput) => place(input, defaultRules(input.nest), "linear");
+export const buildTree = (input: BuildInput, rules: RuleId[]) => place(input, rules, "project");
+export const buildLinearTree = (input: BuildInput, rules: RuleId[]) => place(input, rules, "linear");
 
 type LayoutFn = (entered: Set<Node>, claims: Map<Node, Claim>, f: Facts) => Group[];
 const LAYOUTS: Record<Layout, LayoutFn> = { project: projectLayout, linear: linearLayout };

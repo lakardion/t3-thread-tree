@@ -1,6 +1,6 @@
 import { describe, expect, test } from "bun:test";
 
-import { buildTree } from "../src/server/build-tree.ts";
+import { buildTree, defaultRules } from "../src/server/build-tree.ts";
 import { settledPage, settledRoutes, settledSignature } from "../src/server/settled.ts";
 import type { Project, Thread } from "../src/server/t3.ts";
 
@@ -29,15 +29,17 @@ const pages = (list: Thread[], spawners: Record<string, string> = {}) => {
   const threads = new Map(list.map((t) => [t.id, t]));
   const projects = new Map<string, Project>([["p", { title: "Proj", repo: null }]]);
   const tree = () =>
-    buildTree({
-      threads: threads.values(),
-      projects,
-      spawnerOf: (id) => spawners[id],
-      environmentId: "e",
-      settled: true,
-      nest: false,
-      now: 0,
-    });
+    buildTree(
+      {
+        threads: threads.values(),
+        projects,
+        spawnerOf: (id) => spawners[id],
+        environmentId: "e",
+        settled: true,
+        now: 0,
+      },
+      defaultRules(false),
+    );
   return (after: string | null, limit: number) => settledPage(tree(), threads, after, limit);
 };
 const ids = (p: ReturnType<ReturnType<typeof pages>>) => p.items.map((i) => i.t.id);

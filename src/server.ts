@@ -3,7 +3,7 @@ import { dirname, join } from "node:path";
 
 import index from "./page/index.html";
 import upNext from "./page/up-next.html";
-import { buildLinearTree, buildTree, issueKey } from "./server/build-tree.ts";
+import { buildLinearTree, buildTree, defaultRules, issueKey, parseRules } from "./server/build-tree.ts";
 import { catchUpService } from "./server/catch-up.ts";
 import { findRoutes } from "./server/find.ts";
 import { labelStore } from "./server/labels.ts";
@@ -38,6 +38,7 @@ import {
 import { parseToken, readToken, tokenResponse, writeToken } from "./server/token.ts";
 import { launchList, scanFields } from "./server/workflow-start.ts";
 import { workflowRoutes } from "./server/workflows.ts";
+import type { RuleId } from "./shared/rules.ts";
 import type { RunItem } from "./shared/runs.ts";
 import { allRuns, allThreads, parseLabels, parseLinear, type Conn, type Tree } from "./shared/tree.ts";
 import type { Field } from "./shared/workflow-start.ts";
@@ -135,7 +136,7 @@ function resolveSpawners() {
   }, 2000);
 }
 
-type Client = { nest: boolean; labels: string[]; wantsLinear: boolean; send: (data: string, event?: string) => void };
+type Client = { rules: RuleId[]; labels: string[]; wantsLinear: boolean; send: (data: string, event?: string) => void };
 const clients = new Set<Client>();
 
 const linear = parseLinear(process.env.LINEAR_WORKSPACE, process.env.LINEAR_TEAMS);
@@ -143,7 +144,7 @@ const linear = parseLinear(process.env.LINEAR_WORKSPACE, process.env.LINEAR_TEAM
 /** `POST /map-threads` marks and unmarks map threads here. */
 const mapThreadsFile = process.env.MAP_THREADS_FILE ?? join(homedir(), ".config", "t3-thread-tree", "map-threads");
 
-const treeFor = (settled: boolean, nest = false, labels: string[] = [], wantsLinear = false): Tree => ({
+const treeFor = (settled: boolean, rules = defaultRules(false), labels: string[] = [], wantsLinear = false): Tree => ({
   conn: ready ? conn : "connecting",
   lastUpdate,
   linear,
@@ -153,25 +154,27 @@ const treeFor = (settled: boolean, nest = false, labels: string[] = [], wantsLin
   workflows: runsSnapshot && launchList(runsSnapshot.workflows ?? [], fieldScan),
   workflowScan: scanError,
   t3Origin: runsOrigin ?? null,
-  projects: (wantsLinear ? buildLinearTree : buildTree)({
-    threads: threads.values(),
-    projects,
-    spawnerOf: (id) => spawners.get(id),
-    environmentId,
-    settled,
-    nest,
-    now: Date.now(),
-    labels,
-    labelsOf: store.labelsOf,
-    linearOf: wantsLinear ? linearSource.of : undefined,
-    catchUpOf: (id) => catchUp.of(id),
-    lastMessagesOf: lineage.lastMessages,
-    runs: runsSnapshot,
-    stepsOf: (runId) => runSteps.get(runId)?.steps,
-    origin: runsOrigin,
-    mapKeyOf,
-    marked: readMapThreads(mapThreadsFile),
-  }),
+  projects: (wantsLinear ? buildLinearTree : buildTree)(
+    {
+      threads: threads.values(),
+      projects,
+      spawnerOf: (id) => spawners.get(id),
+      environmentId,
+      settled,
+      now: Date.now(),
+      labels,
+      labelsOf: store.labelsOf,
+      linearOf: wantsLinear ? linearSource.of : undefined,
+      catchUpOf: (id) => catchUp.of(id),
+      lastMessagesOf: lineage.lastMessages,
+      runs: runsSnapshot,
+      stepsOf: (runId) => runSteps.get(runId)?.steps,
+      origin: runsOrigin,
+      mapKeyOf,
+      marked: readMapThreads(mapThreadsFile),
+    },
+    rules,
+  ),
 });
 
 const active = () => [...clients].some((c) => c.labels.length > 0);
@@ -273,8 +276,8 @@ function changed() {
     syncSteps(tree.flatMap(allRuns));
     const cache = new Map<string, string>();
     for (const c of clients) {
-      const key = `${c.nest}|${c.labels.join(",")}|${c.wantsLinear}`;
-      if (!cache.has(key)) cache.set(key, JSON.stringify(treeFor(false, c.nest, c.labels, c.wantsLinear)));
+      const key = `${c.rules.join(",")}|${c.labels.join(",")}|${c.wantsLinear}`;
+      if (!cache.has(key)) cache.set(key, JSON.stringify(treeFor(false, c.rules, c.labels, c.wantsLinear)));
       c.send(cache.get(key)!);
     }
   }, 150);
@@ -427,7 +430,7 @@ const server = Bun.serve({
     "/events": (req) => {
       server.timeout(req, 0);
       const params = new URL(req.url).searchParams;
-      const nest = params.get("nest") === "1";
+      const rules = parseRules(params.get("rules"));
       const labels = parseLabels(params.get("labels") ?? "");
       const wantsLinear = params.get("linear") === "1";
       const enc = new TextEncoder();
@@ -436,7 +439,7 @@ const server = Bun.serve({
         new ReadableStream({
           start(ctrl) {
             client = {
-              nest,
+              rules,
               labels,
               wantsLinear,
               send: (d, event) => ctrl.enqueue(enc.encode(`${event ? `event: ${event}\n` : ""}data: ${d}\n\n`)),
@@ -444,7 +447,7 @@ const server = Bun.serve({
             clients.add(client);
             if (labels.length) store.sync(threads.values(), true);
             syncLinear();
-            client.send(JSON.stringify(treeFor(false, nest, labels, wantsLinear)));
+            client.send(JSON.stringify(treeFor(false, rules, labels, wantsLinear)));
           },
           cancel() {
             clients.delete(client);

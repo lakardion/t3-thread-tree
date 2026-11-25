@@ -2,7 +2,14 @@ import { describe, expect, test } from "bun:test";
 import { homedir } from "node:os";
 
 import { flatten, sortFlat } from "../src/page/view.ts";
-import { buildLinearTree, buildTree, issueKey, statusOf, type BuildInput } from "../src/server/build-tree.ts";
+import {
+  buildLinearTree,
+  buildTree,
+  defaultRules,
+  issueKey,
+  statusOf,
+  type BuildInput,
+} from "../src/server/build-tree.ts";
 import { launchedIds } from "../src/server/lineage.ts";
 import { decodeItem, decodeThread, type RunsSnapshot, type Thread } from "../src/server/t3.ts";
 import {
@@ -88,14 +95,16 @@ function inputOf(raws: object[], spawners: Record<string, string> = {}, over: Pa
     spawnerOf: (id) => spawners[id],
     environmentId: "env-1",
     settled: false,
-    nest: true,
     now: NOW,
     ...over,
   };
 }
 
-function build(raws: object[], spawners: Record<string, string> = {}, over: Partial<BuildInput> = {}) {
-  return buildTree(inputOf(raws, spawners, over));
+/** `nest` picks the rule chain; the rest is build input. */
+type Over = Partial<BuildInput> & { nest?: boolean };
+
+function build(raws: object[], spawners: Record<string, string> = {}, over: Over = {}) {
+  return buildTree(inputOf(raws, spawners, over), defaultRules(over.nest ?? true));
 }
 
 const labels = (b: Group[]) => b.map((x) => x.label);
@@ -846,7 +855,7 @@ describe("labels", () => {
     { name: "Ready-For-Review", color: "0e8a16" },
     { name: "size:L", color: null },
   ];
-  const prsOf = (over: Partial<BuildInput>, raw: Record<string, unknown> = {}, settled = false) =>
+  const prsOf = (over: Over, raw: Record<string, unknown> = {}, settled = false) =>
     build(
       [shell("a", "SHOP-1 x", { pullRequests: [linked], ...raw })],
       {},
@@ -885,7 +894,7 @@ describe("linearOf", () => {
     milestone: null,
   };
   const linearOf = (key: string) => (key === "SHOP-1" ? ISSUE : undefined);
-  const nodeOf = (title: string, over: Partial<BuildInput> = {}) => {
+  const nodeOf = (title: string, over: Over = {}) => {
     const [p] = build([shell("a", title)], {}, over);
     return [...p.groups.flatMap((g) => g.threads), ...p.threads][0];
   };
@@ -912,10 +921,10 @@ describe("buildLinearTree", () => {
     raws: object[],
     answers: Record<string, LinearIssue | null> = {},
     spawners: Record<string, string> = {},
-    over: Partial<BuildInput> = {},
+    over: Over = {},
   ) => {
     const linearOf = (k: string) => answers[k] ?? undefined;
-    return buildLinearTree(inputOf(raws, spawners, { linearOf, ...over }));
+    return buildLinearTree(inputOf(raws, spawners, { linearOf, ...over }), defaultRules(over.nest ?? true));
   };
   const ids = (b: Group[]) => b.map((x) => x.id);
 
@@ -1176,7 +1185,7 @@ describe("suggested replies", () => {
   const req = (kind: string) => ({ pendingRuntimeRequest: { id: "r", kind, createdAt: "2026-11-12T09:00:00.000Z" } });
   const MSG = "Tell me when PR #53 is merged.";
   const all = (b: Group[]): ThreadNode[] => b.flatMap(allThreads);
-  const repliesOf = (raws: object[], over: Partial<BuildInput> = {}, spawners: Record<string, string> = {}) => {
+  const repliesOf = (raws: object[], over: Over = {}, spawners: Record<string, string> = {}) => {
     const asked: string[][] = [];
     const tree = build(raws, spawners, {
       lastMessagesOf: (ids) => (asked.push(ids), new Map(ids.map((id) => [id, id === "none" ? null : MSG]))),
@@ -1298,7 +1307,7 @@ describe("runs", () => {
       for (const tree of [
         build(raws, {}, snap([run("r1")])),
         build(raws, {}, { ...snap([run("r1")]), settled: true }),
-        buildLinearTree(inputOf(raws, {}, snap([run("r1")]))),
+        buildLinearTree(inputOf(raws, {}, snap([run("r1")])), defaultRules(true)),
       ]) {
         const tops = tree.flatMap((p) => [...p.threads, ...p.groups.flatMap((b) => b.threads)]);
         expect(tops.filter((t) => !t.run).map((t) => t.id)).toEqual(["x"]);
@@ -1310,6 +1319,7 @@ describe("runs", () => {
       const raws = [shell("spawner", "Wayfinder"), step("a", "Plan", "r1", "plan")];
       const tree = buildLinearTree(
         inputOf(raws, { "run:r1": "spawner", a: "spawner" }, snap([run("r1", { title: "Nightly" })])),
+        defaultRules(true),
       );
       expect(tree.flatMap((p) => p.threads).map((t) => t.id)).toEqual(["spawner", "run:r1"]);
       expect(tree[0].threads[0].children).toEqual([]);
@@ -1750,6 +1760,7 @@ describe("Map groups", () => {
           },
         },
       ),
+      defaultRules(true),
     );
     expect(titles(loose(tree).filter((t) => t.map)[0].children)).toEqual(["a"]);
     expect(allRuns(tree[0])).toHaveLength(1);
@@ -1761,7 +1772,7 @@ describe("Map groups", () => {
       "SHOP-2": { project: { id: "y", name: "Proj y", url: "u" }, milestone: null },
     };
     const buildL = (raws: object[], m: Record<string, string>, spawners: Record<string, string> = {}) =>
-      buildLinearTree(inputOf(raws, spawners, { linearOf: (k) => answers[k], ...keys(m) }));
+      buildLinearTree(inputOf(raws, spawners, { linearOf: (k) => answers[k], ...keys(m) }), defaultRules(true));
 
     test("the group follows the map thread; a member in another Linear project stays", () => {
       const tree = buildL(
