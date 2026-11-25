@@ -113,6 +113,7 @@ import { useDesktopSync } from "./desktop-sync.ts";
 import { FindDialog, FIND_KEY, MAC } from "./find.tsx";
 import {
   ago,
+  agoAt,
   folded,
   foldIds,
   initials,
@@ -182,12 +183,17 @@ import { Swap, useChanges } from "./swap.tsx";
 import { TriageButton, TriageCard } from "./triage.tsx";
 import {
   closedCounts,
+  ageTip,
+  blockTime,
   FLAT,
   flatLists,
   flatten,
   folds,
+  groupTime,
+  headerTip,
   isContext,
   itemIds,
+  lastRunOf,
   pathFolds,
   sectionHolding,
   sectionOf,
@@ -1343,6 +1349,8 @@ const SendTo = createContext<{ t3cli: CliStatus | null; open: (id: string) => vo
 /** The workspace root of the project block that holds the row. */
 const RowProject = createContext<string | undefined>(undefined);
 const NeedsOnly = createContext(false);
+/** Whether snoozed threads count in the time of a row. */
+const ShowSnoozed = createContext(true);
 /** Whether rows show the project name next to its icon. */
 const ProjectNames = createContext(true);
 /** The statuses of the status section that holds the row. Null outside one. */
@@ -1587,10 +1595,11 @@ function MapThreadButton({ t }: { t: ThreadNode }) {
 function DetailBlock({ t }: { t: ThreadNode }) {
   const now = useContext(Now);
   const d = t.detail;
+  const lastRun = lastRunOf(t);
   const limit = [d.limitResetAt && `resets ${hhmm(d.limitResetAt)}`, d.autoResume && "auto-resume"]
     .filter(Boolean)
     .join(" · ");
-  const tags = [d.tags.join(", "), d.pinned && "Pinned"].filter(Boolean).join(" · ");
+  const tags = [d.tags.join(", "), d.pinned && "Pinned in T3"].filter(Boolean).join(" · ");
   const last = useLastMessage(t.id, t.updatedAt);
   return (
     <dl className="m-0 grid grid-cols-[auto_1fr] gap-x-3 gap-y-0.5 py-1 pl-[156px] text-xs max-[720px]:pl-7">
@@ -1634,6 +1643,7 @@ function DetailBlock({ t }: { t: ThreadNode }) {
       {d.origin && <Line label="Origin">{d.origin}</Line>}
       {d.startedBy && <Line label="Started by">{d.startedBy}</Line>}
       <Line label="Updated">{ago(t.updatedAt, now)}</Line>
+      {lastRun > -Infinity && <Line label="Last run">{agoAt(lastRun, now)}</Line>}
       {d.createdAt && <Line label="Created">{ago(d.createdAt, now)}</Line>}
       {d.goal && (
         <Line label="Goal">
@@ -1865,6 +1875,7 @@ function RowActions({ t, projectPath }: { t: ThreadNode; projectPath?: string })
 function ThreadRow({
   t,
   chip,
+  block,
   sort,
   inStack,
   project,
@@ -1875,6 +1886,8 @@ function ThreadRow({
   handle,
 }: {
   t: ThreadNode;
+  /** The node whose block gives the row time. Defaults to the row. */
+  block?: ThreadNode;
   chip?: string;
   sort?: Sort;
   /** Replaces the details fold. A Map group puts its member count and fold here. */
@@ -1889,6 +1902,7 @@ function ThreadRow({
   review?: boolean;
 }) {
   const now = useContext(Now);
+  const time = blockTime(block ?? t, useContext(ShowSnoozed));
   const { open, toggle, show } = useContext(Details);
   const section = useContext(Section);
   const projectNames = useContext(ProjectNames);
@@ -2013,14 +2027,16 @@ function ThreadRow({
                 +{t.prs.length - 2}
               </Button>
             )}
-            <Tooltip>
-              <TooltipTrigger asChild>
-                <span className="font-mono text-[11px] text-muted-foreground tabular-nums">
-                  {ago(t.updatedAt, now)}
-                </span>
-              </TooltipTrigger>
-              <TooltipContent>Updated {new Date(t.updatedAt).toLocaleString()}</TooltipContent>
-            </Tooltip>
+            {time.by && (
+              <Tooltip>
+                <TooltipTrigger asChild>
+                  <span className="font-mono text-[11px] text-muted-foreground tabular-nums">
+                    {agoAt(time.at, now)}
+                  </span>
+                </TooltipTrigger>
+                <TooltipContent>{ageTip(t, time)}</TooltipContent>
+              </Tooltip>
+            )}
             <RowActions t={t} projectPath={projectPath} />
             {end ?? (
               <CollapsibleTrigger asChild>
@@ -2059,6 +2075,7 @@ function NodeRow(p: ComponentProps<typeof ThreadRow>) {
   const section = useContext(Section);
   const { closed, toggle } = useContext(Folds);
   const { t, sort, inStack, nested, project, corners } = p;
+  const snoozed = useContext(ShowSnoozed);
   if (t.map)
     return (
       <Sortable sort={sort}>
@@ -2066,6 +2083,7 @@ function NodeRow(p: ComponentProps<typeof ThreadRow>) {
           <MapGroup
             t={t}
             chip={p.chip}
+            tip={headerTip(blockTime(t, snoozed))}
             project={project}
             open={!closed.has(t.id)}
             toggle={() => toggle(t.id)}
@@ -2091,6 +2109,7 @@ function NodeRow(p: ComponentProps<typeof ThreadRow>) {
         <RunRow
           t={t}
           now={now}
+          at={blockTime(t, snoozed).at}
           Row={NodeRow}
           liRef={ref}
           liClass={cn(project && "border-l-[3px] pl-1", corners)}
@@ -2242,12 +2261,15 @@ function GroupRow({ b, closed, toggle, fold, sort }: { b: Group; sort?: Sort } &
   const linear = useContext(Linear);
   const lists = useContext(Lists);
   const groupHref = isKeyGroup(b) ? linearHref(b.label, linear) : null;
+  const snoozed = useContext(ShowSnoozed);
+  const tip = b.linear ? undefined : headerTip(groupTime([b], snoozed));
   if (one) return <NodeRow t={one} chip={b.label} sort={sort} />;
   const render = (ref: RefFn, handleRef?: RefFn) => (
     <Collapsible asChild open={open} onOpenChange={() => toggle(b.id)}>
       <li ref={ref} className="my-px">
         <div
           className="group/row relative flex h-7 min-w-0 items-center gap-2 rounded-[8px] px-2 hover:bg-accent max-[720px]:h-auto max-[720px]:min-h-7 max-[720px]:flex-wrap"
+          title={tip}
           data-waiting={!open && waits(b) ? "" : undefined}
         >
           <DragHandle handleRef={handleRef} name={b.label} />
@@ -2402,6 +2424,7 @@ function StackRail({
    * ponytail: fixed threshold; measure fit with a ResizeObserver if a fixed count proves too coarse.
    */
   const overlap = stops.length > 3;
+  const tip = headerTip(groupTime(run, useContext(ShowSnoozed)));
   const rowProject = useContext(RowProject);
   const projectPath = project?.path ?? rowProject;
   const render = (ref: RefFn, handleRef?: RefFn) => (
@@ -2421,6 +2444,7 @@ function StackRail({
       >
         <div
           className="group/row relative flex min-h-7 flex-wrap items-center gap-2 rounded-[10px] px-2 text-xs"
+          title={tip}
           data-waiting={!open && run.some(waits) ? "" : undefined}
         >
           <DragHandle handleRef={handleRef} name={`PR stack of ${run[0].label}`} />
@@ -2627,6 +2651,8 @@ function FlatRow({
 function ProjectBlock({ b, closed, toggle, fold }: { b: Group } & Fold) {
   const open = !closed.has(b.id);
   const lists = useContext(Lists);
+  const snoozed = useContext(ShowSnoozed);
+  const reviewsTip = isLinearReviews(b) ? headerTip(groupTime([b], snoozed)) : undefined;
   const fallback = isFallback(b);
   const color = fallback ? "var(--border)" : projectHex(b.label);
   const threads = (
@@ -2655,6 +2681,7 @@ function ProjectBlock({ b, closed, toggle, fold }: { b: Group } & Fold) {
         <div>
           <div
             className="group/row sticky top-0 z-20 flex h-8 min-w-0 items-center gap-1.5 bg-card px-2 max-[720px]:h-auto max-[720px]:min-h-8"
+            title={reviewsTip}
             data-waiting={!open && waits(b) ? "" : undefined}
           >
             <DragHandle handleRef={handleRef} name={b.label} />
@@ -2823,13 +2850,18 @@ const pipeline = (ps: Group[], c: Cfg): { full: Arranged; view: Arranged & { fla
   if (c.layout === "flat") {
     const own = c.freeze?.list === FLAT ? c.freeze.ids : c.orders[FLAT];
     const units =
-      c.sortBy === "updated" ? sortFlat(flatten(view.projects)) : applyOrder(flatten(view.projects), (u) => u.id, own);
+      c.sortBy === "updated"
+        ? sortFlat(flatten(view.projects), c.snoozed)
+        : applyOrder(flatten(view.projects), (u) => u.id, own);
     /** The payload can still have the T3 shape just after the choice changes: it groups as None until the Linear tree arrives. */
     const groupBy = c.groupBy === "linear" && !isLinear(ps) ? "none" : c.groupBy;
     const flat = sequence(units, groupBy, c.shutSections, c.snoozed, view.projects);
     return { full, view: { ...view, lists: flatLists(flat), flat } };
   }
-  return { full, view: { ...view, projects: c.sortBy === "updated" ? sortTree(view.projects) : view.projects } };
+  return {
+    full,
+    view: { ...view, projects: c.sortBy === "updated" ? sortTree(view.projects, c.snoozed) : view.projects },
+  };
 };
 
 type SettledItem = { project: Group; t: ThreadNode };
@@ -3558,26 +3590,30 @@ function App() {
                                   <SendTo value={sendToApi}>
                                     <WorkflowStarter value={workflowStarter}>
                                       <Folds value={{ closed, toggle, fold }}>
-                                        {layout === "flat" ? (
-                                          <Presence key="flat" items={view.flat ?? []} keyOf={(i) => i.id}>
-                                            {(i) => (
-                                              <FlatRow
-                                                i={i}
-                                                corners={edgeCorners(view.flat ?? [], i)}
-                                                linear={flatMode === "linear"}
-                                                section={sectionOf(view.flat ?? [], i)}
-                                                closed={closed}
-                                                toggle={toggle}
-                                                fold={fold}
-                                                toggleSection={toggleSection}
-                                              />
-                                            )}
-                                          </Presence>
-                                        ) : (
-                                          <Presence key="tree" items={projects} keyOf={(p) => p.id}>
-                                            {(p) => <ProjectBlock b={p} closed={closed} toggle={toggle} fold={fold} />}
-                                          </Presence>
-                                        )}
+                                        <ShowSnoozed value={snoozed}>
+                                          {layout === "flat" ? (
+                                            <Presence key="flat" items={view.flat ?? []} keyOf={(i) => i.id}>
+                                              {(i) => (
+                                                <FlatRow
+                                                  i={i}
+                                                  corners={edgeCorners(view.flat ?? [], i)}
+                                                  linear={flatMode === "linear"}
+                                                  section={sectionOf(view.flat ?? [], i)}
+                                                  closed={closed}
+                                                  toggle={toggle}
+                                                  fold={fold}
+                                                  toggleSection={toggleSection}
+                                                />
+                                              )}
+                                            </Presence>
+                                          ) : (
+                                            <Presence key="tree" items={projects} keyOf={(p) => p.id}>
+                                              {(p) => (
+                                                <ProjectBlock b={p} closed={closed} toggle={toggle} fold={fold} />
+                                              )}
+                                            </Presence>
+                                          )}
+                                        </ShowSnoozed>
                                       </Folds>
                                     </WorkflowStarter>
                                   </SendTo>

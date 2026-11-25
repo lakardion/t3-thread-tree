@@ -3,14 +3,19 @@ import { describe, expect, test } from "bun:test";
 import { foldIds } from "../src/page/format.ts";
 import { applyOrder } from "../src/page/order.ts";
 import {
+  ageTip,
+  blockTime,
   closedCounts,
+  counted,
   FLAT,
   flatLists,
   flatten,
   folds,
+  groupTime,
+  headerTip,
   itemIds,
+  lastRunOf,
   pathFolds,
-  recency,
   sectionHolding,
   sectionList,
   sectionOf,
@@ -66,12 +71,106 @@ const branch = (id: string, threads: ThreadNode[] = [], groups: Group[] = [], st
 const ids = (xs: { id: string }[]) => xs.map((x) => x.id);
 const project = (id: string, groups: Group[]) => branch(id, [], groups);
 
-describe("recency", () => {
-  test("is the newest run of a thread and its subthreads", () => {
-    expect(recency(thread("a", 1, [thread("c", 5), thread("d", 3)]))).toBe(Date.parse(T(5)));
+/** A thread with no run, created at second `n`. */
+const created = (id: string, n: number, children: ThreadNode[] = []): ThreadNode => {
+  const t = thread(id, null, children);
+  t.detail = { createdAt: T(n) } as ThreadNode["detail"];
+  return t;
+};
+const settledT = (t: ThreadNode): ThreadNode => ({ ...t, settled: true });
+const snoozedT = (t: ThreadNode): ThreadNode => ({ ...t, status: "snoozed" });
+const runAt = (id: string, updated: number, children: ThreadNode[] = []): ThreadNode => ({
+  ...thread(id, null, children),
+  updatedAt: T(updated),
+  run: {} as ThreadNode["run"],
+});
+const mapHeader = (id: string, children: ThreadNode[]): ThreadNode => ({
+  ...thread(id, null, children),
+  map: { name: id, header: true, href: null },
+});
+
+describe("lastRunOf", () => {
+  test("is the Last run of a thread", () => {
+    expect(lastRunOf(thread("a", 4))).toBe(Date.parse(T(4)));
   });
-  test("is -Infinity when nothing ran", () => {
-    expect(recency(thread("a", null, [thread("c")]))).toBe(-Infinity);
+  test("is the creation time when the thread has no run", () => {
+    expect(lastRunOf(created("a", 3))).toBe(Date.parse(T(3)));
+  });
+  test("is updatedAt for a run node", () => {
+    expect(lastRunOf(runAt("r", 6))).toBe(Date.parse(T(6)));
+  });
+  test("is -Infinity for a Map header and for a missing time", () => {
+    expect(lastRunOf(mapHeader("m", [thread("a", 5)]))).toBe(-Infinity);
+    expect(lastRunOf(thread("a"))).toBe(-Infinity);
+  });
+});
+
+describe("counted", () => {
+  test("drops settled nodes unless all are settled", () => {
+    const [a, b] = [thread("a", 1), settledT(thread("b", 2))];
+    expect(ids(counted([a, b], true))).toEqual(["a"]);
+    expect(ids(counted([b], true))).toEqual(["b"]);
+  });
+  test("drops snoozed nodes only with snoozed off, and keeps all when all are snoozed", () => {
+    const [a, b] = [thread("a", 1), snoozedT(thread("b", 2))];
+    expect(ids(counted([a, b], true))).toEqual(["a", "b"]);
+    expect(ids(counted([a, b], false))).toEqual(["a"]);
+    expect(ids(counted([b], false))).toEqual(["b"]);
+  });
+});
+
+describe("blockTime", () => {
+  test("gives the newest subthread as by", () => {
+    const c = thread("c", 5);
+    const time = blockTime(thread("a", 1, [c, thread("d", 3)]), true);
+    expect(time.at).toBe(Date.parse(T(5)));
+    expect(time.by).toBe(c);
+  });
+  test("a thread with no subthreads gives itself", () => {
+    const a = thread("a", 2);
+    expect(blockTime(a, true).by).toBe(a);
+  });
+  test("a run node takes the newer step thread", () => {
+    const step = thread("s", 7);
+    expect(blockTime(runAt("r", 2, [step]), true).by).toBe(step);
+    expect(blockTime(runAt("r", 9, [step]), true).at).toBe(Date.parse(T(9)));
+  });
+  test("a map thread node takes a newer member", () => {
+    const m = thread("m", 8);
+    const head = { ...thread("h", 1, [m]), map: { name: "h", header: false, href: null } };
+    expect(blockTime(head, true).by).toBe(m);
+  });
+  test("a Map header node takes its newest member", () => {
+    const m = thread("m", 8);
+    expect(blockTime(mapHeader("h", [thread("x", 1), m]), true).by).toBe(m);
+  });
+});
+
+describe("ageTip and headerTip", () => {
+  const at = Date.parse(T(5));
+  const date = new Date(at).toLocaleString();
+  test("name the time, and the thread that gives it", () => {
+    const [a, c] = [thread("a", 1), thread("c", 5)];
+    expect(ageTip(a, { at, by: a })).toBe(`Last run ${date}`);
+    expect(ageTip(a, { at, by: c })).toBe(`Last run ${date} · c`);
+    expect(headerTip({ at, by: c })).toBe(`Last run ${date} · c`);
+  });
+  test("add no suffix for a copy of the row with the same id", () => {
+    const a = thread("a", 5);
+    expect(ageTip({ ...a, children: [] }, { at, by: a })).toBe(`Last run ${date}`);
+  });
+  test("say Created for a thread with no run, and nothing with no time", () => {
+    const a = created("a", 5);
+    expect(ageTip(a, { at, by: a })).toBe(`Created ${date}`);
+    expect(ageTip(a, { at: -Infinity, by: null })).toBeUndefined();
+    expect(headerTip({ at: -Infinity, by: null })).toBeUndefined();
+  });
+});
+
+describe("groupTime", () => {
+  test("is the newest counted thread of the groups", () => {
+    const b = thread("b", 6);
+    expect(groupTime([branch("g1", [thread("a", 2)]), branch("g2", [b])], true).by).toBe(b);
   });
 });
 
@@ -94,6 +193,42 @@ describe("sortTree", () => {
       ]),
     ]);
     expect(ids(p.groups)).toEqual(["g2", "g3", "g1"]);
+  });
+
+  test("sorts a thread with no run by its creation, not last", () => {
+    const [p] = sortTree([project("p", [branch("g", [thread("old", 1), created("c", 5), thread("none")])])]);
+    expect(ids(p.groups[0].threads)).toEqual(["c", "old", "none"]);
+  });
+
+  test("a settled newer subthread does not lift its parent", () => {
+    const [p] = sortTree([project("p", [branch("g", [thread("a", 2, [settledT(thread("s", 9))]), thread("b", 5)])])]);
+    expect(ids(p.groups[0].threads)).toEqual(["b", "a"]);
+  });
+
+  test("a snoozed newer subthread lifts its parent only with snoozed on", () => {
+    const tree = () => [project("p", [branch("g", [thread("a", 2, [snoozedT(thread("s", 9))]), thread("b", 5)])])];
+    expect(ids(sortTree(tree(), true)[0].groups[0].threads)).toEqual(["a", "b"]);
+    expect(ids(sortTree(tree(), false)[0].groups[0].threads)).toEqual(["b", "a"]);
+  });
+
+  test("sorts the stack runs of a milestone by block time", () => {
+    const lin = (b: Group): Group => ({ ...b, linear: {} });
+    const p = lin(
+      branch(
+        "lp:s",
+        [],
+        [
+          lin(
+            branch(
+              "lm:m",
+              [],
+              [branch("lm:m:K1", [thread("a", 1)], [], "s1"), branch("lm:m:K2", [thread("b", 9)], [], "s2")],
+            ),
+          ),
+        ],
+      ),
+    );
+    expect(ids(sortTree([p])[0].groups[0].groups)).toEqual(["lm:m:K2", "lm:m:K1"]);
   });
 
   test("keeps Reviews first and No issue key last, and sorts inside them", () => {

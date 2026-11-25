@@ -10,10 +10,11 @@ import { cn } from "@/lib/utils";
 import { find, type Hit } from "../shared/find.ts";
 import { CATCH_UP, isIn } from "../shared/status.ts";
 import type { Workflow } from "../shared/workflow-start.ts";
-import { ago } from "./format.ts";
+import { ago, agoAt } from "./format.ts";
 import { IconState } from "./icon-state.tsx";
 import { needsYou } from "./needs-you.ts";
 import { StatusIcon } from "./status-icon.tsx";
+import { byNewest, lastRunOf } from "./view.ts";
 import { fits } from "./workflow-start.ts";
 
 /** True on macOS, where Find is Cmd+K. */
@@ -24,11 +25,8 @@ export const FIND_KEY = MAC ? "⌘K" : "Ctrl+K";
 const RECENT_MAX = 8;
 const SETTLED_ROW = "find:settled-search";
 
-/** The recent threads of the empty query: the newest updated. */
-const recent = (list: Hit[]): Hit[] =>
-  list
-    .toSorted((a, b) => Number(b.t.updatedAt > a.t.updatedAt) - Number(b.t.updatedAt < a.t.updatedAt))
-    .slice(0, RECENT_MAX);
+/** The recent threads of the empty query: the newest Last run. */
+const recent = (list: Hit[]): Hit[] => byNewest(list, (h) => lastRunOf(h.t)).slice(0, RECENT_MAX);
 
 type RowProps = {
   h: Hit;
@@ -40,6 +38,7 @@ type RowProps = {
 
 function Row({ h, now, canShow, open, show }: RowProps) {
   const { t } = h;
+  const lastRun = lastRunOf(t);
   const meta = [h.project, t.key, t.detail.branch].filter(Boolean).join(" · ") + (h.parent ? ` · in ${h.parent}` : "");
   return (
     <CommandItem value={t.id} onSelect={() => open(h)} className="items-start gap-2.5 py-2">
@@ -59,7 +58,7 @@ function Row({ h, now, canShow, open, show }: RowProps) {
           <span className="flex-none text-[12px] leading-5 text-muted-foreground tabular-nums">
             {isIn(CATCH_UP, t.status)
               ? `${t.phrase}${needsYou(t.status) && t.since ? ` · ${ago(t.since, now)}` : ""}`
-              : ago(t.updatedAt, now)}
+              : lastRun > -Infinity && agoAt(lastRun, now)}
           </span>
         </span>
         <span className="truncate text-[12px] text-muted-foreground">{meta}</span>

@@ -16,6 +16,7 @@ const MAP_TONE = "text-amber-600 dark:text-amber-400";
 type RowProps = {
   t: ThreadNode;
   chip?: string;
+  block?: ThreadNode;
   nested?: boolean;
   project?: Group;
   corners?: string;
@@ -76,6 +77,7 @@ function UnmarkDot({ id }: { id: string }) {
 export function MapGroup({
   t,
   chip,
+  tip,
   project,
   open,
   toggle,
@@ -89,6 +91,8 @@ export function MapGroup({
 }: {
   t: ThreadNode;
   chip?: string;
+  /** The hover of the Map header, which shows no age. */
+  tip?: string;
   /** The project column of the map thread row; the caller draws the project border. */
   project?: Group;
   open: boolean;
@@ -163,7 +167,10 @@ export function MapGroup({
           </span>
         )}
         {info.header ? (
-          <div className="group/row relative flex h-9 min-w-0 items-center gap-2 rounded-[8px] px-2 text-xs hover:bg-accent">
+          <div
+            className="group/row relative flex h-9 min-w-0 items-center gap-2 rounded-[8px] px-2 text-xs hover:bg-accent"
+            title={tip}
+          >
             {handle}
             <button
               type="button"
@@ -192,6 +199,7 @@ export function MapGroup({
           <ul className="m-0 min-w-0 list-none p-0">
             <Row
               t={{ ...t, children: [], map: undefined }}
+              block={t}
               chip={chip}
               project={project}
               corners="border-l-0 pl-0"

@@ -1,5 +1,6 @@
 import { NEEDS_YOU } from "../shared/status.ts";
 import {
+  allRuns,
   allThreads,
   bySince,
   flat,
@@ -21,31 +22,86 @@ export type SortBy = "manual" | "updated";
 export type Layout = "tree" | "flat";
 export type GroupBy = "none" | "status" | "linear";
 
-/** The newest `lastRun` of a thread and its subthreads, as a time. `-Infinity` when none has run. */
-export function recency(t: ThreadNode): number {
-  return Math.max(t.lastRun ? Date.parse(t.lastRun) : -Infinity, ...t.children.map(recency));
+/** The Last run of a node as a time: a thread's `lastRun`, else its creation; a run node's `updatedAt`. `-Infinity` for a Map header or a bad value. */
+export function lastRunOf(t: ThreadNode): number {
+  if (t.map?.header) return -Infinity;
+  const at = Date.parse((t.run ? t.updatedAt : (t.lastRun ?? t.detail.createdAt)) ?? "");
+  return Number.isNaN(at) ? -Infinity : at;
 }
 
-/** The newest run, as a time, over all threads of a group, subthreads included. */
-const newestRun = (b: Group) => Math.max(-Infinity, ...allThreads(b).map(recency));
-const threadsSorted = (b: Group): Group => ({ ...b, threads: byNewest(b.threads, recency) });
+/** The nodes whose time counts: settled ones only when all are settled; snoozed ones only when `snoozed` is on, or when all left are snoozed. */
+export function counted(ts: ThreadNode[], snoozed: boolean): ThreadNode[] {
+  const live = ts.filter((t) => !t.settled);
+  const open = live.length > 0 ? live : ts;
+  if (snoozed) return open;
+  const awake = open.filter((t) => t.status !== "snoozed");
+  return awake.length > 0 ? awake : open;
+}
+
+/** A time, with the node that gives it. `by` is null when there is none. */
+export type Time = { at: number; by: ThreadNode | null };
+
+/** The newest Last run over the counted nodes. The first node wins a tie. */
+export function newest(ts: ThreadNode[], snoozed: boolean): Time {
+  return counted(ts, snoozed).reduce<Time>((m, t) => (lastRunOf(t) > m.at ? { at: lastRunOf(t), by: t } : m), {
+    at: -Infinity,
+    by: null,
+  });
+}
+
+/** The time of a row: the newest Last run of its block. A run nests only at the top level or under a run, so it never lifts a thread's block. */
+export const blockTime = (t: ThreadNode, snoozed: boolean): Time => newest([...flat(t), ...runsOf(t)], snoozed);
+
+/** The hover of a row age: what the time is, and the thread that gives it when that is not the row. */
+export function ageTip(t: ThreadNode, { at, by }: Time): string | undefined {
+  if (!by) return undefined;
+  const what = by.run || by.lastRun ? "Last run" : "Created";
+  return `${what} ${new Date(at).toLocaleString()}${by.id === t.id ? "" : ` · ${by.title}`}`;
+}
+
+/** The hover of a header, which shows no age: "Last run <date> · <title>". */
+export const headerTip = ({ at, by }: Time): string | undefined =>
+  by ? `Last run ${new Date(at).toLocaleString()} · ${by.title}` : undefined;
+
+/** The time of a list of groups: a key group, a Reviews subgroup, a stack run or a map block. */
+export const groupTime = (bs: Group[], snoozed: boolean): Time =>
+  newest(
+    bs.flatMap((b) => [...allThreads(b), ...allRuns(b)]),
+    snoozed,
+  );
+
+const threadsSorted = (b: Group, snoozed: boolean): Group => ({
+  ...b,
+  threads: byNewest(b.threads, (t) => blockTime(t, snoozed).at),
+});
 
 /** Stable sort, newest first. */
-const byNewest = <T>(items: T[], by: (t: T) => number): T[] =>
+export const byNewest = <T>(items: T[], by: (t: T) => number): T[] =>
   items.toSorted((a, b) => Number(by(b) > by(a)) - Number(by(b) < by(a)));
 
+/** The stack runs of a milestone, newest first; each run keeps its inner order. */
+const sortRuns = (groups: Group[], snoozed: boolean): Group[] =>
+  byNewest(stackRuns(groups), (run) => groupTime(run, snoozed).at).flat();
+
 /**
- * Sorts an arranged tree by recency. Projects keep their order. In a project, Reviews stays first and No issue key last;
+ * Sorts an arranged tree by Last run (`snoozed`: whether snoozed threads count). Projects keep their order. In a project, Reviews stays first and No issue key last;
  * the groups between them, and the threads in each group, sort newest first. A stack run moves as one block and keeps
  * its inner order. Subthreads keep their order. Ties keep the input order. The input is not changed.
- * A Linear tree keeps its project, milestone and PR stack order and sorts only the threads of each milestone and of the top-level group.
+ * A Linear tree keeps its project, milestone and PR stack order and sorts the threads of each milestone and of the top-level group. The stack runs of a milestone also sort by block time, each keeping its inner order.
  */
-export function sortTree(projects: Group[]): Group[] {
+export function sortTree(projects: Group[], snoozed = true): Group[] {
+  const sorted = (b: Group) => threadsSorted(b, snoozed);
+  const groupAt = (b: Group) => groupTime([b], snoozed).at;
   if (isLinear(projects))
     return projects.map((p) =>
       isLinearReviews(p)
-        ? { ...p, groups: byNewest(p.groups.map(threadsSorted), newestRun) }
-        : { ...threadsSorted(p), groups: isFallback(p) ? p.groups : p.groups.map(threadsSorted) },
+        ? { ...p, groups: byNewest(p.groups.map(sorted), groupAt) }
+        : {
+            ...sorted(p),
+            groups: isFallback(p)
+              ? p.groups
+              : p.groups.map((m) => ({ ...sorted(m), groups: sortRuns(m.groups, snoozed) })),
+          },
     );
   return projects.map((p) => {
     const keys = stackRuns(p.groups.filter((b) => !isPinned(b)));
@@ -54,11 +110,9 @@ export function sortTree(projects: Group[]): Group[] {
       groups: [
         ...p.groups
           .filter((b) => b.label === REVIEWS)
-          .map((r) => ({ ...r, groups: byNewest(r.groups.map(threadsSorted), newestRun) })),
-        ...byNewest(keys, (run) => Math.max(...run.map(newestRun))).flatMap((run) =>
-          run[0].stack ? run : run.map(threadsSorted),
-        ),
-        ...p.groups.filter((b) => b.label === NO_KEY).map(threadsSorted),
+          .map((r) => ({ ...r, groups: byNewest(r.groups.map(sorted), groupAt) })),
+        ...byNewest(keys, (run) => groupTime(run, snoozed).at).flatMap((run) => (run[0].stack ? run : run.map(sorted))),
+        ...p.groups.filter((b) => b.label === NO_KEY).map(sorted),
       ],
     };
   });
@@ -144,8 +198,8 @@ const unitThreads = (u: FlatUnit): ThreadNode[] => {
 };
 
 /** Sorts units across projects, newest first. A stack counts its newest thread. Ties keep the input order. */
-export const sortFlat = (units: FlatUnit[]): FlatUnit[] =>
-  byNewest(units, (u) => Math.max(-Infinity, ...(u.kind === "thread" ? [recency(u.t)] : u.run.map(newestRun))));
+export const sortFlat = (units: FlatUnit[], snoozed = true): FlatUnit[] =>
+  byNewest(units, (u) => (u.kind === "thread" ? blockTime(u.t, snoozed) : groupTime(u.run, snoozed)).at);
 
 /** The status sections, most urgent first. */
 export const SECTIONS: [key: string, label: string, statuses: Status[]][] = [

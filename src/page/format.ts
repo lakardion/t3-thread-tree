@@ -67,6 +67,9 @@ export function ago(iso: string, now: number): string {
   return `${Math.floor(m / 1440)}d`;
 }
 
+/** `ago` of a time in ms. */
+export const agoAt = (at: number, now: number): string => ago(new Date(at).toISOString(), now);
+
 /** The phrase with its elapsed time: "Working 12m", "Approval · 3m". */
 export function phraseWith(t: Pick<ThreadNode, "status" | "phrase" | "since">, now: number): string {
   if (!t.since) return t.phrase;
