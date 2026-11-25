@@ -1,9 +1,9 @@
 import { describe, expect, test } from "bun:test";
 
-import { defaultRules, place, type BuildInput } from "../src/server/build-tree.ts";
+import { defaultRules, parseRules, place, type BuildInput } from "../src/server/build-tree.ts";
 import { decodeThread } from "../src/server/t3.ts";
 import { RULES, type RuleId } from "../src/shared/rules.ts";
-import type { Group, LinearIssue, ThreadNode } from "../src/shared/tree.ts";
+import { allThreads, type Group, type LinearIssue, type ThreadNode } from "../src/shared/tree.ts";
 
 const NOW = Date.parse("2026-11-12T12:00:00.000Z");
 let clock = 0;
@@ -72,7 +72,6 @@ function inputOf(raws: object[], spawners: Record<string, string> = {}, over: Pa
     spawnerOf: (id) => spawners[id],
     environmentId: "env-1",
     settled: false,
-    nest: true,
     now: NOW,
     ...over,
   };
@@ -354,5 +353,144 @@ describe("kind", () => {
     expect(k["lf:reviews"]).toBe("review");
     expect(k["lf:reviews:WEB-5"]).toBe("key");
     expect(Object.values(k).every((v) => v !== undefined)).toBe(true);
+  });
+});
+
+describe("parseRules", () => {
+  test("no parameter: the default chain; empty: all rules off", () => {
+    expect(parseRules(null)).toEqual(OFF);
+    expect(parseRules("")).toEqual([]);
+  });
+
+  test("unknown and repeated ids drop, the first repeat wins", () => {
+    expect(parseRules("map,x,review,map,review,key")).toEqual(["map", "review", "key"]);
+  });
+
+  test("map goes first and nest last; the middle order stays", () => {
+    expect(parseRules("nest,key,map")).toEqual(["map", "key", "nest"]);
+    expect(parseRules("key,nest,stack,review,map")).toEqual(["map", "key", "stack", "review", "nest"]);
+  });
+});
+
+describe("Rule order", () => {
+  const chain = (...ids: RuleId[]) => ids;
+  const DEFAULT = chain("map", "review", "stack", "key");
+  const REVIEW_LAST = chain("map", "stack", "review", "key");
+  const KEY_FIRST = chain("map", "review", "key", "stack");
+  const without = (id: RuleId) => DEFAULT.filter((r) => r !== id);
+  const projectBy = (rules: RuleId[], raws: object[], spawners: Record<string, string> = {}, over = {}) =>
+    place(inputOf(raws, spawners, over), rules, "project");
+  const linearBy = (rules: RuleId[], raws: object[], spawners: Record<string, string> = {}, over = {}) =>
+    place(inputOf(raws, spawners, { linearOf: (k) => answers[k], ...over }), rules, "linear");
+  /** Thread id to the labels of the groups that hold it, outer first. */
+  const homes = (b: Group[], path: string[] = []): Record<string, string> =>
+    Object.assign(
+      {},
+      ...b.flatMap((g) => [
+        Object.fromEntries(g.threads.map((t) => [t.id, [...path, g.label].join(" > ")])),
+        homes(g.groups, [...path, g.label]),
+      ]),
+    );
+
+  /** A review and a keyed base in one stack. */
+  const reviewed = () => [
+    shell("rv", "Review #11", { pullRequests: [pr(11, "created"), pr(10, "stack")] }),
+    shell("base", "WEB-1 base", { pullRequests: [pr(10, "created", "open", { base: "main" }), pr(11, "stack")] }),
+  ];
+
+  /** WEB-1 and WEB-2 in one stack, with a keyless mate; Linear puts them in two milestones. */
+  const split = () => [
+    shell("a", "WEB-1 a", {
+      pullRequests: [pr(10, "created", "open", { base: "main" }), pr(11, "stack"), pr(12, "stack")],
+    }),
+    shell("b", "WEB-2 b", { pullRequests: [pr(11, "created"), pr(10, "stack"), pr(12, "stack")] }),
+    shell("m", "mate", { pullRequests: [pr(12, "created"), pr(10, "stack"), pr(11, "stack")] }),
+  ];
+  const milestones = {
+    linearOf: (k: string) =>
+      k === "WEB-1"
+        ? { project: answers["WEB-1"].project, milestone: { id: "m1", name: "One", targetDate: "2026-12-01" } }
+        : k === "WEB-2"
+          ? { project: answers["WEB-2"].project, milestone: { id: "m2", name: "Two", targetDate: "2026-12-02" } }
+          : undefined,
+  };
+
+  test("the default order puts a review in Reviews, in both layouts", () => {
+    expect(homes(projectBy(DEFAULT, reviewed())).rv).toBe("frontend > Reviews");
+    expect(homes(linearBy(DEFAULT, reviewed())).rv).toBe("Reviews");
+  });
+
+  test("Reviews below PR stack: a review in a stack shows in its stack", () => {
+    expect(homes(projectBy(REVIEW_LAST, reviewed())).rv).toBe("frontend > PR stack #10");
+    const l = linearBy(REVIEW_LAST, reviewed());
+    expect(l.map((g) => g.label)).not.toContain("Reviews");
+    expect(homes(l).rv).toBe("Proj x > No milestone > PR stack #10");
+  });
+
+  test("Issue key above PR stack: a keyed stack thread goes to its key group, keyless mates stay in the stack", () => {
+    const p = homes(projectBy(KEY_FIRST, split()));
+    expect(p).toMatchObject({ a: "frontend > WEB-1", b: "frontend > WEB-2", m: "frontend > PR stack #10" });
+    const l = homes(linearBy(KEY_FIRST, split(), {}, milestones));
+    expect(l.a).not.toBe(l.b);
+    expect(l.a).toContain("One");
+    expect(l.b).toContain("Two");
+    expect(l.m).toContain("PR stack");
+  });
+
+  test("Map group off: no map group, the member places by the next rules", () => {
+    const raws = [shell("chart", "Wayfinder"), shell("t1", "WEB-1 a")];
+    const m = keys({ t1: "/m/x" });
+    expect(homes(projectBy(DEFAULT, raws, { t1: "chart" }, m)).t1).toBeUndefined();
+    const p = projectBy(without("map"), raws, { t1: "chart" }, m);
+    expect(homes(p).t1).toBe("frontend > WEB-1");
+    expect(p[0].threads.flatMap((t) => t.children)).toEqual([]);
+    const on = linearBy(DEFAULT, raws, { t1: "chart" }, m);
+    expect(titles(on[0].threads.find((t) => t.id === "chart")!.children)).toEqual(["WEB-1 a"]);
+    const off = linearBy(without("map"), raws, { t1: "chart" }, m);
+    expect(homes(off).t1).toContain("Proj x");
+    expect(off.flatMap(allThreads).filter((t) => t.id === "chart")[0].children).toEqual([]);
+    expect(off.flatMap(allThreads).some((t) => t.children.some((c) => c.id === "t1"))).toBe(false);
+  });
+
+  test("Reviews off: a review places by its key", () => {
+    const raws = [shell("r", "Review #1 WEB-1")];
+    expect(homes(projectBy(without("review"), raws)).r).toBe("frontend > WEB-1");
+    expect(homes(linearBy(without("review"), raws)).r).toContain("Proj x");
+  });
+
+  test("PR stack off: no stack group, and the thread and key rail data stay", () => {
+    const p = projectBy(without("stack"), [
+      ...stacked(),
+      shell("m", "mate", { pullRequests: [pr(12, "stack"), pr(10, "stack")] }),
+    ]);
+    expect(labels(p[0].groups)).toEqual(["WEB-1", "WEB-2", "WEB-3"]);
+    expect(titles(p[0].threads)).toEqual(["mate"]);
+    expect(p[0].threads[0].stack).toBeDefined();
+    expect(child(p, "frontend", "WEB-1").threads[0].stack).toBeDefined();
+    const l = linearBy(without("stack"), stacked());
+    expect(Object.keys(kinds(l)).filter((id) => id.includes("PR stack"))).toEqual([]);
+    expect(Object.values(kinds(l))).toContain("stack");
+  });
+
+  test("Issue key off: no key group; stack threads go to the stack group in a project, and are loose in Linear", () => {
+    const raws = [...stacked(), shell("k", "WEB-9 solo")];
+    const p = projectBy(without("key"), raws);
+    expect(Object.values(kinds(p))).not.toContain("key");
+    expect(homes(p)).toMatchObject({ s1: "frontend > PR stack #10", s2: "frontend > PR stack #10", k: "frontend" });
+    const l = linearBy(without("key"), raws);
+    expect(l.map((g) => g.id)).toEqual(["lf:loose"]);
+    expect(Object.keys(homes(l)).toSorted()).toEqual(["k", "s1", "s2", "s3"]);
+    expect(Object.values(homes(l)).every((h) => !h.includes("Proj"))).toBe(true);
+  });
+
+  test("Launch nesting on nests in the project layout; off leaves the child loose", () => {
+    const raws = [shell("lead", "lead"), shell("kid", "kid")];
+    expect(titles(projectBy(ON, raws, { kid: "lead" })[0].threads[0].children)).toEqual(["kid"]);
+    expect(titles(projectBy(DEFAULT, raws, { kid: "lead" })[0].threads)).toEqual(["lead", "kid"]);
+  });
+
+  test("Launch nesting on nests in the Linear layout too", () => {
+    const l = linearBy(ON, [shell("lead", "lead"), shell("kid", "kid")], { kid: "lead" });
+    expect(titles(l[0].threads[0].children)).toEqual(["kid"]);
   });
 });

@@ -164,7 +164,7 @@ import {
   type Freeze,
   type Orders,
 } from "./order.ts";
-import { flag, forget, idSet, load, oneOf, save, usePref, type Codec } from "./prefs.ts";
+import { flag, forget, idSet, load, oneOf, ruleList, rulesParam, save, usePref, type Codec } from "./prefs.ts";
 import { Presence, useMotion } from "./presence.tsx";
 import { ProjectIcon, projectHex } from "./project-icon.tsx";
 import { ProviderIcon } from "./provider-icon.tsx";
@@ -216,6 +216,7 @@ const SETTLED_KEY = "thread-tree:settled";
 const SNOOZED_KEY = "thread-tree:snoozed";
 const SECTIONS_KEY = "thread-tree:sections";
 const NEST_KEY = "thread-tree:nest";
+const RULES_KEY = "thread-tree:rules";
 const PROJECT_NAMES_KEY = "thread-tree:project-names";
 const STATUS_TEXT_KEY = "thread-tree:status-text";
 const KEY_HINTS_KEY = "thread-tree:key-hints";
@@ -2949,7 +2950,10 @@ function App() {
   const reconnect = useRef(() => {});
   const [settled, setSettled] = usePref(SETTLED_KEY, flag(false));
   const [snoozed, setSnoozed] = usePref(SNOOZED_KEY, flag(true));
-  const [nest, setNest] = usePref(NEST_KEY, flag(false));
+  const [rules, setRules] = usePref(RULES_KEY, ruleList(load(NEST_KEY) === "1"));
+  const nest = rules.find((r) => r.id === "nest")!.on;
+  const setNest = (on: boolean) => setRules((rs) => rs.map((r) => (r.id === "nest" ? { ...r, on } : r)));
+  const rulesQuery = rulesParam(rules);
   const [projectNames, setProjectNames] = usePref(PROJECT_NAMES_KEY, flag(true));
   const [statusText, setStatusText] = usePref(STATUS_TEXT_KEY, flag(true));
   const [keyHints, setKeyHints] = usePref(KEY_HINTS_KEY, flag(true));
@@ -3307,7 +3311,7 @@ function App() {
     const events = liveStream({
       open: () =>
         new EventSource(
-          `/events?nest=${nest ? 1 : 0}${labelsParam ? `&labels=${encodeURIComponent(labelsParam)}` : ""}${linearOn ? "&linear=1" : ""}`,
+          `/events?rules=${encodeURIComponent(rulesQuery)}${labelsParam ? `&labels=${encodeURIComponent(labelsParam)}` : ""}${linearOn ? "&linear=1" : ""}`,
         ),
       onTree: (data) => {
         lastPush.current = new Date().toISOString();
@@ -3321,7 +3325,7 @@ function App() {
     });
     reconnect.current = events.reconnect;
     return () => events.close();
-  }, [nest, labelsParam, linearOn]);
+  }, [rulesQuery, labelsParam, linearOn]);
 
   const projects = connecting ? undefined : view.projects;
 

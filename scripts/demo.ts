@@ -3,7 +3,7 @@ import { dirname } from "node:path";
 
 import index from "../src/page/index.html";
 import upNext from "../src/page/up-next.html";
-import { buildLinearTree, buildTree } from "../src/server/build-tree.ts";
+import { buildLinearTree, buildTree, defaultRules, parseRules } from "../src/server/build-tree.ts";
 import { findRoutes } from "../src/server/find.ts";
 import { lastMessageRoutes } from "../src/server/last-message.ts";
 import { runItems } from "../src/server/runs.ts";
@@ -14,6 +14,7 @@ import type { Pr, Project, RunsSnapshot, Thread } from "../src/server/t3.ts";
 import { launchList, scanFields } from "../src/server/workflow-start.ts";
 import { workflowRoutes } from "../src/server/workflows.ts";
 import type { LocalConfig, LocalState, ModelPick } from "../src/shared/model.ts";
+import type { RuleId } from "../src/shared/rules.ts";
 import { type CatchUp, parseLabels, type LinearIssue } from "../src/shared/tree.ts";
 
 const now = Date.now();
@@ -376,25 +377,27 @@ const CATCH_UP: Record<string, CatchUp> = {
   "search-b": { state: "running", pick: "claude" },
 };
 
-const projectsFor = (settled: boolean, nest = false, labels: string[] = [], wantsLinear = false) =>
-  (wantsLinear ? buildLinearTree : buildTree)({
-    threads,
-    projects,
-    spawnerOf: (id) => spawners[id],
-    mapKeyOf: (id) => MAP_KEYS[id] ?? null,
-    environmentId: "demo",
-    settled,
-    nest,
-    now,
-    labels,
-    labelsOf: (p) => LABELS[p.n],
-    catchUpOf: (id) => CATCH_UP[id],
-    lastMessagesOf: (ids) => new Map(ids.map((id) => [id, lastMessage(id)])),
-    linearOf: wantsLinear ? (key) => LINEAR[key] : undefined,
-    runs: workflows,
-    stepsOf: (runId) => RUN_STEPS[runId],
-    origin: "http://127.0.0.1:3773",
-  });
+const projectsFor = (settled: boolean, rules = defaultRules(false), labels: string[] = [], wantsLinear = false) =>
+  (wantsLinear ? buildLinearTree : buildTree)(
+    {
+      threads,
+      projects,
+      spawnerOf: (id) => spawners[id],
+      mapKeyOf: (id) => MAP_KEYS[id] ?? null,
+      environmentId: "demo",
+      settled,
+      now,
+      labels,
+      labelsOf: (p) => LABELS[p.n],
+      catchUpOf: (id) => CATCH_UP[id],
+      lastMessagesOf: (ids) => new Map(ids.map((id) => [id, lastMessage(id)])),
+      linearOf: wantsLinear ? (key) => LINEAR[key] : undefined,
+      runs: workflows,
+      stepsOf: (runId) => RUN_STEPS[runId],
+      origin: "http://127.0.0.1:3773",
+    },
+    rules,
+  );
 /** The fake `workflows.get` steps of the runs that have step threads. */
 const RUN_STEPS: Record<string, { name: string; status: string; threadId: string | null }[]> = {
   "run-8": [
@@ -510,14 +513,14 @@ const DEFINITION = [
   { source: "const payload = { project: Path }", workflows: ["sentry-hook@1"] },
 ];
 const SCAN_ERROR = "The authenticated token is missing required scope: filesystem:read";
-const treeFor = (nest: boolean, labels: string[], wantsLinear: boolean) =>
+const treeFor = (rules: RuleId[], labels: string[], wantsLinear: boolean) =>
   JSON.stringify({
     conn: process.env.CONN ?? "up",
     lastUpdate: new Date(now).toISOString(),
     linear: { workspace: "acme", teams: ["SHOP"] },
     linearKey: process.env.LINEAR_KEY ?? "ok",
     settled: settledSignature(threads),
-    projects: projectsFor(false, nest, labels, wantsLinear),
+    projects: projectsFor(false, rules, labels, wantsLinear),
     runs: runItems(workflows, "http://127.0.0.1:3773", "demo-env"),
     workflows: launchList(workflows.workflows ?? [], process.env.WF_SCAN === "off" ? null : scanFields(DEFINITION)),
     workflowScan: process.env.WF_SCAN === "off" ? SCAN_ERROR : null,
@@ -691,7 +694,7 @@ const server = Bun.serve({
     },
     ...sender.routes,
     ...lastMessageRoutes({ read: lastMessage, has: (id) => threads.some((th) => th.id === id) }),
-    ...findRoutes(() => projectsFor(true, false)),
+    ...findRoutes(() => projectsFor(true)),
     ...settleRoutes({
       hasThread: (id) => threads.some((th) => th.id === id && !th.gone),
       dispatch: async (c) => {
@@ -721,12 +724,12 @@ const server = Bun.serve({
       server.timeout(req, 0);
       await Bun.sleep(Number(process.env.DELAY ?? 0));
       const params = new URL(req.url).searchParams;
-      const nest = params.get("nest") === "1";
+      const rules = parseRules(params.get("rules"));
       const labels = parseLabels(params.get("labels") ?? "");
       const wantsLinear = params.get("linear") === "1";
       const enc = new TextEncoder();
       let send: (event: string, data: string) => void;
-      const push = () => send("", treeFor(nest, labels, wantsLinear));
+      const push = () => send("", treeFor(rules, labels, wantsLinear));
       return new Response(
         new ReadableStream({
           start(ctrl) {
