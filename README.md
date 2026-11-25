@@ -34,6 +34,8 @@ Use it as a Mac app or in a browser. The Mac app adds a Dock badge, notification
 
 ![Triage mode in dark mode, with a question and two answer chips](docs/triage.png)
 
+- **Set up the Local model with an agent.** In Settings › Local model, the button "Set up with an agent" starts a T3 thread that installs Ollama and the model for you, and saves the config.
+
 ### Also
 
 - **Mac app:** Dock badge, notifications, a menu-bar entry and an Up next window (⌥⌘U) that stays on top.
