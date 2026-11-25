@@ -2409,7 +2409,12 @@ function StackRail({
   const [showOther, setShowOther] = useState(false);
   const hidden = section ? allRows.filter((r) => folds(r.t, section)) : [];
   const rows = showOther ? allRows : allRows.filter((r) => !hidden.includes(r));
-  const partial = stops.filter((s) => s.n).length < total;
+  const numbered = stops.filter((s) => s.n).length;
+  const partial = numbered < total;
+  /**
+   * ponytail: fixed threshold; measure fit with a ResizeObserver if a fixed count proves too coarse.
+   */
+  const overlap = stops.length > 3;
   const rowProject = useContext(RowProject);
   const projectPath = project?.path ?? rowProject;
   const render = (ref: RefFn, handleRef?: RefFn) => (
@@ -2448,7 +2453,7 @@ function StackRail({
             </CollapsibleTrigger>
           )}
           {project && <ProjectColumn b={project} />}
-          <span className="inline-flex flex-wrap items-center gap-y-1">
+          <span className="group/stops relative z-10 inline-flex flex-wrap items-center gap-y-1">
             {base && (
               <code className="rounded-[5px] bg-muted px-1.5 py-0.5 font-mono text-[11px] text-muted-foreground">
                 {base}
@@ -2456,24 +2461,40 @@ function StackRail({
             )}
             {stops.map(({ id: stopId, label, p, n }, i) => (
               <span key={stopId} className="inline-flex items-center">
-                {(i > 0 || base) && <span className="h-0.5 w-4" style={{ background: prTone(p) }} />}
+                {(i > 0 || base) && (
+                  <span
+                    className={cn(
+                      "h-0.5 w-4 transition-[margin,width] motion-reduce:transition-none",
+                      overlap && i > 0 && "w-0 group-focus-within/stops:w-4 group-hover/stops:w-4",
+                    )}
+                    style={{ background: prTone(p) }}
+                  />
+                )}
                 <a
                   href={p?.url}
                   target="_blank"
                   rel="noreferrer"
-                  title={label}
+                  title={n ? `${n} of ${total} · ${label}` : label}
                   className={cn(
-                    "relative z-10 inline-flex items-center gap-1 rounded-full border px-1.5 py-px font-mono text-[11px] hover:underline",
+                    "relative z-10 inline-flex items-center gap-1 rounded-full border bg-card px-1.5 py-px font-mono text-[11px] transition-[margin,width] hover:underline motion-reduce:transition-none",
+                    overlap && i > 0 && "-ml-2.5 group-focus-within/stops:ml-0 group-hover/stops:ml-0",
                     p?.draft && "border-dashed",
                   )}
                   style={{ borderColor: prTone(p) }}
                 >
                   <span className="size-1.5 rounded-full" style={{ background: prTone(p) }} />
-                  {stopLabel(n, total, partial)}
-                  {p && ` · #${p.n}`}
+                  {stopLabel(n, p?.n)}
                 </a>
               </span>
             ))}
+            {partial && (
+              <span
+                className="ml-1.5 text-[11px] text-muted-foreground"
+                title={`${total - numbered} PRs of this stack are not shown`}
+              >
+                +{total - numbered}
+              </span>
+            )}
           </span>
           <StartMenu
             point={stackPoint(stops.flatMap((s) => s.p ?? []))}

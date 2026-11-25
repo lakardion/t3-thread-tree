@@ -275,11 +275,12 @@ describe("ownPos", () => {
 
 describe("stopLabel", () => {
   test.each([
-    [undefined, 4, true, ""],
-    [2, 4, false, "2"],
-    [2, 4, true, "2 of 4"],
-  ])("%p of %i, partial %p is %p", (n, total, partial, out) => {
-    expect(stopLabel(n, total, partial)).toBe(out);
+    [undefined, undefined, ""],
+    [2, undefined, "2"],
+    [2, 16360, "#16360"],
+    [undefined, 16360, "#16360"],
+  ])("position %p, PR %p is %p", (n, pr, out) => {
+    expect(stopLabel(n, pr)).toBe(out);
   });
 });
 
