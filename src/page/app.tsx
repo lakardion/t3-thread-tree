@@ -2334,12 +2334,15 @@ function RailNode({
   above,
   below,
   n,
+  merged,
 }: {
   y: number;
   color: string;
   above: boolean;
   below: boolean;
   n?: number;
+  /** An unnumbered stop whose PR is merged: a filled merge-colored dot. */
+  merged?: boolean;
 }) {
   const line = `color-mix(in oklch, ${color} 45%, transparent)`;
   return (
@@ -2349,7 +2352,11 @@ function RailNode({
       <span
         className={cn(
           "absolute flex -translate-y-1/2 items-center justify-center rounded-full text-[9px] font-bold text-background",
-          n ? "left-px size-[18px]" : "left-1 size-3 border-2 border-muted-foreground bg-card",
+          n
+            ? "left-px size-[18px]"
+            : merged
+              ? "left-1 size-3 bg-pr-merged"
+              : "left-1 size-3 border-2 border-muted-foreground bg-card",
         )}
         style={{ top: y, background: n ? color : undefined }}
       >
@@ -2539,6 +2546,7 @@ function StackRail({
                     above={r.t !== rows[0].t}
                     below={r.t !== rows.at(-1)!.t}
                     n={r.n}
+                    merged={!r.n && r.t.prs[0]?.state === "merged"}
                   />
                   <ul className="m-0 list-none p-0">
                     <ThreadRow t={r.t} chip={r.chip} inStack />

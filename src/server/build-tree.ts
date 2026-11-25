@@ -94,9 +94,10 @@ export type BuildInput = {
 };
 
 /** `si` is the stack index of a child in a stack rail of a Map group. */
-type Node = ThreadNode & { t: Thread; first: string; si?: number };
+type Node = ThreadNode & { t: Thread; first: string; si?: number; slot?: number };
 type Group = { key: string; nodes: Node[]; first: string };
-type Stack = { set: Set<number>; threads: Thread[]; order: number[] };
+/** `order` holds the open PRs, which get numbers. `slots` adds merged PRs at their place in the stack. */
+type Stack = { set: Set<number>; threads: Thread[]; order: number[]; slots: number[] };
 
 const stackPrs = (t: Thread) => t.prs.filter((p) => STACK_SOURCES.has(p.source) && p.state === "open").map((p) => p.n);
 const CHECKS = ["passing", "failing", "pending"] as const;
@@ -171,7 +172,7 @@ export function computeStacks(threads: Thread[]): Stack[] {
     const s = new Set(stackPrs(t));
     if (s.size < 2) continue;
     const hit = stacks.filter((st) => [...st.set].some((n) => s.has(n)));
-    const merged: Stack = { set: s, threads: [t], order: [] };
+    const merged: Stack = { set: s, threads: [t], order: [], slots: [] };
     for (const h of hit) {
       stacks.splice(stacks.indexOf(h), 1);
       h.set.forEach((n) => s.add(n));
@@ -180,36 +181,49 @@ export function computeStacks(threads: Thread[]): Stack[] {
     stacks.push(merged);
   }
   for (const st of stacks) {
-    const layers =
-      st.threads
-        .flatMap((t) => t.prs)
-        .filter((p) => p.stackLayers?.length)
-        .reduce<Pr | null>(
-          (a, b) =>
-            !a ||
-            syncedMs(b) > syncedMs(a) ||
-            (syncedMs(b) === syncedMs(a) && b.stackLayers!.length > a.stackLayers!.length)
-              ? b
-              : a,
-          null,
-        )?.stackLayers ?? [];
-    if (layers.length) {
-      st.order = layers;
-      continue;
-    }
-    const best = st.threads.reduce((a, b) => (stackPrs(b).length > stackPrs(a).length ? b : a));
-    const order = best.prs
-      .filter((p) => (p.source === "stack" || p.source === "agent") && p.state === "open")
-      .map((p) => p.n);
-    for (const p of best.prs.filter((x) => x.source === "created")) {
-      let k = 0;
-      order.forEach((x, j) => x < p.n && (k = j + 1));
-      order.splice(k, 0, p.n);
-    }
-    st.order = order;
+    const latest = st.threads
+      .flatMap((t) => t.prs)
+      .filter((p) => p.stackLayers?.length)
+      .reduce<Pr | null>(
+        (a, b) =>
+          !a ||
+          syncedMs(b) > syncedMs(a) ||
+          (syncedMs(b) === syncedMs(a) && b.stackLayers!.length > a.stackLayers!.length)
+            ? b
+            : a,
+        null,
+      );
+    st.order = latest?.stackLayers ?? fallbackOrder(st);
+    st.slots = [...(latest?.stackSlots ?? st.order)];
+    /** A thread's own PR that the layers lack, such as a merged one, goes after the last lower number. */
+    for (const n of st.threads.flatMap(ownPr)) placeByNumber(st.slots, n);
   }
   return stacks;
 }
+
+/** The order from the thread with the longest list, when T3 has no layers. */
+const fallbackOrder = (st: Stack): number[] => {
+  const best = st.threads.reduce((a, b) => (stackPrs(b).length > stackPrs(a).length ? b : a));
+  const order = best.prs
+    .filter((p) => (p.source === "stack" || p.source === "agent") && p.state === "open")
+    .map((p) => p.n);
+  for (const p of best.prs.filter((x) => x.source === "created" && x.state === "open")) placeByNumber(order, p.n);
+  return order;
+};
+
+/** The PR a thread opened: its created PR, else its agent-linked one. */
+const ownPr = (t: Thread): number[] => {
+  const n = (t.prs.find((p) => p.source === "created") ?? t.prs.find((p) => p.source === "agent"))?.n;
+  return n === undefined ? [] : [n];
+};
+
+/** Puts `n` after the last lower number, unless the list has it. */
+const placeByNumber = (list: number[], n: number) => {
+  if (list.includes(n)) return;
+  let k = 0;
+  list.forEach((x, j) => x < n && (k = j + 1));
+  list.splice(k, 0, n);
+};
 
 /** The later of two ISO times, or null when both are null. */
 const newest = (a: string | null, b: string | null): string | null =>
@@ -371,9 +385,10 @@ function prepare(input: BuildInput) {
 
   const nodeOf = (t: Thread): Node => {
     const si = stackIdOf.get(t.id);
-    const created = (t.prs.find((p) => p.source === "created") ?? t.prs.find((p) => p.source === "agent"))?.n;
+    const created = ownPr(t)[0];
     const st = si === undefined ? null : stacks[si];
     const pos = st && created !== undefined && st.order.includes(created) ? st.order.indexOf(created) + 1 : null;
+    const slot = st && created !== undefined ? st.slots.indexOf(created) : -1;
     const key = issueKey(t.title);
     const catchUp = input.catchUpOf?.(t.id);
     return {
@@ -391,6 +406,7 @@ function prepare(input: BuildInput) {
       input: t.pending?.blocking === false,
       snoozedUntil: t.snoozedUntil && Date.parse(t.snoozedUntil) > now ? t.snoozedUntil : null,
       stack: st ? { pos, total: st.order.length } : null,
+      ...(slot >= 0 && { slot }),
       prs: t.prs
         .filter((p) => p.source !== "stack" && p.source !== "stack-dismissed")
         .map((p) => prNode(p, labelsFor(t, p))),
@@ -579,7 +595,8 @@ function prepare(input: BuildInput) {
 }
 
 /** Stack mates in a stack, then creation. */
-const byPos = (a: Node, b: Node) => (a.stack?.pos ?? Infinity) - (b.stack?.pos ?? Infinity) || byFirst(a, b);
+const bySlot = (a: Node, b: Node) => (a.slot ?? Infinity) - (b.slot ?? Infinity);
+const byPos = (a: Node, b: Node) => bySlot(a, b) || byFirst(a, b);
 
 /** The rail data of a stack. */
 const railOf = (st: Stack | undefined): Branch["stack"] => {
@@ -637,13 +654,13 @@ export function buildTree(input: BuildInput): Branch[] {
       g.nodes.forEach(settle);
       /** Stack mates go in stack order; the group keeps the slot of its oldest thread. */
       g.first = g.nodes.toSorted(byFirst)[0].first;
-      g.nodes.sort((a, b) => (a.stack?.pos ?? Infinity) - (b.stack?.pos ?? Infinity) || byFirst(a, b));
+      g.nodes.sort(byPos);
     }
     gs.sort(byFirst);
     /** Groups that share a stack sit together, in stack order, at the slot of the oldest member. */
     const stackOf = (g: Group) => g.nodes.map((n) => stackIdOf.get(n.id)).find((s) => s !== undefined);
     const minPos = (g: Group, si: number) =>
-      Math.min(...g.nodes.filter((n) => stackIdOf.get(n.id) === si).map((n) => n.stack?.pos ?? Infinity));
+      Math.min(...g.nodes.filter((n) => stackIdOf.get(n.id) === si).map((n) => n.slot ?? Infinity));
     const placed = new Set<Group>();
     const ordered: Group[] = [];
     for (const g of gs) {
@@ -696,12 +713,7 @@ const stackAdjacent = (nodes: Node[], stackIdOf: Map<string, number>): Node[] =>
   return sorted.flatMap((n) => {
     if (placed.has(n)) return [];
     const si = stackIdOf.get(n.id);
-    const mates =
-      si === undefined
-        ? [n]
-        : sorted
-            .filter((m) => stackIdOf.get(m.id) === si)
-            .toSorted((a, b) => (a.stack?.pos ?? Infinity) - (b.stack?.pos ?? Infinity));
+    const mates = si === undefined ? [n] : sorted.filter((m) => stackIdOf.get(m.id) === si).toSorted(bySlot);
     mates.forEach((m) => placed.add(m));
     return mates;
   });
@@ -844,7 +856,7 @@ const reviewGroups = (nodes: Node[], id: string): Branch[] => {
 };
 
 /** Strips the build-only fields before the node goes on the wire. Nested subthreads get no Suggested replies. */
-const clean = ({ t: _t, first: _f, si: _si, children, ...n }: Node): ThreadNode => ({
+const clean = ({ t: _t, first: _f, si: _si, slot: _sl, children, ...n }: Node): ThreadNode => ({
   ...n,
   children: (children as Node[]).map(({ suggestedReplies: _s, ...c }) => clean(c as Node)),
 });
