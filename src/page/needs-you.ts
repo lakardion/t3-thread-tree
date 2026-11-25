@@ -267,3 +267,23 @@ export function releaseHeld(held: Held, tree: Tree, now: number): { send: Thread
   }
   return { send, held: keep };
 }
+
+/**
+ * Splits new notify events into those to send now and those to hold for their Catch-up. With the Catch-up on or not
+ * known yet, a thread event is held from `now`. With it off, nothing is held and every held event goes out.
+ */
+export function holdNew(
+  events: NotifyEvent[],
+  held: Held,
+  catchUpOn: boolean | undefined,
+  now: number,
+): { send: NotifyEvent[]; held: Held } {
+  if (catchUpOn === false) return { send: [...events, ...[...held.values()].map((h) => h.event)], held: new Map() };
+  const keep: Held = new Map(held);
+  const send: NotifyEvent[] = [];
+  for (const e of events) {
+    if (e.kind === "thread") keep.set(e.threadId, { event: e, at: now });
+    else send.push(e);
+  }
+  return { send, held: keep };
+}

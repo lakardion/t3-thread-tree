@@ -109,6 +109,7 @@ import {
 import { effectivePick, foldValue, switchBody } from "./catch-up-fold.ts";
 import { CatchUpTitle } from "./catch-up-line.tsx";
 import { CopyPrompt } from "./copy-prompt.tsx";
+import { useDesktopSync } from "./desktop-sync.ts";
 import { FindDialog, FIND_KEY, MAC } from "./find.tsx";
 import {
   ago,
@@ -131,7 +132,7 @@ import { useKeyHints } from "./key-hints.tsx";
 import { pageKey } from "./keys.ts";
 import { liveStream, type LiveState } from "./live.ts";
 import { SetupDialog } from "./local-setup-dialog.tsx";
-import { looksDone, parseSkip, pruneSkip, SKIP_KEY } from "./looks-done.ts";
+import { looksDone, parseSkip, pruneSkip, SKIP_KEY, type Skip } from "./looks-done.ts";
 import { LooksDoneButton, LooksDoneDialog, UndoToast } from "./looks-done.tsx";
 import { MapGroup } from "./map-group.tsx";
 import {
@@ -139,21 +140,14 @@ import {
   emptyKind,
   type EmptyKind,
   favicon,
-  HOLD_MS,
-  type Held,
   needsYou,
   needsYouThreads,
   needsYouTip,
   nextTarget,
-  noMemory,
-  notifyEvents,
-  type NotifyMemory,
   onlyNeedsYou,
   openNextQueue,
-  releaseHeld,
   remember,
   tabTitle,
-  upNextList,
   waits,
   withoutSnoozed,
 } from "./needs-you.ts";
@@ -174,6 +168,7 @@ import {
   type Freeze,
   type Orders,
 } from "./order.ts";
+import { flag, forget, idSet, load, oneOf, save, usePref, type Codec } from "./prefs.ts";
 import { Presence, useMotion } from "./presence.tsx";
 import { ProjectIcon, projectHex } from "./project-icon.tsx";
 import { ProviderIcon } from "./provider-icon.tsx";
@@ -1318,23 +1313,9 @@ function SettingsPanel(p: PanelProps) {
 /** A failure text that names a missing scope or authorization. */
 const SCOPE_ERROR = /scope|authoriz|forbidden|permission/i;
 
-const load = (k: string): string | null => {
-  try {
-    return localStorage.getItem(k);
-  } catch {
-    return null;
-  }
-};
-const save = (k: string, v: string) => {
-  try {
-    localStorage.setItem(k, v);
-  } catch {}
-};
-const forget = (k: string) => {
-  try {
-    localStorage.removeItem(k);
-  } catch {}
-};
+/** The "All / Needs you" filter, stored as "needs" or "all". */
+const NEEDS_ONLY: Codec<boolean> = { parse: (raw) => raw === "needs", format: (v) => (v ? "needs" : "all") };
+const SKIP: Codec<Skip[]> = { parse: parseSkip, format: (v) => JSON.stringify(v) };
 
 /** Saves the settings with `PUT /model-pick`. Gives the saved Catch-up switch, or `null` when the server did not save them. */
 const putPick = (body: { pick?: ModelPick; catchUp?: boolean }) =>
@@ -2941,27 +2922,22 @@ function App() {
   const [lost, setLost] = useState<{ last: string | null } | null>(null);
   const lastPush = useRef<string | null>(null);
   const reconnect = useRef(() => {});
-  const [settled, setSettled] = useState(load(SETTLED_KEY) === "1");
-  const [snoozed, setSnoozed] = useState(load(SNOOZED_KEY) !== "0");
-  const [nest, setNest] = useState(load(NEST_KEY) === "1");
-  const [projectNames, setProjectNames] = useState(load(PROJECT_NAMES_KEY) !== "0");
-  const [statusText, setStatusText] = useState(load(STATUS_TEXT_KEY) !== "0");
-  const [keyHints, setKeyHints] = useState(load(KEY_HINTS_KEY) !== "0");
-  const [needsOnly, setNeedsOnly] = useState(load(FILTER_KEY) === "needs");
-  const [theme, setTheme] = useState<Theme>(() => THEMES.find((t) => t === load(THEME_KEY)) ?? "system");
-  const [sortBy, setSortBy] = useState<SortBy>(() => (load(SORT_KEY) === "updated" ? "updated" : "manual"));
-  const [layout, setLayout] = useState<Layout>(() => (load(LAYOUT_KEY) === "flat" ? "flat" : "tree"));
-  const [groupBy, setGroupBy] = useState<GroupBy>(() => {
-    const g = load(GROUP_KEY);
-    return g === "status" || g === "linear" ? g : "none";
-  });
-  const [treeGroup, setTreeGroup] = useState<TreeGroup>(() => (load(TREE_GROUP_KEY) === "linear" ? "linear" : "t3"));
+  const [settled, setSettled] = usePref(SETTLED_KEY, flag(false));
+  const [snoozed, setSnoozed] = usePref(SNOOZED_KEY, flag(true));
+  const [nest, setNest] = usePref(NEST_KEY, flag(false));
+  const [projectNames, setProjectNames] = usePref(PROJECT_NAMES_KEY, flag(true));
+  const [statusText, setStatusText] = usePref(STATUS_TEXT_KEY, flag(true));
+  const [keyHints, setKeyHints] = usePref(KEY_HINTS_KEY, flag(true));
+  const [needsOnly, setNeedsOnly] = usePref(FILTER_KEY, NEEDS_ONLY);
+  const [theme, setTheme] = usePref(THEME_KEY, oneOf(THEMES, "system"));
+  const [sortBy, setSortBy] = usePref(SORT_KEY, oneOf<SortBy>(["manual", "updated"], "manual"));
+  const [layout, setLayout] = usePref(LAYOUT_KEY, oneOf<Layout>(["tree", "flat"], "tree"));
+  const [groupBy, setGroupBy] = usePref(GROUP_KEY, oneOf<GroupBy>(["none", "status", "linear"], "none"));
+  const [treeGroup, setTreeGroup] = usePref(TREE_GROUP_KEY, oneOf<TreeGroup>(["t3", "linear"], "t3"));
   const [now, setNow] = useState(Date.now);
   const [shown, setShown] = useState(() => new Set<string>());
-  const [closed, setClosed] = useState(() => new Set<string>(JSON.parse(load(CLOSED_KEY) ?? "[]") as string[]));
-  const [shutSections, setShutSections] = useState(
-    () => new Set<string>(JSON.parse(load(SECTIONS_KEY) ?? '["idle","done"]') as string[]),
-  );
+  const [closed, setClosed] = usePref(CLOSED_KEY, idSet());
+  const [shutSections, setShutSections] = usePref(SECTIONS_KEY, idSet(["idle", "done"]));
   const [clis, setClis] = useState<Offered | null>(null);
   const [cli, setCli] = useState<ModelPick | null | undefined>(undefined);
   const [catchUpOn, setCatchUpOn] = useState<boolean>();
@@ -2971,7 +2947,7 @@ function App() {
   const [wfStarted, setWfStarted] = useState<{ name: string; runId: string } | null>(null);
   const [orders, setOrders] = useState(() => parseOrders(load(ORDER_KEY)));
   const [linearOrders, setLinearOrders] = useState(() => parseOrders(load(ORDER_LINEAR_KEY)));
-  const [skip, setSkip] = useState(() => parseSkip(load(SKIP_KEY)));
+  const [skip, setSkip] = usePref(SKIP_KEY, SKIP);
   const [doneOpen, setDoneOpen] = useState(false);
   const [undoIds, setUndoIds] = useState<string[] | null>(null);
   const [findOpen, setFindOpen] = useState(false);
@@ -3017,7 +2993,6 @@ function App() {
     else forget(LABELS_KEY);
   };
   const [freeze, setFreeze] = useState<Freeze>();
-  const sentNeedsYou = useRef("");
   const runs = tree?.runs ?? [];
   const queue = openNextQueue(tree?.projects ?? [], runs);
   const target = nextTarget(queue, seen);
@@ -3042,72 +3017,13 @@ function App() {
     triageRef.current = triage;
   });
 
-  const sentOpenNext = useRef<string | null | undefined>(undefined);
-  const openNextTitle = target ? target.title || target.id : null;
-  useEffect(() => {
-    if (!window.desktopBridge || openNextTitle === sentOpenNext.current) return;
-    sentOpenNext.current = openNextTitle;
-    window.desktopBridge.setOpenNext(openNextTitle);
-  }, [openNextTitle]);
-  useEffect(() => window.desktopBridge?.onOpenNext(() => openNextRef.current()), []);
-  useEffect(() => window.desktopBridge?.onOpenThread((id) => openThreadRef.current(id)), []);
-
-  const sentUpNext = useRef("");
-  useEffect(() => {
-    if (!window.desktopBridge || !tree) return;
-    const list = upNextList(tree.projects, queue, target, linear);
-    const key = JSON.stringify(list);
-    if (key === sentUpNext.current) return;
-    sentUpNext.current = key;
-    window.desktopBridge.setUpNext(list);
-  });
-
-  useEffect(() => {
-    if (!window.desktopBridge || !tree) return;
-    const list = needsYouThreads(tree.projects, tree.runs ?? []);
-    const key = JSON.stringify(list);
-    if (key === sentNeedsYou.current) return;
-    sentNeedsYou.current = key;
-    window.desktopBridge.setNeedsYou(list);
-  }, [tree]);
+  useDesktopSync({ tree, queue, target, linear, catchUpOn, openNext, openThread });
 
   useEffect(() => {
     const n = tree ? needsYouThreads(tree.projects, tree.runs ?? []).length : 0;
     document.title = tabTitle(n);
     iconLink.href = favicon(appIcon, n);
   }, [tree]);
-
-  const lastNotified = useRef<NotifyMemory>(noMemory);
-  const held = useRef<Held>(new Map());
-  useEffect(() => {
-    if (!window.desktopBridge || !tree) return;
-    const bridge = window.desktopBridge;
-    const { events, next: memory } = notifyEvents(lastNotified.current, tree);
-    lastNotified.current = memory;
-    const started = Date.now();
-    const sendNow: typeof events = [];
-    for (const e of events) {
-      if (e.kind === "thread" && catchUpOn !== false) held.current.set(e.threadId, { event: e, at: started });
-      else sendNow.push(e);
-    }
-    if (catchUpOn === false) {
-      sendNow.push(...[...held.current.values()].map((h) => h.event));
-      held.current = new Map();
-    }
-    if (sendNow.length > 0) bridge.notify(sendNow);
-    let timer: ReturnType<typeof setTimeout> | undefined;
-    const release = () => {
-      const r = releaseHeld(held.current, tree, Date.now());
-      held.current = r.held;
-      if (r.send.length > 0) bridge.notify(r.send);
-      if (r.held.size > 0 && tree.conn === "up") {
-        const next = Math.min(...[...r.held.values()].map((h) => h.at)) + HOLD_MS;
-        timer = setTimeout(release, Math.max(next - Date.now(), 0));
-      }
-    };
-    release();
-    return () => clearTimeout(timer);
-  }, [tree, catchUpOn]);
 
   const loadModels = useCallback(() => {
     fetch("/models")
@@ -3141,28 +3057,9 @@ function App() {
     return () => clearInterval(id);
   }, []);
 
-  useEffect(() => {
-    save(FILTER_KEY, needsOnly ? "needs" : "all");
-  }, [needsOnly]);
-  useEffect(() => {
-    save(PROJECT_NAMES_KEY, projectNames ? "1" : "0");
-  }, [projectNames]);
-  useEffect(() => {
-    save(STATUS_TEXT_KEY, statusText ? "1" : "0");
-  }, [statusText]);
-  useEffect(() => {
-    save(KEY_HINTS_KEY, keyHints ? "1" : "0");
-  }, [keyHints]);
   useKeyHints(keyHints);
-  useEffect(() => {
-    save(SNOOZED_KEY, snoozed ? "1" : "0");
-  }, [snoozed]);
-  useEffect(() => {
-    save(SKIP_KEY, JSON.stringify(skip));
-  }, [skip]);
 
   useEffect(() => {
-    save(THEME_KEY, theme);
     const mq = matchMedia("(prefers-color-scheme: dark)");
     const apply = () =>
       document.documentElement.classList.toggle("dark", theme === "dark" || (theme === "system" && mq.matches));
@@ -3199,7 +3096,6 @@ function App() {
     if (n.has(id)) n.delete(id);
     else n.add(id);
     setClosed(n);
-    save(CLOSED_KEY, JSON.stringify([...n]));
   };
   const toggleSection = (key: string) => {
     if (!shutSections.has(key)) holdFocus(`sec:${key}`);
@@ -3207,7 +3103,6 @@ function App() {
     if (n.has(key)) n.delete(key);
     else n.add(key);
     setShutSections(n);
-    save(SECTIONS_KEY, JSON.stringify([...n]));
   };
   const fold = (ids: string[], shut: boolean) => {
     if (shut) for (const id of ids) if (holdFocus(id)) break;
@@ -3217,7 +3112,6 @@ function App() {
       else n.delete(id);
     }
     setClosed(n);
-    save(CLOSED_KEY, JSON.stringify([...n]));
   };
 
   const details = {
@@ -3385,7 +3279,6 @@ function App() {
     };
   }, [listRef, last]);
   useEffect(() => {
-    save(NEST_KEY, nest ? "1" : "0");
     const events = liveStream({
       open: () =>
         new EventSource(
@@ -3404,7 +3297,6 @@ function App() {
     reconnect.current = events.reconnect;
     return () => events.close();
   }, [nest, labelsParam, linearOn]);
-  useEffect(() => save(SETTLED_KEY, settled ? "1" : "0"), [settled]);
 
   const projects = connecting ? undefined : view.projects;
 
@@ -3474,19 +3366,15 @@ function App() {
   };
 
   const pickSort = (s: SortBy) => {
-    save(SORT_KEY, s);
     transition(() => setSortBy(s));
   };
   const pickLayout = (l: Layout) => {
-    save(LAYOUT_KEY, l);
     transition(() => setLayout(l));
   };
   const pickGroup = (g: GroupBy) => {
-    save(GROUP_KEY, g);
     transition(() => setGroupBy(g));
   };
   const pickTreeGroup = (g: TreeGroup) => {
-    save(TREE_GROUP_KEY, g);
     transition(() => setTreeGroup(g));
   };
   const groupValue = layout === "flat" ? flatMode : treeMode;

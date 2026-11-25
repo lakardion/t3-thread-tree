@@ -5,6 +5,7 @@ import {
   emptyKind,
   favicon,
   hasCatchUpLine,
+  holdNew,
   needsYou,
   needsYouTip,
   needsYouThreads,
@@ -741,5 +742,34 @@ describe("Map groups", () => {
   test("a snoozed map thread stays while a member stays", () => {
     const [p] = withoutSnoozed([branch("p", [head("m", "snoozed", [thread("s", "working")])])]);
     expect(p.threads[0].map).toEqual(map);
+  });
+});
+
+describe("holdNew", () => {
+  const ev = (id: string) => ({
+    kind: "thread" as const,
+    threadId: id,
+    environmentId: "e",
+    title: id,
+    status: "needs-input" as const,
+  });
+  const run = { kind: "run" as const, id: "r", title: "r", status: "run-question" as const, url: "u" };
+  const old = (): Held => new Map([["a", { event: ev("a"), at: 1 }]]);
+
+  test("holds thread events and sends the others, with the Catch-up on or not known", () => {
+    for (const on of [true, undefined]) {
+      const r = holdNew([ev("b"), run], old(), on, 5);
+      expect(r.send).toEqual([run]);
+      expect([...r.held]).toEqual([
+        ["a", { event: ev("a"), at: 1 }],
+        ["b", { event: ev("b"), at: 5 }],
+      ]);
+    }
+  });
+
+  test("with the Catch-up off, sends every event and the held ones, and holds none", () => {
+    const r = holdNew([ev("b"), run], old(), false, 5);
+    expect(r.send).toEqual([ev("b"), run, ev("a")]);
+    expect(r.held.size).toBe(0);
   });
 });
