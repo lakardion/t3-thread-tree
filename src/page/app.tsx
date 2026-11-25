@@ -1906,8 +1906,8 @@ function RowActions({ t, projectPath }: { t: ThreadNode; projectPath?: string })
       <Popover.Portal>
         <Popover.Content
           ref={bar}
-          side="bottom"
-          align="end"
+          side="left"
+          align="center"
           sideOffset={2}
           collisionPadding={8}
           onOpenAutoFocus={(e) => {

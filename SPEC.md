@@ -687,7 +687,7 @@ A thread row has an always-visible `⋯` button (label "Row actions") before the
 
 - **Open:** a mouse hover on the button opens it. A click, a tap or Enter toggles it. On touch it opens only on a tap.
 - **Icon:** the `⋯` morphs to `X` while the toolbar is open.
-- **Place:** the toolbar renders in a portal below the button, aligned to its end, and flips when there is no room. No row or divider covers it.
+- **Place:** the toolbar renders in a portal to the left of the button, centered on the row. It covers the row's own PR pill and time, never the next row, and flips when there is no room. No row or divider covers it.
 - **Close:** the pointer leaves the button and the toolbar for 180 ms, a click outside, or Escape. It stays open while a menu of the toolbar is open, while a settle request runs and after a settle failure.
 - **One at a time:** opening a toolbar closes the one that is open.
 - **Focus:** a hover open does not move focus. A keyboard open moves focus into the toolbar. Tab past the last action, or Shift+Tab past the first, closes it and focuses `⋯`. Escape closes the toolbar. After a keyboard open, focus goes back to `⋯`. After a hover open, focus does not move.
