@@ -23,11 +23,11 @@ The **Status** of a thread whose run waits on another thread. The row says "Wait
 _Avoid_: waiting (that word is for **Wait**)
 
 **Settled**:
-A thread that the user marked as finished. It leaves the default view and stays findable.
+A thread that T3 marks as finished, by the user or by an agent. It leaves the default view and stays findable.
 _Avoid_: archived, closed, done (done is a **Status**)
 
 **Snoozed**:
-A thread that the user hid until a set time. It keeps its place in the tree and does not wait on the user until the time passes.
+A thread put aside until a set time. Until then its **Status** is snoozed, unless it has an open request.
 _Avoid_: muted, deferred
 
 **Review thread**:
