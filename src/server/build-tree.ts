@@ -4,7 +4,6 @@ import { RULES, type RuleId } from "../shared/rules.ts";
 import {
   LINEAR_LOOSE,
   LINEAR_REVIEWS,
-  NO_KEY,
   NO_MILESTONE,
   NO_PROJECT,
   REVIEWS,
@@ -725,6 +724,7 @@ function projectLayout(entered: Set<Node>, claims: Map<Node, Claim>, f: Facts): 
   const { stacks, stackIdOf } = f;
 
   const groups = new Map<string, Map<string, KeyGroup>>();
+  const looseOf = new Map<string, Node[]>();
   const addTo = (projectId: string, key: string, kind: GroupKind, n: Node) => {
     const g = groups.get(projectId) ?? new Map<string, KeyGroup>();
     groups.set(projectId, g);
@@ -739,12 +739,15 @@ function projectLayout(entered: Set<Node>, claims: Map<Node, Claim>, f: Facts): 
     if (c.into === "review") addTo(pid, REVIEWS, "review", n);
     else if (c.into === "key") addTo(pid, c.by.key!, "key", n);
     else if (c.into === "stack") addTo(pid, `PR stack #${stacks[c.si].order[0]}`, "stack", n);
-    else addTo(pid, NO_KEY, "loose", n);
+    else looseOf.set(pid, [...(looseOf.get(pid) ?? []), n]);
   }
 
   const out: { branch: Group; first: string }[] = [];
-  for (const [projectId, gmap] of groups) {
-    const gs = [...gmap.values()];
+  for (const projectId of new Set([...groups.keys(), ...looseOf.keys()])) {
+    const gs = [...(groups.get(projectId)?.values() ?? [])];
+    const loose = looseOf.get(projectId) ?? [];
+    loose.forEach(settle);
+    loose.sort(byFirst);
     for (const g of gs) {
       g.nodes.forEach(settle);
       /** Stack mates go in stack order; the group keeps the slot of its oldest thread. */
@@ -753,7 +756,8 @@ function projectLayout(entered: Set<Node>, claims: Map<Node, Claim>, f: Facts): 
     }
     gs.sort(byFirst);
     /** Groups that share a stack sit together, in stack order, at the slot of the oldest member. */
-    const stackOf = (g: KeyGroup) => g.nodes.map((n) => stackIdOf.get(n.id)).find((s) => s !== undefined);
+    const stackOf = (g: KeyGroup) =>
+      g.kind === "review" ? undefined : g.nodes.map((n) => stackIdOf.get(n.id)).find((s) => s !== undefined);
     const minPos = (g: KeyGroup, si: number) =>
       Math.min(...g.nodes.filter((n) => stackIdOf.get(n.id) === si).map((n) => n.slot ?? Infinity));
     const placed = new Set<KeyGroup>();
@@ -765,7 +769,7 @@ function projectLayout(entered: Set<Node>, claims: Map<Node, Claim>, f: Facts): 
         si === undefined
           ? [g]
           : gs
-              .filter((h) => h.nodes.some((n) => stackIdOf.get(n.id) === si))
+              .filter((h) => h.kind !== "review" && h.nodes.some((n) => stackIdOf.get(n.id) === si))
               .toSorted((a, b) => minPos(a, si) - minPos(b, si));
       for (const h of mates)
         if (!placed.has(h)) {
@@ -773,14 +777,11 @@ function projectLayout(entered: Set<Node>, claims: Map<Node, Claim>, f: Facts): 
           ordered.push(h);
         }
     }
-    const rank = (g: KeyGroup) => (g.key === REVIEWS ? -1 : g.key === NO_KEY ? 1 : 0);
-    ordered.sort((a, b) => rank(a) - rank(b));
 
     const gid = (key: string) => `g:${projectId}:${key}`;
     const keyGroups = ordered.map((g): Group => {
       if (g.key !== REVIEWS) {
-        /** "No issue key" gets no rail: it does not sit with its stack mates. Reviews takes the other return. */
-        const stack = g.key === NO_KEY ? undefined : railOf(stacks[stackOf(g) ?? -1]);
+        const stack = railOf(stacks[stackOf(g) ?? -1]);
         return {
           id: gid(g.key),
           label: g.key,
@@ -794,8 +795,7 @@ function projectLayout(entered: Set<Node>, claims: Map<Node, Claim>, f: Facts): 
         id: gid(REVIEWS),
         label: REVIEWS,
         kind: "review",
-        threads: [],
-        groups: reviewGroups(g.nodes, gid(REVIEWS)),
+        ...reviewGroups(g.nodes, gid(REVIEWS)),
       };
     });
     const project = projects.get(projectId);
@@ -807,9 +807,9 @@ function projectLayout(entered: Set<Node>, claims: Map<Node, Claim>, f: Facts): 
         ...(project?.repo && { repo: project.repo }),
         ...(project?.path && { path: project.path }),
         groups: keyGroups,
-        threads: [],
+        threads: loose.map(clean),
       },
-      first: gs[0].first,
+      first: [...gs.map((g) => g.first), ...loose.map((n) => n.first)].toSorted()[0],
     });
   }
   return out.toSorted(byFirst).map((o) => o.branch);
@@ -903,67 +903,71 @@ function linearLayout(entered: Set<Node>, claims: Map<Node, Claim>, f: Facts): G
 
   for (const p of byProject.values()) for (const m of p.milestones.values()) m.nodes = placeAll(m.nodes);
 
-  const top = [...byProject]
-    .map(([id, p]) => {
-      const ms = [...p.milestones.values()];
-      const first = (m: Milestone) => oldest(m.nodes);
-      ms.sort(
-        (a, b) => rank(a) - rank(b) || (a.date ?? "").localeCompare(b.date ?? "") || first(a).localeCompare(first(b)),
-      );
-      return {
-        first: oldest(ms.flatMap((m) => m.nodes)),
-        branch: {
-          id: `lp:${id}`,
-          label: p.name,
-          kind: "linear-project",
-          linear: { url: p.url },
-          threads: [],
-          groups: ms.map((m): Group => ({
-            id: m.id,
-            label: m.label,
-            kind: "milestone",
-            linear: { date: m.date },
-            ...holder(m.nodes, m.id),
-          })),
-        } satisfies Group,
-      };
-    })
-    .toSorted(byFirst)
-    .map((o) => o.branch);
-
-  const fallback = (id: string, label: string, kind: GroupKind, ns: Node[]): Group[] =>
-    ns.length ? [{ id, label, kind, linear: {}, ...holder(placeAll(ns), id) }] : [];
-  const reviewGroup: Group[] = reviews.length
+  const top = [...byProject].map(([id, p]) => {
+    const ms = [...p.milestones.values()];
+    const first = (m: Milestone) => oldest(m.nodes);
+    ms.sort(
+      (a, b) => rank(a) - rank(b) || (a.date ?? "").localeCompare(b.date ?? "") || first(a).localeCompare(first(b)),
+    );
+    return {
+      first: oldest(ms.flatMap((m) => m.nodes)),
+      branch: {
+        id: `lp:${id}`,
+        label: p.name,
+        kind: "linear-project",
+        linear: { url: p.url },
+        threads: [],
+        groups: ms.map((m): Group => ({
+          id: m.id,
+          label: m.label,
+          kind: "milestone",
+          linear: { date: m.date },
+          ...holder(m.nodes, m.id),
+        })),
+      } satisfies Group,
+    };
+  });
+  /** A group of the top level with the time of its oldest thread, so that it sorts with the Linear projects. */
+  const fallback = (id: string, label: string, kind: GroupKind, ns: Node[]) => {
+    const placed = placeAll(ns);
+    return ns.length ? [{ first: oldest(placed), branch: { id, label, kind, linear: {}, ...holder(placed, id) } }] : [];
+  };
+  const placedReviews = placeAll(reviews);
+  const reviewGroup = reviews.length
     ? [
         {
-          id: LINEAR_REVIEWS,
-          label: REVIEWS,
-          kind: "review",
-          linear: {},
-          threads: [],
-          groups: reviewGroups(placeAll(reviews), LINEAR_REVIEWS),
+          first: oldest(placedReviews),
+          branch: {
+            id: LINEAR_REVIEWS,
+            label: REVIEWS,
+            kind: "review" as const,
+            linear: {},
+            ...reviewGroups(placedReviews, LINEAR_REVIEWS),
+          },
         },
       ]
     : [];
+  const entries = [...top, ...reviewGroup, ...fallback("lf:none", NO_PROJECT, "no-project", noProject)];
   return [
-    ...top,
-    ...reviewGroup,
-    ...fallback("lf:none", NO_PROJECT, "no-project", noProject),
-    ...fallback(LINEAR_LOOSE, "", "loose", loose),
+    ...entries.toSorted(byFirst).map((o) => o.branch),
+    ...fallback(LINEAR_LOOSE, "", "loose", loose).map((o) => o.branch),
   ];
 }
 
-/** Review threads in one subgroup per issue key, in first-seen order. */
-const reviewGroups = (nodes: Node[], id: string): Group[] => {
+/** Review threads in one subgroup per issue key, in first-seen order. Keyless reviews sit directly in the group. */
+const reviewGroups = (nodes: Node[], id: string): Pick<Group, "groups" | "threads"> => {
   const byKey = new Map<string, Node[]>();
-  for (const n of nodes) byKey.set(n.key ?? NO_KEY, [...(byKey.get(n.key ?? NO_KEY) ?? []), n]);
-  return [...byKey].map(([k, ns]): Group => ({
-    id: `${id}:${k}`,
-    label: k,
-    kind: "key",
-    groups: [],
-    threads: ns.map(clean),
-  }));
+  for (const n of nodes) if (n.key) byKey.set(n.key, [...(byKey.get(n.key) ?? []), n]);
+  return {
+    groups: [...byKey].map(([k, ns]): Group => ({
+      id: `${id}:${k}`,
+      label: k,
+      kind: "key",
+      groups: [],
+      threads: ns.map(clean),
+    })),
+    threads: nodes.filter((x) => !x.key).map(clean),
+  };
 };
 
 /** Strips the build-only fields before the node goes on the wire. Nested subthreads get no Suggested replies. */

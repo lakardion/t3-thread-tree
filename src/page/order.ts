@@ -1,12 +1,12 @@
 import { arrayMove } from "@dnd-kit/helpers";
 
-import { isFallback, isLinearReviews, NO_KEY, REVIEWS, type Group, type ThreadNode } from "../shared/tree.ts";
+import { allThreads, LINEAR_LOOSE, type Group, type ThreadNode } from "../shared/tree.ts";
 import { stackRuns } from "./format.ts";
 
 /** The stored order: list key to the ids of that list. */
 export type Orders = Record<string, string[]>;
 
-/** What one list holds: a project or review group, a run of stacked key groups, or a thread. */
+/** What one list holds: a group, a run of stacked key groups, or a thread. */
 export type Unit = Group | Group[] | ThreadNode;
 
 /** While a drag runs, the list `list` renders as `ids`; `units` keeps the units that a push removed. */
@@ -28,9 +28,6 @@ export const threadUnitId = (t: ThreadNode) => `t:${t.id}`;
 export const runUnitId = (projectId: string, run: Group[]) =>
   run[0].stack ? `stack:${projectId}:${run[0].stack.id}` : run[0].id;
 
-/** Reviews and No issue key: Reviews stays first, No issue key stays last, and neither moves. */
-export const isPinned = (b: Group): boolean => b.label === REVIEWS || b.label === NO_KEY;
-
 /** True for the Linear tree: its top-level groups carry `linear`. */
 export const isLinear = (projects: Group[]): boolean => projects.some((p) => p.linear);
 
@@ -38,6 +35,62 @@ const isRun = (u: Unit): u is Group[] => Array.isArray(u);
 const isGroup = (u: Unit): u is Group => !Array.isArray(u) && "groups" in u;
 const isThread = (u: Unit): u is ThreadNode => !Array.isArray(u) && "children" in u;
 const groupIds = (u: Unit): string[] => (isRun(u) ? u.map((b) => b.id) : [u.id]);
+
+/** The oldest creation time in a run of groups. `Infinity` when no thread has one, so the run goes last. */
+const createdAt = (run: Group[]): number =>
+  Math.min(
+    Infinity,
+    ...run
+      .flatMap(allThreads)
+      .map((t) => Date.parse(t.detail.createdAt ?? ""))
+      .filter((n) => !Number.isNaN(n)),
+  );
+
+/** A thread as a headerless group, so that every list holds groups only. */
+const wrap = (t: ThreadNode, linear: boolean): Group => ({
+  id: threadUnitId(t),
+  label: t.key ?? "",
+  kind: "loose",
+  groups: [],
+  threads: [t],
+  ...(linear && { linear: {} }),
+});
+
+/** Merges two lists by oldest creation. A tie keeps the run first. */
+function merge(runs: Group[][], loose: Group[][]): Group[] {
+  const out: Group[][] = [];
+  let i = 0;
+  for (const run of runs) {
+    while (i < loose.length && createdAt(loose[i]) < createdAt(run)) out.push(loose[i++]);
+    out.push(run);
+  }
+  return [...out, ...loose.slice(i)].flat();
+}
+
+/**
+ * Turns the threads of every container into one-thread `loose` groups, merged by creation with its groups and stack runs.
+ * The Linear loose branch merges into the top level. Calling it again changes nothing.
+ */
+function spread(projects: Group[]): Group[] {
+  const container = (b: Group): Group => {
+    if (b.kind === "key" || b.kind === "stack" || b.kind === "loose") return b;
+    const own = b.threads.map((t) => [wrap(t, !!b.linear)]);
+    return { ...b, groups: merge(stackRuns(b.groups.map(container)), own), threads: [] };
+  };
+  const loose = projects.find((p) => p.id === LINEAR_LOOSE);
+  const rest = projects.filter((p) => p !== loose).map(container);
+  if (!loose) return rest;
+  const items = [
+    ...stackRuns(loose.groups).map((run): Group[] => [
+      { id: runUnitId(LINEAR_LOOSE, run), label: "", kind: "loose", linear: {}, groups: run, threads: [] },
+    ]),
+    ...loose.threads.map((t) => [wrap(t, true)]),
+  ].toSorted((a, b) => Number(createdAt(a) > createdAt(b)) - Number(createdAt(a) < createdAt(b)));
+  return merge(
+    rest.map((r) => [r]),
+    items,
+  );
+}
 
 /** The stored ids that still exist, in stored order, then the other items in base order. */
 export function applyOrder<T>(items: T[], idOf: (t: T) => string, stored: string[] | undefined): T[] {
@@ -73,11 +126,11 @@ function applyFreeze<T extends Unit>(
 
 /**
  * The tree with the user order applied at each level, and the ids and units of each list.
- * Reviews stays first and No issue key last. Subthreads keep the base order. The input is not changed.
- * A Linear tree orders its projects, the threads of each milestone and fallback group, and the Reviews subgroups.
- * Milestones and fallback groups do not move.
+ * Every list holds groups, stack runs and loose threads, and the user can move each.
+ * Subthreads keep the base order. The input is not changed.
+ * A Linear project keeps its milestones in order.
  */
-export function arrange(projects: Group[], orders: Orders, freeze?: Freeze): Arranged {
+export function arrange(input: Group[], orders: Orders, freeze?: Freeze): Arranged {
   const lists = new Map<string, string[]>();
   const units = new Map<string, Map<string, Unit>>();
   const put = <T extends Unit>(key: string, items: T[], idOf: (t: T) => string, fits: (u: Unit) => u is T): T[] => {
@@ -87,39 +140,20 @@ export function arrange(projects: Group[], orders: Orders, freeze?: Freeze): Arr
     units.set(key, new Map(out.map((t) => [idOf(t), t])));
     return out;
   };
-  const group = (b: Group): Group => ({
-    ...b,
-    threads: put(threadsKey(b.id), b.threads, threadUnitId, isThread),
-  });
-  const reviews = (b: Group): Group => ({
-    ...b,
-    groups: put(groupsKey(b.id), b.groups, (c) => c.id, isGroup).map(group),
-  });
-  const project = (p: Group): Group => {
-    const keys = p.groups.filter((b) => !isPinned(b));
-    const runs = put(groupsKey(p.id), stackRuns(keys), (r) => runUnitId(p.id, r), isRun);
+  const container = (b: Group): Group => {
+    if (b.kind === "loose") return b;
+    if (b.kind === "key" || b.kind === "stack")
+      return { ...b, threads: put(threadsKey(b.id), b.threads, threadUnitId, isThread) };
+    if (b.kind === "linear-project") return { ...b, groups: b.groups.map(container) };
     return {
-      ...p,
-      groups: [
-        ...p.groups.filter((b) => b.label === REVIEWS).map(reviews),
-        ...runs.flat().map(group),
-        ...p.groups.filter((b) => b.label === NO_KEY).map(group),
-      ],
+      ...b,
+      groups: put(groupsKey(b.id), stackRuns(b.groups), (r) => runUnitId(b.id, r), isRun)
+        .flat()
+        .map(container),
     };
   };
-  if (isLinear(projects)) {
-    const milestones = (p: Group): Group => ({ ...p, groups: p.groups.map(group) });
-    const top = put(
-      PROJECTS,
-      projects.filter((b) => !isFallback(b)),
-      (b) => b.id,
-      isGroup,
-    ).map(milestones);
-    const fallbacks = projects.filter(isFallback).map((b) => (isLinearReviews(b) ? reviews(b) : group(b)));
-    return { projects: [...top, ...fallbacks], lists, units };
-  }
-  const ordered = put(PROJECTS, projects, (b) => b.id, isGroup).map(project);
-  return { projects: ordered, lists, units };
+  const projects = put(PROJECTS, spread(input), (b) => b.id, isGroup).map(container);
+  return { projects, lists, units };
 }
 
 /**

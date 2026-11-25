@@ -31,7 +31,7 @@ export function settledPage(projects: Group[], threads: Map<string, Thread>, aft
   const keyed = projects
     .flatMap((p) =>
       settledIn(p).map((t) => ({
-        project: { id: p.id, label: p.label, repo: p.repo, groups: [], threads: [] } as Group,
+        project: { id: p.id, label: p.label, kind: "project", repo: p.repo, groups: [], threads: [] } as Group,
         t,
         key: settledKey(threads.get(t.id)!),
       })),

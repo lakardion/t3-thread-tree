@@ -21,6 +21,7 @@ const thread = (
 const branch = (id: string, threads: ThreadNode[] = [], groups: Group[] = []): Group => ({
   id,
   label: id,
+  kind: "key",
   groups,
   threads,
 });

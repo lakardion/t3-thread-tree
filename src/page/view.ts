@@ -4,19 +4,13 @@ import {
   allThreads,
   bySince,
   flat,
-  isFallback,
-  isLinearReviews,
   isThread,
-  LINEAR_LOOSE,
-  NO_KEY,
-  REVIEWS,
   runsOf,
   type Group,
   type Status,
   type ThreadNode,
 } from "../shared/tree.ts";
 import { stackRuns } from "./format.ts";
-import { isLinear, isPinned } from "./order.ts";
 
 export type SortBy = "manual" | "updated";
 export type Layout = "tree" | "flat";
@@ -70,52 +64,32 @@ export const groupTime = (bs: Group[], snoozed: boolean): Time =>
     snoozed,
   );
 
-const threadsSorted = (b: Group, snoozed: boolean): Group => ({
-  ...b,
-  threads: byNewest(b.threads, (t) => blockTime(t, snoozed).at),
-});
-
 /** Stable sort, newest first. */
 export const byNewest = <T>(items: T[], by: (t: T) => number): T[] =>
   items.toSorted((a, b) => Number(by(b) > by(a)) - Number(by(b) < by(a)));
 
-/** The stack runs of a milestone, newest first; each run keeps its inner order. */
-const sortRuns = (groups: Group[], snoozed: boolean): Group[] =>
-  byNewest(stackRuns(groups), (run) => groupTime(run, snoozed).at).flat();
-
 /**
- * Sorts an arranged tree by Last run (`snoozed`: whether snoozed threads count). Projects keep their order. In a project, Reviews stays first and No issue key last;
- * the groups between them, and the threads in each group, sort newest first. A stack run moves as one block and keeps
- * its inner order. Subthreads keep their order. Ties keep the input order. The input is not changed.
- * A Linear tree keeps its project, milestone and PR stack order and sorts the threads of each milestone and of the top-level group. The stack runs of a milestone also sort by block time, each keeping its inner order.
+ * Sorts an arranged tree by Last run (`snoozed`: whether snoozed threads count). Top-level items keep their order.
+ * In every container, the groups, stack runs and loose threads sort together, newest first; a stack run moves as one
+ * block and keeps its inner order. A key group sorts its threads. Milestones of a Linear project keep their order.
+ * Subthreads keep their order. Ties keep the input order. The input is not changed.
  */
 export function sortTree(projects: Group[], snoozed = true): Group[] {
-  const sorted = (b: Group) => threadsSorted(b, snoozed);
-  const groupAt = (b: Group) => groupTime([b], snoozed).at;
-  if (isLinear(projects))
-    return projects.map((p) =>
-      isLinearReviews(p)
-        ? { ...p, groups: byNewest(p.groups.map(sorted), groupAt) }
-        : {
-            ...sorted(p),
-            groups: isFallback(p)
-              ? p.groups
-              : p.groups.map((m) => ({ ...sorted(m), groups: sortRuns(m.groups, snoozed) })),
-          },
-    );
-  return projects.map((p) => {
-    const keys = stackRuns(p.groups.filter((b) => !isPinned(b)));
-    return {
-      ...p,
-      groups: [
-        ...p.groups
-          .filter((b) => b.label === REVIEWS)
-          .map((r) => ({ ...r, groups: byNewest(r.groups.map(sorted), groupAt) })),
-        ...byNewest(keys, (run) => groupTime(run, snoozed).at).flatMap((run) => (run[0].stack ? run : run.map(sorted))),
-        ...p.groups.filter((b) => b.label === NO_KEY).map(sorted),
-      ],
-    };
+  const sortGroup = (b: Group): Group =>
+    b.kind === "key"
+      ? { ...b, threads: byNewest(b.threads, (t) => blockTime(t, snoozed).at) }
+      : b.kind === "loose" || b.kind === "stack"
+        ? b
+        : sortList(b);
+  const sortList = (b: Group): Group => ({
+    ...b,
+    groups: byNewest(stackRuns(b.groups), (run) => groupTime(run, snoozed).at).flatMap((run) =>
+      run[0].stack ? run : run.map(sortGroup),
+    ),
   });
+  return projects.map((p) =>
+    p.kind === "loose" ? p : p.kind === "linear-project" ? { ...p, groups: p.groups.map(sortList) } : sortList(p),
+  );
 }
 
 /** The `view-transition-name` of a thread row (`t`), a stack rail (`s`) or a section header (`sec`). */
@@ -137,6 +111,7 @@ export type FlatItem =
       open: boolean;
       statuses: Status[] | null;
       date?: string | null;
+      loose?: true;
     };
 
 const stackUnit = (run: Group[], project: Group): FlatUnit => ({
@@ -155,29 +130,18 @@ const threadUnit = (t: ThreadNode, project: Group, review: boolean): FlatUnit =>
 });
 
 /**
- * The units of an arranged tree, in order: per project, the Reviews threads, then each stack run (one unit) or
- * group thread, then the No issue key threads. Subthreads stay in `t.children`.
- * A Linear top-level group walks each branch in order: a stack run (one unit), other subgroups, then the branch's
- * threads. Its own threads come last.
+ * The units of an arranged tree, in order: per top-level item, a stack run (one unit), other groups walked in
+ * order, then the threads of the item. Subthreads stay in `t.children`.
  */
 export function flatten(projects: Group[]): FlatUnit[] {
   return projects.flatMap((p) => {
-    if (p.linear) {
-      const walk = (b: Group): FlatUnit[] => [
-        ...stackRuns(b.groups).flatMap((run): FlatUnit[] => (run[0].stack ? [stackUnit(run, p)] : run.flatMap(walk))),
-        ...b.threads.map((t) => threadUnit(t, p, isLinearReviews(p))),
-      ];
-      return walk(p);
-    }
-    return [
-      ...p.groups
-        .filter((b) => b.label === REVIEWS)
-        .flatMap((r) => r.groups.flatMap((g) => g.threads.map((t) => threadUnit(t, p, true)))),
-      ...stackRuns(p.groups.filter((b) => !isPinned(b))).flatMap((run): FlatUnit[] =>
-        run[0].stack ? [stackUnit(run, p)] : run.flatMap((g) => g.threads.map((t) => threadUnit(t, p, false))),
+    const walk = (b: Group, review: boolean): FlatUnit[] => [
+      ...stackRuns(b.groups).flatMap((run): FlatUnit[] =>
+        run[0].stack ? [stackUnit(run, p)] : run.flatMap((g) => walk(g, review || g.kind === "review")),
       ),
-      ...p.groups.filter((b) => b.label === NO_KEY).flatMap((g) => g.threads.map((t) => threadUnit(t, p, false))),
+      ...b.threads.map((t) => threadUnit(t, p, review)),
     ];
+    return walk(p, p.kind === "review");
   });
 }
 
@@ -235,7 +199,14 @@ const waitOf = (u: FlatUnit, statuses: Status[]): string | null =>
     .map((t) => t.since)
     .toSorted(bySince)[0] ?? null;
 
-type Section = { key: string; label: string; statuses: Status[] | null; date?: string | null; units: FlatUnit[] };
+type Section = {
+  key: string;
+  label: string;
+  statuses: Status[] | null;
+  date?: string | null;
+  loose?: true;
+  units: FlatUnit[];
+};
 
 /**
  * Groups units by status, in section order, and drops empty sections. A unit goes by its most urgent thread,
@@ -275,28 +246,35 @@ const tops = (b: Group): ThreadNode[] => [...b.groups.flatMap(tops), ...b.thread
 
 /**
  * The Linear sections of an arranged Linear tree, in tree order: one per milestone, labelled "Project · Milestone",
- * and one per fallback group, the loose keyless threads last. A section takes the units whose thread sits in it, in unit order. Empty sections drop.
+ * and one per other top-level item. Adjacent loose items make one section with no label. A section takes the units whose thread sits in it, in unit order. Empty sections drop.
  */
 export function linearSections(projects: Group[], units: FlatUnit[]): Section[] {
   return projects
     .flatMap((p): [Group, string, string | null][] =>
-      isFallback(p)
-        ? [[p, p.label, null]]
-        : p.groups.map((m) => [m, `${p.label} · ${m.label}`, m.linear?.date ?? null]),
+      p.kind === "linear-project"
+        ? p.groups.map((m) => [m, `${p.label} · ${m.label}`, m.linear?.date ?? null])
+        : [[p, p.label, null]],
     )
-    .map(([b, label, date]) => {
+    .map(([b, label, date]): Section => {
       const held = new Set(tops(b).map((t) => t.id));
       return {
         key: b.id,
         label,
         statuses: null,
         date,
+        ...(b.kind === "loose" && { loose: true as const }),
         units: units.filter((u) =>
           [...placing(u), ...(u.kind === "thread" && !isThread(u.t) ? [u.t] : [])].some((t) => held.has(t.id)),
         ),
       };
     })
-    .filter((s) => s.units.length > 0);
+    .filter((s) => s.units.length > 0)
+    .reduce<Section[]>((out, s) => {
+      const last = out.at(-1);
+      if (s.loose && last?.loose) last.units.push(...s.units);
+      else out.push(s);
+      return out;
+    }, []);
 }
 
 const groupSections = (units: FlatUnit[], groupBy: GroupBy, snoozed: boolean, projects: Group[]): Section[] =>
@@ -312,7 +290,7 @@ export const folds = (t: ThreadNode, statuses: Status[]): boolean => flat(t).eve
  * The flat sequence: the units, or section headers each followed by its units. A header counts the threads that
  * match its section, subthreads included. Context rows are not counted. A Linear section has no statuses: it counts
  * all threads of its units. A section in `shut` keeps its header and count and gives no units. `shut` does nothing
- * without grouping. The Linear loose section has no label: the page shows no header for it, and it never shuts.
+ * without grouping. A loose section has no label: the page shows no header for it, and it never shuts.
  */
 export const sequence = (
   units: FlatUnit[],
@@ -323,7 +301,7 @@ export const sequence = (
 ): FlatItem[] =>
   groupBy !== "none"
     ? groupSections(units, groupBy, snoozed, projects).flatMap((s): FlatItem[] => {
-        const open = s.key === LINEAR_LOOSE || !shut.has(s.key);
+        const open = !!s.loose || !shut.has(s.key);
         return [
           {
             kind: "section",
@@ -334,6 +312,7 @@ export const sequence = (
             open,
             statuses: s.statuses,
             date: s.date,
+            ...(s.loose && { loose: true as const }),
           },
           ...(open ? s.units : []),
         ];
@@ -404,7 +383,7 @@ export function pathFolds(projects: Group[], id: string): string[] {
     const path = walk(p);
     if (path)
       return [
-        ...path.flatMap((b) => (b.stack ? [b.id, `rail:${b.stack.id}`] : [b.id])),
+        ...path.flatMap((b) => (b.kind === "loose" ? [] : b.stack ? [b.id, `rail:${b.stack.id}`] : [b.id])),
         ...path.at(-1)!.threads.flatMap((t) => mapHeadsTo(t, id)),
       ];
   }

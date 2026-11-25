@@ -125,6 +125,7 @@ export function MapGroup({
           run={e.map((c) => ({
             id: `${t.id}:${c.id}`,
             label: c.key ?? c.title,
+            kind: "stack",
             stack: c.rail,
             groups: [],
             threads: [c],
