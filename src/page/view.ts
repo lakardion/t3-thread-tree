@@ -1,4 +1,4 @@
-import { OPEN_NEXT } from "../shared/status.ts";
+import { NEEDS_YOU } from "../shared/status.ts";
 import {
   allThreads,
   bySince,
@@ -172,7 +172,7 @@ export const closedCounts = (ts: ThreadNode[]): { status: Status; label: string;
       })).filter((g) => g.n > 0);
 
 /** The sections that sort by Wait, oldest first, and have no drag. */
-export const WAIT_SECTIONS = new Set<string>(OPEN_NEXT);
+export const WAIT_SECTIONS = new Set<string>(NEEDS_YOU);
 
 /** The oldest `since` of the unit threads that are in `statuses`. `null` when none has one. */
 const waitOf = (u: FlatUnit, statuses: Status[]): string | null =>

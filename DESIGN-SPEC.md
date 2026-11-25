@@ -341,14 +341,14 @@ The hover background of a row is `--accent`. It replaces the wash while the poin
 
 **Header counts.** Four count chips over the visible threads, nested threads included:
 
-| Chip          | Counts                           | Style                                                         |
-| ------------- | -------------------------------- | ------------------------------------------------------------- |
-| "N need you"  | `needs-input`, `plan-ready`      | Amber wash and `--status-needs-input-fg`. Hidden when N is 0. |
-| "N working"   | `working`, `starting`, `blocked` | Outline                                                       |
-| "N your turn" | `your-turn`                      | Outline                                                       |
-| "N stopped"   | `failed`, `interrupted`          | Outline                                                       |
+| Chip          | Counts                                   | Style                                                         |
+| ------------- | ---------------------------------------- | ------------------------------------------------------------- |
+| "N need you"  | `needs-input`, `plan-ready`, `your-turn` | Amber wash and `--status-needs-input-fg`. Hidden when N is 0. |
+| "N working"   | `working`, `starting`, `blocked`         | Outline                                                       |
+| "N your turn" | `your-turn`                              | Outline                                                       |
+| "N stopped"   | `failed`, `interrupted`                  | Outline                                                       |
 
-**"Needs you" filter.** It keeps the threads with status `needs-input`, `plan-ready` or `your-turn`, and the groups and projects that hold them. A thread that matches keeps its place under a spawner that does not match; that spawner row stays, in muted color. The chip shows the needs-you count as a badge. Then it shows "·" and the your-turn count as a muted 11 px tabular number. Each count shows only when above 0. The "·" shows only when both counts show. The tooltip reads "N need you, M your turn". It sits inside the item, so the item keeps its `data-state`. The filter runs on the page. The backend tree does not change. The page stores the choice in `localStorage` under `thread-tree:filter`.
+**"Needs you" filter.** It keeps the threads with status `needs-input`, `plan-ready` or `your-turn`, and the groups and projects that hold them. A thread that matches keeps its place under a spawner that does not match; that spawner row stays, in muted color. The chip shows the needs-you count as a badge, your-turn threads included. The badge shows only when above 0. The tooltip reads "N need you (M your turn)", and drops the part in parentheses when M is 0. It sits inside the item, so the item keeps its `data-state`. The filter runs on the page. The backend tree does not change. The page stores the choice in `localStorage` under `thread-tree:filter`.
 
 **States of the page:**
 

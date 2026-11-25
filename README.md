@@ -29,7 +29,7 @@ Use it as a Mac app or in a browser. The Mac app adds a Dock badge, notification
 
 - **Catch-up line.** Under each waiting or failed row, a model writes what the thread did and what it asks, with the answer options as chips.
 - **Last message preview.** Put the pointer over a Catch-up line to see the end of the last message with Markdown formatting.
-- **Needs you.** One filter keeps only the threads that wait for you. The browser tab title and the Dock badge show the count.
+- **Needs you.** One filter keeps only the threads that wait for you: needs input, plan ready and your turn. The browser tab title, the Dock badge and the menu-bar list show the count. A your-turn thread counts, but it sends no notification.
 - **Empty list.** When a filter hides every thread, the list says why and gives a button to show them again.
 - **Open next.** The key `n` opens the thread that has waited longest.
 - **Run questions and Paused runs.** A question from a T3 workflow, and a run that a failed step paused, also count as Needs you.

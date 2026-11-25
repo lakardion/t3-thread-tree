@@ -96,7 +96,7 @@ describe("countHeader", () => {
         thread("k", "idle"),
       ]),
     ];
-    expect(countHeader(tree)).toEqual({ needYou: 2, working: 3, yourTurn: 1, stopped: 2 });
+    expect(countHeader(tree)).toEqual({ needYou: 3, working: 3, yourTurn: 1, stopped: 2 });
   });
 
   test("an empty tree gives zeros", () => {
@@ -213,7 +213,7 @@ describe("emptyKind", () => {
 });
 
 describe("needsYouThreads", () => {
-  test("keeps needs-input and plan-ready, nested included, and drops the rest", () => {
+  test("keeps needs-input, plan-ready and your-turn, nested included, and drops the rest", () => {
     const tree = [
       branch("p", [
         thread("a", "needs-input", [thread("n", "plan-ready")]),
@@ -221,7 +221,7 @@ describe("needsYouThreads", () => {
         thread("c", "working"),
       ]),
     ];
-    expect(needsYouThreads(tree).map((t) => t.id)).toEqual(["a", "n"]);
+    expect(needsYouThreads(tree).map((t) => t.id)).toEqual(["a", "n", "b"]);
   });
 
   test("drops settled threads", () => {
@@ -381,12 +381,13 @@ describe("notifyEvents", () => {
 });
 
 describe("waits", () => {
-  test("true when a nested thread needs input or has a plan ready", () => {
+  test("true when a nested thread is in Needs you", () => {
     expect(waits(branch("g", [thread("a", "done", [thread("b", "plan-ready")])]))).toBe(true);
     expect(waits(branch("p", [], [branch("g", [thread("a", "needs-input")])]))).toBe(true);
+    expect(waits(branch("g", [thread("a", "your-turn")]))).toBe(true);
   });
   test("false for other statuses and for settled threads", () => {
-    expect(waits(branch("g", [thread("a", "working"), thread("b", "your-turn")]))).toBe(false);
+    expect(waits(branch("g", [thread("a", "working"), thread("b", "done")]))).toBe(false);
     expect(waits(branch("g", [{ ...thread("a", "needs-input"), settled: true }]))).toBe(false);
   });
 });
@@ -515,9 +516,9 @@ describe("favicon", () => {
 
 describe("needsYouTip", () => {
   const tip = (needYou: number, yourTurn: number) => needsYouTip({ needYou, working: 0, yourTurn, stopped: 0 });
-  test("joins the non-zero parts", () => {
-    expect(tip(6, 5)).toBe("6 need you, 5 your turn");
-    expect(tip(0, 3)).toBe("3 your turn");
+  test("names the your-turn part of the count", () => {
+    expect(tip(6, 5)).toBe("6 need you (5 your turn)");
+    expect(tip(3, 3)).toBe("3 need you (3 your turn)");
     expect(tip(5, 0)).toBe("5 need you");
     expect(tip(0, 0)).toBe("");
   });
