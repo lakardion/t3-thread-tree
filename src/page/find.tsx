@@ -8,6 +8,7 @@ import { Kbd } from "@/components/ui/kbd";
 import { cn } from "@/lib/utils";
 
 import { find, type Hit } from "../shared/find.ts";
+import { CATCH_UP, isIn } from "../shared/status.ts";
 import type { Workflow } from "../shared/workflow-start.ts";
 import { ago } from "./format.ts";
 import { IconState } from "./icon-state.tsx";
@@ -56,7 +57,7 @@ function Row({ h, now, canShow, open, show }: RowProps) {
             {t.title || t.id}
           </span>
           <span className="flex-none text-[12px] leading-5 text-muted-foreground tabular-nums">
-            {needsYou(t.status) || t.status === "failed"
+            {isIn(CATCH_UP, t.status)
               ? `${t.phrase}${needsYou(t.status) && t.since ? ` · ${ago(t.since, now)}` : ""}`
               : ago(t.updatedAt, now)}
           </span>

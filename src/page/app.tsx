@@ -89,6 +89,7 @@ import { hits } from "../shared/find.ts";
 import type { LocalConfig, LocalState, ModelPick, Offered } from "../shared/model.ts";
 import { isRun, type RunItem } from "../shared/runs.ts";
 import type { CliStatus } from "../shared/send.ts";
+import { CATCH_UP, isIn } from "../shared/status.ts";
 import {
   allThreads,
   isFallback,
@@ -1707,7 +1708,7 @@ function StatusCell({ t, now }: { t: ThreadNode; now: number }) {
 
 /** The phrase beside the icon on rows that wait on the user, with the Wait; failed rows show the phrase only. Hidden by the status text setting. */
 function PhraseCell({ t, now }: { t: ThreadNode; now: number }) {
-  if (!needsYou(t.status) && t.status !== "failed") return null;
+  if (!isIn(CATCH_UP, t.status)) return null;
   return (
     <span
       className={cn(
