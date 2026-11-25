@@ -9,9 +9,9 @@ import { cn } from "@/lib/utils";
 
 import { find, type Hit } from "../shared/find.ts";
 import type { Workflow } from "../shared/workflow-start.ts";
-import { needsYou } from "./attention.ts";
 import { ago } from "./format.ts";
 import { IconState } from "./icon-state.tsx";
+import { needsYou } from "./needs-you.ts";
 import { StatusIcon } from "./status-icon.tsx";
 import { fits } from "./workflow-start.ts";
 

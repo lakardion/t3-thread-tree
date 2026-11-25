@@ -25,7 +25,7 @@ export const needsYouTip = (c: Counts): string =>
   [c.needYou > 0 && `${c.needYou} need you`, c.yourTurn > 0 && `${c.yourTurn} your turn`].filter(Boolean).join(", ");
 
 /** The summary counts over all threads of the tree, nested threads included. Each run item needs the user. */
-export function countAttention(projects: Branch[], runs: RunItem[] = []): Counts {
+export function countHeader(projects: Branch[], runs: RunItem[] = []): Counts {
   const c: Counts = { needYou: runs.length, working: 0, yourTurn: 0, stopped: 0 };
   for (const { status } of projects.flatMap(allThreads)) {
     if (status === "needs-input" || status === "plan-ready") c.needYou++;

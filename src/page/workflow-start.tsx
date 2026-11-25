@@ -34,7 +34,7 @@ export type StartRequest = {
 };
 
 /** The workflows that the server offers and the opener of the start dialog. */
-export const Launcher = createContext<{
+export const WorkflowStarter = createContext<{
   workflows: Workflow[];
   t3cli: CliStatus | null;
   open: (req: StartRequest) => void;
@@ -78,7 +78,7 @@ export function StartMenu({
   disabled?: boolean;
   onPick?: () => void;
 }) {
-  const { workflows, t3cli, open } = useContext(Launcher);
+  const { workflows, t3cli, open } = useContext(WorkflowStarter);
   const fit = point ? workflows.filter((w) => fits(w, point)) : [];
   if (!point || fit.length === 0) return null;
   return (

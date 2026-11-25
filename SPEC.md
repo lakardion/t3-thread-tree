@@ -2,7 +2,7 @@
 
 A local webapp, also packaged as a macOS desktop app. It shows the active T3 Code threads as one live tree: Project › issue key › thread. Each node shows its status and its PR stack. A click on a node opens the thread in T3 Code. The app writes to T3 only through a send or a start that the user confirms.
 
-Terms are defined in [CONTEXT.md](CONTEXT.md). Each section links the ticket that holds the full decision and its reasons. When this spec and a ticket do not agree, this spec wins: it includes the later changes.
+Terms are defined in [GLOSSARY.md](GLOSSARY.md). Each section links the ticket that holds the full decision and its reasons. When this spec and a ticket do not agree, this spec wins: it includes the later changes.
 
 ## Scope
 
@@ -52,7 +52,7 @@ Source: [How can a local process read T3 thread data live?](.wayfinder/tickets/0
 
 ## Run questions
 
-A **Run question** and a **Paused run** wait for the user, as threads do (see CONTEXT.md). The app shows them with the threads that need the user. They add no row to the tree. A run that has a step thread has its own row (see "Runs in the tree").
+A **Run question** and a **Paused run** wait for the user, as threads do (see GLOSSARY.md). The app shows them with the threads that need the user. They add no row to the tree. A run that has a step thread has its own row (see "Runs in the tree").
 
 ### Data
 

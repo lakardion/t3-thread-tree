@@ -1,6 +1,6 @@
 import { describe, expect, test } from "bun:test";
 
-import { onlyNeedsYou } from "../src/page/attention.ts";
+import { onlyNeedsYou } from "../src/page/needs-you.ts";
 import { applyOrder, arrange, parseOrders, prune, reorder, type Freeze } from "../src/page/order.ts";
 import { NO_KEY, REVIEWS, type Branch, type Status, type ThreadNode } from "../src/shared/tree.ts";
 

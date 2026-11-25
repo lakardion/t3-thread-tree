@@ -1,6 +1,6 @@
 # T3 thread tree: design spec
 
-This spec defines the visual design of the thread tree page: the tokens, the status model, the row anatomy, the layout, the components, and the data that the backend must add to the tree. Where it differs from [SPEC.md](SPEC.md) › UI, this spec wins. The tree rules, the data source and the runtime in `SPEC.md` do not change. Terms are defined in [CONTEXT.md](CONTEXT.md).
+This spec defines the visual design of the thread tree page: the tokens, the status model, the row anatomy, the layout, the components, and the data that the backend must add to the tree. Where it differs from [SPEC.md](SPEC.md) › UI, this spec wins. The tree rules, the data source and the runtime in `SPEC.md` do not change. Terms are defined in [GLOSSARY.md](GLOSSARY.md).
 
 The design merges two proposals: [A, "Harbor"](.wayfinder/design-overhaul/research/02-opus-proposal.md) and [B, "Slate signal"](.wayfinder/design-overhaul/research/03-sol-proposal.md). The mockups in the same folder show the two starting points, not this result.
 
@@ -18,7 +18,7 @@ Each row gives the choice and its one reason.
 | Projects        | One shared card. Each project is a block with a one-line header (T3 monogram and name) and a left edge in the project color                                                                                       | All projects show in less height, and the user finds a project by color.   |
 | Gradients       | Color gradients for state and for the stack only (A, reduced)                                                                                                                                                     | Calm rows stay flat, so a gradient keeps its meaning.                      |
 | Layout          | Fold single-thread key groups (A), stack rail (A), centered column of 1200 px maximum (B), one status shape per thread on closed rows, status counts on a closed project or tree group with 5 or more threads (A) | Fewer rows, a visible stack, and no wide gap between title and chips.      |
-| Header          | Attention summary (A), "Needs you" filter (A), theme choice (B), first-load skeleton (A)                                                                                                                          | They answer "what needs me?" before the user reads the tree.               |
+| Header          | Header counts (A), "Needs you" filter (A), theme choice (B), first-load skeleton (A)                                                                                                                              | They answer "what needs me?" before the user reads the tree.               |
 | Inventory       | Row: status phrase, elapsed time, age, PR marks. All other useful fields: details.                                                                                                                                | The row holds only what the user scans.                                    |
 
 Rejected from both proposals: subagent and background task counts, in any place; a model chip, tags, pin, limit and stop flags on the row (they are in details); exhaustive details with ids (B); a hover card (A); a popover for extra PR links (B).
@@ -334,12 +334,12 @@ The hover background of a row is `--accent`. It replaces the wash while the poin
 ### Page
 
 - One centered column: `max-width: 1200px`, 16 px side padding.
-- Header, one line that wraps: the title "Thread tree" (15 px, semibold), the attention summary, the "All / Needs you" filter, then at the right the "Reset order" button, the "show settled" switch and the theme choice. "Reset order" is a ghost `sm` button. It shows only when the user has a stored order. A click clears the stored order.
+- Header, one line that wraps: the title "Thread tree" (15 px, semibold), the header counts, the "All / Needs you" filter, then at the right the "Reset order" button, the "show settled" switch and the theme choice. "Reset order" is a ghost `sm` button. It shows only when the user has a stored order. A click clears the stored order.
 - The banner is below the header, as now.
 - The Catch-up fold sits in Settings › Setup, before "Local model". It uses the fold row of the other Setup folds: the label at the left, the value at the right (green with a label, neutral for "Off", yellow with a warning sign for "No model"). Its body has a switch row and a radio group of the Model picks, each with its provider icon, 14 px, and its label (13 px).
 - One card with all projects follows.
 
-**Attention summary.** Four count chips over the visible threads, nested threads included:
+**Header counts.** Four count chips over the visible threads, nested threads included:
 
 | Chip          | Counts                           | Style                                                         |
 | ------------- | -------------------------------- | ------------------------------------------------------------- |
