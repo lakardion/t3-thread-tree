@@ -167,6 +167,7 @@ import {
 import { IconState } from "./icon-state.tsx";
 import { Hint, useKeyHints } from "./key-hints.tsx";
 import { pageKey } from "./keys.ts";
+import { liveStream, type LiveState } from "./live.ts";
 import { SetupDialog } from "./local-setup-dialog.tsx";
 import { looksDone, parseSkip, pruneSkip, SKIP_KEY } from "./looks-done.ts";
 import { LooksDoneButton, LooksDoneDialog, UndoToast } from "./looks-done.tsx";
@@ -3032,6 +3033,10 @@ function SettledList({ signature, scrollRoot }: { signature: string; scrollRoot:
 
 function App() {
   const [tree, setTree] = useState<Tree | null>(null);
+  /** Set while the stream is down: the time of the last push, null before the first. */
+  const [lost, setLost] = useState<{ last: string | null } | null>(null);
+  const lastPush = useRef<string | null>(null);
+  const reconnect = useRef(() => {});
   const [settled, setSettled] = useState(load(SETTLED_KEY) === "1");
   const [snoozed, setSnoozed] = useState(load(SNOOZED_KEY) !== "0");
   const [nest, setNest] = useState(load(NEST_KEY) === "1");
@@ -3510,17 +3515,23 @@ function App() {
   }, [listRef, last]);
   useEffect(() => {
     save(NEST_KEY, nest ? "1" : "0");
-    const es = new EventSource(
-      `/events?nest=${nest ? 1 : 0}${labelsParam ? `&labels=${encodeURIComponent(labelsParam)}` : ""}${linearOn ? "&linear=1" : ""}`,
-    );
-    es.onmessage = (e) => {
-      const next = JSON.parse(e.data) as Tree;
-      const cur = latest.current;
-      /** Only a change of the row order plays a transition; a push every second while a thread works does not. */
-      if (cur.connecting || cur.rows(next.projects) === cur.rows(cur.projects)) setTree(next);
-      else transition(() => setTree(next));
-    };
-    return () => es.close();
+    const events = liveStream({
+      open: () =>
+        new EventSource(
+          `/events?nest=${nest ? 1 : 0}${labelsParam ? `&labels=${encodeURIComponent(labelsParam)}` : ""}${linearOn ? "&linear=1" : ""}`,
+        ),
+      onTree: (data) => {
+        lastPush.current = new Date().toISOString();
+        const next = JSON.parse(data) as Tree;
+        const cur = latest.current;
+        /** Only a change of the row order plays a transition; a push every second while a thread works does not. */
+        if (cur.connecting || cur.rows(next.projects) === cur.rows(cur.projects)) setTree(next);
+        else transition(() => setTree(next));
+      },
+      onState: (s: LiveState) => setLost(s === "live" ? null : { last: lastPush.current }),
+    });
+    reconnect.current = events.reconnect;
+    return () => events.close();
   }, [nest, labelsParam, linearOn]);
   useEffect(() => save(SETTLED_KEY, settled ? "1" : "0"), [settled]);
 
@@ -3720,6 +3731,17 @@ function App() {
       </header>
       <div ref={listRef} className={cn("min-h-0 flex-1 overflow-y-auto", projects?.length === 0 && "flex flex-col")}>
         <Focus value={focusApi}>
+          {lost && (
+            <Alert className="mb-3 border-l-[3px] border-l-status-needs-input">
+              <AlertDescription className="flex flex-wrap items-center gap-x-2 text-foreground">
+                Live updates stopped: the rows can be out of date. Reconnecting… Last update{" "}
+                {lost.last ? hhmm(lost.last) : "never"}.
+                <Button variant="link" size="sm" className="h-auto p-0" onClick={() => reconnect.current()}>
+                  Reconnect now
+                </Button>
+              </AlertDescription>
+            </Alert>
+          )}
           {tree?.conn === "down" && (
             <Alert className="mb-3 border-l-[3px] border-l-status-needs-input">
               <AlertDescription className="text-foreground">
