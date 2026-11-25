@@ -16,6 +16,8 @@ export type Pr = {
   repository: string;
   /** Snapshot `updatedAt`; empty before the first sync. */
   updatedAt: string;
+  /** Snapshot `syncedAt`, the time T3 last synced the link and its `stack`; empty before the first sync. */
+  syncedAt: string;
   source: string;
   state: string;
   draft: boolean | null;
@@ -193,6 +195,7 @@ export function decodeThread(raw: unknown): Thread | null {
           host: str(o.host) ?? "",
           repository: str(o.repository) ?? "",
           updatedAt: str(snap.updatedAt) ?? "",
+          syncedAt: str(snap.syncedAt) ?? "",
           source: str(o.source) ?? "",
           state,
           draft: bool(snap.isDraft),

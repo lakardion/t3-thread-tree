@@ -95,6 +95,7 @@ const pr = (n: number, source: string, state = "open", over: Partial<Pr> = {}): 
   host: "github.com",
   repository: "",
   updatedAt: "",
+  syncedAt: "",
   source,
   state,
   draft: null,

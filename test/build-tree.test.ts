@@ -54,7 +54,13 @@ function shell(id: string, title: string, over: Record<string, unknown> = {}) {
   };
 }
 
-const pr = (number: number, source: string, state = "open", stack: object | null = null) => ({
+const pr = (
+  number: number,
+  source: string,
+  state = "open",
+  stack: object | null = null,
+  syncedAt = "2026-11-12T08:00:00.000Z",
+) => ({
   host: "github.com",
   repository: "org/repo",
   number,
@@ -68,7 +74,7 @@ const pr = (number: number, source: string, state = "open", stack: object | null
     baseBranch: "b",
     isDraft: false,
     updatedAt: null,
-    syncedAt: "2026-11-12T08:00:00.000Z",
+    syncedAt,
   },
   stack,
 });
@@ -438,6 +444,23 @@ describe("PR stack", () => {
       ["WEB-1 B", 3],
     ]);
     expect(child(tree, "frontend", "WEB-2").threads[0].stack).toEqual({ pos: 4, total: 4 });
+  });
+
+  test("the most recently synced stack layers win, whatever the thread order", () => {
+    const layers = (ns: number[]) => ({ base: "main", layers: ns.map((number) => ({ number, state: "open" })) });
+    const copy = (n: number, ns: number[], at: string) =>
+      [10, 11, 12].map((x) => pr(x, x === n ? "agent" : "stack", "open", layers(ns), at));
+    const stale = shell("a", "WEB-1 A", { pullRequests: copy(10, [10, 11, 12], "2026-11-12T08:00:00.000Z") });
+    const fresh = shell("b", "WEB-1 B", { pullRequests: copy(11, [10, 12, 11], "2026-11-13T08:00:00.000Z") });
+    for (const raws of [
+      [stale, fresh],
+      [fresh, stale],
+    ]) {
+      const tree = build(raws);
+      const pos = (title: string) =>
+        child(tree, "frontend", "WEB-1").threads.find((t) => t.title === title)?.stack?.pos;
+      expect([pos("WEB-1 A"), pos("WEB-1 B")]).toEqual([1, 3]);
+    }
   });
 
   test("a review thread with stack PRs stays in Reviews", () => {

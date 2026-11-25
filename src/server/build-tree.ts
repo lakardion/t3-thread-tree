@@ -21,7 +21,7 @@ import {
 import { waiting } from "./catch-up.ts";
 import { mapName, mapsOf, markedKey } from "./maps.ts";
 import { suggestedReplies } from "./replies.ts";
-import type { Project, RunStepsRaw, RunsSnapshot, Thread } from "./t3.ts";
+import type { Pr, Project, RunStepsRaw, RunsSnapshot, Thread } from "./t3.ts";
 
 /** Review threads sit in Reviews, whatever their key. */
 const isReview = (t: { title: string }) => t.title.startsWith("Review #");
@@ -155,13 +155,15 @@ export function detailOf(t: Thread, now: number, all: Map<string, Thread>): Omit
 }
 /** Time in ms, zero-padded so a string compare orders it, then the id. A bad date sorts first. */
 const timeKey = (iso: string | null, id: string) => `${String(Date.parse(iso ?? "") || 0).padStart(16, "0")} ${id}`;
+const syncedMs = (p: Pr) => Date.parse(p.syncedAt) || 0;
 const creationKey = (t: Thread) => timeKey(t.createdAt, t.id);
 const byFirst = <T extends { first: string }>(a: T, b: T) => a.first.localeCompare(b.first);
 
 /**
- * Stacks are connected sets of open stack PRs across threads. The order is the longest layer list
- * T3 reports. Without one, it comes from the thread with the longest list: its stack/agent PRs in
- * list order, with each of its own created PRs placed after the last lower number.
+ * Stacks are connected sets of open stack PRs across threads. The order is the layer list T3
+ * synced last (a tie goes to the longest). Without one, it comes from the thread with the longest
+ * list: its stack/agent PRs in list order, with each of its own created PRs placed after the last
+ * lower number.
  */
 export function computeStacks(threads: Thread[]): Stack[] {
   const stacks: Stack[] = [];
@@ -178,9 +180,19 @@ export function computeStacks(threads: Thread[]): Stack[] {
     stacks.push(merged);
   }
   for (const st of stacks) {
-    const layers = st.threads
-      .flatMap((t) => t.prs.map((p) => p.stackLayers ?? []))
-      .reduce((a, b) => (b.length > a.length ? b : a), []);
+    const layers =
+      st.threads
+        .flatMap((t) => t.prs)
+        .filter((p) => p.stackLayers?.length)
+        .reduce<Pr | null>(
+          (a, b) =>
+            !a ||
+            syncedMs(b) > syncedMs(a) ||
+            (syncedMs(b) === syncedMs(a) && b.stackLayers!.length > a.stackLayers!.length)
+              ? b
+              : a,
+          null,
+        )?.stackLayers ?? [];
     if (layers.length) {
       st.order = layers;
       continue;
