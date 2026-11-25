@@ -22,6 +22,7 @@ type RowProps = {
   corners?: string;
   end?: ReactNode;
   handle?: ReactNode;
+  pin?: ReactNode;
 };
 
 const FoldIcon = ({ open }: { open: boolean }) => (
@@ -71,7 +72,7 @@ function UnmarkDot({ id }: { id: string }) {
 /**
  * A Map group on its amber rail: the map thread row, or a Map header, then the members. `Row` renders a member, a
  * sub-map or a thread row; `Rail` renders consecutive members of one PR stack. `liRef`, `liClass`, `liStyle` and
- * `handle` come from the caller, which owns the drag and the row frame. In a status section, a row folds behind
+ * `handle` and `pin` come from the caller, which owns the drag and the row frame. In a status section, a row folds behind
  * "+N other threads" when it and its subthreads are context rows.
  */
 export function MapGroup({
@@ -88,6 +89,7 @@ export function MapGroup({
   liClass,
   liStyle,
   handle,
+  pin,
 }: {
   t: ThreadNode;
   chip?: string;
@@ -104,6 +106,8 @@ export function MapGroup({
   liClass?: string;
   liStyle?: CSSProperties;
   handle?: ReactNode;
+  /** The Pin button of the group. */
+  pin?: ReactNode;
 }) {
   const [showOther, setShowOther] = useState(false);
   const info = t.map!;
@@ -185,6 +189,7 @@ export function MapGroup({
               <span className="truncate font-semibold">{info.name}</span>
             </button>
             {countText}
+            {pin}
             {info.href && (
               <a
                 href={info.href}
@@ -206,6 +211,7 @@ export function MapGroup({
               corners="border-l-0 pl-0"
               nested
               handle={handle}
+              pin={pin}
               end={
                 <>
                   {countText}

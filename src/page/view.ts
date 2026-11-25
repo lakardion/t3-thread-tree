@@ -11,6 +11,7 @@ import {
   type ThreadNode,
 } from "../shared/tree.ts";
 import { stackRuns } from "./format.ts";
+import { pinFirst, pinIdOf, pinnedList, runUnitId, unitPinId } from "./order.ts";
 
 export type SortBy = "manual" | "updated";
 export type Layout = "tree" | "flat";
@@ -73,19 +74,29 @@ export const byNewest = <T>(items: T[], by: (t: T) => number): T[] =>
  * In every container, the groups, stack runs and loose threads sort together, newest first; a stack run moves as one
  * block and keeps its inner order. A key group sorts its threads. Milestones of a Linear project keep their order.
  * Subthreads keep their order. Ties keep the input order. The input is not changed.
+ * A pinned item leads its list; pins sort among themselves.
  */
-export function sortTree(projects: Group[], snoozed = true): Group[] {
+export function sortTree(projects: Group[], snoozed = true, pins: ReadonlySet<string> = new Set()): Group[] {
   const sortGroup = (b: Group): Group =>
     b.kind === "key"
-      ? { ...b, threads: byNewest(b.threads, (t) => blockTime(t, snoozed).at) }
+      ? {
+          ...b,
+          threads: pinFirst(
+            byNewest(b.threads, (t) => blockTime(t, snoozed).at),
+            pinIdOf,
+            pins,
+          ),
+        }
       : b.kind === "loose" || b.kind === "stack"
         ? b
         : sortList(b);
   const sortList = (b: Group): Group => ({
     ...b,
-    groups: byNewest(stackRuns(b.groups), (run) => groupTime(run, snoozed).at).flatMap((run) =>
-      run[0].stack ? run : run.map(sortGroup),
-    ),
+    groups: pinFirst(
+      byNewest(stackRuns(b.groups), (run) => groupTime(run, snoozed).at),
+      (run) => unitPinId(runUnitId(b.id, run), run),
+      pins,
+    ).flatMap((run) => (run[0].stack ? run : run.map(sortGroup))),
   });
   return projects.map((p) =>
     p.kind === "loose" ? p : p.kind === "linear-project" ? { ...p, groups: p.groups.map(sortList) } : sortList(p),
@@ -113,6 +124,9 @@ export type FlatItem =
       date?: string | null;
       loose?: true;
     };
+
+/** The pin id of a flat unit: a thread pins as in the tree, a stack by its unit id. */
+export const flatPinId = (u: FlatUnit): string => (u.kind === "thread" ? pinIdOf(u.t) : u.id);
 
 const stackUnit = (run: Group[], project: Group): FlatUnit => ({
   kind: "stack",
@@ -212,9 +226,9 @@ type Section = {
  * Groups units by status, in section order, and drops empty sections. A unit goes by its most urgent thread,
  * subthreads included. Units keep their input order, except in a waiting section: there the oldest Wait comes
  * first, units with no Wait last, and ties keep the input order. With `snoozed` false, the snoozed status is in no
- * section: a snoozed thread does not place its unit.
+ * section: a snoozed thread does not place its unit. A pinned unit leads a waiting section.
  */
-export function sections(units: FlatUnit[], snoozed = true): Section[] {
+export function sections(units: FlatUnit[], snoozed = true, pins: ReadonlySet<string> = new Set()): Section[] {
   const list = SECTIONS.map(([key, label, statuses]): [string, string, Status[]] => [
     key,
     label,
@@ -234,7 +248,11 @@ export function sections(units: FlatUnit[], snoozed = true): Section[] {
         label,
         statuses,
         units: WAIT_SECTIONS.has(key)
-          ? inSection.toSorted((a, b) => bySince(waitOf(a, statuses), waitOf(b, statuses)))
+          ? pinFirst(
+              inSection.toSorted((a, b) => bySince(waitOf(a, statuses), waitOf(b, statuses))),
+              flatPinId,
+              pins,
+            )
           : inSection,
       };
     })
@@ -277,8 +295,13 @@ export function linearSections(projects: Group[], units: FlatUnit[]): Section[] 
     }, []);
 }
 
-const groupSections = (units: FlatUnit[], groupBy: GroupBy, snoozed: boolean, projects: Group[]): Section[] =>
-  groupBy === "linear" ? linearSections(projects, units) : sections(units, snoozed);
+const groupSections = (
+  units: FlatUnit[],
+  groupBy: GroupBy,
+  snoozed: boolean,
+  projects: Group[],
+  pins: ReadonlySet<string>,
+): Section[] => (groupBy === "linear" ? linearSections(projects, units) : sections(units, snoozed, pins));
 
 /** True when the thread is a context row in a section of `statuses`: it is settled or has another status. */
 export const isContext = (t: ThreadNode, statuses: Status[]): boolean => t.settled || !statuses.includes(t.status);
@@ -298,9 +321,10 @@ export const sequence = (
   shut: ReadonlySet<string> = new Set(),
   snoozed = true,
   projects: Group[] = [],
+  pins: ReadonlySet<string> = new Set(),
 ): FlatItem[] =>
   groupBy !== "none"
-    ? groupSections(units, groupBy, snoozed, projects).flatMap((s): FlatItem[] => {
+    ? groupSections(units, groupBy, snoozed, projects, pins).flatMap((s): FlatItem[] => {
         const open = !!s.loose || !shut.has(s.key);
         return [
           {
@@ -341,20 +365,26 @@ export const sectionList = (key: string) => `${FLAT}:${key}`;
 
 /**
  * The drag lists of a flat sequence: all unit ids under `FLAT`, and the unit ids of each section header. A waiting
- * section has no list, and its units are not under `FLAT`, so its rows have no drag.
+ * section has no list, and its units are not under `FLAT`, so its rows have no drag. A pinned unit goes to the
+ * pinned part of both lists, which exists only when it holds a unit.
  */
-export function flatLists(items: FlatItem[]): Map<string, string[]> {
+export function flatLists(items: FlatItem[], pins: ReadonlySet<string> = new Set()): Map<string, string[]> {
   const lists = new Map<string, string[]>([[FLAT, []]]);
-  let section: string[] | undefined;
+  let section: string | undefined;
   let waiting = false;
+  const add = (list: string, id: string) => {
+    if (!lists.has(list)) lists.set(list, []);
+    lists.get(list)!.push(id);
+  };
   for (const i of items) {
     if (i.kind === "section") {
       waiting = WAIT_SECTIONS.has(i.key);
-      section = waiting ? undefined : [];
-      if (section) lists.set(sectionList(i.key), section);
+      section = waiting ? undefined : sectionList(i.key);
+      if (section) lists.set(section, []);
     } else if (!waiting) {
-      lists.get(FLAT)!.push(i.id);
-      section?.push(i.id);
+      const pinned = pins.has(flatPinId(i));
+      add(pinned ? pinnedList(FLAT) : FLAT, i.id);
+      if (section) add(pinned ? pinnedList(section) : section, i.id);
     }
   }
   return lists;
@@ -398,6 +428,6 @@ export const sectionHolding = (
   groupBy: GroupBy = "status",
   projects: Group[] = [],
 ): string | null =>
-  groupSections(units, groupBy, snoozed, projects).find((s) =>
+  groupSections(units, groupBy, snoozed, projects, new Set()).find((s) =>
     s.units.some((u) => everyThread(u).some((t) => t.id === id)),
   )?.key ?? null;

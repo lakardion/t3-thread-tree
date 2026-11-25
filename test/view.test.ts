@@ -1,7 +1,7 @@
 import { describe, expect, test } from "bun:test";
 
 import { foldIds } from "../src/page/format.ts";
-import { applyOrder, arrange } from "../src/page/order.ts";
+import { applyOrder, arrange, pinnedList } from "../src/page/order.ts";
 import {
   ageTip,
   blockTime,
@@ -1023,5 +1023,62 @@ describe("Map groups in the views", () => {
       ]),
     ]);
     expect(ids(p.groups[0].threads)).toEqual(["h", "mid", "old"]);
+  });
+});
+
+describe("pins in the view", () => {
+  const pin = (...p: string[]) => new Set(p);
+
+  test("sortTree puts pinned runs, groups and threads first, newest first among pins", () => {
+    const tree = [
+      project("p", [
+        branch("g1", [thread("a", 5)]),
+        branch("g2", [thread("b", 1)]),
+        branch("g3", [thread("c", 3)]),
+        loose(thread("l", 2)),
+      ]),
+    ];
+    expect(ids(sortTree(tree, true)[0].groups)).toEqual(["g1", "g3", "t:l", "g2"]);
+    expect(ids(sortTree(tree, true, pin("g2", "t:l"))[0].groups)).toEqual(["t:l", "g2", "g1", "g3"]);
+  });
+
+  test("sortTree puts a pinned thread first in its key group", () => {
+    const tree = [project("p", [branch("g", [thread("a", 5), thread("b", 1)])])];
+    expect(ids(sortTree(tree, true, pin("t:b"))[0].groups[0].threads)).toEqual(["b", "a"]);
+  });
+
+  test("sections puts a pinned unit before the Wait order in a waiting section", () => {
+    const waiting = (id: string, since: string) => ({ ...thread(id, 1, [], "your-turn"), since });
+    const units = flatten([project("p", [branch("g", [waiting("a", T(1)), waiting("b", T(5))])])]);
+    expect(sections(units).map((s) => ids(s.units))).toEqual([["t:a", "t:b"]]);
+    expect(sections(units, true, pin("t:b")).map((s) => ids(s.units))).toEqual([["t:b", "t:a"]]);
+  });
+
+  describe("flatLists", () => {
+    const units = flatten([
+      project("p", [
+        branch("g", [thread("a", 1, [], "working"), thread("b", 1, [], "working"), thread("c", 1, [], "done")]),
+      ]),
+    ]);
+    test("puts a pinned unit in flat#pin and in one section pin list", () => {
+      const lists = flatLists(sequence(units, "status", new Set(), true, [], pin("t:b")), pin("t:b"));
+      expect(lists.get(pinnedList(FLAT))).toEqual(["t:b"]);
+      expect(lists.get(FLAT)).toEqual(["t:a", "t:c"]);
+      expect(lists.get(pinnedList(sectionList("working")))).toEqual(["t:b"]);
+      expect(lists.get(sectionList("working"))).toEqual(["t:a"]);
+      expect([...lists.keys()].filter((k) => lists.get(k)!.includes("t:b"))).toEqual([
+        pinnedList(FLAT),
+        pinnedList(sectionList("working")),
+      ]);
+    });
+    test("puts a pinned unit of a waiting section in no list", () => {
+      const waiting = flatten([project("p", [branch("g", [thread("a", 1, [], "your-turn")])])]);
+      const lists = flatLists(sequence(waiting, "status"), pin("t:a"));
+      expect([...lists.values()].flat()).toEqual([]);
+    });
+    test("a group id pins no flat unit", () => {
+      const lists = flatLists(sequence(units, "none"), pin("g", "p"));
+      expect(lists.has(pinnedList(FLAT))).toBe(false);
+    });
   });
 });

@@ -121,7 +121,13 @@ export type ThreadNode = {
 };
 
 /** `header`: a Map header, which is not a thread. `href` is the map thread link, null with no map thread. */
-export type MapInfo = { name: string; header: boolean; href: string | null };
+export type MapInfo = {
+  name: string;
+  header: boolean;
+  href: string | null;
+  /** The map key. Not set on a head that anchors several maps. */
+  key?: string;
+};
 
 /** What a group holds, so that a reader does not match the label text. */
 export type GroupKind =
