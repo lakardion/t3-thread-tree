@@ -18,9 +18,8 @@ export const ownPr = (g: Branch): PrNode | undefined => allThreads(g).find((t) =
 export const ownPos = (g: Branch): number | undefined =>
   allThreads(g).find((t) => t.stack?.pos)?.stack?.pos ?? undefined;
 
-/** The label of a stack stop: its position, with " of total" when the run hides some PRs of the stack. */
-export const stopLabel = (n: number | undefined, total: number, partial: boolean): string =>
-  n === undefined ? "" : partial ? `${n} of ${total}` : `${n}`;
+/** The label of a stack stop: its PR number, or its position when it has no PR. */
+export const stopLabel = (n: number | undefined, pr: number | undefined): string => (pr ? `#${pr}` : n ? `${n}` : "");
 
 type RailStop = { id: string; label: string; p: PrNode | undefined; n: number | undefined };
 type RailRow = { t: ThreadNode; chip: string | undefined; stop: RailStop; n: number | undefined };
