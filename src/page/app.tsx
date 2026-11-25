@@ -156,6 +156,7 @@ import { SetupDialog } from "./local-setup-dialog.tsx";
 import { looksDone, parseSkip, pruneSkip, SKIP_KEY } from "./looks-done.ts";
 import { LooksDoneButton, LooksDoneDialog, UndoToast } from "./looks-done.tsx";
 import { MapGroup } from "./map-group.tsx";
+import { RulesPrototype } from "./rules-prototype.tsx";
 import {
   PROJECTS,
   arrange,
@@ -1138,6 +1139,7 @@ type PanelProps = LinearProps &
     setSnoozed: (v: boolean) => void;
     nest: boolean;
     setNest: (v: boolean) => void;
+    linearOn: boolean;
     statusText: boolean;
     setStatusText: (v: boolean) => void;
     keyHints: boolean;
@@ -1223,9 +1225,6 @@ function SettingsPanel(p: PanelProps) {
           <Row label="Show snoozed threads" htmlFor="snoozed">
             <Switch id="snoozed" checked={p.snoozed} onCheckedChange={p.setSnoozed} />
           </Row>
-          <Row label="Nest launched threads" htmlFor="nest">
-            <Switch id="nest" checked={p.nest} onCheckedChange={p.setNest} />
-          </Row>
           <Row label="Show status text in rows" htmlFor="status-text">
             <Switch id="status-text" checked={p.statusText} onCheckedChange={p.setStatusText} />
           </Row>
@@ -1244,6 +1243,7 @@ function SettingsPanel(p: PanelProps) {
             <ThemeToggle theme={p.theme} setTheme={p.setTheme} />
           </Row>
         </Group>
+        <RulesPrototype nest={p.nest} setNest={p.setNest} linear={p.linearOn} />
         <Group title="Setup">
           <Fold label="T3 token" value={token} tone={token === "Connected" ? "ok" : "warn"} defaultOpen={p.tokenOpen}>
             <div className="grid gap-2">
@@ -3752,6 +3752,7 @@ function App() {
           setSnoozed={setSnoozed}
           nest={nest}
           setNest={setNest}
+          linearOn={linearOn}
           statusText={statusText}
           setStatusText={setStatusText}
           keyHints={keyHints}
