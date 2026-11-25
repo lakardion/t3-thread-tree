@@ -87,7 +87,7 @@ describe("countHeader", () => {
         thread("a", "needs-input"),
         thread("b", "working"),
         thread("c", "starting"),
-        thread("d", "waiting"),
+        thread("d", "blocked"),
         thread("e", "plan-ready"),
         thread("f", "your-turn"),
         thread("g", "done"),

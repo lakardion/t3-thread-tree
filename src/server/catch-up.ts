@@ -2,13 +2,13 @@
 import * as v from "valibot";
 
 import type { ModelPick } from "../shared/model.ts";
+import { CATCH_UP, isIn } from "../shared/status.ts";
 import { bySince, type CatchUp, type ThreadNode } from "../shared/tree.ts";
 import guideText from "./catch-up-prompt.md" with { type: "text" };
 import { digestOf, questionOf, tailOf } from "./last-message.ts";
 import type { Models, PickSettings } from "./model.ts";
 
 const TAIL = 4000;
-const WAITING = new Set(["needs-input", "plan-ready", "your-turn", "failed"]);
 
 /** Strict: Codex `--output-schema` needs every property required and no extra properties. */
 export const SCHEMA = {
@@ -51,9 +51,9 @@ export function parseAnswer(answer: unknown): Required<Pick<CatchUp, "did" | "as
   };
 }
 
-/** The threads that wait on the user: not snoozed, not settled. A snoozed thread keeps its status when a request is pending. */
-export const waiting = <T extends ThreadNode>(nodes: T[]): T[] =>
-  nodes.filter((n) => WAITING.has(n.status) && !n.settled && !n.snoozedUntil);
+/** The threads that get a Catch-up: not snoozed, not settled. A snoozed thread keeps its status when a request is pending. */
+export const catchUpThreads = <T extends ThreadNode>(nodes: T[]): T[] =>
+  nodes.filter((n) => isIn(CATCH_UP, n.status) && !n.settled && !n.snoozedUntil);
 
 /** `at` is the Wait start, or `updatedAt` when the thread has none. It orders the queue. */
 type Seen = { key: string; at: string; input: string; question: string | null };
@@ -120,7 +120,7 @@ export function catchUpService(o: {
   return {
     /** Drops what no longer waits or whose key changed, and starts a timer for each new key. */
     sync(nodes: ThreadNode[], last: (ids: string[]) => Map<string, { id: string; text: string } | null>, now: number) {
-      const wait = waiting(nodes);
+      const wait = catchUpThreads(nodes);
       const msgs = last(wait.map((n) => n.id));
       seen = new Map(
         wait.map((n) => {

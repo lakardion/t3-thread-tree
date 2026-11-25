@@ -7,7 +7,7 @@ export type Status =
   | "needs-input"
   | "working"
   | "starting"
-  | "waiting"
+  | "blocked"
   | "plan-ready"
   | "your-turn"
   | "done"

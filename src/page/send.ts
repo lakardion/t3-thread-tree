@@ -1,10 +1,9 @@
 import type { SendError, WorkflowStartOk } from "../shared/send.ts";
+import { BUSY, isIn } from "../shared/status.ts";
 import type { Status } from "../shared/tree.ts";
 
-/** Statuses in which a sent message waits for the thread's next turn. */
-const BUSY: Status[] = ["working", "starting", "waiting"];
-
-export const isBusy = (s: Status) => BUSY.includes(s);
+/** Whether a sent message waits for the thread's next turn. */
+export const isBusy = (s: Status) => isIn(BUSY, s);
 
 export type Result<T extends object = object> = ({ ok: true } & T) | { ok: false; err: SendError };
 

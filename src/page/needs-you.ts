@@ -7,18 +7,17 @@ import type {
   UpNext,
 } from "../shared/desktop.ts";
 import { isRun, type RunItem } from "../shared/runs.ts";
+import { BUSY, CATCH_UP, isIn, NEEDS_YOU, NOTIFY, OPEN_NEXT } from "../shared/status.ts";
 import { allThreads, bySince, isThread, type Branch, type Status, type ThreadNode, type Tree } from "../shared/tree.ts";
 import { linearHref } from "./format.ts";
 
 export type Counts = { needYou: number; working: number; yourTurn: number; stopped: number };
 
 /** The statuses that the "Needs you" filter keeps. */
-export const needsYou = (s: Status): s is "needs-input" | "plan-ready" | "your-turn" =>
-  s === "needs-input" || s === "plan-ready" || s === "your-turn";
+export const needsYou = (s: Status) => isIn(OPEN_NEXT, s);
 
-/** Whether a row shows a Catch-up line. The statuses match `WAITING` in `src/server/catch-up.ts`. */
-export const hasCatchUpLine = (t: Pick<ThreadNode, "status" | "catchUp">) =>
-  !!t.catchUp && (needsYou(t.status) || t.status === "failed");
+/** Whether a row shows a Catch-up line. */
+export const hasCatchUpLine = (t: Pick<ThreadNode, "status" | "catchUp">) => !!t.catchUp && isIn(CATCH_UP, t.status);
 
 /** The tooltip of the "Needs you" chip numbers: the Needs-you count, then the your-turn count; "" when both are 0. */
 export const needsYouTip = (c: Counts): string =>
@@ -28,8 +27,8 @@ export const needsYouTip = (c: Counts): string =>
 export function countHeader(projects: Branch[], runs: RunItem[] = []): Counts {
   const c: Counts = { needYou: runs.length, working: 0, yourTurn: 0, stopped: 0 };
   for (const { status } of projects.flatMap(allThreads)) {
-    if (status === "needs-input" || status === "plan-ready") c.needYou++;
-    else if (status === "working" || status === "starting" || status === "waiting") c.working++;
+    if (isIn(NEEDS_YOU, status)) c.needYou++;
+    else if (isIn(BUSY, status)) c.working++;
     else if (status === "your-turn") c.yourTurn++;
     else if (status === "failed" || status === "interrupted") c.stopped++;
   }
@@ -77,11 +76,11 @@ const lineOf = (t: ThreadNode): { catchUp?: CatchUpLineData } => {
 
 const envOf = (t: ThreadNode) => decodeURIComponent(t.href.split("/")[3] ?? "");
 
-const waiting = (t: ThreadNode): t is ThreadNode & { status: "needs-input" | "plan-ready" } =>
-  !t.settled && (t.status === "needs-input" || t.status === "plan-ready");
+const inNeedsYou = (t: ThreadNode): t is ThreadNode & { status: (typeof NEEDS_YOU)[number] } =>
+  !t.settled && isIn(NEEDS_YOU, t.status);
 
 /** True when a thread under `b` waits for the user (needs input or plan ready), settled ones left out. */
-export const waits = (b: Branch): boolean => allThreads(b).some(waiting);
+export const waits = (b: Branch): boolean => allThreads(b).some(inNeedsYou);
 
 const runStatus = (r: RunItem): "run-question" | "paused-run" =>
   r.kind === "question" ? "run-question" : "paused-run";
@@ -97,7 +96,7 @@ export const needsYouThreads = (projects: Branch[], runs: RunItem[] = []): Needs
   ...projects
     .flatMap(allThreads)
     .flatMap((t) =>
-      waiting(t)
+      inNeedsYou(t)
         ? [{ id: t.id, title: t.title, environmentId: envOf(t), since: t.since, status: t.status, ...lineOf(t) }]
         : [],
     ),
@@ -197,7 +196,7 @@ export type NotifyMemory = { threads: Statuses | null; runs: Set<string> | null 
 
 export const noMemory: NotifyMemory = { threads: null, runs: null };
 
-const notifies = (s: Status): s is NotifyStatus => s === "needs-input" || s === "plan-ready" || s === "failed";
+const notifies = (s: Status): s is NotifyStatus => isIn(NOTIFY, s);
 
 /**
  * The notifications for the threads that entered needs-input, plan-ready or failed since `last`,

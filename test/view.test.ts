@@ -220,7 +220,7 @@ describe("sections", () => {
       unit("c", "starting"),
       unit("d", "snoozed"),
       unit("e", "idle"),
-      unit("f", "waiting"),
+      unit("f", "blocked"),
       unit("g", "needs-input"),
     ];
     expect(sections(units).map((s) => [s.key, ids(s.units)])).toEqual([

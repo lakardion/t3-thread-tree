@@ -1,3 +1,4 @@
+import { OPEN_NEXT } from "../shared/status.ts";
 import {
   allThreads,
   bySince,
@@ -152,7 +153,7 @@ export const SECTIONS: [key: string, label: string, statuses: Status[]][] = [
   ["plan-ready", "Plan ready", ["plan-ready"]],
   ["your-turn", "Your turn", ["your-turn"]],
   ["failed", "Failed", ["failed", "interrupted"]],
-  ["working", "Working", ["working", "starting", "waiting"]],
+  ["working", "Working", ["working", "starting", "blocked"]],
   ["idle", "Idle and snoozed", ["idle", "snoozed"]],
   ["done", "Done", ["done"]],
 ];
@@ -171,7 +172,7 @@ export const closedCounts = (ts: ThreadNode[]): { status: Status; label: string;
       })).filter((g) => g.n > 0);
 
 /** The sections that sort by Wait, oldest first, and have no drag. */
-export const WAIT_SECTIONS = new Set(["needs-input", "plan-ready", "your-turn"]);
+export const WAIT_SECTIONS = new Set<string>(OPEN_NEXT);
 
 /** The oldest `since` of the unit threads that are in `statuses`. `null` when none has one. */
 const waitOf = (u: FlatUnit, statuses: Status[]): string | null =>

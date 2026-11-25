@@ -702,7 +702,7 @@ One reusable component on the shadcn Dialog (Radix).
 - **Opens from:** a thread row, top-level or subthread: a send icon in the row toolbar that the `⋯` button opens (see "Row toolbar"), after the settle icon (see "Settle icon"). Its tooltip says "Send message". The icon stops propagation, so it does not open the thread and does not start a drag.
 - **Target:** fixed. The dialog shows the icon and title of the row, with no picker.
 - **Message:** a textarea, editable. It starts empty. Confirm send is disabled while the message is empty after trim.
-- **Busy note:** when the target status is `working`, `starting` or `waiting`, a muted line under the target says "This thread is working. The message waits for its next turn." Other statuses show no note.
+- **Busy note:** when the target status is `working`, `starting` or `blocked`, a muted line under the target says "This thread is working. The message waits for its next turn." Other statuses show no note.
 - **Last message:** a muted box above the textarea, with the label "Last message". It shows the end of the last message of the target thread, in a box of at most 10 rem with scroll. It loads when the dialog opens and again when the target changes. It shows nothing while it loads or when the thread has no message.
 - **Approval note:** when the target status is `needs-input` and its phrase is "Approval", a muted line says "This thread waits for an approval. A message does not approve the request. Approve it in T3."
 - **Suggested replies:** a chip row between "Last message" and the textarea (see "Suggested replies").
