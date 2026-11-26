@@ -21,7 +21,7 @@ export type KeyContext = {
 export function pageKey(
   e: KeyEvent,
   ctx: KeyContext,
-): "next" | "triage" | "find" | "down" | "up" | "toggle" | "expand" | "collapse" | "send" | "pin" | null {
+): "next" | "triage" | "find" | "down" | "up" | "toggle" | "expand" | "collapse" | "send" | "pin" | "graph" | null {
   if (
     e.key.toLowerCase() === "k" &&
     !e.altKey &&
@@ -41,6 +41,7 @@ export function pageKey(
   if (ctx.stop && e.key === "h") return "collapse";
   if (ctx.stop === "thread" && e.key === "s") return "send";
   if (ctx.stop && e.key === "p") return "pin";
+  if (ctx.stop && e.key === "g") return "graph";
   if (e.key === "n") return "next";
   return e.key === "t" ? "triage" : null;
 }

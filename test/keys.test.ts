@@ -30,6 +30,17 @@ describe("pin key", () => {
   });
 });
 
+describe("graph key", () => {
+  test("g acts on a thread or header stop, and does nothing elsewhere", () => {
+    expect(pageKey(ev("g"), ctx({ stop: "thread" }))).toBe("graph");
+    expect(pageKey(ev("g"), ctx({ stop: "header" }))).toBe("graph");
+    expect(pageKey(ev("g"), ctx())).toBeNull();
+    expect(pageKey(ev("g"), ctx({ stop: "thread", field: true }))).toBeNull();
+    expect(pageKey(ev("g"), ctx({ stop: "thread", overlay: "dialog" }))).toBeNull();
+    expect(pageKey(ev("g", { metaKey: true }), ctx({ stop: "thread" }))).toBeNull();
+  });
+});
+
 describe("plain keys", () => {
   test("n acts on a free page, 1 does nothing", () => {
     expect(pageKey(ev("n"), ctx())).toBe("next");
