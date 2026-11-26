@@ -232,21 +232,34 @@ function VariantA() {
       <Legend />
       <div
         onPointerDown={pan}
-        className="min-h-0 flex-1 cursor-grab touch-none overflow-auto rounded-md border bg-muted/30 select-none [scrollbar-width:none] [&::-webkit-scrollbar]:hidden"
+        className="min-h-0 flex-1 cursor-grab touch-none overflow-auto rounded-md border bg-[radial-gradient(ellipse_at_top_left,color-mix(in_oklch,var(--primary)_10%,transparent),transparent_60%),linear-gradient(315deg,color-mix(in_oklch,var(--status-plan)_6%,var(--background)),var(--background)_50%)] select-none [scrollbar-width:none] [&::-webkit-scrollbar]:hidden"
       >
         <Canvas
           nw={210}
-          nh={96}
+          nh={92}
           gx={44}
           gy={14}
           Card={({ s }) => {
             const p = s.node;
             if (!p) return <BranchNode label={s.label!} />;
             return (
-              <div className={cn("relative flex h-full flex-col gap-0.5 rounded-lg border bg-card p-2 font-mono text-[11px] shadow-sm", dim(p) && "opacity-55", p.outside && "border-dashed", p.state === "draft" && "border-dashed")} title={p.title}>
+              <div className={cn("relative flex h-full flex-col justify-between rounded-lg border bg-card px-2.5 py-2 font-mono text-[11px] shadow-md shadow-black/10 dark:shadow-black/40", dim(p) && "opacity-55", p.outside && "border-dashed", p.state === "draft" && "border-dashed")} title={p.title}>
                 <div className="flex items-center justify-between gap-1">
-                  <span className="truncate font-sans text-xs font-semibold">{p.key ?? "no key"}</span>
-                  <span className="flex items-center gap-1 text-muted-foreground">
+                  {p.thread ? (
+                    <a href={t3(p.thread.id)} title={`Open thread in T3: ${p.thread.title} (${p.thread.status})`} className="flex min-w-0 items-center gap-1.5 font-sans text-xs font-semibold hover:underline">
+                      {(() => {
+                        const S = STATUS[p.thread.status];
+                        return <S.icon className={cn("size-3.5 flex-none", S.shape)} aria-hidden />;
+                      })()}
+                      <span className="truncate">{p.key ?? "no key"}</span>
+                    </a>
+                  ) : (
+                    <span className="flex min-w-0 items-center gap-1.5 font-sans text-xs font-semibold">
+                      <span className="truncate">{p.key ?? "no key"}</span>
+                      <span className="font-normal text-destructive">no thread</span>
+                    </span>
+                  )}
+                  <span className="flex flex-none items-center gap-1 text-muted-foreground">
                     {p.outside ? <span className="rounded bg-muted px-1 font-sans text-[10px]">outside the map</span> : p.lane && `L${p.lane}`}
                     <Bang p={p} />
                   </span>
@@ -257,9 +270,9 @@ function VariantA() {
                   {p.conflicting && <span className="ml-auto text-destructive">conflicts</span>}
                 </div>
                 <div className="truncate text-muted-foreground">{p.branch}</div>
-                <div className="flex items-center justify-between gap-2 font-sans">
-                  <span className="flex items-center gap-1 text-muted-foreground">{p.stack && <><Layers className="size-3" />stack {p.stack.pos}/{p.stack.of}</>}</span>
-                  {p.thread ? <ThreadMark t={p.thread} /> : <span className="text-destructive">no thread</span>}
+                <div className="flex items-center gap-1 font-sans text-muted-foreground">
+                  <Layers className="size-3" />
+                  {p.stack ? `stack ${p.stack.pos}/${p.stack.of}` : "no stack"}
                 </div>
               </div>
             );
