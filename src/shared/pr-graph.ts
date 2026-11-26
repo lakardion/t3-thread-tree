@@ -280,14 +280,26 @@ export function buildPrGraph(head: ThreadNode, data: MapGraphData | null): PrGra
           b.n - a.n,
       )[0];
 
+  /** The merged members of each stack, in stack order. They share the spot of the last one, ahead of the open rest. */
+  const piles = Map.groupBy(
+    nodes.filter((n) => n.state === "merged" && n.stack).toSorted((a, b) => a.stack!.pos - b.stack!.pos),
+    (n) => n.stack!.number,
+  );
+
   const branches = new Map<string, BranchNode>();
   const edges: Edge[] = [];
   const children = new Map<string, GraphNode[]>();
   const vertex = (n: GraphNode) => `#${n.n}`;
   for (const node of nodes) {
+    const pile = node.stack ? piles.get(node.stack.number) : undefined;
+    const top = pile?.at(-1);
+    const inPile = pile?.includes(node);
+    if (inPile && node !== top) continue;
     const dim = node.state !== "open";
-    const parent = node.base && node.base !== "main" ? baseOf(node) : undefined;
-    if (!node.base || node.base === "main") {
+    const toMain = inPile || !node.base || node.base === "main";
+    const found = toMain ? undefined : baseOf(node);
+    const parent = top && !inPile && (toMain || (found && pile!.includes(found))) ? top : found;
+    if (!parent && toMain) {
       edges.push({ from: "main", to: node.n, kind: dim ? "dim" : "main" });
       children.set("main", [...(children.get("main") ?? []), node]);
     } else if (parent) {
@@ -295,12 +307,13 @@ export function buildPrGraph(head: ThreadNode, data: MapGraphData | null): PrGra
       edges.push({ from: parent.n, to: node.n, kind: dim ? "dim" : stack ? "stack" : "base" });
       children.set(vertex(parent), [...(children.get(vertex(parent)) ?? []), node]);
     } else {
-      if (!branches.has(node.base)) {
-        branches.set(node.base, { branch: node.base, col: 1, row: 0 });
-        edges.push({ from: "main", to: { branch: node.base }, kind: "main" });
+      const base = node.base!;
+      if (!branches.has(base)) {
+        branches.set(base, { branch: base, col: 1, row: 0 });
+        edges.push({ from: "main", to: { branch: base }, kind: "main" });
       }
-      edges.push({ from: { branch: node.base }, to: node.n, kind: dim ? "dim" : "base" });
-      children.set(`b:${node.base}`, [...(children.get(`b:${node.base}`) ?? []), node]);
+      edges.push({ from: { branch: base }, to: node.n, kind: dim ? "dim" : "base" });
+      children.set(`b:${base}`, [...(children.get(`b:${base}`) ?? []), node]);
     }
   }
 
@@ -330,6 +343,12 @@ export function buildPrGraph(head: ThreadNode, data: MapGraphData | null): PrGra
     1,
     0,
   );
+  for (const pile of piles.values()) {
+    for (const n of pile) {
+      Object.assign(n, { col: pile.at(-1)!.col, row: pile.at(-1)!.row });
+      seen.add(n);
+    }
+  }
   for (const n of nodes) {
     if (!seen.has(n)) {
       n.col = 1;

@@ -313,6 +313,33 @@ describe("layout", () => {
     expect(order).toEqual([4, 3, 5, 2, 1]);
   });
 
+  test("merged stack members pile up at one spot, and the open rest chains on from the pile", () => {
+    const s = (pos: number) => ({ stack: { number: 7, pos, total: 4 } });
+    const g = buildPrGraph(
+      head(
+        node("a", {
+          prs: [
+            pr(2, { ...s(2), state: "merged" }),
+            pr(1, { ...s(1), state: "merged" }),
+            pr(3, s(3)),
+            pr(4, { ...s(4), base: "h3" }),
+            pr(5),
+          ],
+        }),
+      ),
+      null,
+    );
+    expect([1, 2, 3, 4, 5].map((n) => [byN(g, n).col, byN(g, n).row])).toEqual([
+      [1, 0],
+      [1, 0],
+      [2, 0],
+      [3, 0],
+      [1, 1],
+    ]);
+    expect(g.edges.filter((e) => e.to === 1 || e.to === 2)).toEqual([{ from: "main", to: 2, kind: "dim" }]);
+    expect(g.edges.find((e) => e.to === 3)).toEqual({ from: 2, to: 3, kind: "stack" });
+  });
+
   test("foreign branches go after the PR children of main", () => {
     const g = buildPrGraph(head(node("a", { prs: [pr(1, { base: "zzz" }), pr(2)] })), null);
     expect(byN(g, 2).row).toBe(0);
