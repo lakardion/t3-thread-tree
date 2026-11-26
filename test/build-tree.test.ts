@@ -10,8 +10,9 @@ import {
   statusOf,
   type BuildInput,
 } from "../src/server/build-tree.ts";
+import { prNode } from "../src/server/build-tree.ts";
 import { launchedIds } from "../src/server/lineage.ts";
-import { decodeItem, decodeThread, type RunsSnapshot, type Thread } from "../src/server/t3.ts";
+import { decodeItem, decodeListResult, decodeThread, type RunsSnapshot, type Thread } from "../src/server/t3.ts";
 import {
   NO_MILESTONE,
   NO_PROJECT,
@@ -537,6 +538,9 @@ describe("PR stack", () => {
         review: null,
         conflicting: false,
         title: "x",
+        head: "h",
+        base: "b",
+        stack: null,
         additions: null,
         deletions: null,
         changedFiles: null,
@@ -677,6 +681,9 @@ describe("status", () => {
         review: "changes-requested",
         conflicting: true,
         title: "x",
+        head: "h",
+        base: "b",
+        stack: null,
         additions: null,
         deletions: null,
         changedFiles: null,
@@ -691,6 +698,9 @@ describe("status", () => {
         review: null,
         conflicting: false,
         title: "x",
+        head: "h",
+        base: "b",
+        stack: null,
         additions: null,
         deletions: null,
         changedFiles: null,
@@ -1897,5 +1907,100 @@ describe("Map groups", () => {
       expect(m.map?.name).toBe("Marked ticket");
       expect(titles(m.children)).toEqual(["SHOP-1 k"]);
     });
+  });
+});
+
+describe("PR branches and stack place", () => {
+  const prOf = (over: Record<string, unknown>) => decodeThread(shell("a", "x", { pullRequests: [over] }))!.prs[0];
+
+  test("decode reads the head and base branch", () => {
+    expect(prOf(pr(1, "created"))).toMatchObject({ head: "h", base: "b" });
+    expect(prOf({ number: 1 })).toMatchObject({ head: null, base: null });
+  });
+
+  const withStack = (own: number, number: number | null, layers: number[]) =>
+    prNode(
+      prOf({
+        ...pr(own, "created"),
+        stack: {
+          base: "main",
+          ...(number !== null && { number }),
+          layers: layers.map((n) => ({ number: n, state: "open" })),
+        },
+      }),
+      [],
+    );
+
+  test("prNode gives the place in the stack slots", () => {
+    expect(withStack(12, 87, [11, 12, 13]).stack).toEqual({ number: 87, pos: 2, total: 3 });
+  });
+
+  test("prNode gives no stack when the PR is not in its slots or the stack has no number", () => {
+    expect(withStack(14, 87, [11, 12, 13]).stack).toBeNull();
+    expect(withStack(12, null, [11, 12, 13]).stack).toBeNull();
+    expect(prNode(prOf(pr(1, "created")), []).stack).toBeNull();
+  });
+});
+
+describe("decodeListResult", () => {
+  const entry = {
+    projectId: "p1",
+    host: "github.com",
+    repository: "org/repo",
+    number: 5,
+    title: "ABC-1 thing",
+    url: "https://github.com/org/repo/pull/5",
+    headBranch: "abc-1-thing",
+    baseBranch: "main",
+    state: "open",
+    isDraft: true,
+    mergeability: "conflicting",
+    additions: 0,
+    deletions: 0,
+    checksState: "failing",
+    reviewDecision: "approved",
+    stack: { number: 9, position: 2, size: 3, base: "main" },
+  };
+
+  test("maps an entry to a row", () => {
+    expect(decodeListResult({ entries: [entry], errors: [] })).toEqual({
+      rows: [
+        {
+          n: 5,
+          url: entry.url,
+          state: "open",
+          draft: true,
+          checks: "failing",
+          review: "approved",
+          conflicting: true,
+          title: "ABC-1 thing",
+          head: "abc-1-thing",
+          base: "main",
+          stack: { number: 9, pos: 2, total: 3 },
+          additions: null,
+          deletions: null,
+          changedFiles: null,
+          labels: [],
+          host: "github.com",
+          repository: "org/repo",
+          projectId: "p1",
+        },
+      ],
+      error: null,
+    });
+  });
+
+  test("an entry with no stack, an unknown check or no number is lenient or dropped", () => {
+    const { rows } = decodeListResult({
+      entries: [{ ...entry, stack: undefined, checksState: "weird" }, { title: "no number" }, "junk"],
+    });
+    expect(rows).toHaveLength(1);
+    expect(rows[0]).toMatchObject({ stack: null, checks: null });
+  });
+
+  test("errors join string and message items; none gives null", () => {
+    expect(decodeListResult({ entries: [], errors: ["a", { message: "b" }, { x: 1 }] }).error).toBe("a; b");
+    expect(decodeListResult({ entries: [], errors: [] }).error).toBeNull();
+    expect(decodeListResult(null)).toEqual({ rows: [], error: null });
   });
 });

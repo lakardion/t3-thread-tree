@@ -27,6 +27,10 @@ export type PrNode = {
   review: "approved" | "changes-requested" | "review-required" | null;
   conflicting: boolean;
   title: string | null;
+  head: string | null;
+  base: string | null;
+  /** Place in the GitHub stack. Null when the PR is in none. */
+  stack: { number: number; pos: number; total: number } | null;
   additions: number | null;
   deletions: number | null;
   changedFiles: number | null;

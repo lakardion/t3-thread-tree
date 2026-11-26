@@ -23,7 +23,15 @@ import {
 import { catchUpThreads } from "./catch-up.ts";
 import { mapName, mapsOf, markedKey } from "./maps.ts";
 import { suggestedReplies } from "./replies.ts";
-import type { Pr, Project, RunStepsRaw, RunsSnapshot, Thread } from "./t3.ts";
+import {
+  narrowChecks,
+  narrowReview,
+  type Pr,
+  type Project,
+  type RunStepsRaw,
+  type RunsSnapshot,
+  type Thread,
+} from "./t3.ts";
 
 /** Review threads sit in Reviews, whatever their key. */
 const isReview = (t: { title: string }) => t.title.startsWith("Review #");
@@ -100,23 +108,27 @@ type KeyGroup = { key: string; nodes: Node[]; first: string; kind: GroupKind };
 type Stack = { set: Set<number>; threads: Thread[]; order: number[]; slots: number[] };
 
 const stackPrs = (t: Thread) => t.prs.filter((p) => STACK_SOURCES.has(p.source) && p.state === "open").map((p) => p.n);
-const CHECKS = ["passing", "failing", "pending"] as const;
-const REVIEWS_STATE = ["approved", "changes-requested", "review-required"] as const;
-const narrow = <T extends string>(v: string | null, set: readonly T[]): T | null => set.find((x) => x === v) ?? null;
-const prNode = (p: Thread["prs"][number], labels: Label[]): PrNode => ({
-  n: p.n,
-  url: p.url,
-  state: p.state,
-  draft: p.draft === true,
-  checks: narrow(p.checks, CHECKS),
-  review: narrow(p.review, REVIEWS_STATE),
-  conflicting: p.mergeability === "conflicting",
-  title: p.title,
-  additions: p.additions,
-  deletions: p.deletions,
-  changedFiles: p.changedFiles,
-  labels,
-});
+export const prNode = (p: Thread["prs"][number], labels: Label[]): PrNode => {
+  const pos = p.stackSlots?.indexOf(p.n) ?? -1;
+  return {
+    n: p.n,
+    url: p.url,
+    state: p.state,
+    draft: p.draft === true,
+    checks: narrowChecks(p.checks),
+    review: narrowReview(p.review),
+    conflicting: p.mergeability === "conflicting",
+    title: p.title,
+    head: p.head,
+    base: p.base,
+    stack:
+      p.stackNumber !== null && pos >= 0 ? { number: p.stackNumber, pos: pos + 1, total: p.stackSlots!.length } : null,
+    additions: p.additions,
+    deletions: p.deletions,
+    changedFiles: p.changedFiles,
+    labels,
+  };
+};
 /** The `t3code://` link of a thread. */
 export const hrefOf = (environmentId: string, id: string) =>
   `t3code://threads/${encodeURIComponent(environmentId)}/${encodeURIComponent(id)}`;
