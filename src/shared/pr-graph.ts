@@ -370,3 +370,14 @@ export function buildPrGraph(head: ThreadNode, data: MapGraphData | null): PrGra
     noPr: members.filter((m) => m.prs.length === 0).map((m) => m.thread),
   };
 }
+
+/** Card height. */
+export const NH = 92;
+/** Vertical gap between rows. */
+export const GY = 14;
+/** Gap between the cards of an open pile. */
+export const PILE_GAP = 4;
+
+/** How far an open pile of `count` cards on `row` moves up to center on its deck, without leaving the canvas top. */
+export const pileLift = (row: number, count: number): number =>
+  Math.min(((count - 1) * (NH + PILE_GAP)) / 2, row * (NH + GY));

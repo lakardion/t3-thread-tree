@@ -1,7 +1,7 @@
 import { describe, expect, test } from "bun:test";
 
 import type { MapGraphData } from "../src/shared/map-graph.ts";
-import { buildPrGraph } from "../src/shared/pr-graph.ts";
+import { buildPrGraph, GY, NH, pileLift } from "../src/shared/pr-graph.ts";
 import type { PrNode, ThreadNode } from "../src/shared/tree.ts";
 
 const pr = (n: number, over: Partial<PrNode> = {}): PrNode => ({
@@ -605,5 +605,24 @@ describe("Anomalies", () => {
       expect(texts(build([pr(1, { stack: stackOf(7), state: "closed" })], { stacks: [] }))).toEqual([]);
       expect(texts(build([pr(1, { stack: stackOf(7) })], null))).toEqual([]);
     });
+  });
+});
+
+describe("pileLift", () => {
+  test("a pile on row 0 opens down", () => {
+    expect(pileLift(0, 5)).toBe(0);
+    expect(pileLift(0, 1)).toBe(0);
+  });
+
+  test("a single card never lifts", () => {
+    expect(pileLift(5, 1)).toBe(0);
+  });
+
+  test("a deep row gets the full centering lift", () => {
+    expect(pileLift(9, 3)).toBe(NH + 4);
+  });
+
+  test("a high row is capped so the pile top stays on the canvas", () => {
+    expect(pileLift(1, 20)).toBe(NH + GY);
   });
 });

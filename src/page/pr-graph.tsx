@@ -18,7 +18,17 @@ import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip
 import { cn } from "@/lib/utils";
 
 import type { MapGraphData } from "../shared/map-graph.ts";
-import { buildPrGraph, type Edge, type GraphNode, type GraphThread, type PrGraph } from "../shared/pr-graph.ts";
+import {
+  buildPrGraph,
+  type Edge,
+  GY,
+  type GraphNode,
+  type GraphThread,
+  NH,
+  PILE_GAP,
+  pileLift,
+  type PrGraph,
+} from "../shared/pr-graph.ts";
 import type { Status, ThreadNode } from "../shared/tree.ts";
 import { STATUS } from "./status-icon.tsx";
 
@@ -26,9 +36,7 @@ import { STATUS } from "./status-icon.tsx";
 export const OpenGraph = createContext<(id: string) => void>(() => {});
 
 const NW = 210;
-const NH = 92;
 const GX = 44;
-const GY = 14;
 const PAD = 16;
 const MAIN_W = 64;
 
@@ -236,9 +244,6 @@ function NodeCard({
   );
 }
 
-/** Gap between the cards of an open pile. */
-const PILE_GAP = 4;
-
 /** Merged stack members on one spot: a deck that fans out on hover, in stack order, centered on the deck. */
 function MergedPile({
   pile,
@@ -261,7 +266,7 @@ function MergedPile({
           top: y,
           width: NW,
           "--open": `${pile.length * step - PILE_GAP}px`,
-          "--shift": `0 ${(-(pile.length - 1) * step) / 2}px`,
+          "--shift": `0 ${-pileLift(pile[0].row, pile.length)}px`,
         } as CSSProperties
       }
       data-lane={lane ?? undefined}
