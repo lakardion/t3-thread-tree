@@ -3,7 +3,7 @@ import { dirname } from "node:path";
 
 import index from "../src/page/index.html";
 import upNext from "../src/page/up-next.html";
-import { buildLinearTree, buildTree, defaultRules, parseRules } from "../src/server/build-tree.ts";
+import { buildLinearTree, buildTree, defaultRules, parseRules, prNode } from "../src/server/build-tree.ts";
 import { findRoutes } from "../src/server/find.ts";
 import { lastMessageRoutes } from "../src/server/last-message.ts";
 import { runItems } from "../src/server/runs.ts";
@@ -13,6 +13,7 @@ import { settledPage, settledRoutes, settledSignature } from "../src/server/sett
 import type { Pr, Project, RunsSnapshot, Thread } from "../src/server/t3.ts";
 import { launchList, scanFields } from "../src/server/workflow-start.ts";
 import { workflowRoutes } from "../src/server/workflows.ts";
+import type { MapGraphData } from "../src/shared/map-graph.ts";
 import type { LocalConfig, LocalState, ModelPick } from "../src/shared/model.ts";
 import type { RuleId } from "../src/shared/rules.ts";
 import { type CatchUp, parseLabels, type LinearIssue } from "../src/shared/tree.ts";
@@ -119,6 +120,18 @@ const stacked = (own: number, over: Partial<Pr> = {}) => [
   pr(own, "created", "open", { stackBase: "main", stackNumber: 87, ...over }),
   ...STACK.filter((n) => n !== own).map((n) => pr(n, "stack")),
 ];
+/** A gh stack of three member PRs. Its fourth slot (5104) has no member. */
+const DS_STACK = [5101, 5102, 5103, 5104];
+const dsPr = (n: number, head: string, base: string, over: Partial<Pr> = {}) =>
+  pr(n, "created", "open", {
+    head,
+    base,
+    stackBase: "main",
+    stackNumber: 91,
+    stackLayers: DS_STACK,
+    stackSlots: DS_STACK,
+    ...over,
+  });
 const request = (kind: string, blocking: boolean | null = null) => ({ kind, createdAt: ago(12), blocking });
 const completed = { latestRunCompletedAt: ago(30) };
 
@@ -163,10 +176,26 @@ const threads: Thread[] = [
   t("Review #2093 SHOP-401", { status: "running", prs: [pr(2093, "agent")] }),
   t("Review #2095 SHOP-401", { latestRunCompletedAt: ago(120), prs: [pr(2095, "agent", "merged")] }),
   t("Design-system migration map", { id: "map", status: "idle" }),
-  t("Migrate Button to the new tokens", { id: "m1", status: "running" }),
-  t("Migrate Dialog to the new tokens", { id: "m2", ...completed }),
-  t("Migrate Tooltip to the new tokens", { id: "m3", snoozedUntil: later(20) }),
-  t("Migrate Popover to the new tokens", { id: "m4", status: "idle" }),
+  t("Migrate Button to the new tokens", {
+    id: "m1",
+    status: "running",
+    prs: [dsPr(5101, "ds-101-button-tokens", "main")],
+  }),
+  t("Migrate Dialog to the new tokens", {
+    id: "m2",
+    ...completed,
+    prs: [dsPr(5102, "ds-102-dialog-tokens", "ds-101-button-tokens")],
+  }),
+  t("Migrate Tooltip to the new tokens", {
+    id: "m3",
+    snoozedUntil: later(20),
+    prs: [dsPr(5103, "ds-103-tooltip-tokens", "ds-102-dialog-tokens")],
+  }),
+  t("Migrate Popover to the new tokens", {
+    id: "m4",
+    status: "idle",
+    prs: [pr(5110, "created", "open", { head: "ds-201-popover-tokens", base: "release/2.x" })],
+  }),
   t("Flaky e2e: cart badge count", {
     status: "failed",
     lastErrorClass: "provider",
@@ -659,6 +688,49 @@ const STEPS: (() => void)[] = [
   },
 ];
 
+/** The `/map-graph` fixture of the demo map. */
+const GRAPH: MapGraphData = {
+  at: new Date(now).toISOString(),
+  lanes: [
+    {
+      n: 1,
+      label: "Tokens",
+      explicit: true,
+      keys: [
+        { key: "DS-101", base: "main" },
+        { key: "DS-102", base: "DS-101" },
+        { key: "DS-103", base: "DS-102" },
+      ],
+    },
+    { n: 2, label: "Overlays", explicit: true, keys: [{ key: "DS-201", base: "main" }] },
+  ],
+  stacks: [{ prs: DS_STACK }],
+  settled: [],
+  rows: [
+    {
+      ...prNode(
+        pr(5104, "linked", "open", {
+          head: "ds-104-menu-tokens",
+          base: "ds-103-tooltip-tokens",
+          title: "DS-104 Menu tokens",
+        }),
+        [],
+      ),
+      stack: { number: 91, pos: 4, total: 4 },
+      threadId: null,
+    },
+    {
+      ...prNode(
+        pr(5120, "linked", "merged", { head: "ds-102-legacy-button", base: "main", title: "DS-102 Legacy button" }),
+        [],
+      ),
+      threadId: null,
+    },
+  ],
+  behind: { 5102: 3 },
+  errors: [],
+};
+
 const pushes = new Set<() => void>();
 /** `PUSH=1` applies one fake live change every 3 s, in a loop, and pushes the new tree to each open stream. */
 if (process.env.PUSH === "1") {
@@ -722,6 +794,14 @@ const server = Bun.serve({
     ...settledRoutes({
       page: (after, limit) => settledPage(projectsFor(true), new Map(threads.map((th) => [th.id, th])), after, limit),
     }),
+    "/map-graph": async (req) => {
+      await Bun.sleep(1000);
+      if (process.env.GRAPH === "down") return new Response(null, { status: 503 });
+      if (new URL(req.url).searchParams.get("key") !== "/wiki/design-system")
+        return new Response(null, { status: 404 });
+      const errors = process.env.GRAPH === "fail" ? [{ key: "DS-201", text: "GitHub rate limit exceeded" }] : [];
+      return Response.json({ ...GRAPH, errors });
+    },
     "/events": async (req) => {
       server.timeout(req, 0);
       await Bun.sleep(Number(process.env.DELAY ?? 0));

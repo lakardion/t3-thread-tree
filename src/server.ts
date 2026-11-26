@@ -11,8 +11,9 @@ import { lastMessageRoutes } from "./server/last-message.ts";
 import { mayBeLaunched, needsScan, openLineage } from "./server/lineage.ts";
 import { fetchLinear } from "./server/linear-api.ts";
 import { linearStore } from "./server/linear.ts";
+import { mapGraph, mapGraphRoutes, type GraphCtx } from "./server/map-graph.ts";
 import { mapThreadRoutes, readMapThreads } from "./server/map-threads.ts";
-import { mapKey, markedKey } from "./server/maps.ts";
+import { mapKey, mapsOf, markedKey } from "./server/maps.ts";
 import {
   appleHelperPath,
   createModels,
@@ -351,6 +352,46 @@ const shell = connectShell({
   },
 });
 
+const graph = mapGraph({
+  list: (projectId, query) => shell.list(projectId, query),
+  detail: (ref) => shell.detail(ref),
+  archived: () => shell.archived(),
+  readMap: (key) =>
+    key.startsWith("/")
+      ? Bun.file(join(key, "map.md"))
+          .text()
+          .catch(() => null)
+      : Promise.resolve(null),
+  now: Date.now,
+});
+
+/** The spawner of a thread, also of an archived one that the scan never saw. */
+const spawnerOf = (id: string) => (spawners.has(id) ? spawners.get(id) : lineage.spawner(id));
+
+/** The members of a map, with the archived threads that the stream leaves out. Null when the map has none. */
+const graphCtx =
+  (key: string) =>
+  (archived: Thread[]): GraphCtx | null => {
+    const all = new Map([...archived, ...threads.values()].map((t) => [t.id, t]));
+    const keyOfMarked = markedKey(mapKeyOf, spawnerOf, readMapThreads(mapThreadsFile));
+    const created = (id: string) => `${all.get(id)?.createdAt ?? ""} ${id}`;
+    const pool = [...all.values()].filter((t) => !t.parentThreadId && !t.sideChat && !t.workflowRun);
+    const maps = mapsOf({ ids: pool.map((t) => t.id), spawnerOf, keyOf: keyOfMarked, createdKey: created });
+    const members = pool
+      .filter((t) => maps.mapOf(t.id) === key)
+      .toSorted((a, b) => created(a.id).localeCompare(created(b.id)));
+    if (members.length === 0) return null;
+    const linking = [...all.values()]
+      .filter((t) => !t.parentThreadId && !t.sideChat)
+      .toSorted((a, b) => created(a.id).localeCompare(created(b.id)));
+    return {
+      members,
+      project: all.get(maps.threadOf.get(key) ?? "")?.projectId ?? members[0].projectId,
+      threadOf: (repository, n) =>
+        linking.find((t) => t.prs.some((p) => p.repository === repository && p.n === n))?.id ?? null,
+    };
+  };
+
 /** `PUT /local-model` saves the Local model config here. */
 const localModelFile = process.env.LOCAL_MODEL_FILE ?? join(homedir(), ".config", "t3-thread-tree", "local-model");
 const models = createModels({ localConfig: () => readLocalConfig(localModelFile), appleHelper: appleHelperPath() });
@@ -394,6 +435,14 @@ const server = Bun.serve({
         scanIfNeeded(true);
         return settledPage(treeFor(true).projects, threads, after, limit);
       },
+    }),
+    ...mapGraphRoutes({
+      up: () => conn === "up",
+      get: (key, refresh) => {
+        scanIfNeeded(true);
+        return graph.get(key, graphCtx(key), refresh);
+      },
+      timeout: (req) => server.timeout(req, 0),
     }),
     ...lastMessageRoutes({ read: (id) => lineage.lastMessages([id]).get(id) ?? null, has: (id) => threads.has(id) }),
     "/token": {
