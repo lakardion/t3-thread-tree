@@ -1790,12 +1790,48 @@ describe("Map groups", () => {
 
     test("a settled map thread puts the header at its place", () => {
       const tree = buildL(
-        [shell("chart", "Wayfinder", SETTLED), shell("t1", "SHOP-1 a")],
-        { t1: "/m/x" },
-        { t1: "chart" },
+        [shell("chart", "Wayfinder", SETTLED), shell("t1", "SHOP-1 a"), shell("t2", "SHOP-2 b")],
+        { t1: "/m/x", t2: "/m/x" },
+        { t1: "chart", t2: "chart" },
       );
       expect(tree.map((b) => b.id)).toEqual(["lf:loose"]);
       expect(tree[0].threads[0]).toMatchObject({ id: "chart", map: { header: true } });
+    });
+
+    test("a keyless map thread goes to the Linear project its members share", () => {
+      const m = { id: "m1", name: "M1", targetDate: null };
+      const shared: Record<string, LinearIssue> = {
+        "SHOP-1": { project: { id: "x", name: "Proj x", url: "u" }, milestone: m },
+        "SHOP-3": { project: { id: "x", name: "Proj x", url: "u" }, milestone: m },
+      };
+      const tree = buildLinearTree(
+        inputOf(
+          [shell("chart", "Wayfinder"), shell("t1", "SHOP-1 a"), shell("t3", "SHOP-3 c")],
+          { t1: "chart", t3: "chart" },
+          { linearOf: (k) => shared[k], ...keys({ t1: "/m/x", t3: "/m/x" }) },
+        ),
+        defaultRules(true),
+      );
+      expect(tree.map((b) => b.id)).toEqual(["lp:x"]);
+      expect(tree[0].groups.map((g) => g.id)).toEqual(["lm:m1"]);
+      expect(titles(tree[0].groups[0].threads[0].children)).toEqual(["SHOP-1 a", "SHOP-3 c"]);
+    });
+
+    test("a keyless thread of several maps goes to the Linear project their members share", () => {
+      const shared: Record<string, LinearIssue> = {
+        "SHOP-1": { project: { id: "x", name: "Proj x", url: "u" }, milestone: null },
+        "SHOP-3": { project: { id: "x", name: "Proj x", url: "u" }, milestone: null },
+      };
+      const tree = buildLinearTree(
+        inputOf(
+          [shell("chart", "Wayfinder"), shell("t1", "SHOP-1 a"), shell("t3", "SHOP-3 c")],
+          { t1: "chart", t3: "chart" },
+          { linearOf: (k) => shared[k], ...keys({ t1: "/m/x", t3: "/m/y" }) },
+        ),
+        defaultRules(true),
+      );
+      expect(tree.map((b) => b.id)).toEqual(["lp:x"]);
+      expect(tree[0].groups[0].threads[0].children.map((c) => c.id)).toEqual(["map:/m/x", "map:/m/y"]);
     });
 
     test("a map with no map thread puts the header at the oldest member's place", () => {

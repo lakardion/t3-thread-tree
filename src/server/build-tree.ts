@@ -846,20 +846,28 @@ function linearLayout(entered: Set<Node>, claims: Map<Node, Claim>, f: Facts): G
   const reviews: Node[] = [];
   const noProject: Node[] = [];
   const loose: Node[] = [];
+  /** The Linear project that all threads under a map head share; the milestone only when they share one too. */
+  const sharedOf = (head: Node): LinearIssue | undefined => {
+    const below = (n: ThreadNode): ThreadNode[] => n.children.flatMap((c) => [c, ...below(c)]);
+    const ls = below(head).flatMap((m) => (m.linear?.project ? [m.linear] : []));
+    if (new Set(ls.map((l) => l.project!.id)).size !== 1) return undefined;
+    const one = new Set(ls.map((l) => l.milestone?.id)).size === 1;
+    return { project: ls[0].project, milestone: one ? ls[0].milestone : null };
+  };
   for (const n of entered) {
     const { t } = n;
     n.t3Project = { id: t.projectId, label: projects.get(t.projectId)?.title ?? t.projectId };
     const c = claims.get(n)!;
     if ("under" in c) continue;
+    const linear = c.into === "key" ? c.by.linear : c.into === "loose" && n.map ? sharedOf(n) : undefined;
     if (c.into === "review") reviews.push(n);
-    else if (c.into === "key") {
-      const by = c.by;
-      const lp = by.linear?.project;
+    else if (c.into === "key" || linear) {
+      const lp = linear?.project;
       if (!lp) noProject.push(n);
       else {
         const p = byProject.get(lp.id) ?? { name: lp.name, url: lp.url, milestones: new Map() };
         byProject.set(lp.id, p);
-        const m = by.linear?.milestone;
+        const m = linear?.milestone;
         const id = m ? `lm:${m.id}` : `lm:${lp.id}:none`;
         const entry = p.milestones.get(id) ?? {
           id,

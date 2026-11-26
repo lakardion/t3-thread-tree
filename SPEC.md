@@ -210,7 +210,7 @@ The **Map rail**, in amber: `amber-500` for the rail, `amber-600` (light) and `a
 
 ### Linear tree
 
-- The map thread places by the Linear placement rules: its key gives the project and milestone, else it is a loose thread. The whole group follows it.
+- The map thread places by the Linear placement rules: its key gives the project and milestone. A keyless map thread takes the Linear project that all its members with a project share, and their milestone when they all share one, else "No milestone". With no shared project, it is a loose thread. The whole group follows it.
 - A member whose key is in another Linear project stays in the group (the Map group rule is first).
 - A settled map thread puts the map header at the place the map thread would have. With no map thread, the header goes to the place of the oldest visible member.
 
