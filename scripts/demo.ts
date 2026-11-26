@@ -103,6 +103,8 @@ const pr = (n: number, source: string, state = "open", over: Partial<Pr> = {}): 
   checks: null,
   review: null,
   mergeability: null,
+  head: null,
+  base: null,
   stackBase: null,
   stackNumber: null,
   stackLayers: null,

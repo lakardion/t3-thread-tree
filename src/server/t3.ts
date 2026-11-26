@@ -5,7 +5,7 @@
 import { homedir } from "node:os";
 import { join } from "node:path";
 
-import type { Conn, Label } from "../shared/tree.ts";
+import type { Conn, Label, PrNode } from "../shared/tree.ts";
 
 export const USERDATA = join(homedir(), ".t3", "userdata");
 
@@ -24,6 +24,9 @@ export type Pr = {
   checks: string | null;
   review: string | null;
   mergeability: string | null;
+  /** Head and base branch names of the PR. */
+  head: string | null;
+  base: string | null;
   stackBase: string | null;
   /** GitHub number of the stack. */
   stackNumber: number | null;
@@ -204,6 +207,8 @@ export function decodeThread(raw: unknown): Thread | null {
           checks: str(snap.checksState),
           review: str(snap.reviewDecision),
           mergeability: str(snap.mergeability),
+          head: str(snap.headBranch),
+          base: str(snap.baseBranch),
           stackBase: str(obj(o.stack).base),
           stackNumber: num(obj(o.stack).number),
           stackLayers: Array.isArray(obj(o.stack).layers)
@@ -287,6 +292,56 @@ export function decodeItem(raw: unknown): StreamEvent | null {
 }
 
 const list = (v: unknown): unknown[] => (Array.isArray(v) ? v : []);
+
+const CHECKS = ["passing", "failing", "pending"] as const;
+const REVIEWS_STATE = ["approved", "changes-requested", "review-required"] as const;
+const narrow = <T extends string>(v: string | null, set: readonly T[]): T | null => set.find((x) => x === v) ?? null;
+export const narrowChecks = (v: string | null): PrNode["checks"] => narrow(v, CHECKS);
+export const narrowReview = (v: string | null): PrNode["review"] => narrow(v, REVIEWS_STATE);
+
+/** A PR row of `pullRequests.list`: the node fields, plus where the PR lives. */
+export type ListRow = PrNode & { host: string; repository: string; projectId: string };
+
+/** Lenient decode of a `pullRequests.list` result. Entries without a number drop out. `error` joins the per-project errors. */
+export function decodeListResult(raw: unknown): { rows: ListRow[]; error: string | null } {
+  const r = obj(raw);
+  const rows = list(r.entries).flatMap((e): ListRow[] => {
+    const o = obj(e);
+    const n = num(o.number);
+    if (n === null) return [];
+    const stack = obj(o.stack);
+    const sn = num(stack.number);
+    const pos = num(stack.position);
+    const total = num(stack.size);
+    return [
+      {
+        n,
+        url: str(o.url) ?? "",
+        state: str(o.state) ?? "open",
+        draft: o.isDraft === true,
+        checks: narrowChecks(str(o.checksState)),
+        review: narrowReview(str(o.reviewDecision)),
+        conflicting: o.mergeability === "conflicting",
+        title: str(o.title),
+        head: str(o.headBranch),
+        base: str(o.baseBranch),
+        stack: sn !== null && pos !== null && total !== null ? { number: sn, pos, total } : null,
+        additions: null,
+        deletions: null,
+        changedFiles: null,
+        labels: [],
+        host: str(o.host) ?? "",
+        repository: str(o.repository) ?? "",
+        projectId: str(o.projectId) ?? "",
+      },
+    ];
+  });
+  const texts = list(r.errors).flatMap((x) => {
+    const m = typeof x === "string" ? x : str(obj(x).message);
+    return m ? [m] : [];
+  });
+  return { rows, error: texts.length ? texts.join("; ") : null };
+}
 
 /** Lenient decode of a `workflows.subscribe` snapshot. Entries without their key fields drop out. */
 export function decodeRunsSnapshot(raw: unknown): RunsSnapshot {
@@ -531,7 +586,7 @@ export function connectShell(opts: {
       host: string;
       repository: string;
       number: number;
-    }): Promise<{ labels: Label[]; updatedAt: string }> {
+    }): Promise<{ labels: Label[]; updatedAt: string; behindBy: number | null }> {
       const v = obj(await request("pullRequests.detail", { ...ref, allowStale: false }));
       return {
         labels: (Array.isArray(v.labels) ? v.labels : []).flatMap((l) => {
@@ -539,8 +594,17 @@ export function connectShell(opts: {
           return typeof o.name === "string" ? [{ name: o.name, color: str(o.color) }] : [];
         }),
         updatedAt: str(v.updatedAt) ?? "",
+        behindBy: num(v.behindBy),
       };
     },
+    /** The PRs of one project that match `query`, any state. */
+    list: async (projectId: string, query: string) =>
+      decodeListResult(await request("pullRequests.list", { state: "all", projectId, query })),
+    /** The archived threads, which the shell stream leaves out. */
+    archived: async (): Promise<Thread[]> =>
+      list(obj(await request("orchestration.getArchivedShellSnapshot", {})).threads).flatMap(
+        (t) => decodeThread(t) ?? [],
+      ),
     /** Drops the open socket and connects again with the current token. Resolves with the first outcome. */
     reconnect(): Promise<Conn> {
       gen++;
