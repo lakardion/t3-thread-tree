@@ -368,25 +368,29 @@ function Canvas({ graph }: { graph: PrGraph }) {
       {graph.branches.map((b) => (
         <Pill key={b.branch} {...b} />
       ))}
-      {Object.values(Object.groupBy(graph.nodes, (n) => `${n.col},${n.row}`)).map((pile = []) =>
-        pile.length > 1 ? (
+      {Object.values(Object.groupBy(graph.nodes, (n) => `${n.col},${n.row}`)).map((pile = []) => {
+        if (pile.length < 2)
+          return (
+            <NodeCard
+              key={pile[0].n}
+              n={pile[0]}
+              texts={anomalyTexts(pile[0])}
+              className={cn("transition-opacity", dim(focusOf(graph, pile[0].n)))}
+              lane={focusOf(graph, pile[0].n)}
+            />
+          );
+        const sorted = pile.toSorted((a, b) => a.stack!.pos - b.stack!.pos);
+        const focus = focusOf(graph, sorted.at(-1)!.n);
+        return (
           <MergedPile
             key={pile[0].n}
-            pile={pile.toSorted((a, b) => a.stack!.pos - b.stack!.pos)}
+            pile={sorted}
             texts={anomalyTexts}
-            className={dim(focusOf(graph, pile.at(-1)!.n)) || undefined}
-            lane={focusOf(graph, pile.at(-1)!.n)}
+            className={dim(focus) || undefined}
+            lane={focus}
           />
-        ) : (
-          <NodeCard
-            key={pile[0].n}
-            n={pile[0]}
-            texts={anomalyTexts(pile[0])}
-            className={cn("transition-opacity", dim(focusOf(graph, pile[0].n)))}
-            lane={focusOf(graph, pile[0].n)}
-          />
-        ),
-      )}
+        );
+      })}
     </div>
   );
 }
