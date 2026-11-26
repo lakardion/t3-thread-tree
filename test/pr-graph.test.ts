@@ -1,7 +1,7 @@
 import { describe, expect, test } from "bun:test";
 
 import type { MapGraphData } from "../src/shared/map-graph.ts";
-import { buildPrGraph } from "../src/shared/pr-graph.ts";
+import { buildPrGraph, focusOf, GY, NH, pileLift } from "../src/shared/pr-graph.ts";
 import type { PrNode, ThreadNode } from "../src/shared/tree.ts";
 
 const pr = (n: number, over: Partial<PrNode> = {}): PrNode => ({
@@ -340,6 +340,27 @@ describe("layout", () => {
     expect(g.edges.find((e) => e.to === 3)).toEqual({ from: 2, to: 3, kind: "stack" });
   });
 
+  test("a PR built on a hidden pile member chains on from the pile top", () => {
+    const s = (pos: number) => ({ stack: { number: 7, pos, total: 3 } });
+    const g = buildPrGraph(
+      head(
+        node("a", {
+          prs: [
+            pr(1, { ...s(1), state: "merged", head: "h1" }),
+            pr(2, { ...s(2), state: "merged", head: "h2", base: "h1" }),
+            pr(3, { ...s(3), base: "h2" }),
+            pr(4, { base: "h1" }),
+            pr(5, { base: "h4" }),
+          ],
+        }),
+      ),
+      null,
+    );
+    expect(g.edges.find((e) => e.to === 4)).toMatchObject({ from: 2 });
+    expect(byN(g, 4)).toMatchObject({ col: byN(g, 2).col + 1 });
+    expect(byN(g, 5)).toMatchObject({ col: byN(g, 2).col + 2 });
+  });
+
   test("foreign branches go after the PR children of main", () => {
     const g = buildPrGraph(head(node("a", { prs: [pr(1, { base: "zzz" }), pr(2)] })), null);
     expect(byN(g, 2).row).toBe(0);
@@ -605,5 +626,54 @@ describe("Anomalies", () => {
       expect(texts(build([pr(1, { stack: stackOf(7), state: "closed" })], { stacks: [] }))).toEqual([]);
       expect(texts(build([pr(1, { stack: stackOf(7) })], null))).toEqual([]);
     });
+  });
+});
+
+describe("pileLift", () => {
+  test("a pile on row 0 opens down", () => {
+    expect(pileLift(0, 5)).toBe(0);
+    expect(pileLift(0, 1)).toBe(0);
+  });
+
+  test("a single card never lifts", () => {
+    expect(pileLift(5, 1)).toBe(0);
+  });
+
+  test("a deep row gets the full centering lift", () => {
+    expect(pileLift(9, 3)).toBe(NH + 4);
+  });
+
+  test("a high row is capped so the pile top stays on the canvas", () => {
+    expect(pileLift(1, 20)).toBe(NH + GY);
+  });
+});
+
+describe("focusOf", () => {
+  const build = (prs: PrNode[], lanes: MapGraphData["lanes"] = null) =>
+    buildPrGraph(head(node("a", { prs })), data({ lanes }));
+
+  test("with no lanes, a chain shares the focus of its root", () => {
+    const g = build([pr(1, { head: "h1" }), pr(2, { head: "h2", base: "h1" }), pr(3, { base: "h2" }), pr(4)]);
+    expect([1, 2, 3, 4].map((n) => focusOf(g, n))).toEqual(["#1", "#1", "#1", "#4"]);
+  });
+
+  test("a laned PR gives its lane, and a lane-less child of it too", () => {
+    const g = build([pr(1, { head: "l1-1" }), pr(2, { base: "l1-1" })], [lane(1, ["L1-1"])]);
+    expect(focusOf(g, 1)).toBe("L1");
+    expect(focusOf(g, 2)).toBe("L1");
+  });
+
+  test("a branch pill has no focus", () => {
+    expect(focusOf(build([pr(1)]), { branch: "x" })).toBeNull();
+  });
+
+  test("the top of a merged pile and the PR that chains on from it share a focus", () => {
+    const s = (pos: number) => ({ stack: { number: 7, pos, total: 3 } });
+    const g = build([
+      pr(1, { ...s(1), state: "merged", head: "h1" }),
+      pr(2, { ...s(2), state: "merged", head: "h2", base: "h1" }),
+      pr(3, { ...s(3), base: "h2" }),
+    ]);
+    expect(focusOf(g, 3)).toBe(focusOf(g, 2));
   });
 });

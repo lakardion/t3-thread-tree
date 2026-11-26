@@ -18,7 +18,18 @@ import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip
 import { cn } from "@/lib/utils";
 
 import type { MapGraphData } from "../shared/map-graph.ts";
-import { buildPrGraph, type Edge, type GraphNode, type GraphThread, type PrGraph } from "../shared/pr-graph.ts";
+import {
+  buildPrGraph,
+  type Edge,
+  focusOf,
+  GY,
+  type GraphNode,
+  type GraphThread,
+  NH,
+  pileLift,
+  PILE_GAP,
+  type PrGraph,
+} from "../shared/pr-graph.ts";
 import type { Status, ThreadNode } from "../shared/tree.ts";
 import { STATUS } from "./status-icon.tsx";
 
@@ -26,9 +37,7 @@ import { STATUS } from "./status-icon.tsx";
 export const OpenGraph = createContext<(id: string) => void>(() => {});
 
 const NW = 210;
-const NH = 92;
 const GX = 44;
-const GY = 14;
 const PAD = 16;
 const MAIN_W = 64;
 
@@ -46,9 +55,9 @@ const EDGE_LEGEND: [Edge["kind"], string][] = [
   ["dim", "closed or merged"],
 ];
 
-const stateOf = (n: GraphNode) => (n.draft ? "draft" : n.state);
+const stateOf = (n: GraphNode) => (n.draft && n.state === "open" ? "draft" : n.state);
 const tone = (n: GraphNode) =>
-  n.draft
+  n.draft && n.state === "open"
     ? "text-muted-foreground"
     : n.state === "open"
       ? "text-status-done-fg"
@@ -181,7 +190,7 @@ function NodeCard({
   style?: CSSProperties;
   className?: string;
   /** The lane that hover focuses; a card in a pile leaves it to the pile. */
-  lane?: number | null;
+  lane?: string | null;
 }) {
   const { x, y } = place(n.col, n.row);
   return (
@@ -236,9 +245,6 @@ function NodeCard({
   );
 }
 
-/** Gap between the cards of an open pile. */
-const PILE_GAP = 4;
-
 /** Merged stack members on one spot: a deck that fans out on hover, in stack order, centered on the deck. */
 function MergedPile({
   pile,
@@ -249,7 +255,7 @@ function MergedPile({
   pile: GraphNode[];
   texts: (n: GraphNode) => string[];
   className?: string;
-  lane: number | null;
+  lane: string | null;
 }) {
   const { x, y } = place(pile[0].col, pile[0].row);
   const step = NH + PILE_GAP;
@@ -261,7 +267,7 @@ function MergedPile({
           top: y,
           width: NW,
           "--open": `${pile.length * step - PILE_GAP}px`,
-          "--shift": `0 ${(-(pile.length - 1) * step) / 2}px`,
+          "--shift": `0 ${-pileLift(pile[0].row, pile.length)}px`,
         } as CSSProperties
       }
       data-lane={lane ?? undefined}
@@ -311,18 +317,11 @@ function Pill({ branch, col, row }: { branch: string; col: number; row: number }
 
 function Canvas({ graph }: { graph: PrGraph }) {
   /** The lane of the hovered card: other lanes dim. */
-  const [lane, setLane] = useState<number | null>(null);
-  const dim = (l: number | null) => lane !== null && l !== lane && "opacity-25";
+  const [lane, setLane] = useState<string | null>(null);
+  const dim = (l: string | null) => lane !== null && l !== lane && "opacity-25";
   const focusLane = (e: SyntheticEvent) => {
     const l = (e.target as HTMLElement).closest<HTMLElement>("[data-lane]")?.dataset.lane;
-    setLane(l ? Number(l) : null);
-  };
-  /** A PR with no lane takes the lane of the PR it builds on. */
-  const laneOf = (e: Edge["to"]): number | null => {
-    if (typeof e !== "number") return null;
-    const own = graph.nodes.find((n) => n.n === e)!.lane;
-    const from = graph.edges.find((x) => x.to === e)?.from;
-    return own ?? (typeof from === "number" ? laneOf(from) : null);
+    setLane(l ?? null);
   };
   const anomalyTexts = (n: GraphNode) => graph.anomalies.filter((a) => a.prs.includes(n.n)).map((a) => a.text);
   const spot = new Map<string, { col: number; row: number }>([
@@ -360,7 +359,7 @@ function Canvas({ graph }: { graph: PrGraph }) {
               d={`M${x1},${y1} C${mx},${y1} ${mx},${y2} ${x2},${y2}`}
               fill="none"
               strokeWidth={2}
-              className={cn(EDGE[e.kind], "transition-opacity", dim(laneOf(e.to)))}
+              className={cn(EDGE[e.kind], "transition-opacity", dim(focusOf(graph, e.to)))}
             />
           );
         })}
@@ -369,25 +368,29 @@ function Canvas({ graph }: { graph: PrGraph }) {
       {graph.branches.map((b) => (
         <Pill key={b.branch} {...b} />
       ))}
-      {Object.values(Object.groupBy(graph.nodes, (n) => `${n.col},${n.row}`)).map((pile = []) =>
-        pile.length > 1 ? (
+      {Object.values(Object.groupBy(graph.nodes, (n) => `${n.col},${n.row}`)).map((pile = []) => {
+        if (pile.length < 2)
+          return (
+            <NodeCard
+              key={pile[0].n}
+              n={pile[0]}
+              texts={anomalyTexts(pile[0])}
+              className={cn("transition-opacity", dim(focusOf(graph, pile[0].n)))}
+              lane={focusOf(graph, pile[0].n)}
+            />
+          );
+        const sorted = pile.toSorted((a, b) => a.stack!.pos - b.stack!.pos);
+        const focus = focusOf(graph, sorted.at(-1)!.n);
+        return (
           <MergedPile
             key={pile[0].n}
-            pile={pile.toSorted((a, b) => a.stack!.pos - b.stack!.pos)}
+            pile={sorted}
             texts={anomalyTexts}
-            className={dim(laneOf(pile[0].n)) || undefined}
-            lane={laneOf(pile[0].n)}
+            className={dim(focus) || undefined}
+            lane={focus}
           />
-        ) : (
-          <NodeCard
-            key={pile[0].n}
-            n={pile[0]}
-            texts={anomalyTexts(pile[0])}
-            className={cn("transition-opacity", dim(laneOf(pile[0].n)))}
-            lane={laneOf(pile[0].n)}
-          />
-        ),
-      )}
+        );
+      })}
     </div>
   );
 }
@@ -399,51 +402,58 @@ function Lists({ graph, box }: { graph: PrGraph; box: RefObject<HTMLDivElement |
     el?.focus({ preventScroll: true });
   };
   return (
-    <div className="grid max-h-[calc(min(860px,100dvh-2rem)*0.3)] flex-none grid-rows-[minmax(0,1fr)] gap-4 text-xs sm:grid-cols-2">
-      <section className="min-h-0 overflow-auto">
-        <h3 className="mb-1.5 flex items-center gap-1.5 font-semibold text-muted-foreground">
-          <AlertTriangle className="size-3.5" aria-hidden /> Anomalies
-        </h3>
-        {graph.anomalies.length === 0 ? (
-          <p className="text-muted-foreground">None</p>
-        ) : (
-          <ul className="space-y-1">
-            {graph.anomalies.map((a, i) => (
-              <li key={i}>
-                {a.text}{" "}
-                {a.prs.map((n) => (
-                  <button
-                    key={n}
-                    type="button"
-                    onClick={() => jump(n)}
-                    className="mr-1 font-mono text-primary hover:underline"
-                  >
-                    #{n}
-                  </button>
-                ))}
-              </li>
-            ))}
-          </ul>
-        )}
-      </section>
-      <section className="min-h-0 overflow-auto">
-        <h3 className="mb-1.5 font-semibold text-muted-foreground">Threads with no PR</h3>
-        {graph.noPr.length === 0 ? (
-          <p className="text-muted-foreground">None</p>
-        ) : (
-          <ul className="space-y-1">
-            {graph.noPr.map((t) => (
-              <li key={t.id} className="flex items-center gap-1.5">
-                <StatusMark thread={t} />
-                <a href={t.href} className="min-w-0 truncate hover:underline">
-                  {t.title}
-                </a>
-              </li>
-            ))}
-          </ul>
-        )}
-      </section>
-    </div>
+    <details className="flex-none text-xs">
+      <summary className="flex cursor-pointer items-center gap-1.5 font-semibold text-muted-foreground">
+        <AlertTriangle className="size-3.5" aria-hidden /> {graph.anomalies.length}{" "}
+        {graph.anomalies.length === 1 ? "anomaly" : "anomalies"} · {graph.noPr.length}{" "}
+        {graph.noPr.length === 1 ? "thread" : "threads"} with no PR
+      </summary>
+      <div className="mt-2 grid max-h-[calc(min(860px,100dvh-2rem)*0.3)] grid-rows-[minmax(0,1fr)] gap-4 sm:grid-cols-2">
+        <section className="min-h-0 overflow-auto">
+          <h3 className="mb-1.5 flex items-center gap-1.5 font-semibold text-muted-foreground">
+            <AlertTriangle className="size-3.5" aria-hidden /> Anomalies
+          </h3>
+          {graph.anomalies.length === 0 ? (
+            <p className="text-muted-foreground">None</p>
+          ) : (
+            <ul className="space-y-1">
+              {graph.anomalies.map((a, i) => (
+                <li key={i}>
+                  {a.text}{" "}
+                  {a.prs.map((n) => (
+                    <button
+                      key={n}
+                      type="button"
+                      onClick={() => jump(n)}
+                      className="mr-1 font-mono text-primary hover:underline"
+                    >
+                      #{n}
+                    </button>
+                  ))}
+                </li>
+              ))}
+            </ul>
+          )}
+        </section>
+        <section className="min-h-0 overflow-auto">
+          <h3 className="mb-1.5 font-semibold text-muted-foreground">Threads with no PR</h3>
+          {graph.noPr.length === 0 ? (
+            <p className="text-muted-foreground">None</p>
+          ) : (
+            <ul className="space-y-1">
+              {graph.noPr.map((t) => (
+                <li key={t.id} className="flex items-center gap-1.5">
+                  <StatusMark thread={t} />
+                  <a href={t.href} className="min-w-0 truncate hover:underline">
+                    {t.title}
+                  </a>
+                </li>
+              ))}
+            </ul>
+          )}
+        </section>
+      </div>
+    </details>
   );
 }
 

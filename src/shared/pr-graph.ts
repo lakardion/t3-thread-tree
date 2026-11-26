@@ -286,6 +286,12 @@ export function buildPrGraph(head: ThreadNode, data: MapGraphData | null): PrGra
     (n) => n.stack!.number,
   );
 
+  /** A merged pile member is hidden behind the top of its pile, which owns the pile's edges. */
+  const pileTop = (n: GraphNode) => {
+    const pile = n.stack && piles.get(n.stack.number);
+    return pile?.includes(n) ? pile.at(-1)! : n;
+  };
+
   const branches = new Map<string, BranchNode>();
   const edges: Edge[] = [];
   const children = new Map<string, GraphNode[]>();
@@ -298,7 +304,7 @@ export function buildPrGraph(head: ThreadNode, data: MapGraphData | null): PrGra
     const dim = node.state !== "open";
     const toMain = inPile || !node.base || node.base === "main";
     const found = toMain ? undefined : baseOf(node);
-    const parent = top && !inPile && (toMain || (found && pile!.includes(found))) ? top : found;
+    const parent = top && !inPile && toMain ? top : found && pileTop(found);
     if (!parent && toMain) {
       edges.push({ from: "main", to: node.n, kind: dim ? "dim" : "main" });
       children.set("main", [...(children.get("main") ?? []), node]);
@@ -369,4 +375,24 @@ export function buildPrGraph(head: ThreadNode, data: MapGraphData | null): PrGra
     }),
     noPr: members.filter((m) => m.prs.length === 0).map((m) => m.thread),
   };
+}
+
+/** Card height. */
+export const NH = 92;
+/** Vertical gap between rows. */
+export const GY = 14;
+/** Gap between the cards of an open pile. */
+export const PILE_GAP = 4;
+
+/** How far an open pile of `count` cards on `row` moves up to center on its deck, without leaving the canvas top. */
+export const pileLift = (row: number, count: number): number =>
+  Math.min(((count - 1) * (NH + PILE_GAP)) / 2, row * (NH + GY));
+
+/** What hover focuses for a PR: its lane, else the focus of the PR it builds on, else its own chain root. A branch pill has none. */
+export function focusOf(graph: PrGraph, to: Edge["to"]): string | null {
+  if (typeof to !== "number") return null;
+  const own = graph.nodes.find((n) => n.n === to)!.lane;
+  if (own !== null) return `L${own}`;
+  const from = graph.edges.find((e) => e.to === to)?.from;
+  return typeof from === "number" ? focusOf(graph, from) : `#${to}`;
 }
