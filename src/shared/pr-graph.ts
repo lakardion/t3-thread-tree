@@ -286,6 +286,12 @@ export function buildPrGraph(head: ThreadNode, data: MapGraphData | null): PrGra
     (n) => n.stack!.number,
   );
 
+  /** A merged pile member is hidden behind the top of its pile, which owns the pile's edges. */
+  const pileTop = (n: GraphNode) => {
+    const pile = n.stack && piles.get(n.stack.number);
+    return pile?.includes(n) ? pile.at(-1)! : n;
+  };
+
   const branches = new Map<string, BranchNode>();
   const edges: Edge[] = [];
   const children = new Map<string, GraphNode[]>();
@@ -298,7 +304,7 @@ export function buildPrGraph(head: ThreadNode, data: MapGraphData | null): PrGra
     const dim = node.state !== "open";
     const toMain = inPile || !node.base || node.base === "main";
     const found = toMain ? undefined : baseOf(node);
-    const parent = top && !inPile && (toMain || (found && pile!.includes(found))) ? top : found;
+    const parent = top && !inPile && toMain ? top : found && pileTop(found);
     if (!parent && toMain) {
       edges.push({ from: "main", to: node.n, kind: dim ? "dim" : "main" });
       children.set("main", [...(children.get("main") ?? []), node]);

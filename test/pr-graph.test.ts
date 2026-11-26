@@ -340,6 +340,27 @@ describe("layout", () => {
     expect(g.edges.find((e) => e.to === 3)).toEqual({ from: 2, to: 3, kind: "stack" });
   });
 
+  test("a PR built on a hidden pile member chains on from the pile top", () => {
+    const s = (pos: number) => ({ stack: { number: 7, pos, total: 3 } });
+    const g = buildPrGraph(
+      head(
+        node("a", {
+          prs: [
+            pr(1, { ...s(1), state: "merged", head: "h1" }),
+            pr(2, { ...s(2), state: "merged", head: "h2", base: "h1" }),
+            pr(3, { ...s(3), base: "h2" }),
+            pr(4, { base: "h1" }),
+            pr(5, { base: "h4" }),
+          ],
+        }),
+      ),
+      null,
+    );
+    expect(g.edges.find((e) => e.to === 4)).toMatchObject({ from: 2 });
+    expect(byN(g, 4)).toMatchObject({ col: byN(g, 2).col + 1 });
+    expect(byN(g, 5)).toMatchObject({ col: byN(g, 2).col + 2 });
+  });
+
   test("foreign branches go after the PR children of main", () => {
     const g = buildPrGraph(head(node("a", { prs: [pr(1, { base: "zzz" }), pr(2)] })), null);
     expect(byN(g, 2).row).toBe(0);
