@@ -231,13 +231,25 @@ function NodeCard({
   );
 }
 
-/** Merged stack members on one spot: a deck that fans out down on hover, in stack order. */
+/** Gap between the cards of an open pile. */
+const PILE_GAP = 4;
+
+/** Merged stack members on one spot: a deck that fans out on hover, in stack order, centered on the deck. */
 function MergedPile({ pile, texts }: { pile: GraphNode[]; texts: (n: GraphNode) => string[] }) {
   const { x, y } = place(pile[0].col, pile[0].row);
+  const step = NH + PILE_GAP;
   return (
     <div
-      style={{ left: x, top: y, width: NW, "--open": `${pile.length * (NH + GY) - GY}px` } as CSSProperties}
-      className="group/pile absolute h-[92px] opacity-60 transition-[height,opacity] hover:z-10 hover:h-(--open) hover:opacity-100 motion-reduce:transition-none"
+      style={
+        {
+          left: x,
+          top: y,
+          width: NW,
+          "--open": `${pile.length * step - PILE_GAP}px`,
+          "--shift": `0 ${(-(pile.length - 1) * step) / 2}px`,
+        } as CSSProperties
+      }
+      className="group/pile absolute h-[92px] brightness-75 transition-[height,translate,filter] hover:z-10 hover:h-(--open) hover:[translate:var(--shift)] hover:brightness-100 motion-reduce:transition-none"
     >
       {pile.map((n, i) => {
         const d = Math.min(pile.length - 1 - i, 3) * 5;
@@ -246,7 +258,7 @@ function MergedPile({ pile, texts }: { pile: GraphNode[]; texts: (n: GraphNode) 
             key={n.n}
             n={n}
             texts={texts(n)}
-            style={{ left: 0, top: 0, "--c": `${d}px ${-d}px`, "--e": `0 ${i * (NH + GY)}px` } as CSSProperties}
+            style={{ left: 0, top: 0, "--c": `${d}px ${-d}px`, "--e": `0 ${i * step}px` } as CSSProperties}
             className="[translate:var(--c)] border-pr-merged/40 opacity-100 transition-[translate] group-hover/pile:[translate:var(--e)] group-hover/pile:border-border motion-reduce:transition-none"
           />
         );
