@@ -245,6 +245,18 @@ _Avoid_: map stack, map section
 The row that heads a **Map group** when its **Map thread** is settled or missing, or heads several maps. It is not a thread.
 _Avoid_: map row, map title
 
+**PR graph**:
+The PRs of one map, drawn as a graph from `main` in a modal: one node per PR, an edge to its base, with **Lanes**, gh stacks and **Anomalies**.
+_Avoid_: PR map, stack graph, DAG
+
+**Lane**:
+One chain of keys in the Route of `map.md`, under a `### Lane N` heading. A Route with no lane heading has one implicit lane.
+_Avoid_: track, column
+
+**Anomaly**:
+A fact in a **PR graph** that the user must check, such as a PR with conflicts or a closed PR with open children. It shows as a `!` badge on the node and in a list.
+_Avoid_: warning, error, problem
+
 ### The app
 
 **Desktop app**:
@@ -266,6 +278,7 @@ _Avoid_: mini window, small window, Needs-you window
 - A **PR stack** can span threads of more than one **Issue key**.
 - A thread goes to the first **Placement rule** that **Claims** it. With the default order, a thread in a **PR stack** shows in its stack block, whatever its **Issue key**, spawner or **Launch nesting**; a **Review thread** stays in Reviews, and a **Map member** shows in its **Map group**, with its stack mates inside the group.
 - A **Pin** orders a list that the **Placement rules** already built. It never moves an item to another list.
+- A **Map group** has one **PR graph**. Its nodes are the PRs of its **Map members** and the PRs of its keys.
 - A **Map thread** heads one **Map group** for each map it launched. A **Map group** can hold the **Map group** of a sub-map, at the place of its **Map thread**.
 - The keyless threads of one **PR stack** share one group, named after the bottom PR (`PR stack #61`).
 
