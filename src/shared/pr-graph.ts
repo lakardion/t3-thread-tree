@@ -1,4 +1,5 @@
 /** The pure model of the PR graph of a wayfinder map: nodes, edges, lanes and layout. */
+import type { MapLane } from "../server/map-md.ts";
 import type { MapGraphData } from "./map-graph.ts";
 import { bySince, type PrNode, type ThreadNode } from "./tree.ts";
 
@@ -54,6 +55,159 @@ const keyOf = (s: string | null) => s?.match(KEY)?.[0].toUpperCase();
 /** The thread nodes under `head`. A Map header and a run node leave out their subtree, and a member that heads a sub-map leaves out its children. */
 const walk = (n: ThreadNode): ThreadNode[] =>
   n.children.flatMap((c) => (c.run || c.map?.header ? [] : [c, ...(c.map ? [] : walk(c))]));
+
+type AnomalyCtx = {
+  nodes: GraphNode[];
+  edges: Edge[];
+  data: MapGraphData | null;
+  mateNumbers: Set<number>;
+  memberKeys: string[];
+};
+
+const open = (n: GraphNode) => n.state === "open";
+const nums = (ns: GraphNode[]) => ns.map((n) => n.n);
+const refs = (ns: GraphNode[]) => nums(ns).map((n) => `#${n}`);
+
+const fanOut = ({ nodes, data }: AnomalyCtx): Anomaly[] =>
+  Object.entries(
+    Object.groupBy(
+      nodes.filter((n) => open(n) && n.base && n.base !== "main"),
+      (n) => n.base!,
+    ),
+  ).flatMap(([base, kids = []]) =>
+    kids.length < 2
+      ? []
+      : [
+          {
+            text: `${base} has ${kids.length} open children${
+              kids.every((k) =>
+                data?.lanes?.some((l) => l.keys.some((key) => key.base === base && rowMatches(k, [key.key]))),
+              )
+                ? " (planned)"
+                : ""
+            }`,
+            prs: nums(kids),
+          },
+        ],
+  );
+
+const closedParent = ({ nodes, edges }: AnomalyCtx): Anomaly[] =>
+  edges.flatMap((e) => {
+    const parent = nodes.find((n) => n.n === e.from);
+    const child = nodes.find((n) => n.n === e.to);
+    return parent?.state === "closed" && child && open(child)
+      ? [{ text: `#${parent.n} is closed, but #${child.n} builds on it`, prs: [parent.n, child.n] }]
+      : [];
+  });
+
+const conflicts = ({ nodes }: AnomalyCtx): Anomaly[] =>
+  nodes.filter((n) => open(n) && n.conflicting).map((n) => ({ text: `#${n.n} has conflicts`, prs: [n.n] }));
+
+const foreignBase = ({ nodes, edges }: AnomalyCtx): Anomaly[] =>
+  edges.flatMap((e) => {
+    const node = typeof e.from === "object" && nodes.find((n) => n.n === e.to);
+    return node ? [{ text: `#${node.n} is based on ${node.base}, which is not main or a map PR`, prs: [node.n] }] : [];
+  });
+
+const behindBase = ({ nodes, data }: AnomalyCtx): Anomaly[] =>
+  nodes
+    .filter((n) => open(n) && n.stack && (data?.behind[n.n] ?? 0) > 0)
+    .map((n) => ({ text: `#${n.n} is ${data!.behind[n.n]} commits behind its base`, prs: [n.n] }));
+
+const noThread = ({ nodes, mateNumbers }: AnomalyCtx): Anomaly[] =>
+  nodes
+    .filter((n) => open(n) && !n.thread && !mateNumbers.has(n.n))
+    .map((n) => ({ text: `#${n.n} has no thread`, prs: [n.n] }));
+
+const stoppedThread = ({ nodes }: AnomalyCtx): Anomaly[] =>
+  nodes
+    .filter((n) => open(n) && n.thread?.live && ["failed", "interrupted"].includes(n.thread.status))
+    .map((n) => ({ text: `#${n.n}: its thread stopped`, prs: [n.n] }));
+
+/** The key of the node in an explicit lane, with the base that its lane gives. */
+const laneKeyOf = (node: GraphNode, lanes: MapLane[]) => {
+  const lane = lanes.find((l) => l.n === node.lane && l.explicit);
+  const key = lane?.keys.find((k) => rowMatches(node, [k.key]));
+  return lane && key ? { lane, key } : null;
+};
+
+const offLaneChain = ({ nodes, data }: AnomalyCtx): Anomaly[] => {
+  const live = (k: string) => nodes.filter((n) => n.state !== "closed" && rowMatches(n, [k]));
+  return nodes.flatMap((node) => {
+    const found = open(node) && laneKeyOf(node, data?.lanes ?? []);
+    if (!found) return [];
+    const { lane, key } = found;
+    const base = node.base ?? "main";
+    const prev = lane.keys.some((k) => k.key === key.base) ? live(key.base) : null;
+    const ok = [
+      ...live(key.key)
+        .filter((n) => n !== node)
+        .map((n) => n.head),
+      ...(prev ? prev.map((n) => n.head) : [key.base]),
+      ...(key.base === "main" || prev?.every((n) => n.state === "merged") ? ["main"] : []),
+    ];
+    return ok.includes(base)
+      ? []
+      : [{ text: `#${node.n} is based on ${base}; the lane says ${key.base}`, prs: [node.n] }];
+  });
+};
+
+const stackAcrossLanes = ({ nodes, data }: AnomalyCtx): Anomaly[] =>
+  Object.values(
+    Object.groupBy(
+      nodes.filter((n) => n.stack && laneKeyOf(n, data?.lanes ?? [])),
+      (n) => n.stack!.number,
+    ),
+  ).flatMap((group = []) => {
+    const lanes = [...new Set(group.map((n) => n.lane!))].toSorted((a, b) => a - b);
+    return lanes.length < 2
+      ? []
+      : [
+          {
+            text: `Stack #${group[0].stack!.number} spans lanes ${lanes.map((l) => `L${l}`).join(", ")}`,
+            prs: nums(group),
+          },
+        ];
+  });
+
+const keyWithSeveralPrs = ({ nodes, data, memberKeys }: AnomalyCtx): Anomaly[] =>
+  [...new Set([...(data?.lanes ?? []).flatMap((l) => l.keys.map((k) => k.key.toUpperCase())), ...memberKeys])].flatMap(
+    (key) => {
+      const all = nodes.filter((n) => rowMatches(n, [key]));
+      const live = all.filter((n) => n.state !== "closed");
+      const closed = all.filter((n) => n.state === "closed");
+      return live.length < 2
+        ? []
+        : [
+            {
+              text: `${key} has ${live.length} PRs: ${refs(live).join(", ")}${closed.length ? ` (closed: ${refs(closed).join(", ")})` : ""}`,
+              prs: nums(all),
+            },
+          ];
+    },
+  );
+
+const missingFromStacks = ({ nodes, data }: AnomalyCtx): Anomaly[] =>
+  data?.stacks
+    ? nodes
+        .filter((n) => open(n) && n.stack && !data.stacks!.some((s) => s.prs.includes(n.n)))
+        .map((n) => ({ text: `#${n.n} is in a stack, but not in Stacks`, prs: [n.n] }))
+    : [];
+
+const findAnomalies = (ctx: AnomalyCtx): Anomaly[] =>
+  [
+    fanOut,
+    closedParent,
+    conflicts,
+    foreignBase,
+    behindBase,
+    noThread,
+    stoppedThread,
+    offLaneChain,
+    stackAcrossLanes,
+    keyWithSeveralPrs,
+    missingFromStacks,
+  ].flatMap((rule) => rule(ctx));
 
 export function buildPrGraph(head: ThreadNode, data: MapGraphData | null): PrGraph {
   const tree = walk(head).filter((t) => data || !t.settled);
@@ -187,7 +341,13 @@ export function buildPrGraph(head: ThreadNode, data: MapGraphData | null): PrGra
     nodes,
     branches: [...branches.values()],
     edges,
-    anomalies: [],
+    anomalies: findAnomalies({
+      nodes,
+      edges,
+      data,
+      mateNumbers,
+      memberKeys: members.map((m) => keyOf(m.thread.title)).filter((k) => k !== undefined),
+    }),
     noPr: members.filter((m) => m.prs.length === 0).map((m) => m.thread),
   };
 }
