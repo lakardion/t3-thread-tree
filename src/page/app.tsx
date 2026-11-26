@@ -172,6 +172,7 @@ import {
   type Orders,
 } from "./order.ts";
 import { PinButton, Pins } from "./pin-button.tsx";
+import { OpenGraph, PrGraphDialog } from "./pr-graph.tsx";
 import {
   flag,
   forget,
@@ -1968,6 +1969,11 @@ function ThreadRow({
                 <Kbd>s</Kbd> Send
               </span>
             )}
+            {block?.map?.key && (
+              <span className="flex items-center gap-1">
+                <Kbd>g</Kbd> Graph
+              </span>
+            )}
           </span>
           {pulse > 0 && <span key={pulse} aria-hidden className={cn("row-pulse", STATUS[t.status].shape)} />}
           {project && <ProjectColumn b={project} />}
@@ -2776,6 +2782,15 @@ function ProjectBlock({ b, closed, toggle, fold }: { b: Group } & Fold) {
   );
 }
 
+/** The map head with this id in the raw tree, so the filters never drop a member from its graph. */
+const mapHead = (groups: Group[], id: string): ThreadNode | undefined => {
+  const down = (t: ThreadNode): ThreadNode | undefined =>
+    t.id === id && t.map?.key ? t : t.children.map(down).find(Boolean);
+  const inGroup = (g: Group): ThreadNode | undefined =>
+    g.threads.map(down).find(Boolean) ?? g.groups.map(inGroup).find(Boolean);
+  return groups.map(inGroup).find(Boolean);
+};
+
 const KEYS: [keys: string, action: string][] = [
   ["j k ↑ ↓", "Move"],
   ["Enter", "Open"],
@@ -2783,6 +2798,7 @@ const KEYS: [keys: string, action: string][] = [
   ["l h", "Expand, collapse"],
   ["s", "Send"],
   ["p", "Pin"],
+  ["g", "PR graph"],
   ["n", "Open next"],
   ["t", "Triage"],
   [FIND_KEY, "Find"],
@@ -3028,6 +3044,8 @@ function App() {
   const [catchUpOn, setCatchUpOn] = useState<boolean>();
   const [t3cli, setT3cli] = useState<CliStatus | null>(null);
   const [sendTo, setSendTo] = useState({ id: "", open: false });
+  /** The id of the map head whose PR graph is open. */
+  const [graphFor, setGraphFor] = useState<string | null>(null);
   const [wfStart, setWfStart] = useState<{ req: StartRequest | null; open: boolean }>({ req: null, open: false });
   const [wfStarted, setWfStarted] = useState<{ name: string; runId: string } | null>(null);
   const [orders, setOrders] = useState(() => parseOrders(load(ORDER_KEY)));
@@ -3235,6 +3253,9 @@ function App() {
     if (body.pick) setCli(body.pick);
     void putPick(body).then((saved) => saved !== null && setCatchUpOn(saved));
   };
+  const graphHead = graphFor ? mapHead(tree?.projects ?? [], graphFor) : undefined;
+  /** A head that leaves the tree closes its graph for good, so it does not open again when the head comes back. */
+  if (graphFor && !graphHead) setGraphFor(null);
   const live = new Map((tree?.projects ?? []).flatMap(allThreads).map((t) => [t.id, t]));
   /** Threads and run items, for Triage. Skip and Send use `live`, which holds threads only. */
   const triageLive = new Map<string, ThreadNode | RunItem>([...live, ...runs.map((r) => [r.id, r] as const)]);
@@ -3329,6 +3350,9 @@ function App() {
       } else if (action === "pin") {
         const stop = active instanceof HTMLElement ? active.dataset.stop : undefined;
         if (stop) listRef.current?.querySelector<HTMLElement>(`[data-pin-for="${CSS.escape(stop)}"]`)?.click();
+      } else if (action === "graph") {
+        const stop = active instanceof HTMLElement ? active.dataset.stop?.replace(/^fold:/, "") : undefined;
+        if (stop && listRef.current?.querySelector(`[data-graph-for="${CSS.escape(stop)}"]`)) setGraphFor(stop);
       } else if (action === "send") {
         const id = active?.closest<HTMLElement>(".thread-row")?.dataset.thread;
         if (id && latest.current.t3cli?.available !== false) setSendTo({ id, open: true });
@@ -3659,36 +3683,38 @@ function App() {
                               <Card className="gap-0 overflow-clip rounded-[12px] px-2 py-0 shadow-none">
                                 <ul className={cn("m-0 list-none p-0", layout === "flat" && "p-1")}>
                                   <SendTo value={sendToApi}>
-                                    <WorkflowStarter value={workflowStarter}>
-                                      <Folds value={{ closed, toggle, fold }}>
-                                        <ShowSnoozed value={snoozed}>
-                                          <Pins value={pinApi}>
-                                            {layout === "flat" ? (
-                                              <Presence key="flat" items={view.flat ?? []} keyOf={(i) => i.id}>
-                                                {(i) => (
-                                                  <FlatRow
-                                                    i={i}
-                                                    corners={edgeCorners(view.flat ?? [], i)}
-                                                    linear={flatMode === "linear"}
-                                                    section={sectionOf(view.flat ?? [], i)}
-                                                    closed={closed}
-                                                    toggle={toggle}
-                                                    fold={fold}
-                                                    toggleSection={toggleSection}
-                                                  />
-                                                )}
-                                              </Presence>
-                                            ) : (
-                                              <Presence key="tree" items={projects} keyOf={(p) => p.id}>
-                                                {(p) => (
-                                                  <ProjectBlock b={p} closed={closed} toggle={toggle} fold={fold} />
-                                                )}
-                                              </Presence>
-                                            )}
-                                          </Pins>
-                                        </ShowSnoozed>
-                                      </Folds>
-                                    </WorkflowStarter>
+                                    <OpenGraph value={setGraphFor}>
+                                      <WorkflowStarter value={workflowStarter}>
+                                        <Folds value={{ closed, toggle, fold }}>
+                                          <ShowSnoozed value={snoozed}>
+                                            <Pins value={pinApi}>
+                                              {layout === "flat" ? (
+                                                <Presence key="flat" items={view.flat ?? []} keyOf={(i) => i.id}>
+                                                  {(i) => (
+                                                    <FlatRow
+                                                      i={i}
+                                                      corners={edgeCorners(view.flat ?? [], i)}
+                                                      linear={flatMode === "linear"}
+                                                      section={sectionOf(view.flat ?? [], i)}
+                                                      closed={closed}
+                                                      toggle={toggle}
+                                                      fold={fold}
+                                                      toggleSection={toggleSection}
+                                                    />
+                                                  )}
+                                                </Presence>
+                                              ) : (
+                                                <Presence key="tree" items={projects} keyOf={(p) => p.id}>
+                                                  {(p) => (
+                                                    <ProjectBlock b={p} closed={closed} toggle={toggle} fold={fold} />
+                                                  )}
+                                                </Presence>
+                                              )}
+                                            </Pins>
+                                          </ShowSnoozed>
+                                        </Folds>
+                                      </WorkflowStarter>
+                                    </OpenGraph>
                                   </SendTo>
                                 </ul>
                               </Card>
@@ -3805,6 +3831,7 @@ function App() {
         />
       )}
       {undoIds && <UndoToast key={undoIds.join()} ids={undoIds} onClose={() => setUndoIds(null)} />}
+      {graphHead && <PrGraphDialog key={graphHead.id} head={graphHead} onOpenChange={() => setGraphFor(null)} />}
       <SendDialog
         fixed
         open={sendTo.open}

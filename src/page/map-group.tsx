@@ -1,13 +1,15 @@
 import { Map as MapNode, X } from "lucide";
-import { ChevronDown, ExternalLink, Map as MapIcon } from "lucide-react";
+import { ChevronDown, ExternalLink, GitBranch, Map as MapIcon } from "lucide-react";
 import { MorphIcon } from "morphicons/react";
-import { useState, type ComponentType, type CSSProperties, type ReactNode, type Ref } from "react";
+import { useContext, useState, type ComponentType, type CSSProperties, type ReactNode, type Ref } from "react";
 
 import { Button } from "@/components/ui/button";
+import { Kbd } from "@/components/ui/kbd";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import { cn } from "@/lib/utils";
 
 import { flat, type Group, type Status, type ThreadNode } from "../shared/tree.ts";
+import { OpenGraph } from "./pr-graph.tsx";
 import { postMapThread } from "./send.ts";
 import { folds } from "./view.ts";
 
@@ -65,6 +67,29 @@ function UnmarkDot({ id }: { id: string }) {
         </button>
       </TooltipTrigger>
       <TooltipContent>{err ?? "Unmark map thread"}</TooltipContent>
+    </Tooltip>
+  );
+}
+
+/** The PR graph button of a map head. A head that anchors several maps has no map key and no button. */
+function GraphButton({ t }: { t: ThreadNode }) {
+  const open = useContext(OpenGraph);
+  if (!t.map?.key) return null;
+  return (
+    <Tooltip>
+      <TooltipTrigger asChild>
+        <Button
+          variant="ghost"
+          size="icon"
+          className="relative z-10 size-5 flex-none rounded-[6px] text-muted-foreground pointer-coarse:min-h-11 pointer-coarse:min-w-11"
+          aria-label="PR graph"
+          data-graph-for={t.id}
+          onClick={() => open(t.id)}
+        >
+          <GitBranch className="size-3.5" aria-hidden />
+        </Button>
+      </TooltipTrigger>
+      <TooltipContent>PR graph</TooltipContent>
     </Tooltip>
   );
 }
@@ -173,7 +198,7 @@ export function MapGroup({
         )}
         {info.header ? (
           <div
-            className="group/row relative flex h-9 min-w-0 items-center gap-2 rounded-[8px] px-2 text-xs hover:bg-accent"
+            className="group/row map-head relative flex h-9 min-w-0 items-center gap-2 rounded-[8px] px-2 text-xs hover:bg-accent"
             title={tip}
           >
             {handle}
@@ -188,7 +213,17 @@ export function MapGroup({
               <MapIcon className={cn("size-3.5 flex-none", MAP_TONE)} aria-label="Map" />
               <span className="truncate font-semibold">{info.name}</span>
             </button>
+            {info.key && (
+              <span
+                aria-hidden
+                data-hint="row"
+                className="key-hint -top-3 right-8 items-center gap-1 rounded-md border bg-popover px-1.5 py-0.5 text-[11px] text-muted-foreground shadow-sm"
+              >
+                <Kbd>g</Kbd> Graph
+              </span>
+            )}
             {countText}
+            <GraphButton t={t} />
             {pin}
             {info.href && (
               <a
@@ -215,6 +250,7 @@ export function MapGroup({
               end={
                 <>
                   {countText}
+                  <GraphButton t={t} />
                   <Button
                     variant="ghost"
                     size="icon"
