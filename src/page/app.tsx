@@ -1522,7 +1522,7 @@ function PrChip({ p }: { p: PrNode }) {
         p.draft && "border-dashed",
         "duration-300 motion-reduce:transition-none",
         p.state === "merged" && "text-pr-merged",
-        p.state === "open" && !p.draft && "border-status-done-fg text-status-done-fg",
+        p.state === "open" && !p.draft && "border-status-working-fg text-status-working-fg",
       )}
       asChild
     >
