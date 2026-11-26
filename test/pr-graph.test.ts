@@ -1,7 +1,7 @@
 import { describe, expect, test } from "bun:test";
 
 import type { MapGraphData } from "../src/shared/map-graph.ts";
-import { buildPrGraph, GY, NH, pileLift } from "../src/shared/pr-graph.ts";
+import { buildPrGraph, focusOf, GY, NH, pileLift } from "../src/shared/pr-graph.ts";
 import type { PrNode, ThreadNode } from "../src/shared/tree.ts";
 
 const pr = (n: number, over: Partial<PrNode> = {}): PrNode => ({
@@ -624,5 +624,35 @@ describe("pileLift", () => {
 
   test("a high row is capped so the pile top stays on the canvas", () => {
     expect(pileLift(1, 20)).toBe(NH + GY);
+  });
+});
+
+describe("focusOf", () => {
+  const build = (prs: PrNode[], lanes: MapGraphData["lanes"] = null) =>
+    buildPrGraph(head(node("a", { prs })), data({ lanes }));
+
+  test("with no lanes, a chain shares the focus of its root", () => {
+    const g = build([pr(1, { head: "h1" }), pr(2, { head: "h2", base: "h1" }), pr(3, { base: "h2" }), pr(4)]);
+    expect([1, 2, 3, 4].map((n) => focusOf(g, n))).toEqual(["#1", "#1", "#1", "#4"]);
+  });
+
+  test("a laned PR gives its lane, and a lane-less child of it too", () => {
+    const g = build([pr(1, { head: "l1-1" }), pr(2, { base: "l1-1" })], [lane(1, ["L1-1"])]);
+    expect(focusOf(g, 1)).toBe("L1");
+    expect(focusOf(g, 2)).toBe("L1");
+  });
+
+  test("a branch pill has no focus", () => {
+    expect(focusOf(build([pr(1)]), { branch: "x" })).toBeNull();
+  });
+
+  test("the top of a merged pile and the PR that chains on from it share a focus", () => {
+    const s = (pos: number) => ({ stack: { number: 7, pos, total: 3 } });
+    const g = build([
+      pr(1, { ...s(1), state: "merged", head: "h1" }),
+      pr(2, { ...s(2), state: "merged", head: "h2", base: "h1" }),
+      pr(3, { ...s(3), base: "h2" }),
+    ]);
+    expect(focusOf(g, 3)).toBe(focusOf(g, 2));
   });
 });

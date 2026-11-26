@@ -381,3 +381,12 @@ export const PILE_GAP = 4;
 /** How far an open pile of `count` cards on `row` moves up to center on its deck, without leaving the canvas top. */
 export const pileLift = (row: number, count: number): number =>
   Math.min(((count - 1) * (NH + PILE_GAP)) / 2, row * (NH + GY));
+
+/** What hover focuses for a PR: its lane, else the focus of the PR it builds on, else its own chain root. A branch pill has none. */
+export function focusOf(graph: PrGraph, to: Edge["to"]): string | null {
+  if (typeof to !== "number") return null;
+  const own = graph.nodes.find((n) => n.n === to)!.lane;
+  if (own !== null) return `L${own}`;
+  const from = graph.edges.find((e) => e.to === to)?.from;
+  return typeof from === "number" ? focusOf(graph, from) : `#${to}`;
+}
