@@ -422,10 +422,11 @@ One line when the title fits, `min-height: 36px`, radius 8 px, 13 px text with a
 | `X` icon                     | `reviewDecision` is `changes-requested` |
 | `TriangleAlert` icon         | `mergeability` is `conflicting`         |
 | Dashed border                | `isDraft` is true                       |
+| Green text and border        | `state` is `open`, not draft            |
 | Text in `--pr-merged`        | `state` is `merged`                     |
 | Text struck through, muted   | `state` is `closed`                     |
 
-An absent value shows no mark. Each mark has a `title` with its meaning.
+A draft keeps the muted text. Green is `--status-done-fg`: the chip uses the PR graph state tones, not the stack rail review tones. An absent value shows no mark. Each mark has a `title` with its meaning.
 
 **Narrow screens.** Below 720 px, the title goes on its own line below the status, and the right group wraps to a line below the title. The title wraps to as many lines as it needs. The page never scrolls sideways. On a touch screen, buttons have a 44 px target.
 
