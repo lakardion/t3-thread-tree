@@ -249,7 +249,7 @@ function MergedPile({ pile, texts }: { pile: GraphNode[]; texts: (n: GraphNode) 
           "--shift": `0 ${(-(pile.length - 1) * step) / 2}px`,
         } as CSSProperties
       }
-      className="group/pile absolute h-[92px] brightness-75 transition-[height,translate,filter] hover:z-10 hover:h-(--open) hover:[translate:var(--shift)] hover:brightness-100 motion-reduce:transition-none"
+      className="group/pile absolute h-[92px] transition-[height,translate] before:pointer-events-none before:absolute before:-inset-2.5 before:rounded-xl before:bg-background/40 before:opacity-0 before:shadow-[0_0_48px_12px_rgb(0_0_0/0.55)] before:ring-2 before:ring-pr-merged/60 before:backdrop-blur-sm before:transition-opacity hover:z-10 hover:h-(--open) hover:[translate:var(--shift)] hover:before:opacity-100 motion-reduce:transition-none"
     >
       {pile.map((n, i) => {
         const d = Math.min(pile.length - 1 - i, 3) * 5;
@@ -259,7 +259,7 @@ function MergedPile({ pile, texts }: { pile: GraphNode[]; texts: (n: GraphNode) 
             n={n}
             texts={texts(n)}
             style={{ left: 0, top: 0, "--c": `${d}px ${-d}px`, "--e": `0 ${i * step}px` } as CSSProperties}
-            className="[translate:var(--c)] border-pr-merged/40 opacity-100 transition-[translate] group-hover/pile:[translate:var(--e)] group-hover/pile:border-border motion-reduce:transition-none"
+            className="[translate:var(--c)] border-pr-merged/40 opacity-100 brightness-75 transition-[translate,filter] group-hover/pile:[translate:var(--e)] group-hover/pile:border-border group-hover/pile:brightness-100 motion-reduce:transition-none"
           />
         );
       })}
