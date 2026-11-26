@@ -256,7 +256,6 @@ function VariantA() {
                   ) : (
                     <span className="flex min-w-0 items-center gap-1.5 font-sans text-xs font-semibold">
                       <span className="truncate">{p.key ?? "no key"}</span>
-                      <span className="font-normal text-destructive">no thread</span>
                     </span>
                   )}
                   <span className="flex flex-none items-center gap-1 text-muted-foreground">
@@ -273,6 +272,7 @@ function VariantA() {
                 <div className="flex items-center gap-1 font-sans text-muted-foreground">
                   <Layers className="size-3" />
                   {p.stack ? `stack ${p.stack.pos}/${p.stack.of}` : "no stack"}
+                  {!p.thread && <span className="ml-auto text-destructive">no thread</span>}
                 </div>
               </div>
             );
