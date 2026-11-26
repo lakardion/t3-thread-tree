@@ -688,6 +688,16 @@ const STEPS: (() => void)[] = [
   },
 ];
 
+/** A gh stack whose first four PRs merged, so GitHub moved the base of each one to main. */
+const FORMS = [
+  [5301, "ds-301-input-tokens"],
+  [5302, "ds-302-select-tokens"],
+  [5303, "ds-303-checkbox-tokens"],
+  [5304, "ds-304-radio-tokens"],
+  [5305, "ds-305-switch-tokens"],
+  [5306, "ds-306-slider-tokens"],
+] as const;
+
 /** The `/map-graph` fixture of the demo map. */
 const GRAPH: MapGraphData = {
   at: new Date(now).toISOString(),
@@ -703,10 +713,22 @@ const GRAPH: MapGraphData = {
       ],
     },
     { n: 2, label: "Overlays", explicit: true, keys: [{ key: "DS-201", base: "main" }] },
+    {
+      n: 3,
+      label: "Forms",
+      explicit: true,
+      keys: FORMS.map(([n, head], i) => ({ key: head.slice(0, 6).toUpperCase(), base: i ? `DS-${n - 5001}` : "main" })),
+    },
   ],
-  stacks: [{ prs: DS_STACK }],
+  stacks: [{ prs: DS_STACK }, { prs: FORMS.map(([n]) => n) }],
   settled: [],
   rows: [
+    ...FORMS.map(([n, head], i) => ({
+      ...prNode(pr(n, "linked", i < 4 ? "merged" : "open", { head, base: i === 5 ? FORMS[4][1] : "main" }), []),
+      stack: { number: 93, pos: i + 1, total: FORMS.length },
+      threadId: `forms-${n}`,
+      threadHref: "#",
+    })),
     {
       ...prNode(
         pr(5104, "linked", "open", {

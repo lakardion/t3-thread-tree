@@ -6,6 +6,7 @@ import {
   useMemo,
   useRef,
   useState,
+  type CSSProperties,
   type PointerEvent,
   type RefObject,
 } from "react";
@@ -167,18 +168,29 @@ function Badge({ texts }: { texts: string[] }) {
   );
 }
 
-function NodeCard({ n, texts }: { n: GraphNode; texts: string[] }) {
+function NodeCard({
+  n,
+  texts,
+  style,
+  className,
+}: {
+  n: GraphNode;
+  texts: string[];
+  style?: CSSProperties;
+  className?: string;
+}) {
   const { x, y } = place(n.col, n.row);
   return (
     <div
       data-pr={n.n}
       tabIndex={-1}
       title={n.title ?? undefined}
-      style={{ left: x, top: y, width: NW, height: NH }}
+      style={{ left: x, top: y, width: NW, height: NH, ...style }}
       className={cn(
         "absolute flex flex-col justify-between rounded-lg border bg-card px-2.5 py-2 font-mono text-[11px] shadow-md shadow-black/10 outline-none focus-visible:ring-2 focus-visible:ring-ring dark:shadow-black/40",
         (n.draft || n.outside) && "border-dashed",
         (n.state === "closed" || n.state === "merged") && "opacity-55",
+        className,
       )}
     >
       <div className="flex items-center justify-between gap-1">
@@ -215,6 +227,33 @@ function NodeCard({ n, texts }: { n: GraphNode; texts: string[] }) {
         {n.stack ? `stack ${n.stack.pos}/${n.stack.total}` : "no stack"}
         {!n.thread && <span className="ml-auto text-destructive">no thread</span>}
       </div>
+    </div>
+  );
+}
+
+/** Merged stack members on one spot: a deck that fans out down on hover, in stack order. */
+function MergedPile({ pile, texts }: { pile: GraphNode[]; texts: (n: GraphNode) => string[] }) {
+  const { x, y } = place(pile[0].col, pile[0].row);
+  return (
+    <div
+      style={{ left: x, top: y, width: NW, "--open": `${pile.length * (NH + GY) - GY}px` } as CSSProperties}
+      className="group/pile absolute h-[92px] opacity-60 transition-[height,opacity] hover:z-10 hover:h-(--open) hover:opacity-100 motion-reduce:transition-none"
+    >
+      {pile.map((n, i) => {
+        const d = Math.min(pile.length - 1 - i, 3) * 5;
+        return (
+          <NodeCard
+            key={n.n}
+            n={n}
+            texts={texts(n)}
+            style={{ left: 0, top: 0, "--c": `${d}px ${-d}px`, "--e": `0 ${i * (NH + GY)}px` } as CSSProperties}
+            className="[translate:var(--c)] border-pr-merged/40 opacity-100 transition-[translate] group-hover/pile:[translate:var(--e)] group-hover/pile:border-border motion-reduce:transition-none"
+          />
+        );
+      })}
+      <span className="absolute -right-2 -bottom-2 z-10 rounded-full border border-pr-merged/50 bg-card px-1.5 font-sans text-[10px] font-semibold text-pr-merged shadow-md transition-opacity group-hover/pile:opacity-0">
+        {pile.length} merged
+      </span>
     </div>
   );
 }
@@ -278,9 +317,17 @@ function Canvas({ graph }: { graph: PrGraph }) {
       {graph.branches.map((b) => (
         <Pill key={b.branch} {...b} />
       ))}
-      {graph.nodes.map((n) => (
-        <NodeCard key={n.n} n={n} texts={anomalyTexts(n)} />
-      ))}
+      {Object.values(Object.groupBy(graph.nodes, (n) => `${n.col},${n.row}`)).map((pile = []) =>
+        pile.length > 1 ? (
+          <MergedPile
+            key={pile[0].n}
+            pile={pile.toSorted((a, b) => a.stack!.pos - b.stack!.pos)}
+            texts={anomalyTexts}
+          />
+        ) : (
+          <NodeCard key={pile[0].n} n={pile[0]} texts={anomalyTexts(pile[0])} />
+        ),
+      )}
     </div>
   );
 }
