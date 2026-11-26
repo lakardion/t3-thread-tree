@@ -9,6 +9,7 @@ import {
   type CSSProperties,
   type PointerEvent,
   type RefObject,
+  type SyntheticEvent,
 } from "react";
 
 import { Button } from "@/components/ui/button";
@@ -183,6 +184,7 @@ function NodeCard({
   return (
     <div
       data-pr={n.n}
+      data-lane={n.lane ?? undefined}
       tabIndex={-1}
       title={n.title ?? undefined}
       style={{ left: x, top: y, width: NW, height: NH, ...style }}
@@ -235,7 +237,15 @@ function NodeCard({
 const PILE_GAP = 4;
 
 /** Merged stack members on one spot: a deck that fans out on hover, in stack order, centered on the deck. */
-function MergedPile({ pile, texts }: { pile: GraphNode[]; texts: (n: GraphNode) => string[] }) {
+function MergedPile({
+  pile,
+  texts,
+  className,
+}: {
+  pile: GraphNode[];
+  texts: (n: GraphNode) => string[];
+  className?: string;
+}) {
   const { x, y } = place(pile[0].col, pile[0].row);
   const step = NH + PILE_GAP;
   return (
@@ -249,7 +259,11 @@ function MergedPile({ pile, texts }: { pile: GraphNode[]; texts: (n: GraphNode) 
           "--shift": `0 ${(-(pile.length - 1) * step) / 2}px`,
         } as CSSProperties
       }
-      className="group/pile absolute h-[92px] transition-[height,translate] before:pointer-events-none before:absolute before:-inset-2.5 before:rounded-xl before:bg-background/40 before:opacity-0 before:shadow-[0_0_48px_12px_rgb(0_0_0/0.55)] before:ring-2 before:ring-pr-merged/60 before:backdrop-blur-sm before:transition-opacity hover:z-10 hover:h-(--open) hover:[translate:var(--shift)] hover:before:opacity-100 motion-reduce:transition-none"
+      data-lane={pile[0].lane ?? undefined}
+      className={cn(
+        "group/pile absolute h-[92px] transition-[height,translate,opacity] before:pointer-events-none before:absolute before:-inset-2.5 before:rounded-xl before:bg-background/40 before:opacity-0 before:shadow-[0_0_48px_12px_rgb(0_0_0/0.55)] before:ring-2 before:ring-pr-merged/60 before:backdrop-blur-sm before:transition-opacity hover:z-10 hover:h-(--open) hover:[translate:var(--shift)] hover:before:opacity-100 motion-reduce:transition-none",
+        className,
+      )}
     >
       {pile.map((n, i) => {
         const d = Math.min(pile.length - 1 - i, 3) * 5;
@@ -291,6 +305,14 @@ function Pill({ branch, col, row }: { branch: string; col: number; row: number }
 }
 
 function Canvas({ graph }: { graph: PrGraph }) {
+  /** The lane of the hovered card: other lanes dim. */
+  const [lane, setLane] = useState<number | null>(null);
+  const dim = (l: number | null) => lane !== null && l !== lane && "opacity-25";
+  const focusLane = (e: SyntheticEvent) => {
+    const l = (e.target as HTMLElement).closest<HTMLElement>("[data-lane]")?.dataset.lane;
+    setLane(l ? Number(l) : null);
+  };
+  const laneOf = (e: Edge["to"]) => (typeof e === "number" ? graph.nodes.find((n) => n.n === e)!.lane : null);
   const anomalyTexts = (n: GraphNode) => graph.anomalies.filter((a) => a.prs.includes(n.n)).map((a) => a.text);
   const spot = new Map<string, { col: number; row: number }>([
     ["main", { col: 0, row: 0 }],
@@ -304,7 +326,14 @@ function Canvas({ graph }: { graph: PrGraph }) {
   const w = 2 * PAD + cols * NW + (cols - 1) * GX;
   const h = 2 * PAD + rows * NH + (rows - 1) * GY;
   return (
-    <div className="relative" style={{ width: w, height: h }}>
+    <div
+      className="relative"
+      style={{ width: w, height: h }}
+      onMouseOver={focusLane}
+      onFocus={focusLane}
+      onMouseLeave={() => setLane(null)}
+      onBlur={() => setLane(null)}
+    >
       <svg width={w} height={h} className="absolute inset-0" aria-hidden>
         {graph.edges.map((e, i) => {
           const a = at(e.from);
@@ -320,7 +349,7 @@ function Canvas({ graph }: { graph: PrGraph }) {
               d={`M${x1},${y1} C${mx},${y1} ${mx},${y2} ${x2},${y2}`}
               fill="none"
               strokeWidth={2}
-              className={EDGE[e.kind]}
+              className={cn(EDGE[e.kind], "transition-opacity", dim(laneOf(e.to)))}
             />
           );
         })}
@@ -335,9 +364,15 @@ function Canvas({ graph }: { graph: PrGraph }) {
             key={pile[0].n}
             pile={pile.toSorted((a, b) => a.stack!.pos - b.stack!.pos)}
             texts={anomalyTexts}
+            className={dim(pile[0].lane) || undefined}
           />
         ) : (
-          <NodeCard key={pile[0].n} n={pile[0]} texts={anomalyTexts(pile[0])} />
+          <NodeCard
+            key={pile[0].n}
+            n={pile[0]}
+            texts={anomalyTexts(pile[0])}
+            className={cn("transition-opacity", dim(pile[0].lane))}
+          />
         ),
       )}
     </div>
