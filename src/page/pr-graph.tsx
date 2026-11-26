@@ -174,17 +174,20 @@ function NodeCard({
   texts,
   style,
   className,
+  lane,
 }: {
   n: GraphNode;
   texts: string[];
   style?: CSSProperties;
   className?: string;
+  /** The lane that hover focuses; a card in a pile leaves it to the pile. */
+  lane?: number | null;
 }) {
   const { x, y } = place(n.col, n.row);
   return (
     <div
       data-pr={n.n}
-      data-lane={n.lane ?? undefined}
+      data-lane={lane ?? undefined}
       tabIndex={-1}
       title={n.title ?? undefined}
       style={{ left: x, top: y, width: NW, height: NH, ...style }}
@@ -241,10 +244,12 @@ function MergedPile({
   pile,
   texts,
   className,
+  lane,
 }: {
   pile: GraphNode[];
   texts: (n: GraphNode) => string[];
   className?: string;
+  lane: number | null;
 }) {
   const { x, y } = place(pile[0].col, pile[0].row);
   const step = NH + PILE_GAP;
@@ -259,7 +264,7 @@ function MergedPile({
           "--shift": `0 ${(-(pile.length - 1) * step) / 2}px`,
         } as CSSProperties
       }
-      data-lane={pile[0].lane ?? undefined}
+      data-lane={lane ?? undefined}
       className={cn(
         "group/pile absolute h-[92px] transition-[height,translate,opacity] before:pointer-events-none before:absolute before:-inset-2.5 before:rounded-xl before:bg-background/40 before:opacity-0 before:shadow-[0_0_48px_12px_rgb(0_0_0/0.55)] before:ring-2 before:ring-pr-merged/60 before:backdrop-blur-sm before:transition-opacity hover:z-10 hover:h-(--open) hover:[translate:var(--shift)] hover:before:opacity-100 motion-reduce:transition-none",
         className,
@@ -312,7 +317,13 @@ function Canvas({ graph }: { graph: PrGraph }) {
     const l = (e.target as HTMLElement).closest<HTMLElement>("[data-lane]")?.dataset.lane;
     setLane(l ? Number(l) : null);
   };
-  const laneOf = (e: Edge["to"]) => (typeof e === "number" ? graph.nodes.find((n) => n.n === e)!.lane : null);
+  /** A PR with no lane takes the lane of the PR it builds on. */
+  const laneOf = (e: Edge["to"]): number | null => {
+    if (typeof e !== "number") return null;
+    const own = graph.nodes.find((n) => n.n === e)!.lane;
+    const from = graph.edges.find((x) => x.to === e)?.from;
+    return own ?? (typeof from === "number" ? laneOf(from) : null);
+  };
   const anomalyTexts = (n: GraphNode) => graph.anomalies.filter((a) => a.prs.includes(n.n)).map((a) => a.text);
   const spot = new Map<string, { col: number; row: number }>([
     ["main", { col: 0, row: 0 }],
@@ -364,14 +375,16 @@ function Canvas({ graph }: { graph: PrGraph }) {
             key={pile[0].n}
             pile={pile.toSorted((a, b) => a.stack!.pos - b.stack!.pos)}
             texts={anomalyTexts}
-            className={dim(pile[0].lane) || undefined}
+            className={dim(laneOf(pile[0].n)) || undefined}
+            lane={laneOf(pile[0].n)}
           />
         ) : (
           <NodeCard
             key={pile[0].n}
             n={pile[0]}
             texts={anomalyTexts(pile[0])}
-            className={cn("transition-opacity", dim(pile[0].lane))}
+            className={cn("transition-opacity", dim(laneOf(pile[0].n)))}
+            lane={laneOf(pile[0].n)}
           />
         ),
       )}
