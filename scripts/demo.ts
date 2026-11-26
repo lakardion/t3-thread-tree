@@ -120,8 +120,8 @@ const stacked = (own: number, over: Partial<Pr> = {}) => [
   pr(own, "created", "open", { stackBase: "main", stackNumber: 87, ...over }),
   ...STACK.filter((n) => n !== own).map((n) => pr(n, "stack")),
 ];
-/** A gh stack of three member PRs. Its fourth slot (5104) has no member. */
-const DS_STACK = [5101, 5102, 5103, 5104];
+/** A gh stack of three member PRs. Its fourth slot (5104) has no member, and its fifth (5105) is in no row. */
+const DS_STACK = [5101, 5102, 5103, 5104, 5105];
 const dsPr = (n: number, head: string, base: string, over: Partial<Pr> = {}) =>
   pr(n, "created", "open", {
     head,
@@ -716,8 +716,9 @@ const GRAPH: MapGraphData = {
         }),
         [],
       ),
-      stack: { number: 91, pos: 4, total: 4 },
+      stack: { number: 91, pos: 4, total: 5 },
       threadId: null,
+      threadHref: null,
     },
     {
       ...prNode(
@@ -725,6 +726,22 @@ const GRAPH: MapGraphData = {
         [],
       ),
       threadId: null,
+      threadHref: null,
+    },
+  ],
+  mates: [
+    {
+      ...prNode(
+        pr(5105, "stack", "open", {
+          head: "ds-105-popover-tokens",
+          base: "ds-104-menu-tokens",
+          title: "DS-105 Popover tokens",
+        }),
+        [],
+      ),
+      stack: { number: 91, pos: 5, total: 5 },
+      threadId: null,
+      threadHref: null,
     },
   ],
   behind: { 5102: 3 },

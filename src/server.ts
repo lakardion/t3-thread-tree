@@ -3,7 +3,7 @@ import { dirname, join } from "node:path";
 
 import index from "./page/index.html";
 import upNext from "./page/up-next.html";
-import { buildLinearTree, buildTree, defaultRules, issueKey, parseRules } from "./server/build-tree.ts";
+import { buildLinearTree, buildTree, defaultRules, hrefOf, issueKey, parseRules } from "./server/build-tree.ts";
 import { catchUpService } from "./server/catch-up.ts";
 import { findRoutes } from "./server/find.ts";
 import { labelStore } from "./server/labels.ts";
@@ -387,6 +387,7 @@ const graphCtx =
     return {
       members,
       project: all.get(maps.threadOf.get(key) ?? "")?.projectId ?? members[0].projectId,
+      hrefOf: (id) => hrefOf(environmentId, id),
       threadOf: (repository, n) =>
         linking.find((t) => t.prs.some((p) => p.repository === repository && p.n === n))?.id ?? null,
     };

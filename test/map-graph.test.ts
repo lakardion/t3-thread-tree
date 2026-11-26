@@ -25,6 +25,18 @@ const row = (n: number, over: Partial<ListRow> = {}): ListRow => ({
   ...over,
 });
 
+const det = (over: Partial<Awaited<ReturnType<Parameters<typeof mapGraph>[0]["detail"]>>> = {}) => ({
+  behindBy: 2,
+  url: "du",
+  title: "Mate",
+  state: "open",
+  draft: false,
+  mergeability: "mergeable",
+  head: "mate-head",
+  base: "main",
+  ...over,
+});
+
 const thread = (id: string, over: Partial<Thread> = {}): Thread =>
   ({
     id,
@@ -92,6 +104,7 @@ describe("mapGraph", () => {
       members,
       project: "p",
       threadOf: (_, n) => (n === 1 ? "m1" : null),
+      hrefOf: (id) => `h:${id}`,
     });
   const setup = (over: Partial<Parameters<typeof mapGraph>[0]> = {}) => {
     const calls = { list: 0, detail: 0, archived: 0, active: 0, peak: 0 };
@@ -104,7 +117,7 @@ describe("mapGraph", () => {
     };
     const g = mapGraph({
       list: (_, q) => track("list", () => ({ rows: [row(1, { head: `${q.toLowerCase()}-x` })], error: null })),
-      detail: () => track("detail", () => ({ behindBy: 2 })),
+      detail: () => track("detail", () => det()),
       archived: async () => (calls.archived++, []),
       readMap: async () => null,
       now: () => 0,
@@ -210,5 +223,91 @@ describe("mapGraph", () => {
       false,
     );
     expect(data?.settled.map((s) => s.id)).toEqual(["done", "old"]);
+  });
+
+  describe("stack mates", () => {
+    const owner = (slots: number[], links: Pr[] = []) =>
+      thread("m1", {
+        title: "ABC-1",
+        prs: [
+          {
+            n: 1,
+            state: "open",
+            stackNumber: 5,
+            stackSlots: slots,
+            source: "created",
+            host: "github.com",
+            repository: "a/b",
+            url: "u1",
+          } as Pr,
+          ...links,
+        ],
+      });
+    const keep = { list: async () => ({ rows: [], error: null }) };
+
+    test("a slot with no link and no row gives a mate from one detail call", async () => {
+      const seen: number[] = [];
+      const { g } = setup({
+        ...keep,
+        detail: async (r) => (seen.push(r.number), det({ behindBy: null })),
+      });
+      const data = await g.get("k", ctx([owner([1, 2])]), false);
+      expect(seen.toSorted((a, b) => a - b)).toEqual([1, 2]);
+      expect(data?.mates).toHaveLength(1);
+      expect(data?.mates[0]).toMatchObject({
+        n: 2,
+        title: "Mate",
+        head: "mate-head",
+        checks: null,
+        labels: [],
+        stack: { number: 5, pos: 2, total: 2 },
+        threadId: null,
+        threadHref: null,
+      });
+    });
+
+    test("a slot with a synced stack link gives a mate with no detail call", async () => {
+      const link = {
+        n: 2,
+        state: "merged",
+        stackNumber: 5,
+        stackSlots: [1, 2],
+        source: "stack",
+        head: "h2",
+        host: "github.com",
+        repository: "a/b",
+      } as Pr;
+      const seen: number[] = [];
+      const { g } = setup({ ...keep, detail: async (r) => (seen.push(r.number), det()) });
+      const data = await g.get("k", ctx([owner([1, 2], [link])]), false);
+      expect(seen).toEqual([1]);
+      expect(data?.mates.map((m) => [m.n, m.head, m.stack?.pos])).toEqual([[2, "h2", 2]]);
+    });
+
+    test("a slot that a row holds gives no mate", async () => {
+      const { g } = setup({
+        list: async () => ({ rows: [row(2, { head: "abc-1-x" })], error: null }),
+      });
+      const data = await g.get("k", ctx([owner([1, 2])]), false);
+      expect(data?.mates).toEqual([]);
+    });
+
+    test("a failed mate detail adds nothing", async () => {
+      const { g } = setup({ ...keep, detail: async () => Promise.reject(new Error("no")) });
+      const data = await g.get("k", ctx([owner([1, 2])]), false);
+      expect(data?.mates).toEqual([]);
+      expect(data?.errors).toEqual([]);
+    });
+
+    test("an open mate behindBy lands in behind with one call for it", async () => {
+      const seen: number[] = [];
+      const { g } = setup({
+        ...keep,
+        detail: async (r) => (seen.push(r.number), det({ behindBy: r.number === 2 ? 4 : null })),
+      });
+      const data = await g.get("k", ctx([owner([1, 2])]), false);
+      expect(seen.filter((n) => n === 2)).toHaveLength(1);
+      expect(data?.behind[2]).toBe(4);
+    });
   });
 });

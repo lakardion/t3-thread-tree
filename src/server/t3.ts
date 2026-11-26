@@ -580,13 +580,19 @@ export function connectShell(opts: {
     /** Sends one orchestration command and resolves when T3 accepts it. */
     dispatch: (command: Record<string, unknown>): Promise<void> =>
       request("orchestration.dispatchCommand", { ...command, commandId: crypto.randomUUID() }).then(() => {}),
-    /** The labels and `updatedAt` of one PR, fresh from the host. */
-    async detail(ref: {
-      projectId: string;
-      host: string;
-      repository: string;
-      number: number;
-    }): Promise<{ labels: Label[]; updatedAt: string; behindBy: number | null }> {
+    /** The labels, `updatedAt` and PR fields of one PR, fresh from the host. */
+    async detail(ref: { projectId: string; host: string; repository: string; number: number }): Promise<{
+      labels: Label[];
+      updatedAt: string;
+      behindBy: number | null;
+      url: string;
+      title: string | null;
+      state: string;
+      draft: boolean;
+      mergeability: string | null;
+      head: string | null;
+      base: string | null;
+    }> {
       const v = obj(await request("pullRequests.detail", { ...ref, allowStale: false }));
       return {
         labels: (Array.isArray(v.labels) ? v.labels : []).flatMap((l) => {
@@ -595,6 +601,13 @@ export function connectShell(opts: {
         }),
         updatedAt: str(v.updatedAt) ?? "",
         behindBy: num(v.behindBy),
+        url: str(v.url) ?? "",
+        title: str(v.title),
+        state: str(v.state) ?? "open",
+        draft: v.isDraft === true,
+        mergeability: str(v.mergeability),
+        head: str(v.headBranch),
+        base: str(v.baseBranch),
       };
     },
     /** The PRs of one project that match `query`, any state. */
