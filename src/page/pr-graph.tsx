@@ -55,9 +55,9 @@ const EDGE_LEGEND: [Edge["kind"], string][] = [
   ["dim", "closed or merged"],
 ];
 
-const stateOf = (n: GraphNode) => (n.draft ? "draft" : n.state);
+const stateOf = (n: GraphNode) => (n.draft && n.state === "open" ? "draft" : n.state);
 const tone = (n: GraphNode) =>
-  n.draft
+  n.draft && n.state === "open"
     ? "text-muted-foreground"
     : n.state === "open"
       ? "text-status-done-fg"
