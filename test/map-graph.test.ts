@@ -1,7 +1,8 @@
 import { describe, expect, test } from "bun:test";
 
-import { graphKeys, isFresh, mapGraph, rowMatches, type GraphCtx } from "../src/server/map-graph.ts";
+import { graphKeys, isFresh, mapGraph, type GraphCtx } from "../src/server/map-graph.ts";
 import type { ListRow, Pr, Thread } from "../src/server/t3.ts";
+import { rowMatches } from "../src/shared/pr-graph.ts";
 
 const row = (n: number, over: Partial<ListRow> = {}): ListRow => ({
   n,
