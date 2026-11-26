@@ -1,5 +1,5 @@
 import { Map as MapNode, X } from "lucide";
-import { ChevronDown, ExternalLink, Map as MapIcon } from "lucide-react";
+import { ChevronDown, ExternalLink, GitBranch, Map as MapIcon } from "lucide-react";
 import { MorphIcon } from "morphicons/react";
 import { useState, type ComponentType, type CSSProperties, type ReactNode, type Ref } from "react";
 
@@ -8,6 +8,7 @@ import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip
 import { cn } from "@/lib/utils";
 
 import { flat, type Group, type Status, type ThreadNode } from "../shared/tree.ts";
+import { PrGraphDialog } from "./prototype-pr-graph.tsx";
 import { postMapThread } from "./send.ts";
 import { folds } from "./view.ts";
 
@@ -110,7 +111,24 @@ export function MapGroup({
   pin?: ReactNode;
 }) {
   const [showOther, setShowOther] = useState(false);
+  const [graph, setGraph] = useState(false);
   const info = t.map!;
+  const graphButton = (
+    <Tooltip>
+      <TooltipTrigger asChild>
+        <Button
+          variant="ghost"
+          size="icon"
+          className="relative z-10 size-5 flex-none rounded-[6px] text-muted-foreground pointer-coarse:min-h-11 pointer-coarse:min-w-11"
+          aria-label="Open PR graph"
+          onClick={() => setGraph(true)}
+        >
+          <GitBranch className="size-3" />
+        </Button>
+      </TooltipTrigger>
+      <TooltipContent>PR graph · 6 anomalies</TooltipContent>
+    </Tooltip>
+  );
   const count = t.children.flatMap(flat).length;
   const entries = t.children.reduce<ThreadNode[][]>((out, c) => {
     const last = out.at(-1);
@@ -189,6 +207,7 @@ export function MapGroup({
               <span className="truncate font-semibold">{info.name}</span>
             </button>
             {countText}
+            {graphButton}
             {pin}
             {info.href && (
               <a
@@ -215,6 +234,7 @@ export function MapGroup({
               end={
                 <>
                   {countText}
+                  {graphButton}
                   <Button
                     variant="ghost"
                     size="icon"
@@ -233,6 +253,7 @@ export function MapGroup({
           </ul>
         )}
       </div>
+      <PrGraphDialog name={info.name} open={graph} onOpenChange={setGraph} />
       {open && items.length > 0 && (
         <ul className="m-0 ml-[13px] list-none p-0">
           {items.map((el, i) => (
