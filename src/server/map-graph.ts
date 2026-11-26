@@ -1,5 +1,6 @@
 /** The slow calls behind the PR graph of a map: key queries, behind-base details, `map.md`. */
 import type { MapGraphData } from "../shared/map-graph.ts";
+import { rowMatches } from "../shared/pr-graph.ts";
 import type { PrNode } from "../shared/tree.ts";
 import { issueKey, prNode, statusOf } from "./build-tree.ts";
 import { parseMapMd, type MapLane } from "./map-md.ts";
@@ -7,17 +8,6 @@ import type { ListRow, Thread } from "./t3.ts";
 
 const LINEAR = /^[A-Z][A-Z0-9]*-\d+$/;
 const FRESH_MS = 60_000;
-
-/** A row passes when a key equals its head branch or starts it (`abc-12-x`), or the title has the key as a word. */
-export function rowMatches(row: { head: string | null; title: string | null }, keys: string[]): boolean {
-  const head = row.head?.toLowerCase() ?? "";
-  return keys.some(
-    (key) =>
-      head === key.toLowerCase() ||
-      head.startsWith(`${key.toLowerCase()}-`) ||
-      new RegExp(`\\b${key}\\b`, "i").test(row.title ?? ""),
-  );
-}
 
 /** The Linear keys of the lanes, then the issue keys of the member titles, unique. Markdown keys give no query. */
 export const graphKeys = (lanes: MapLane[], memberTitles: string[]): string[] => [
