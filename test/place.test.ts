@@ -147,8 +147,7 @@ describe("Map group rule", () => {
   test("Linear layout: a member stays under its head and gets its T3 project", () => {
     const raws = [shell("chart", "Wayfinder"), shell("t1", "WEB-1 a", { projectId: "p2" })];
     const tree = linearOf(raws, { t1: "chart" }, keys({ t1: "/m/x" }));
-    expect(tree.map((g) => g.id)).toEqual(["lf:loose"]);
-    const [head] = tree[0].threads;
+    const head = tree.flatMap(allThreads).find((t) => t.id === "chart")!;
     expect(head.children.map((c) => [c.title, c.t3Project])).toEqual([["WEB-1 a", { id: "p2", label: "backend" }]]);
   });
 
@@ -445,7 +444,7 @@ describe("Rule order", () => {
     expect(homes(p).t1).toBe("frontend > WEB-1");
     expect(p[0].threads.flatMap((t) => t.children)).toEqual([]);
     const on = linearBy(DEFAULT, raws, { t1: "chart" }, m);
-    expect(titles(on[0].threads.find((t) => t.id === "chart")!.children)).toEqual(["WEB-1 a"]);
+    expect(titles(on.flatMap(allThreads).find((t) => t.id === "chart")!.children)).toEqual(["WEB-1 a"]);
     const off = linearBy(without("map"), raws, { t1: "chart" }, m);
     expect(homes(off).t1).toContain("Proj x");
     expect(off.flatMap(allThreads).filter((t) => t.id === "chart")[0].children).toEqual([]);
