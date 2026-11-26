@@ -29,11 +29,11 @@ export type Node = {
   anomalies: string[];
 };
 
-const gh = (n: number) => `https://github.com/acme/storefront/pull/${n}`;
+export const gh = (n: number) => `https://github.com/acme/storefront/pull/${n}`;
 const th = (id: string, title: string, status: Status): Thread => ({ id, title, status });
-const t3 = (id: string) => `t3code://threads/demo/${id}`;
+export const t3 = (id: string) => `t3code://threads/demo/${id}`;
 
-const NODES: Node[] = [
+export const NODES: Node[] = [
   { n: 2099, key: "DS-100", title: "Add the new color tokens", state: "merged", branch: "ds-100-tokens", base: "main", stack: { num: 87, pos: 1, of: 5 }, lane: 1, thread: th("m2", "Migrate Dialog to the new tokens", "done"), anomalies: [] },
   { n: 2101, key: "DS-101", title: "Migrate Button", state: "open", branch: "ds-101-button", base: "main", stack: { num: 87, pos: 2, of: 5 }, lane: 1, thread: th("m1", "Migrate Button to the new tokens", "working"), anomalies: [] },
   { n: 2102, key: "DS-102", title: "Migrate Dialog", state: "open", branch: "ds-102-dialog", base: 2101, stack: { num: 87, pos: 3, of: 5 }, lane: 1, thread: th("m2", "Migrate Dialog to the new tokens", "done"), anomalies: ["Needs a rebase: #2101 moved."] },
@@ -46,12 +46,12 @@ const NODES: Node[] = [
   { n: 2106, key: "DS-105", title: "Menu keyboard", state: "open", branch: "ds-105-menu-keys", base: 2105, lane: 1, thread: th("m6", "Menu keyboard", "working"), anomalies: [] },
   { n: 2120, key: "DS-120", title: "Hotfix the token export", state: "open", branch: "ds-120-hotfix", base: "release/2.4", lane: 3, thread: th("m7", "Hotfix the token export", "failed"), anomalies: ["Base release/2.4 is not main and not a map PR."] },
 ];
-const NO_PR: Thread[] = [th("m8", "Migrate Select to the new tokens", "working"), th("m9", "Audit icon sizes", "idle")];
-const ANOMALIES = NODES.flatMap((p) => p.anomalies.map((a) => ({ n: p.n, key: p.key, text: a })));
+export const NO_PR: Thread[] = [th("m8", "Migrate Select to the new tokens", "working"), th("m9", "Audit icon sizes", "idle")];
+export const ANOMALIES = NODES.flatMap((p) => p.anomalies.map((a) => ({ n: p.n, key: p.key, text: a })));
 
 /** Rows by depth-first walk from `main`: the first child keeps its parent's row. Foreign bases become branch nodes. */
 export type Slot = { id: string; col: number; row: number; node?: Node; label?: string };
-function layout() {
+export function layout() {
   const foreign = [...new Set(NODES.map((p) => p.base).filter((b): b is string => typeof b === "string" && b !== "main"))];
   const kids = (id: string) => [
     ...foreign.filter(() => id === "main").map((b) => `b:${b}`),
@@ -66,14 +66,14 @@ function layout() {
   walk("main", 0, 0);
   return { slots, rows: next + 1, cols: Math.max(...slots.map((s) => s.col)) + 1 };
 }
-const parentOf = (s: Slot): string | null => {
+export const parentOf = (s: Slot): string | null => {
   if (s.label === "main") return null;
   if (s.label) return "main";
   const b = s.node!.base;
   return typeof b === "number" ? String(b) : b === "main" ? "main" : `b:${b}`;
 };
 export type EdgeKind = "stack" | "virtual" | "main" | "dim";
-function edgeKind(s: Slot, slots: Slot[]): EdgeKind {
+export function edgeKind(s: Slot, slots: Slot[]): EdgeKind {
   const p = s.node;
   if (!p) return "main";
   if (p.state === "merged" || p.state === "closed") return "dim";
@@ -82,20 +82,20 @@ function edgeKind(s: Slot, slots: Slot[]): EdgeKind {
   if (parent) return "virtual";
   return "main";
 }
-const EDGE: Record<EdgeKind, string> = {
+export const EDGE: Record<EdgeKind, string> = {
   stack: "stroke-primary",
   virtual: "stroke-status-needs-input [stroke-dasharray:5_4]",
   main: "stroke-muted-foreground",
   dim: "stroke-border",
 };
-const STATE_TONE: Record<Node["state"], string> = {
+export const STATE_TONE: Record<Node["state"], string> = {
   open: "text-status-done-fg",
   draft: "text-muted-foreground",
   merged: "text-pr-merged",
   closed: "text-destructive",
 };
 
-function ThreadMark({ t, label = true }: { t: Thread; label?: boolean }) {
+export function ThreadMark({ t, label = true }: { t: Thread; label?: boolean }) {
   const S = STATUS[t.status];
   return (
     <a href={t3(t.id)} title={`Open thread in T3: ${t.title}`} className="inline-flex min-w-0 items-center gap-1 hover:underline">
@@ -104,19 +104,19 @@ function ThreadMark({ t, label = true }: { t: Thread; label?: boolean }) {
     </a>
   );
 }
-const PrLink = ({ n }: { n: number }) => (
+export const PrLink = ({ n }: { n: number }) => (
   <a href={gh(n)} target="_blank" rel="noreferrer" className="font-mono hover:underline" title="Open PR on GitHub">
     #{n}
   </a>
 );
-const Bang = ({ p }: { p: Node }) =>
+export const Bang = ({ p }: { p: Node }) =>
   p.anomalies.length > 0 ? (
     <span title={p.anomalies.join("\n")} className="flex size-4 flex-none items-center justify-center rounded-full bg-destructive text-[10px] font-bold text-white">
       !
     </span>
   ) : null;
 
-function Legend() {
+export function Legend() {
   const item = (cls: string, text: string) => (
     <span className="flex items-center gap-1.5">
       <svg width="22" height="6" aria-hidden>
@@ -137,7 +137,7 @@ function Legend() {
   );
 }
 
-function Lists({ className }: { className?: string }) {
+export function Lists({ className }: { className?: string }) {
   return (
     <div className={cn("grid gap-4 text-xs sm:grid-cols-2", className)}>
       <section>
@@ -168,7 +168,7 @@ function Lists({ className }: { className?: string }) {
 }
 
 /** Edges in an SVG under absolute-positioned HTML nodes. */
-function Canvas({ nw, nh, gx, gy, Card, sel }: { nw: number; nh: number; gx: number; gy: number; Card: (p: { s: Slot }) => React.ReactNode; sel?: number }) {
+export function Canvas({ nw, nh, gx, gy, Card, sel }: { nw: number; nh: number; gx: number; gy: number; Card: (p: { s: Slot }) => React.ReactNode; sel?: number }) {
   const { slots, rows, cols } = layout();
   const pos = (s: Slot) => ({ x: 16 + s.col * (nw + gx), y: 16 + s.row * (nh + gy) });
   const W = 32 + cols * nw + (cols - 1) * gx;
@@ -198,10 +198,10 @@ function Canvas({ nw, nh, gx, gy, Card, sel }: { nw: number; nh: number; gx: num
   );
 }
 
-const BranchNode = ({ label }: { label: string }) => (
+export const BranchNode = ({ label }: { label: string }) => (
   <div className="flex h-full items-center justify-center rounded-lg border-2 border-dashed bg-muted font-mono text-xs font-semibold">{label}</div>
 );
-const dim = (p: Node) => p.state === "merged" || p.state === "closed";
+export const dim = (p: Node) => p.state === "merged" || p.state === "closed";
 
 /** A: big canvas, full cards like the skill; lists under the graph. */
 function VariantA() {
