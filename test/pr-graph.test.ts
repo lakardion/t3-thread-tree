@@ -274,10 +274,6 @@ describe("edges", () => {
     );
     expect(open.edges.find((e) => e.to === 4)!.from).toBe(1);
   });
-
-  test("anomalies stay empty", () => {
-    expect(chain().anomalies).toEqual([]);
-  });
 });
 
 describe("layout", () => {
@@ -348,5 +344,239 @@ describe("Threads with no PR", () => {
       data({ settled: [{ id: "s", title: "S", status: "done", createdAt: "2026-02-01", href: "t3://s", prs: [] }] }),
     );
     expect(g.noPr.map((t) => t.id)).toEqual(["old", "s", "young", "undated"]);
+  });
+});
+
+describe("Anomalies", () => {
+  const stackOf = (number: number, pos = 1) => ({ number, pos, total: 2 });
+  const laneOf = (n: number, keys: { key: string; base: string }[], explicit = true) => ({
+    n,
+    label: "",
+    explicit,
+    keys,
+  });
+  const build = (prs: PrNode[], d: Partial<MapGraphData> | null = {}, over: Partial<ThreadNode> = {}) =>
+    buildPrGraph(head(node("a", { prs, ...over })), d && data(d));
+  const texts = (g: ReturnType<typeof buildPrGraph>) => g.anomalies.map((a) => a.text);
+
+  describe("Fan-out", () => {
+    test("a base other than main with 2 open children", () => {
+      const g = build([pr(1, { head: "x" }), pr(2, { base: "x" }), pr(3, { base: "x" })]);
+      expect(g.anomalies).toEqual([{ text: "x has 2 open children", prs: [2, 3] }]);
+    });
+    test("main with 2 children, or one child, or one open child, is not a hit", () => {
+      expect(texts(build([pr(1), pr(2)]))).toEqual([]);
+      expect(texts(build([pr(1, { head: "x" }), pr(2, { base: "x" })]))).toEqual([]);
+      expect(texts(build([pr(1, { head: "x" }), pr(2, { base: "x" }), pr(3, { base: "x", state: "merged" })]))).toEqual(
+        [],
+      );
+    });
+    test("(planned) when each child lane key has the base from stack on", () => {
+      const lanes = [
+        laneOf(1, [
+          { key: "K-2", base: "x" },
+          { key: "K-3", base: "x" },
+        ]),
+      ];
+      const g = build(
+        [pr(1, { head: "x" }), pr(2, { head: "k-2-a", base: "x" }), pr(3, { head: "k-3-a", base: "x" })],
+        {
+          lanes,
+        },
+      );
+      expect(texts(g)).toEqual(["x has 2 open children (planned)"]);
+    });
+  });
+
+  describe("Closed parent", () => {
+    test("one item for each open child of a closed PR", () => {
+      const g = build([pr(1, { head: "x", state: "closed" }), pr(2, { base: "x" }), pr(3, { base: "x" })]);
+      expect(g.anomalies.filter((a) => a.text.includes("closed"))).toEqual([
+        { text: "#1 is closed, but #2 builds on it", prs: [1, 2] },
+        { text: "#1 is closed, but #3 builds on it", prs: [1, 3] },
+      ]);
+    });
+    test("a merged parent or a closed child is not a hit", () => {
+      expect(texts(build([pr(1, { head: "x", state: "merged" }), pr(2, { base: "x" })]))).toEqual([]);
+      expect(texts(build([pr(1, { head: "x", state: "closed" }), pr(2, { base: "x", state: "closed" })]))).toEqual([]);
+    });
+  });
+
+  describe("Conflicts", () => {
+    test("an open conflicting PR", () => {
+      expect(build([pr(1, { conflicting: true })]).anomalies).toEqual([{ text: "#1 has conflicts", prs: [1] }]);
+    });
+    test("a closed conflicting PR or an open clean PR is not a hit", () => {
+      expect(texts(build([pr(1, { conflicting: true, state: "closed" }), pr(2)]))).toEqual([]);
+    });
+  });
+
+  describe("Foreign base", () => {
+    test("each PR on a foreign base", () => {
+      expect(build([pr(1, { base: "zzz" }), pr(2, { base: "zzz", state: "closed" })]).anomalies).toEqual([
+        { text: "#1 is based on zzz, which is not main or a map PR", prs: [1] },
+        { text: "#2 is based on zzz, which is not main or a map PR", prs: [2] },
+      ]);
+    });
+    test("main or a map PR is not a hit", () => {
+      expect(texts(build([pr(1), pr(2, { base: "h1" })]))).toEqual([]);
+    });
+  });
+
+  describe("Behind base", () => {
+    test("an open stacked PR with behindBy above 0", () => {
+      const g = build([pr(1, { stack: stackOf(7) })], { behind: { 1: 3 } });
+      expect(g.anomalies).toEqual([{ text: "#1 is 3 commits behind its base", prs: [1] }]);
+    });
+    test("no stack, 0 behind, no answer, closed or data null is not a hit", () => {
+      expect(texts(build([pr(1)], { behind: { 1: 3 } }))).toEqual([]);
+      expect(texts(build([pr(1, { stack: stackOf(7) })], { behind: { 1: 0 } }))).toEqual([]);
+      expect(texts(build([pr(1, { stack: stackOf(7) })], { behind: {} }))).toEqual([]);
+      expect(texts(build([pr(1, { stack: stackOf(7), state: "closed" })], { behind: { 1: 3 } }))).toEqual([]);
+      expect(texts(build([pr(1, { stack: stackOf(7) })], null))).toEqual([]);
+    });
+  });
+
+  describe("No thread", () => {
+    test("an open PR with no thread", () => {
+      expect(buildPrGraph(head(), data({ rows: [row(1)] })).anomalies).toEqual([
+        { text: "#1 has no thread", prs: [1] },
+      ]);
+    });
+    test("a PR with a thread, a closed PR or an outside stack mate is not a hit", () => {
+      expect(texts(build([pr(1)]))).toEqual([]);
+      expect(texts(buildPrGraph(head(), data({ rows: [row(1, { state: "closed" })] })))).toEqual([]);
+      expect(texts(buildPrGraph(head(), data({ mates: [row(1)] })))).toEqual([]);
+    });
+  });
+
+  describe("Stopped thread", () => {
+    test("failed and interrupted live threads", () => {
+      expect(build([pr(1)], {}, { status: "failed" }).anomalies).toEqual([
+        { text: "#1: its thread stopped", prs: [1] },
+      ]);
+      expect(texts(build([pr(1)], {}, { status: "interrupted" }))).toEqual(["#1: its thread stopped"]);
+    });
+    test("a settled stopped thread, an idle thread or a closed PR is not a hit", () => {
+      expect(texts(build([pr(1)], {}, { status: "failed", settled: true }))).toEqual([]);
+      expect(texts(build([pr(1)], {}, { status: "idle" }))).toEqual([]);
+      expect(texts(build([pr(1, { state: "closed" })], {}, { status: "failed" }))).toEqual([]);
+    });
+  });
+
+  describe("Off the lane chain", () => {
+    const keys = [
+      { key: "K-1", base: "main" },
+      { key: "K-2", base: "K-1" },
+    ];
+    const k = (n: number, key: string, over: Partial<PrNode> = {}) =>
+      pr(n, { head: `${key.toLowerCase()}-a`, ...over });
+    test("a base that is not the lane base", () => {
+      const g = build([k(1, "K-1"), k(2, "K-2", { base: "other" })], { lanes: [laneOf(1, keys)] });
+      expect(g.anomalies.filter((a) => a.text.includes("lane says"))).toEqual([
+        { text: "#2 is based on other; the lane says K-1", prs: [2] },
+      ]);
+    });
+    test("the head of a non-closed PR of the previous key passes", () => {
+      const g = build([k(1, "K-1"), k(2, "K-2", { base: "k-1-a" })], { lanes: [laneOf(1, keys)] });
+      expect(texts(g).filter((t) => t.includes("lane says"))).toEqual([]);
+    });
+    test("main passes when the previous key has no PR or only merged PRs", () => {
+      const lanes = [laneOf(1, keys)];
+      expect(texts(build([k(2, "K-2")], { lanes }))).toEqual([]);
+      expect(texts(build([k(1, "K-1", { state: "merged" }), k(2, "K-2")], { lanes }))).toEqual([]);
+    });
+    test("main does not pass while the previous key has an open PR", () => {
+      const g = build([k(1, "K-1"), k(2, "K-2")], { lanes: [laneOf(1, keys)] });
+      expect(texts(g)).toEqual(["#2 is based on main; the lane says K-1"]);
+    });
+    test("the stack on branch passes, another branch does not", () => {
+      const lanes = [laneOf(1, [{ key: "K-1", base: "feat" }])];
+      expect(texts(build([k(1, "K-1", { base: "feat" })], { lanes }))).toEqual([
+        "#1 is based on feat, which is not main or a map PR",
+      ]);
+      expect(texts(build([k(1, "K-1", { base: "feat" }), pr(9, { head: "feat" })], { lanes }))).toEqual([]);
+      expect(texts(build([k(1, "K-1", { base: "x" }), pr(9, { head: "x" })], { lanes })).join()).toContain(
+        "#1 is based on x; the lane says feat",
+      );
+    });
+    test("the head of another non-closed PR of the same key passes", () => {
+      const lanes = [laneOf(1, [{ key: "K-1", base: "main" }])];
+      const a = pr(1, { head: "k-1-a" });
+      const b = pr(2, { head: "k-1-b", base: "k-1-a" });
+      expect(texts(build([a, b], { lanes })).filter((t) => t.includes("lane says"))).toEqual([]);
+      expect(texts(build([a, { ...b, base: "k-1-c" }], { lanes })).join()).toContain("#2 is based on k-1-c");
+    });
+    test("implicit lanes, outside PRs and data null give no hit", () => {
+      const prs = [k(1, "K-1"), k(2, "K-2", { base: "other" })];
+      expect(texts(build(prs, { lanes: [laneOf(1, keys, false)] })).join()).not.toContain("lane says");
+      expect(texts(build([pr(3, { base: "main" })], { lanes: [laneOf(1, keys)] }))).toEqual([]);
+      expect(texts(build(prs, null)).join()).not.toContain("lane says");
+    });
+  });
+
+  describe("Stack across lanes", () => {
+    const lanes = (explicit = true) => [
+      laneOf(1, [{ key: "K-1", base: "main" }], explicit),
+      laneOf(2, [{ key: "K-2", base: "main" }], explicit),
+    ];
+    test("one stack with nodes of 2 lanes", () => {
+      const g = build([pr(1, { head: "k-1-a", stack: stackOf(7) }), pr(2, { head: "k-2-a", stack: stackOf(7, 2) })], {
+        lanes: lanes(),
+      });
+      expect(g.anomalies.filter((a) => a.text.startsWith("Stack"))).toEqual([
+        { text: "Stack #7 spans lanes L1, L2", prs: [1, 2] },
+      ]);
+    });
+    test("one lane, another stack, implicit lanes or data null is not a hit", () => {
+      const a = pr(1, { head: "k-1-a", stack: stackOf(7) });
+      expect(
+        texts(build([a, pr(2, { head: "k-1-b", stack: stackOf(7, 2) })], { lanes: lanes() })).join(),
+      ).not.toContain("Stack #");
+      expect(texts(build([a, pr(2, { head: "k-2-a", stack: stackOf(8) })], { lanes: lanes() })).join()).not.toContain(
+        "Stack #",
+      );
+      const b = pr(2, { head: "k-2-a", stack: stackOf(7, 2) });
+      expect(texts(build([a, b], { lanes: lanes(false) })).join()).not.toContain("Stack #");
+      expect(texts(build([a, b], null)).join()).not.toContain("Stack #");
+    });
+  });
+
+  describe("Key with several PRs", () => {
+    const lanes = [laneOf(1, [{ key: "K-1", base: "main" }], false)];
+    test("2 PRs that are not closed, with the closed ones listed", () => {
+      const g = build([pr(1, { head: "k-1-a" }), pr(2, { head: "k-1-b" }), pr(3, { head: "k-1-c", state: "closed" })], {
+        lanes,
+      });
+      expect(g.anomalies.filter((a) => a.text.startsWith("K-1"))).toEqual([
+        { text: "K-1 has 2 PRs: #1, #2 (closed: #3)", prs: [1, 2, 3] },
+      ]);
+    });
+    test("a merged PR counts, a closed one does not", () => {
+      expect(texts(build([pr(1, { head: "k-1-a", state: "merged" }), pr(2, { head: "k-1-b" })], { lanes }))).toEqual([
+        "K-1 has 2 PRs: #1, #2",
+      ]);
+      expect(texts(build([pr(1, { head: "k-1-a" }), pr(2, { head: "k-1-b", state: "closed" })], { lanes }))).toEqual(
+        [],
+      );
+    });
+    test("a key of a member title counts, a keyless map gives none", () => {
+      const prs = [pr(1, { head: "abc-5-a" }), pr(2, { head: "abc-5-b" })];
+      expect(texts(build(prs, {}, { title: "ABC-5 thing" }))).toEqual(["ABC-5 has 2 PRs: #1, #2"]);
+      expect(texts(build(prs, {}))).toEqual([]);
+    });
+  });
+
+  describe("Missing from Stacks", () => {
+    test("an open stacked PR that no chain lists", () => {
+      const g = build([pr(1, { stack: stackOf(7) }), pr(2, { stack: stackOf(7, 2) })], { stacks: [{ prs: [1] }] });
+      expect(g.anomalies).toEqual([{ text: "#2 is in a stack, but not in Stacks", prs: [2] }]);
+    });
+    test("no Stacks section, no stack, closed or data null is not a hit", () => {
+      expect(texts(build([pr(1, { stack: stackOf(7) })], { stacks: null }))).toEqual([]);
+      expect(texts(build([pr(1)], { stacks: [] }))).toEqual([]);
+      expect(texts(build([pr(1, { stack: stackOf(7), state: "closed" })], { stacks: [] }))).toEqual([]);
+      expect(texts(build([pr(1, { stack: stackOf(7) })], null))).toEqual([]);
+    });
   });
 });
