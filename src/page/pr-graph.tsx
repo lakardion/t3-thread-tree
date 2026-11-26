@@ -398,51 +398,58 @@ function Lists({ graph, box }: { graph: PrGraph; box: RefObject<HTMLDivElement |
     el?.focus({ preventScroll: true });
   };
   return (
-    <div className="grid max-h-[calc(min(860px,100dvh-2rem)*0.3)] flex-none grid-rows-[minmax(0,1fr)] gap-4 text-xs sm:grid-cols-2">
-      <section className="min-h-0 overflow-auto">
-        <h3 className="mb-1.5 flex items-center gap-1.5 font-semibold text-muted-foreground">
-          <AlertTriangle className="size-3.5" aria-hidden /> Anomalies
-        </h3>
-        {graph.anomalies.length === 0 ? (
-          <p className="text-muted-foreground">None</p>
-        ) : (
-          <ul className="space-y-1">
-            {graph.anomalies.map((a, i) => (
-              <li key={i}>
-                {a.text}{" "}
-                {a.prs.map((n) => (
-                  <button
-                    key={n}
-                    type="button"
-                    onClick={() => jump(n)}
-                    className="mr-1 font-mono text-primary hover:underline"
-                  >
-                    #{n}
-                  </button>
-                ))}
-              </li>
-            ))}
-          </ul>
-        )}
-      </section>
-      <section className="min-h-0 overflow-auto">
-        <h3 className="mb-1.5 font-semibold text-muted-foreground">Threads with no PR</h3>
-        {graph.noPr.length === 0 ? (
-          <p className="text-muted-foreground">None</p>
-        ) : (
-          <ul className="space-y-1">
-            {graph.noPr.map((t) => (
-              <li key={t.id} className="flex items-center gap-1.5">
-                <StatusMark thread={t} />
-                <a href={t.href} className="min-w-0 truncate hover:underline">
-                  {t.title}
-                </a>
-              </li>
-            ))}
-          </ul>
-        )}
-      </section>
-    </div>
+    <details className="flex-none text-xs">
+      <summary className="flex cursor-pointer items-center gap-1.5 font-semibold text-muted-foreground">
+        <AlertTriangle className="size-3.5" aria-hidden /> {graph.anomalies.length}{" "}
+        {graph.anomalies.length === 1 ? "anomaly" : "anomalies"} · {graph.noPr.length}{" "}
+        {graph.noPr.length === 1 ? "thread" : "threads"} with no PR
+      </summary>
+      <div className="mt-2 grid max-h-[calc(min(860px,100dvh-2rem)*0.3)] grid-rows-[minmax(0,1fr)] gap-4 sm:grid-cols-2">
+        <section className="min-h-0 overflow-auto">
+          <h3 className="mb-1.5 flex items-center gap-1.5 font-semibold text-muted-foreground">
+            <AlertTriangle className="size-3.5" aria-hidden /> Anomalies
+          </h3>
+          {graph.anomalies.length === 0 ? (
+            <p className="text-muted-foreground">None</p>
+          ) : (
+            <ul className="space-y-1">
+              {graph.anomalies.map((a, i) => (
+                <li key={i}>
+                  {a.text}{" "}
+                  {a.prs.map((n) => (
+                    <button
+                      key={n}
+                      type="button"
+                      onClick={() => jump(n)}
+                      className="mr-1 font-mono text-primary hover:underline"
+                    >
+                      #{n}
+                    </button>
+                  ))}
+                </li>
+              ))}
+            </ul>
+          )}
+        </section>
+        <section className="min-h-0 overflow-auto">
+          <h3 className="mb-1.5 font-semibold text-muted-foreground">Threads with no PR</h3>
+          {graph.noPr.length === 0 ? (
+            <p className="text-muted-foreground">None</p>
+          ) : (
+            <ul className="space-y-1">
+              {graph.noPr.map((t) => (
+                <li key={t.id} className="flex items-center gap-1.5">
+                  <StatusMark thread={t} />
+                  <a href={t.href} className="min-w-0 truncate hover:underline">
+                    {t.title}
+                  </a>
+                </li>
+              ))}
+            </ul>
+          )}
+        </section>
+      </div>
+    </details>
   );
 }
 
