@@ -3,7 +3,7 @@
  * or the bar at the bottom of the open modal, or the ← → keys.
  */
 import { AlertTriangle, ChevronLeft, ChevronRight, ExternalLink, GitBranch, Layers } from "lucide-react";
-import { useEffect, useState } from "react";
+import { useEffect, useState, type PointerEvent } from "react";
 
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { cn } from "@/lib/utils";
@@ -204,11 +204,36 @@ export const BranchNode = ({ label }: { label: string }) => (
 export const dim = (p: Node) => p.state === "merged" || p.state === "closed";
 
 /** A: big canvas, full cards like the skill; lists under the graph. */
+/** Drag the empty canvas to pan. A drag that starts on a link or button does not pan. Wheel and trackpad still scroll. */
+function pan(e: PointerEvent<HTMLDivElement>) {
+  if (e.button !== 0 || (e.target as HTMLElement).closest("a,button")) return;
+  const el = e.currentTarget;
+  const start = { x: e.clientX, y: e.clientY, l: el.scrollLeft, t: el.scrollTop };
+  el.setPointerCapture(e.pointerId);
+  el.style.cursor = "grabbing";
+  const move = (m: globalThis.PointerEvent) => {
+    el.scrollLeft = start.l - (m.clientX - start.x);
+    el.scrollTop = start.t - (m.clientY - start.y);
+  };
+  const up = () => {
+    el.style.cursor = "";
+    el.removeEventListener("pointermove", move);
+    el.removeEventListener("pointerup", up);
+    el.removeEventListener("pointercancel", up);
+  };
+  el.addEventListener("pointermove", move);
+  el.addEventListener("pointerup", up);
+  el.addEventListener("pointercancel", up);
+}
+
 function VariantA() {
   return (
     <>
       <Legend />
-      <div className="min-h-0 flex-1 overflow-auto rounded-md border bg-muted/30">
+      <div
+        onPointerDown={pan}
+        className="min-h-0 flex-1 cursor-grab touch-none overflow-auto rounded-md border bg-muted/30 select-none [scrollbar-width:none] [&::-webkit-scrollbar]:hidden"
+      >
         <Canvas
           nw={210}
           nh={96}
