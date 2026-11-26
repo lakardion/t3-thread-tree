@@ -523,6 +523,20 @@ A row of the Up next window with a Catch-up has a second line under the top line
 - **No clear ask or failed call:** a dashed tag, "No clear ask" or "Catch-up failed" (`text-[10px]`, uppercase, `border-dashed`, no status color), then the raw question in italic and quotes. With no raw question, what the thread did, else the thread title.
 - **No Catch-up:** one line, as before.
 
+### PR graph
+
+The modal of SPEC.md › "Map PR graph". Variant A of the prototype (map `map-pr-graph`, ticket 05).
+
+- **Button.** Ghost icon button, lucide `GitBranch`, the size of the map fold, after the member count. Always visible. Tooltip "PR graph".
+- **Dialog.** The app `Dialog`, `max-w-[1200px]`, at most 860 px high, with a 1rem margin. On a phone it takes the full width minus 2rem.
+- **Graph box.** It hides its scrollbars. The cursor is `grab`, and `grabbing` while a drag pans. The background is two soft gradients on `--background`: `--primary` at 10% from the top left and `--status-plan` at 6% from the bottom right.
+- **Edges.** An SVG layer under the nodes, never a `<canvas>`. gh stack: `--primary`, solid. Plain base: `--status-needs-input`, dashed. Base `main`: `--muted-foreground`, solid. Closed or merged child: `--border`.
+- **Node card.** 210 × 92 px, `bg-card`, `shadow-md`, radius 8 px, four lines with `justify-between`, 11 px text, the branch in mono. A draft or an outside stack mate has a dashed border. A closed or merged node has 55% opacity. A foreign base is a small dashed pill with the branch in mono.
+- **State tones.** Open: `--status-done-fg`. Draft: `--muted-foreground`. Merged: `--pr-merged`. Closed, "conflicts" and "no thread": `--destructive`.
+- **`!` badge.** A 16 px round badge, `--destructive` on white text, at the end of line 1. It is a button, so focus shows its tooltip.
+- **Lists.** Two columns under the graph, each with its own scroll, together at most 30% of the dialog height. One column on a phone. 12 px text, `#N` as a link button.
+- **Themes.** Only theme tokens, so light and dark both work.
+
 ### Typography and focus
 
 - Sans: `Inter` when installed, else `system-ui`. Mono: `ui-monospace, "SF Mono", Menlo`.
@@ -538,6 +552,7 @@ A row of the Up next window with a Catch-up has a second line under the top line
 | Project card                                         | `Card`                         | Add       |
 | Project and group disclosure, details block          | `Collapsible`                  | Installed |
 | Details button, "+N" button, map thread button       | `Button`                       | Add       |
+| PR graph modal                                       | `Dialog`                       | Installed |
 | Filter "All / Needs you"                             | `ToggleGroup`, `type="single"` | Add       |
 | Theme choice                                         | `Select`                       | Add       |
 | First load                                           | `Skeleton`                     | Add       |
