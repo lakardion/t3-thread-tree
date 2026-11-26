@@ -236,8 +236,9 @@ The **PR graph** of a map shows its PRs as a left-to-right graph from `main`. Ea
     at: string; // ISO time of the slow calls
     lanes: { n: number; label: string; keys: { key: string; base: string }[]; explicit: boolean }[] | null;
     stacks: { prs: number[] }[] | null; // `## Stacks` chains, bottom first; null with no such section
-    settled: { id: string; title: string; status: string; prs: PrNode[] }[]; // settled members
-    rows: (PrNode & { threadId: string | null })[]; // key query rows that passed the filter
+    settled: { id: string; title: string; status: string; createdAt: string | null; href: string; prs: PrNode[] }[]; // settled members
+    rows: (PrNode & { threadId: string | null; threadHref: string | null })[]; // key query rows that passed the filter
+    mates: (PrNode & { threadId: string | null; threadHref: string | null })[]; // outside stack mates
     behind: Record<number, number>; // PR number → behindBy, only for answers that came
     errors: { key: string; text: string }[]; // key queries that failed
   };
@@ -250,6 +251,7 @@ The **PR graph** of a map shows its PRs as a left-to-right graph from `main`. Ea
   - `## Stacks` up to the next `## ` or the end of the file. Each `(#N)` after a branch name is a PR of the chain, and `←` joins two PRs. Any other `#N` is not a PR.
 - **Key query.** The keys are the Linear keys of the lanes plus the **Issue keys** in the titles of the **Map members**. A markdown key gives no query, because GitHub search does not match branch names. For each key, the server calls `pullRequests.list` with `state: all` and `query: <key>`, in the project of the map head (the map thread, else the oldest member). It keeps a row only when its head branch or its title has a queried key: a Linear key `ABC-12` matches a branch that starts with `abc-12-` or equals `abc-12`. `threadId` is the live or settled thread that links the PR, else null.
 - **Behind base.** For each open PR with a stack, from the stream and the rows, the server calls `pullRequests.detail` with `allowStale: false` and keeps `behindBy`.
+- **Stack mates.** A **graph number** is the number of a member link (not a `stack` or `stack-dismissed` link) or of a row. Each slot of the `stack.layers` of a member PR that is no graph number is a mate. A `stack` link of a thread with a synced head gives the mate with no call. Else the server calls `pullRequests.detail` once for the slot, and keeps `behindBy` of an open mate. A failed call adds no mate. A mate has its place in the stack and the T3 thread that links it, if any.
 - **Calls.** At most 4 graph calls run at a time, in a queue of their own. A failed key query adds one `errors` item and does not stop the others. A failed detail call adds nothing. The route answers when all calls end.
 - **Cache.** The server keeps the last answer for each map key. A call without `refresh=1` gets the kept answer when it is less than 60 s old. The server never calls T3 for the graph at other times: no prefetch and no call on a stream change.
 - **Settled members.** `settled` holds the settled and archived **Map members** that the tree leaves out, so their PRs and T3 links stay in the graph.
@@ -263,7 +265,7 @@ The **PR graph** of a map shows its PRs as a left-to-right graph from `main`. Ea
   - **Key rows:** the `rows` of the key query.
   - One node for each PR. For a PR of a live thread, the stream data wins. For a PR of a settled thread or with no thread, the row wins, because T3 does not sync settled threads.
   - A PR that two members link gets the T3 link of the oldest member.
-- **Stack mates.** A PR in the same gh stack as a graph PR, with no member link and no key match, is a node with the mark "outside the map".
+- **Stack mates.** A PR in the same gh stack as a graph PR, with no member link and no key match, is a node with the mark "outside the map". The `mates` of `MapGraphData` hold these PRs.
 - **Edges.** Each PR has one edge to its base: a graph PR, `main`, or a **Foreign base**. A foreign base is a branch that is neither `main` nor the head of a graph PR. It is a small branch node hung off `main`.
 - **Edge kinds.** gh stack (both PRs in one stack), plain base (the base is a graph PR, with no shared stack), base `main`, and closed or merged (the child is closed or merged).
 - **Lanes.** A node of a lane key shows `L<n>`. A node with no lane key and a stack mate show "outside the map" when the map has lanes.

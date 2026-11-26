@@ -1,5 +1,6 @@
 /** The slow calls behind the PR graph of a map: key queries, behind-base details, `map.md`. */
 import type { MapGraphData } from "../shared/map-graph.ts";
+import type { PrNode } from "../shared/tree.ts";
 import { issueKey, prNode, statusOf } from "./build-tree.ts";
 import { parseMapMd, type MapLane } from "./map-md.ts";
 import type { ListRow, Thread } from "./t3.ts";
@@ -54,13 +55,25 @@ export type GraphCtx = {
   /** The T3 project of the map head. */
   project: string;
   threadOf: (repository: string, n: number) => string | null;
+  hrefOf: (id: string) => string;
 };
 
 type Ref = { projectId: string; host: string; repository: string; number: number };
 
+type PrDetail = {
+  behindBy: number | null;
+  url: string;
+  title: string | null;
+  state: string;
+  draft: boolean;
+  mergeability: string | null;
+  head: string | null;
+  base: string | null;
+};
+
 export function mapGraph(o: {
   list: (projectId: string, query: string) => Promise<{ rows: ListRow[]; error: string | null }>;
-  detail: (ref: Ref) => Promise<{ behindBy: number | null }>;
+  detail: (ref: Ref) => Promise<PrDetail>;
   archived: () => Promise<Thread[]>;
   /** The text of `<key>/map.md`. Null for a key that is no folder, or when the file is missing. */
   readMap: (key: string) => Promise<string | null>;
@@ -93,10 +106,72 @@ export function mapGraph(o: {
       ),
     );
 
-    const refs = new Map<string, Ref>();
+    const graphNumbers = new Set([
+      ...ctx.members.flatMap((t) =>
+        t.prs.filter((p) => p.source !== "stack" && p.source !== "stack-dismissed").map((p) => p.n),
+      ),
+      ...[...found.values()].map((r) => r.n),
+    ]);
+    const slots = new Map<string, { t: Thread; p: Thread["prs"][number]; n: number; stack: PrNode["stack"] }>();
     for (const t of ctx.members)
       for (const p of t.prs)
-        if (p.state === "open" && p.stackNumber !== null)
+        for (const [i, n] of (p.stackSlots ?? []).entries())
+          if (p.stackNumber !== null && !graphNumbers.has(n) && !slots.has(`${p.repository}#${n}`))
+            slots.set(`${p.repository}#${n}`, {
+              t,
+              p,
+              n,
+              stack: { number: p.stackNumber, pos: i + 1, total: p.stackSlots!.length },
+            });
+    const links = ctx.members.flatMap((t) => t.prs).filter((l) => l.source === "stack" && l.head !== null);
+    const mates: MapGraphData["mates"] = [];
+    const addMate = (node: PrNode, repository: string) => {
+      const threadId = ctx.threadOf(repository, node.n);
+      mates.push({ ...node, threadId, threadHref: threadId && ctx.hrefOf(threadId) });
+    };
+
+    const refs = new Map<string, Ref>();
+    const behind: Record<number, number> = {};
+    const calls: Promise<void>[] = [];
+    const detailed = new Set<string>();
+    for (const [id, { t, p, n, stack }] of slots) {
+      const link = links.find((l) => l.repository === p.repository && l.n === n);
+      if (link) addMate({ ...prNode(link, []), stack }, p.repository);
+      else {
+        detailed.add(id);
+        calls.push(
+          queue(() => o.detail({ projectId: t.projectId, host: p.host, repository: p.repository, number: n })).then(
+            (d) => {
+              addMate(
+                {
+                  n,
+                  url: d.url,
+                  state: d.state,
+                  draft: d.draft,
+                  checks: null,
+                  review: null,
+                  conflicting: d.mergeability === "conflicting",
+                  title: d.title,
+                  head: d.head,
+                  base: d.base,
+                  stack,
+                  additions: null,
+                  deletions: null,
+                  changedFiles: null,
+                  labels: [],
+                },
+                p.repository,
+              );
+              if (d.state === "open" && d.behindBy !== null) behind[n] = d.behindBy;
+            },
+            () => {},
+          ),
+        );
+      }
+    }
+    for (const t of ctx.members)
+      for (const p of t.prs)
+        if (p.state === "open" && p.stackNumber !== null && !detailed.has(`${p.repository}#${p.n}`))
           refs.set(`${p.repository}#${p.n}`, {
             projectId: t.projectId,
             host: p.host,
@@ -106,15 +181,15 @@ export function mapGraph(o: {
     for (const [id, r] of found)
       if (r.state === "open" && r.stack)
         refs.set(id, { projectId: r.projectId, host: r.host, repository: r.repository, number: r.n });
-    const behind: Record<number, number> = {};
-    await Promise.all(
-      [...refs.values()].map((ref) =>
+    await Promise.all([
+      ...calls,
+      ...[...refs.values()].map((ref) =>
         queue(() => o.detail(ref)).then(
           (d) => void (d.behindBy !== null && (behind[ref.number] = d.behindBy)),
           () => {},
         ),
       ),
-    );
+    ]);
 
     const now = o.now();
     return {
@@ -127,9 +202,15 @@ export function mapGraph(o: {
           id: t.id,
           title: t.title,
           status: statusOf(t, now).status,
+          createdAt: t.createdAt,
+          href: ctx.hrefOf(t.id),
           prs: t.prs.map((p) => prNode(p, [])),
         })),
-      rows: [...found.values()].map((r) => ({ ...r, threadId: ctx.threadOf(r.repository, r.n) })),
+      rows: [...found.values()].map((r) => {
+        const threadId = ctx.threadOf(r.repository, r.n);
+        return { ...r, threadId, threadHref: threadId && ctx.hrefOf(threadId) };
+      }),
+      mates,
       behind,
       errors,
     };
