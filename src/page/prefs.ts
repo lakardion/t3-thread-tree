@@ -51,10 +51,10 @@ export const idSet = (fallback: string[] = []): Codec<Set<string>> => ({
 
 export type Rule = { id: RuleId; on: boolean };
 
-/** The placement rules in chain order, stored as a JSON array. With nothing stored, `nestLegacy` turns Launch nesting on. Unknown ids drop, missing ids go last, `map` goes first and `nest` last. */
-export const ruleList = (nestLegacy: boolean): Codec<Rule[]> => ({
+/** The placement rules in chain order, stored as a JSON array. Unknown ids drop and missing ids go last. A stored `map` reads as `lineage`; `lineage` is on when a stored `map` or `nest` was on. `lineage` goes first. */
+export const ruleList = (): Codec<Rule[]> => ({
   parse: (raw) => {
-    const defaults = RULES.map((r): Rule => ({ id: r.id, on: r.id === "nest" ? nestLegacy : r.on }));
+    const defaults = RULES.map((r): Rule => ({ id: r.id, on: r.on }));
     let stored: unknown;
     try {
       stored = JSON.parse(raw ?? "null");
@@ -62,18 +62,20 @@ export const ruleList = (nestLegacy: boolean): Codec<Rule[]> => ({
       return defaults;
     }
     if (!Array.isArray(stored)) return defaults;
+    const entries = (stored as Partial<Rule>[]).filter((d) => d && typeof d === "object");
+    const legacy = entries.filter((d) => (d.id as string) === "map" || (d.id as string) === "nest");
     const rules: Rule[] = [];
-    for (const d of stored as Partial<Rule>[]) {
-      const fallback = defaults.find((r) => r.id === d?.id);
-      if (fallback && !rules.some((r) => r.id === d.id))
+    for (const d of entries) {
+      const id = (d.id as string) === "map" ? "lineage" : d.id;
+      const fallback = defaults.find((r) => r.id === id);
+      if (fallback && !rules.some((r) => r.id === id))
         rules.push({ id: fallback.id, on: typeof d.on === "boolean" ? d.on : fallback.on });
     }
     for (const d of defaults) if (!rules.some((r) => r.id === d.id)) rules.push(d);
-    return [
-      ...rules.filter((r) => r.id === "map"),
-      ...rules.filter((r) => r.id !== "map" && r.id !== "nest"),
-      ...rules.filter((r) => r.id === "nest"),
-    ];
+    const lineage = rules.find((r) => r.id === "lineage")!;
+    const flags = legacy.filter((d) => typeof d.on === "boolean");
+    if (flags.length) lineage.on = flags.some((d) => d.on);
+    return [lineage, ...rules.filter((r) => r.id !== "lineage")];
   },
   format: (v) => JSON.stringify(v),
 });

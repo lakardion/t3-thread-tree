@@ -30,7 +30,6 @@ import {
   List,
   ListTree,
   LoaderCircle,
-  Map as MapIcon,
   Moon,
   Send,
   Settings,
@@ -95,7 +94,6 @@ import type { CliStatus } from "../shared/send.ts";
 import { CATCH_UP, isIn } from "../shared/status.ts";
 import {
   allThreads,
-  isThread,
   parseLabels,
   parseLinear,
   type Group,
@@ -197,7 +195,7 @@ import { ProviderIcon } from "./provider-icon.tsx";
 import { Reveal, revealRow } from "./reveal.tsx";
 import { RunRow } from "./run-row.tsx";
 import { CliGate, LastMessage, SendDialog, useLastMessage } from "./send-dialog.tsx";
-import { postMapThread, postSettle } from "./send.ts";
+import { postSettle } from "./send.ts";
 import { LEGEND, LegendIcon, STATUS, StatusIcon } from "./status-icon.tsx";
 import { nextStop, refocusIndex, stopsIn } from "./stops.ts";
 import { Swap, useChanges } from "./swap.tsx";
@@ -243,7 +241,6 @@ const PINS_KEY = "thread-tree:pins";
 const SETTLED_KEY = "thread-tree:settled";
 const SNOOZED_KEY = "thread-tree:snoozed";
 const SECTIONS_KEY = "thread-tree:sections";
-const NEST_KEY = "thread-tree:nest";
 const RULES_KEY = "thread-tree:rules";
 const PROJECT_NAMES_KEY = "thread-tree:project-names";
 const STATUS_TEXT_KEY = "thread-tree:status-text";
@@ -1588,39 +1585,6 @@ function Line({ label, children }: { label: string; children: ReactNode }) {
 
 const Mono = ({ children }: { children: ReactNode }) => <span className="font-mono">{children}</span>;
 
-/** Marks the thread as a map thread, or unmarks it. An error shows in the tooltip, like the settle button. */
-function MapThreadButton({ t }: { t: ThreadNode }) {
-  const [busy, setBusy] = useState(false);
-  const [err, setErr] = useState<string>();
-  const marked = !!t.detail.mapMarked;
-  return (
-    <Tooltip>
-      <TooltipTrigger asChild>
-        {/** A disabled button gets no hover, so the wrapper keeps the tooltip. */}
-        <span className="inline-flex">
-          <Button
-            variant="ghost"
-            size="xs"
-            className={cn("gap-1.5 text-muted-foreground", err && "text-destructive")}
-            disabled={busy}
-            onClick={async () => {
-              setBusy(true);
-              setErr(undefined);
-              const r = await postMapThread(t.id, !marked);
-              setBusy(false);
-              if (!r.ok) setErr(r.err.error);
-            }}
-          >
-            <MapIcon className={cn("size-3.5", !err && "text-amber-600 dark:text-amber-400")} aria-hidden />
-            {marked ? "Unmark map thread" : "Mark as map thread"}
-          </Button>
-        </span>
-      </TooltipTrigger>
-      {err && <TooltipContent>{err}</TooltipContent>}
-    </Tooltip>
-  );
-}
-
 function DetailBlock({ t }: { t: ThreadNode }) {
   const now = useContext(Now);
   const d = t.detail;
@@ -1697,11 +1661,6 @@ function DetailBlock({ t }: { t: ThreadNode }) {
             .join(" · ")}
         </Line>
       ))}
-      {isThread(t) && !t.step && (
-        <div className="col-span-2 pt-2">
-          <MapThreadButton t={t} />
-        </div>
-      )}
     </dl>
   );
 }
@@ -3145,7 +3104,7 @@ function App() {
   const reconnect = useRef(() => {});
   const [settled, setSettled] = usePref(SETTLED_KEY, flag(false));
   const [snoozed, setSnoozed] = usePref(SNOOZED_KEY, flag(true));
-  const [rules, setRules] = usePref(RULES_KEY, ruleList(load(NEST_KEY) === "1"));
+  const [rules, setRules] = usePref(RULES_KEY, ruleList());
   const rulesQuery = rulesParam(rules);
   const [projectNames, setProjectNames] = usePref(PROJECT_NAMES_KEY, flag(true));
   const [statusText, setStatusText] = usePref(STATUS_TEXT_KEY, flag(true));

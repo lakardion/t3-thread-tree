@@ -409,7 +409,7 @@ const CATCH_UP: Record<string, CatchUp> = {
   "search-b": { state: "running", pick: "claude" },
 };
 
-const projectsFor = (settled: boolean, rules = defaultRules(false), labels: string[] = [], wantsLinear = false) =>
+const projectsFor = (settled: boolean, rules = defaultRules(), labels: string[] = [], wantsLinear = false) =>
   (wantsLinear ? buildLinearTree : buildTree)(
     {
       threads,

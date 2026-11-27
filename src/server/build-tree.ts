@@ -98,8 +98,6 @@ export type BuildInput = {
   origin?: string;
   /** The map key of a thread, from its first message. Unset: no Map groups. */
   mapKeyOf?: (id: string) => string | null;
-  /** The ids of marked map threads: sets the `mapMarked` detail. */
-  marked?: Set<string>;
 };
 
 /** `si` is the stack index of a child in a stack rail of a Map group. */
@@ -435,7 +433,6 @@ function prepare(input: BuildInput) {
       detail: {
         ...detailOf(t, now, all),
         launchedBy: null,
-        ...(input.marked?.has(t.id) && { mapMarked: true as const }),
       },
       children: [],
       ...(catchUp && { catchUp }),
@@ -457,19 +454,6 @@ function prepare(input: BuildInput) {
   }
 
   for (const r of runNodes(stepThreads.map(nodeOf), input)) nodes.set(r.id, r);
-
-  /** Map members and map threads: no thread nests under them by launch. */
-  const mapped = new Set<string>();
-  const visibleSpawner = (id: string): string | null => {
-    const seen = new Set([id]);
-    let c = spawnerOf(id);
-    while (c && !seen.has(c)) {
-      if (visible.has(c)) return mapped.has(c) ? null : c;
-      seen.add(c);
-      c = spawnerOf(c);
-    }
-    return null;
-  };
 
   const created = (id: string) => timeKey(all.get(id)?.createdAt ?? null, id);
 
@@ -594,8 +578,6 @@ function prepare(input: BuildInput) {
     stackIdOf,
     nodes,
     all,
-    mapped,
-    visibleSpawner,
     groupMaps: input.mapKeyOf ? groupMaps : (): Ruled => ({ claims: new Map() }),
   };
 }
@@ -644,17 +626,8 @@ const claiming = (pool: Node[], pick: (n: Node) => Claim | null): Ruled => ({
   ),
 });
 
-/** The group of a node by its own key and review flag. A keyless thread nests under a spawner of the same home. */
-const home = (n: Node, layout: Layout): string => {
-  if (layout === "project") return n.t.projectId;
-  if (isReview(n)) return "review";
-  if (!n.key) return "loose";
-  const lp = n.linear?.project;
-  return lp ? `key:${lp.id}:${n.linear?.milestone?.id ?? "none"}` : "none";
-};
-
 const CHAIN: Record<RuleId, Rule> = {
-  map: (_pool, f) => f.groupMaps(),
+  lineage: (_pool, f) => f.groupMaps(),
   review: (pool) => claiming(pool, (n) => (isReview(n) ? { into: "review" } : null)),
   stack: (pool, f) => {
     const siOf = (n: Node) => (n.run ? undefined : f.stackIdOf.get(n.id));
@@ -677,26 +650,17 @@ const CHAIN: Record<RuleId, Rule> = {
     });
   },
   key: (pool) => claiming(pool, (n) => (n.key ? { into: "key", by: n } : null)),
-  nest: (pool, f) =>
-    claiming(pool, (n) => {
-      if (n.run || n.key || isReview(n)) return null;
-      const vs = f.visibleSpawner(n.t.id);
-      const s = vs ? f.nodes.get(vs) : undefined;
-      return s && home(n, f.layout) === home(s, f.layout) ? { under: s } : null;
-    }),
 };
 
-/** The default chain; `nest` turns Launch nesting on. */
-export const defaultRules = (nest: boolean): RuleId[] =>
-  RULES.filter((r) => r.on || (nest && r.id === "nest")).map((r) => r.id);
+/** The default chain. */
+export const defaultRules = (): RuleId[] => RULES.filter((r) => r.on).map((r) => r.id);
 
-/** The rule list of a `rules` stream parameter. No parameter: the default chain. Unknown and repeated ids drop; `map` goes first and `nest` last. */
+/** The rule list of a `rules` stream parameter. No parameter: the default chain. Unknown and repeated ids drop; `lineage` goes first. */
 export function parseRules(raw: string | null): RuleId[] {
-  if (raw === null) return defaultRules(false);
+  if (raw === null) return defaultRules();
   const ids = RULES.map((r) => r.id);
   const given = [...new Set(raw.split(","))].filter((id): id is RuleId => ids.includes(id as RuleId));
-  const middle = given.filter((id) => id !== "map" && id !== "nest");
-  return [...given.filter((id) => id === "map"), ...middle, ...given.filter((id) => id === "nest")];
+  return [...given.filter((id) => id === "lineage"), ...given.filter((id) => id !== "lineage")];
 }
 
 /** Runs the rules on the pool in order, then lays the claims out as groups. */
@@ -709,18 +673,14 @@ export function place(input: BuildInput, rules: RuleId[], layout: Layout): Group
   const mapRows = new Map<Node, Node[]>();
   for (const id of rules) {
     const ruled = CHAIN[id]([...pool], f);
-    for (const [head, m] of ruled.marks ?? []) {
-      head.map = m;
-      f.mapped.add(head.id);
-    }
+    for (const [head, m] of ruled.marks ?? []) head.map = m;
     for (const [n, c] of ruled.claims) {
       if (entered.has(n) && !pool.has(n)) continue;
       claims.set(n, c);
       pool.delete(n);
       if (!("under" in c)) continue;
       c.under.children.push(n);
-      if (c.top) f.mapped.add(n.id);
-      if (id === "map") mapRows.set(c.under, [...(mapRows.get(c.under) ?? []), n]);
+      if (id === "lineage") mapRows.set(c.under, [...(mapRows.get(c.under) ?? []), n]);
     }
     for (const n of ruled.added ?? []) {
       pool.add(n);

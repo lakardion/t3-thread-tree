@@ -77,8 +77,7 @@ function inputOf(raws: object[], spawners: Record<string, string> = {}, over: Pa
   };
 }
 
-const ON = defaultRules(true);
-const OFF = defaultRules(false);
+const ON = defaultRules();
 const keys = (m: Record<string, string>) => ({ mapKeyOf: (id: string) => m[id] ?? null });
 const projectOf = (raws: object[], spawners: Record<string, string> = {}, over: Partial<BuildInput> = {}) =>
   place(inputOf(raws, spawners, over), ON, "project");
@@ -127,10 +126,9 @@ const stacked = () => [
 ];
 
 describe("defaultRules", () => {
-  test("follows the RULES order; nest only when asked", () => {
-    expect(OFF).toEqual(RULES.filter((r) => r.on).map((r) => r.id));
-    expect(OFF).toEqual(["map", "review", "stack", "key"]);
-    expect(ON).toEqual(["map", "review", "stack", "key", "nest"]);
+  test("follows the RULES order", () => {
+    expect(ON).toEqual(RULES.filter((r) => r.on).map((r) => r.id));
+    expect(ON).toEqual(["lineage", "review", "stack", "key"]);
   });
 });
 
@@ -235,22 +233,7 @@ describe("Issue key rule", () => {
   });
 });
 
-describe("Launch nesting rule", () => {
-  const raws = [shell("lead", "lead"), shell("kid", "kid")];
-
-  test("off by default: a launched thread is loose and names its spawner", () => {
-    const tree = place(inputOf(raws, { kid: "lead" }), OFF, "project");
-    expect(titles(tree[0].threads)).toEqual(["lead", "kid"]);
-    expect(tree[0].threads[1].detail.launchedBy).toMatchObject({ title: "lead" });
-  });
-
-  test("on: the child nests, with no launchedBy", () => {
-    const tree = place(inputOf(raws, { kid: "lead" }), ON, "project");
-    const [lead] = tree[0].threads;
-    expect(titles(lead.children)).toEqual(["kid"]);
-    expect(lead.children[0].detail.launchedBy).toBeNull();
-  });
-
+describe("Lineage rule", () => {
   test("a run is never nested", () => {
     const all = [
       shell("lead", "lead"),
@@ -278,43 +261,11 @@ describe("chain order", () => {
 });
 
 describe("Home", () => {
-  test("project: a keyless child nests under a keyed or review spawner of its project, not another", () => {
-    const raws = [
-      shell("lead", "WEB-1 lead"),
-      shell("rev", "Review #1 WEB-2"),
-      shell("far", "far", { projectId: "p2" }),
-      shell("k1", "k1"),
-      shell("k2", "k2"),
-      shell("k3", "k3"),
-    ];
-    const tree = projectOf(raws, { k1: "lead", k2: "rev", k3: "far" });
-    const front = tree.find((b) => b.label === "frontend")!;
-    expect(titles(child([front], "frontend", "WEB-1").threads[0].children)).toEqual(["k1"]);
-    expect(titles(child([front], "frontend", "Reviews", "WEB-2").threads[0].children)).toEqual(["k2"]);
-    expect(titles(front.threads)).toEqual(["k3"]);
-  });
-
-  test("Linear: a keyless child nests under a keyless spawner that a stack mate placed", () => {
-    const raws = [
-      ...stacked(),
-      shell("mate", "mate", { pullRequests: [pr(10, "stack"), pr(11, "stack")] }),
-      shell("kid", "kid"),
-    ];
-    const tree = linearOf(raws, { kid: "mate" });
-    const holder = tree[0].groups[0].groups.find((g) => g.threads.some((t) => t.title === "mate"))!;
-    expect(titles(holder.threads.find((t) => t.title === "mate")!.children)).toEqual(["kid"]);
-  });
-
   test("Linear: a keyless child does not nest under a keyed or review spawner", () => {
     const raws = [shell("lead", "WEB-1 lead"), shell("rev", "Review #1 WEB-2"), shell("k1", "k1"), shell("k2", "k2")];
     const tree = linearOf(raws, { k1: "lead", k2: "rev" });
     const loose = tree.find((g) => g.id === "lf:loose")!;
     expect(titles(loose.threads)).toEqual(["k1", "k2"]);
-  });
-
-  test("Linear: a keyless child nests under a loose keyless spawner", () => {
-    const tree = linearOf([shell("lead", "lead"), shell("kid", "kid")], { kid: "lead" });
-    expect(titles(tree[0].threads[0].children)).toEqual(["kid"]);
   });
 });
 
@@ -357,25 +308,25 @@ describe("kind", () => {
 
 describe("parseRules", () => {
   test("no parameter: the default chain; empty: all rules off", () => {
-    expect(parseRules(null)).toEqual(OFF);
+    expect(parseRules(null)).toEqual(ON);
     expect(parseRules("")).toEqual([]);
   });
 
   test("unknown and repeated ids drop, the first repeat wins", () => {
-    expect(parseRules("map,x,review,map,review,key")).toEqual(["map", "review", "key"]);
+    expect(parseRules("lineage,x,review,lineage,review,key")).toEqual(["lineage", "review", "key"]);
   });
 
-  test("map goes first and nest last; the middle order stays", () => {
-    expect(parseRules("nest,key,map")).toEqual(["map", "key", "nest"]);
-    expect(parseRules("key,nest,stack,review,map")).toEqual(["map", "key", "stack", "review", "nest"]);
+  test("map and nest drop; lineage goes first and the other order stays", () => {
+    expect(parseRules("nest,key,map")).toEqual(["key"]);
+    expect(parseRules("key,stack,review,lineage")).toEqual(["lineage", "key", "stack", "review"]);
   });
 });
 
 describe("Rule order", () => {
   const chain = (...ids: RuleId[]) => ids;
-  const DEFAULT = chain("map", "review", "stack", "key");
-  const REVIEW_LAST = chain("map", "stack", "review", "key");
-  const KEY_FIRST = chain("map", "review", "key", "stack");
+  const DEFAULT = chain("lineage", "review", "stack", "key");
+  const REVIEW_LAST = chain("lineage", "stack", "review", "key");
+  const KEY_FIRST = chain("lineage", "review", "key", "stack");
   const without = (id: RuleId) => DEFAULT.filter((r) => r !== id);
   const projectBy = (rules: RuleId[], raws: object[], spawners: Record<string, string> = {}, over = {}) =>
     place(inputOf(raws, spawners, over), rules, "project");
@@ -440,12 +391,12 @@ describe("Rule order", () => {
     const raws = [shell("chart", "Wayfinder"), shell("t1", "WEB-1 a")];
     const m = keys({ t1: "/m/x" });
     expect(homes(projectBy(DEFAULT, raws, { t1: "chart" }, m)).t1).toBeUndefined();
-    const p = projectBy(without("map"), raws, { t1: "chart" }, m);
+    const p = projectBy(without("lineage"), raws, { t1: "chart" }, m);
     expect(homes(p).t1).toBe("frontend > WEB-1");
     expect(p[0].threads.flatMap((t) => t.children)).toEqual([]);
     const on = linearBy(DEFAULT, raws, { t1: "chart" }, m);
     expect(titles(on.flatMap(allThreads).find((t) => t.id === "chart")!.children)).toEqual(["WEB-1 a"]);
-    const off = linearBy(without("map"), raws, { t1: "chart" }, m);
+    const off = linearBy(without("lineage"), raws, { t1: "chart" }, m);
     expect(homes(off).t1).toContain("Proj x");
     expect(off.flatMap(allThreads).filter((t) => t.id === "chart")[0].children).toEqual([]);
     expect(off.flatMap(allThreads).some((t) => t.children.some((c) => c.id === "t1"))).toBe(false);
@@ -480,16 +431,5 @@ describe("Rule order", () => {
     expect(l.map((g) => g.id)).toEqual(["lf:loose"]);
     expect(Object.keys(homes(l)).toSorted()).toEqual(["k", "s1", "s2", "s3"]);
     expect(Object.values(homes(l)).every((h) => !h.includes("Proj"))).toBe(true);
-  });
-
-  test("Launch nesting on nests in the project layout; off leaves the child loose", () => {
-    const raws = [shell("lead", "lead"), shell("kid", "kid")];
-    expect(titles(projectBy(ON, raws, { kid: "lead" })[0].threads[0].children)).toEqual(["kid"]);
-    expect(titles(projectBy(DEFAULT, raws, { kid: "lead" })[0].threads)).toEqual(["lead", "kid"]);
-  });
-
-  test("Launch nesting on nests in the Linear layout too", () => {
-    const l = linearBy(ON, [shell("lead", "lead"), shell("kid", "kid")], { kid: "lead" });
-    expect(titles(l[0].threads[0].children)).toEqual(["kid"]);
   });
 });
