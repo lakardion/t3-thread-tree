@@ -1,6 +1,6 @@
 import { isGraphMember } from "../shared/pr-graph-data.ts";
 import type { GraphPr } from "../shared/pr-graph-data.ts";
-import { stackKey } from "../shared/pr-graph.ts";
+import { stackKey, walk } from "../shared/pr-graph.ts";
 import { allThreads, NO_PROJECT, type Group, type PrNode, type ThreadNode } from "../shared/tree.ts";
 import { applyOrder, PROJECTS, pinnedList, type Orders } from "./order.ts";
 
@@ -39,14 +39,22 @@ export function bandsOf(projects: Group[]): Band[] {
   return [...bands.values()];
 }
 
-export type MapEntry = { key: string; name: string; head: ThreadNode; project: Project };
+/** `hasPrs`: a member of the map in the tree links a PR. */
+export type MapEntry = { key: string; name: string; head: ThreadNode; project: Project; hasPrs: boolean };
 
 /** Every map of a raw tree, by name: a map thread row or a Map header, with the project of its thread. */
 export function mapsOf(projects: Group[]): MapEntry[] {
   const maps = new Map<string, MapEntry>();
   const down = (t: ThreadNode, inherited: Project) => {
     const project = t.t3Project ? projectOf(t, undefined) : inherited;
-    if (t.map?.key) maps.set(t.map.key, { key: t.map.key, name: t.map.name, head: t, project });
+    if (t.map?.key)
+      maps.set(t.map.key, {
+        key: t.map.key,
+        name: t.map.name,
+        head: t,
+        project,
+        hasPrs: walk(t).some((m) => m.prs.length > 0),
+      });
     for (const c of t.children) down(c, project);
   };
   for (const g of projects) {

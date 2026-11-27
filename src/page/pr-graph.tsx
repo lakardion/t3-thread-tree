@@ -603,14 +603,16 @@ export function PrGraphDialog({
                   <SelectLabel className="flex items-center gap-1.5">
                     <MapIcon className="size-3.5" aria-hidden /> Maps
                   </SelectLabel>
-                  {maps.map((m) => (
-                    <SelectItem key={m.key} value={`map:${m.key}`}>
-                      {m.name}{" "}
-                      <span className="flex items-center gap-1 text-muted-foreground">
-                        · <ProjectIcon name={m.project.label} /> {m.project.label}
-                      </span>
-                    </SelectItem>
-                  ))}
+                  {maps
+                    .filter((m) => m.hasPrs || m.key === map?.key)
+                    .map((m) => (
+                      <SelectItem key={m.key} value={`map:${m.key}`}>
+                        {m.name}{" "}
+                        <span className="flex items-center gap-1 text-muted-foreground">
+                          · <ProjectIcon name={m.project.label} /> {m.project.label}
+                        </span>
+                      </SelectItem>
+                    ))}
                 </SelectGroup>
               </SelectContent>
             </Select>

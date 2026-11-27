@@ -86,6 +86,24 @@ describe("mapsOf", () => {
       ["zed", "Zed", "h", "Alpha"],
     ]);
   });
+
+  test("hasPrs is true only when a member links a PR", () => {
+    const maps = mapsOf([
+      project(
+        "1",
+        "Alpha",
+        thread("a", { map: { name: "A", header: false, href: null, key: "a" }, children: [thread("x")] }),
+        thread("b", {
+          map: { name: "B", header: false, href: null, key: "b" },
+          children: [thread("y", { prs: [pr(1)] })],
+        }),
+      ),
+    ]);
+    expect(maps.map((m) => [m.key, m.hasPrs])).toEqual([
+      ["a", false],
+      ["b", true],
+    ]);
+  });
 });
 
 describe("bandMates", () => {
