@@ -216,6 +216,12 @@ describe("placement", () => {
     expect(titles(child(tree, "frontend", "Reviews", "SHOP-4319").threads)).toEqual(["Review #15708 SHOP-4319"]);
   });
 
+  test("a title that starts with Review # sets the review flag", () => {
+    const tree = build([shell("r", "Review #1 SHOP-2"), shell("n", "Reviewing #1")]);
+    const flags = Object.fromEntries(allThreads(child(tree, "frontend")).map((t) => [t.id, t.review]));
+    expect(flags).toEqual({ r: true, n: false });
+  });
+
   test("a review newer than a key group comes after it", () => {
     const tree = build([shell("k", "SHOP-1 first"), shell("r", "Review #1 SHOP-2")]);
     expect(labels(tree[0].groups)).toEqual(["SHOP-1", "Reviews"]);

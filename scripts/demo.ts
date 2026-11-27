@@ -13,8 +13,8 @@ import { settledPage, settledRoutes, settledSignature } from "../src/server/sett
 import type { Pr, Project, RunsSnapshot, Thread } from "../src/server/t3.ts";
 import { launchList, scanFields } from "../src/server/workflow-start.ts";
 import { workflowRoutes } from "../src/server/workflows.ts";
-import type { MapGraphData } from "../src/shared/map-graph.ts";
 import type { LocalConfig, LocalState, ModelPick } from "../src/shared/model.ts";
+import { parseScope, type MapGraphPart, type PrGraphData } from "../src/shared/pr-graph-data.ts";
 import { prId } from "../src/shared/pr-graph.ts";
 import type { RuleId } from "../src/shared/rules.ts";
 import { type CatchUp, parseLabels, type LinearIssue } from "../src/shared/tree.ts";
@@ -699,9 +699,8 @@ const FORMS = [
   [5306, "ds-306-slider-tokens"],
 ] as const;
 
-/** The `/map-graph` fixture of the demo map. */
-const GRAPH: MapGraphData = {
-  at: new Date(now).toISOString(),
+/** The map part of the `/pr-graph` fixture of the demo map. */
+const MAP_GRAPH: MapGraphPart = {
   lanes: [
     {
       n: 1,
@@ -752,6 +751,13 @@ const GRAPH: MapGraphData = {
       threadHref: null,
     },
   ],
+  errors: [],
+};
+
+/** The `/pr-graph` fixture of the demo map scope. */
+const GRAPH: PrGraphData = {
+  at: new Date(now).toISOString(),
+  roots: { storefront: "main" },
   mates: [
     {
       ...prNode(
@@ -768,7 +774,38 @@ const GRAPH: MapGraphData = {
     },
   ],
   behind: { [prId({ repository: "", n: 5102 })]: 3 },
-  errors: [],
+  map: MAP_GRAPH,
+};
+
+/** The `/pr-graph` fixture of the All scope. No entry in `roots` for `docs`. */
+const ALL_GRAPH: PrGraphData = {
+  at: GRAPH.at,
+  roots: { storefront: "main", api: "master" },
+  mates: [
+    {
+      ...prNode(
+        pr(2109, "stack", "open", { head: "shop-420-gift-cards", base: "main", title: "SHOP-420 Gift cards" }),
+        [],
+      ),
+      stack: { number: 87, pos: 5, total: 5 },
+      threadId: null,
+      threadHref: null,
+    },
+  ],
+  behind: { [prId({ repository: "", n: 2102 })]: 2 },
+  map: null,
+};
+
+/** The fixture of a project scope: the All answer cut to one project. The mate and the PR behind are in `storefront`. */
+const projectGraph = (id: string): PrGraphData | null => {
+  if (id !== "none" && !projects.has(id)) return null;
+  const own = id === "storefront";
+  return {
+    ...ALL_GRAPH,
+    roots: id in ALL_GRAPH.roots ? { [id]: ALL_GRAPH.roots[id] } : {},
+    mates: own ? ALL_GRAPH.mates : [],
+    behind: own ? ALL_GRAPH.behind : {},
+  };
 };
 
 const pushes = new Set<() => void>();
@@ -834,13 +871,19 @@ const server = Bun.serve({
     ...settledRoutes({
       page: (after, limit) => settledPage(projectsFor(true), new Map(threads.map((th) => [th.id, th])), after, limit),
     }),
-    "/map-graph": async (req) => {
+    "/pr-graph": async (req) => {
       await Bun.sleep(1000);
+      const scope = parseScope(new URL(req.url).searchParams.get("scope"));
+      if (!scope) return new Response(null, { status: 404 });
       if (process.env.GRAPH === "down") return new Response(null, { status: 503 });
-      if (new URL(req.url).searchParams.get("key") !== "/wiki/design-system")
-        return new Response(null, { status: 404 });
+      if (scope.kind === "all") return Response.json(ALL_GRAPH);
+      if (scope.kind === "project") {
+        const data = projectGraph(scope.id);
+        return data ? Response.json(data) : new Response(null, { status: 404 });
+      }
+      if (scope.key !== "/wiki/design-system") return new Response(null, { status: 404 });
       const errors = process.env.GRAPH === "fail" ? [{ key: "DS-201", text: "GitHub rate limit exceeded" }] : [];
-      return Response.json({ ...GRAPH, errors });
+      return Response.json({ ...GRAPH, map: { ...MAP_GRAPH, errors } });
     },
     "/events": async (req) => {
       server.timeout(req, 0);

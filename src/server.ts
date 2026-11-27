@@ -11,7 +11,6 @@ import { lastMessageRoutes } from "./server/last-message.ts";
 import { mayBeLaunched, needsScan, openLineage } from "./server/lineage.ts";
 import { fetchLinear } from "./server/linear-api.ts";
 import { linearStore } from "./server/linear.ts";
-import { mapGraph, mapGraphRoutes, type GraphCtx } from "./server/map-graph.ts";
 import { mapThreadRoutes, readMapThreads } from "./server/map-threads.ts";
 import { mapKey, mapsOf, markedKey } from "./server/maps.ts";
 import {
@@ -22,6 +21,7 @@ import {
   readLocalConfig,
   readPickFile,
 } from "./server/model.ts";
+import { gitRoot, memberLink, prGraph, prGraphRoutes, type GraphCtx } from "./server/pr-graph.ts";
 import { runItems } from "./server/runs.ts";
 import { checkCli, cliPath, projectChoices, sendService } from "./server/send.ts";
 import { settleRoutes } from "./server/settle.ts";
@@ -39,6 +39,7 @@ import {
 import { parseToken, readToken, tokenResponse, writeToken } from "./server/token.ts";
 import { launchList, scanFields } from "./server/workflow-start.ts";
 import { workflowRoutes } from "./server/workflows.ts";
+import { isGraphMember, type Scope } from "./shared/pr-graph-data.ts";
 import type { RuleId } from "./shared/rules.ts";
 import type { RunItem } from "./shared/runs.ts";
 import { allRuns, allThreads, parseLabels, parseLinear, type Conn, type Tree } from "./shared/tree.ts";
@@ -352,7 +353,7 @@ const shell = connectShell({
   },
 });
 
-const graph = mapGraph({
+const graph = prGraph({
   list: (projectId, query) => shell.list(projectId, query),
   detail: (ref) => shell.detail(ref),
   archived: () => shell.archived(),
@@ -362,36 +363,66 @@ const graph = mapGraph({
           .text()
           .catch(() => null)
       : Promise.resolve(null),
+  root: gitRoot,
   now: Date.now,
 });
 
 /** The spawner of a thread, also of an archived one that the scan never saw. */
 const spawnerOf = (id: string) => (spawners.has(id) ? spawners.get(id) : lineage.spawner(id));
 
-/** The members of a map, with the archived threads that the stream leaves out. Null when the map has none. */
-const graphCtx =
-  (key: string) =>
-  (archived: Thread[]): GraphCtx | null => {
-    const all = new Map([...archived, ...threads.values()].map((t) => [t.id, t]));
-    const keyOfMarked = markedKey(mapKeyOf, spawnerOf, readMapThreads(mapThreadsFile));
-    const created = (id: string) => `${all.get(id)?.createdAt ?? ""} ${id}`;
-    const pool = [...all.values()].filter((t) => !t.parentThreadId && !t.sideChat && !t.workflowRun);
-    const maps = mapsOf({ ids: pool.map((t) => t.id), spawnerOf, keyOf: keyOfMarked, createdKey: created });
-    const members = pool
-      .filter((t) => maps.mapOf(t.id) === key)
-      .toSorted((a, b) => created(a.id).localeCompare(created(b.id)));
-    if (members.length === 0) return null;
-    const linking = [...all.values()]
-      .filter((t) => !t.parentThreadId && !t.sideChat)
-      .toSorted((a, b) => created(a.id).localeCompare(created(b.id)));
-    return {
-      members,
-      project: all.get(maps.threadOf.get(key) ?? "")?.projectId ?? members[0].projectId,
-      hrefOf: (id) => hrefOf(environmentId, id),
-      threadOf: (repository, n) =>
-        linking.find((t) => t.prs.some((p) => p.repository === repository && p.n === n))?.id ?? null,
-    };
+const createdKey = (t: Thread) => `${t.createdAt ?? ""} ${t.id}`;
+
+/** The `hrefOf` and `threadOf` of a graph answer: the oldest of `list` that links a PR. */
+const linkLookup = (list: Iterable<Thread>): Pick<GraphCtx, "hrefOf" | "threadOf"> => {
+  const linking = [...list].toSorted((a, b) => createdKey(a).localeCompare(createdKey(b)));
+  return {
+    hrefOf: (id) => hrefOf(environmentId, id),
+    threadOf: (repository, n) =>
+      linking.find((t) => t.prs.some((p) => p.repository === repository && p.n === n))?.id ?? null,
   };
+};
+
+/** The members of a map, with the archived threads that the stream leaves out. Null when the map has none. */
+const mapCtx = (key: string, archived: Thread[]): GraphCtx | null => {
+  const all = new Map([...archived, ...threads.values()].map((t) => [t.id, t]));
+  const keyOfMarked = markedKey(mapKeyOf, spawnerOf, readMapThreads(mapThreadsFile));
+  const created = (id: string) => `${all.get(id)?.createdAt ?? ""} ${id}`;
+  const pool = [...all.values()].filter((t) => !t.parentThreadId && !t.sideChat && !t.workflowRun);
+  const maps = mapsOf({ ids: pool.map((t) => t.id), spawnerOf, keyOf: keyOfMarked, createdKey: created });
+  const members = pool
+    .filter((t) => maps.mapOf(t.id) === key)
+    .toSorted((a, b) => created(a.id).localeCompare(created(b.id)));
+  if (members.length === 0) return null;
+  const project = all.get(maps.threadOf.get(key) ?? "")?.projectId ?? members[0].projectId;
+  return {
+    members,
+    projects: [{ id: project, path: projects.get(project)?.path ?? null }],
+    map: { key, project },
+    ...linkLookup(all.values().filter((t) => !t.parentThreadId && !t.sideChat)),
+  };
+};
+
+/** The live graph members of All or of one project. Null when a project scope names no project. */
+const bandCtx = (scope: Scope): GraphCtx | null => {
+  /** A thread of an unknown project is in the No project band. */
+  const bandOf = (t: Thread) => (projects.has(t.projectId) ? t.projectId : "none");
+  if (scope.kind === "project" && scope.id !== "none" && !projects.has(scope.id)) return null;
+  const members = [...threads.values()].filter(
+    (t) =>
+      isGraphMember({ live: !t.gone, settled: !!t.settledAt, step: !!t.workflowRun, prs: t.prs.filter(memberLink) }) &&
+      (scope.kind !== "project" || bandOf(t) === scope.id),
+  );
+  const ids = scope.kind === "project" ? [scope.id] : [...new Set(members.map(bandOf))];
+  return {
+    members,
+    projects: ids.map((id) => ({ id, path: projects.get(id)?.path ?? null })),
+    map: null,
+    ...linkLookup(threads.values()),
+  };
+};
+
+const graphCtx = (scope: Scope) => (archived: Thread[]) =>
+  scope.kind === "map" ? mapCtx(scope.key, archived) : bandCtx(scope);
 
 /** `PUT /local-model` saves the Local model config here. */
 const localModelFile = process.env.LOCAL_MODEL_FILE ?? join(homedir(), ".config", "t3-thread-tree", "local-model");
@@ -437,11 +468,11 @@ const server = Bun.serve({
         return settledPage(treeFor(true).projects, threads, after, limit);
       },
     }),
-    ...mapGraphRoutes({
+    ...prGraphRoutes({
       up: () => conn === "up",
-      get: (key, refresh) => {
+      get: (scopeId, scope, refresh) => {
         scanIfNeeded(true);
-        return graph.get(key, graphCtx(key), refresh);
+        return graph.get(scopeId, scope, graphCtx(scope), refresh);
       },
       timeout: (req) => server.timeout(req, 0),
     }),

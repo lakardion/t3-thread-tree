@@ -1,7 +1,8 @@
 import { describe, expect, test } from "bun:test";
 
-import { graphKeys, isFresh, mapGraph, type GraphCtx } from "../src/server/map-graph.ts";
+import { graphKeys, isFresh, prGraph, prGraphRoutes, type GraphCtx } from "../src/server/pr-graph.ts";
 import type { ListRow, Pr, Thread } from "../src/server/t3.ts";
+import { parseScope } from "../src/shared/pr-graph-data.ts";
 import { rowMatches } from "../src/shared/pr-graph.ts";
 
 const row = (n: number, over: Partial<ListRow> = {}): ListRow => ({
@@ -26,7 +27,7 @@ const row = (n: number, over: Partial<ListRow> = {}): ListRow => ({
   ...over,
 });
 
-const det = (over: Partial<Awaited<ReturnType<Parameters<typeof mapGraph>[0]["detail"]>>> = {}) => ({
+const det = (over: Partial<Awaited<ReturnType<Parameters<typeof prGraph>[0]["detail"]>>> = {}) => ({
   behindBy: 2,
   url: "du",
   title: "Mate",
@@ -98,16 +99,18 @@ describe("isFresh", () => {
   });
 });
 
-describe("mapGraph", () => {
+describe("prGraph", () => {
+  const MAP = { kind: "map", key: "k" } as const;
   const ctx =
     (members: Thread[] = [thread("m1", { title: "ABC-1 · a" })]): (() => GraphCtx | null) =>
     () => ({
       members,
-      project: "p",
+      projects: [{ id: "p", path: "/p" }],
+      map: { key: "k", project: "p" },
       threadOf: (_, n) => (n === 1 ? "m1" : null),
       hrefOf: (id) => `h:${id}`,
     });
-  const setup = (over: Partial<Parameters<typeof mapGraph>[0]> = {}) => {
+  const setup = (over: Partial<Parameters<typeof prGraph>[0]> = {}) => {
     const calls = { list: 0, detail: 0, archived: 0, active: 0, peak: 0 };
     const track = async <T>(kind: "list" | "detail", value: () => T) => {
       calls[kind]++;
@@ -116,11 +119,12 @@ describe("mapGraph", () => {
       calls.active--;
       return value();
     };
-    const g = mapGraph({
+    const g = prGraph({
       list: (_, q) => track("list", () => ({ rows: [row(1, { head: `${q.toLowerCase()}-x` })], error: null })),
       detail: () => track("detail", () => det()),
       archived: async () => (calls.archived++, []),
       readMap: async () => null,
+      root: async () => null,
       now: () => 0,
       ...over,
     });
@@ -128,13 +132,13 @@ describe("mapGraph", () => {
   };
 
   test("a missing map.md gives null lanes and stacks", async () => {
-    const data = await setup().g.get("k", ctx(), false);
-    expect(data?.lanes).toBeNull();
-    expect(data?.stacks).toBeNull();
+    const data = await setup().g.get("map:k", MAP, ctx(), false);
+    expect(data?.map?.lanes).toBeNull();
+    expect(data?.map?.stacks).toBeNull();
   });
 
   test("no member gives null", async () => {
-    expect(await setup().g.get("k", () => null, false)).toBeNull();
+    expect(await setup().g.get("map:k", MAP, () => null, false)).toBeNull();
   });
 
   test("at most 4 calls at once", async () => {
@@ -149,7 +153,7 @@ describe("mapGraph", () => {
         return { rows: [], error: null };
       },
     });
-    await g.get("k", ctx(members), false);
+    await g.get("map:k", MAP, ctx(members), false);
     expect(calls.list).toBe(12);
     expect(calls.peak).toBe(4);
   });
@@ -162,9 +166,9 @@ describe("mapGraph", () => {
       },
     });
     const members = [thread("a", { title: "ABC-1 · a" }), thread("b", { title: "XYZ-2 · b" })];
-    const data = await g.get("k", ctx(members), false);
-    expect(data?.errors).toEqual([{ key: "ABC-1", text: "boom" }]);
-    expect(data?.rows.map((r) => r.n)).toEqual([2]);
+    const data = await g.get("map:k", MAP, ctx(members), false);
+    expect(data?.map?.errors).toEqual([{ key: "ABC-1", text: "boom" }]);
+    expect(data?.map?.rows.map((r) => r.n)).toEqual([2]);
   });
 
   test("a failed detail adds nothing", async () => {
@@ -172,10 +176,10 @@ describe("mapGraph", () => {
       list: async () => ({ rows: [row(1, { head: "abc-1-x", stack: { number: 1, pos: 1, total: 2 } })], error: null }),
       detail: async () => Promise.reject(new Error("no")),
     });
-    const data = await g.get("k", ctx(), false);
+    const data = await g.get("map:k", MAP, ctx(), false);
     expect(data?.behind).toEqual({});
-    expect(data?.errors).toEqual([]);
-    expect(data?.rows).toHaveLength(1);
+    expect(data?.map?.errors).toEqual([]);
+    expect(data?.map?.rows).toHaveLength(1);
   });
 
   test("behind comes from rows and member PRs", async () => {
@@ -183,23 +187,23 @@ describe("mapGraph", () => {
     const { g } = setup({
       list: async () => ({ rows: [row(1, { head: "abc-1-x", stack: { number: 1, pos: 1, total: 2 } })], error: null }),
     });
-    const data = await g.get("k", ctx([thread("m1", { title: "ABC-1", prs: [pr] })]), false);
+    const data = await g.get("map:k", MAP, ctx([thread("m1", { title: "ABC-1", prs: [pr] })]), false);
     expect(data?.behind).toEqual({ "a/b#1": 2, "a/b#7": 2 });
   });
 
   test("a cache hit makes no call, refresh calls again", async () => {
     const { g, calls } = setup();
-    await g.get("k", ctx(), false);
+    await g.get("map:k", MAP, ctx(), false);
     const first = calls.list;
-    await g.get("k", ctx(), false);
+    await g.get("map:k", MAP, ctx(), false);
     expect(calls.list).toBe(first);
-    await g.get("k", ctx(), true);
+    await g.get("map:k", MAP, ctx(), true);
     expect(calls.list).toBe(first * 2);
   });
 
   test("a running call is shared", async () => {
     const { g, calls } = setup();
-    await Promise.all([g.get("k", ctx(), false), g.get("k", ctx(), false)]);
+    await Promise.all([g.get("map:k", MAP, ctx(), false), g.get("map:k", MAP, ctx(), false)]);
     expect(calls.archived).toBe(1);
   });
 
@@ -212,18 +216,101 @@ describe("mapGraph", () => {
       thread("b", { title: "ABC-1 · b" }),
       thread("c", { title: "ABC-2" }),
     ];
-    const data = await g.get("k", ctx(members), false);
-    expect(data?.rows).toHaveLength(1);
-    expect(data?.rows[0].threadId).toBe("m1");
+    const data = await g.get("map:k", MAP, ctx(members), false);
+    expect(data?.map?.rows).toHaveLength(1);
+    expect(data?.map?.rows[0].threadId).toBe("m1");
   });
 
   test("settled and archived members come with their status", async () => {
     const data = await setup().g.get(
-      "k",
+      "map:k",
+      MAP,
       ctx([thread("live"), thread("done", { settledAt: "2026-01-01T00:00:00Z" }), thread("old", { gone: true })]),
       false,
     );
-    expect(data?.settled.map((s) => s.id)).toEqual(["done", "old"]);
+    expect(data?.map?.settled.map((s) => s.id)).toEqual(["done", "old"]);
+  });
+
+  describe("scopes", () => {
+    const ALL = { kind: "all" } as const;
+    const PROJECT = { kind: "project", id: "p" } as const;
+    const allCtx =
+      (members: Thread[] = [thread("m1", { title: "ABC-1 · a" })]): (() => GraphCtx | null) =>
+      () => ({
+        members,
+        projects: [{ id: "p", path: "/p" }],
+        map: null,
+        threadOf: () => null,
+        hrefOf: (id) => `h:${id}`,
+      });
+
+    test("two scope ids build twice, one id twice within 60 s builds once", async () => {
+      const builds: string[] = [];
+      const { g } = setup();
+      const ctxOf = (scopeId: string) => (): GraphCtx | null => (builds.push(scopeId), allCtx()());
+      await g.get("all", ALL, ctxOf("all"), false);
+      await g.get("project:p", PROJECT, ctxOf("project:p"), false);
+      await g.get("all", ALL, ctxOf("all"), false);
+      expect(builds).toEqual(["all", "project:p"]);
+    });
+
+    test("All scope reads no archived, no list and no map.md, and has no map part", async () => {
+      const seen = { readMap: 0 };
+      const { g, calls } = setup({ readMap: async () => (seen.readMap++, null) });
+      const pr = { n: 7, state: "open", stackNumber: 3, host: "github.com", repository: "a/b" } as Pr;
+      const data = await g.get("all", ALL, allCtx([thread("m1", { title: "ABC-1", prs: [pr] })]), false);
+      expect(data?.map).toBeNull();
+      expect([calls.archived, calls.list, seen.readMap]).toEqual([0, 0, 0]);
+      expect(data?.behind).toEqual({ "a/b#7": 2 });
+    });
+
+    test("roots: a null answer gives no entry, no path gives no call", async () => {
+      const asked: string[] = [];
+      const { g } = setup({ root: async (path) => (asked.push(path), path === "/a" ? "master" : null) });
+      const ctxOf = () => ({
+        ...allCtx()()!,
+        projects: [
+          { id: "a", path: "/a" },
+          { id: "b", path: "/b" },
+          { id: "none", path: null },
+        ],
+      });
+      const data = await g.get("all", ALL, ctxOf, false);
+      expect(data?.roots).toEqual({ a: "master" });
+      expect(asked.toSorted()).toEqual(["/a", "/b"]);
+    });
+
+    test("the map scope carries the root of the map project", async () => {
+      const { g } = setup({ root: async () => "main" });
+      const data = await g.get("map:k", MAP, ctx(), false);
+      expect(data?.roots).toEqual({ p: "main" });
+    });
+  });
+
+  describe("prGraphRoutes", () => {
+    const route = (o: { up?: boolean; data?: unknown } = {}) =>
+      prGraphRoutes({
+        up: () => o.up ?? true,
+        get: async (_id, scope) => (o.data === undefined ? null : ({ scope, ...(o.data as object) } as never)),
+        timeout: () => {},
+      })["/pr-graph"].GET;
+    const ask = (get: ReturnType<typeof route>, q: string) => get(new Request(`http://x/pr-graph${q}`));
+
+    test("a missing or bad scope gives 404, even when down", async () => {
+      expect((await ask(route({ up: false }), "")).status).toBe(404);
+      expect((await ask(route({ up: false }), "?scope=bad")).status).toBe(404);
+    });
+    test("T3 down gives 503", async () => {
+      expect((await ask(route({ up: false }), "?scope=all")).status).toBe(503);
+    });
+    test("no answer gives 404", async () => {
+      expect((await ask(route(), "?scope=project:x")).status).toBe(404);
+    });
+    test("an answer gives JSON", async () => {
+      const res = await ask(route({ data: { at: "t" } }), "?scope=map:/m");
+      expect(res.status).toBe(200);
+      expect(await res.json()).toEqual({ at: "t", scope: parseScope("map:/m") });
+    });
   });
 
   describe("stack mates", () => {
@@ -252,7 +339,7 @@ describe("mapGraph", () => {
         ...keep,
         detail: async (r) => (seen.push(r.number), det({ behindBy: null })),
       });
-      const data = await g.get("k", ctx([owner([1, 2])]), false);
+      const data = await g.get("map:k", MAP, ctx([owner([1, 2])]), false);
       expect(seen.toSorted((a, b) => a - b)).toEqual([1, 2]);
       expect(data?.mates).toHaveLength(1);
       expect(data?.mates[0]).toMatchObject({
@@ -280,7 +367,7 @@ describe("mapGraph", () => {
       } as Pr;
       const seen: number[] = [];
       const { g } = setup({ ...keep, detail: async (r) => (seen.push(r.number), det()) });
-      const data = await g.get("k", ctx([owner([1, 2], [link])]), false);
+      const data = await g.get("map:k", MAP, ctx([owner([1, 2], [link])]), false);
       expect(seen).toEqual([1]);
       expect(data?.mates.map((m) => [m.n, m.head, m.stack?.pos])).toEqual([[2, "h2", 2]]);
     });
@@ -289,15 +376,15 @@ describe("mapGraph", () => {
       const { g } = setup({
         list: async () => ({ rows: [row(2, { head: "abc-1-x" })], error: null }),
       });
-      const data = await g.get("k", ctx([owner([1, 2])]), false);
+      const data = await g.get("map:k", MAP, ctx([owner([1, 2])]), false);
       expect(data?.mates).toEqual([]);
     });
 
     test("a failed mate detail adds nothing", async () => {
       const { g } = setup({ ...keep, detail: async () => Promise.reject(new Error("no")) });
-      const data = await g.get("k", ctx([owner([1, 2])]), false);
+      const data = await g.get("map:k", MAP, ctx([owner([1, 2])]), false);
       expect(data?.mates).toEqual([]);
-      expect(data?.errors).toEqual([]);
+      expect(data?.map?.errors).toEqual([]);
     });
 
     test("an open mate behindBy lands in behind with one call for it", async () => {
@@ -306,7 +393,7 @@ describe("mapGraph", () => {
         ...keep,
         detail: async (r) => (seen.push(r.number), det({ behindBy: r.number === 2 ? 4 : null })),
       });
-      const data = await g.get("k", ctx([owner([1, 2])]), false);
+      const data = await g.get("map:k", MAP, ctx([owner([1, 2])]), false);
       expect(seen.filter((n) => n === 2)).toHaveLength(1);
       expect(data?.behind["a/b#2"]).toBe(4);
     });
