@@ -22,14 +22,17 @@ import { cn } from "@/lib/utils";
 
 import { buildPrGraph, type PrGraph } from "../shared/pr-graph.ts";
 import { allThreads, type Group, type ThreadNode } from "../shared/tree.ts";
+import { SOL_VARIANTS } from "./pr-graph-prototype-sol.tsx";
 import { Canvas, Legend, Lists, pan, ReviewPrs, StatusMark, useMapGraph } from "./pr-graph.tsx";
 
-const VARIANTS = [
-  ["A", "Dropdown + stacked bands"],
-  ["B", "Tabs + band columns"],
-  ["C", "Sidebar + folding bands"],
-] as const;
-type Variant = (typeof VARIANTS)[number][0];
+/** A to C from this file, D and on from the Sol proposal file. */
+const VARIANTS: [key: string, name: string, View: (p: Props) => ReactNode][] = [
+  ["A", "Dropdown + stacked bands", VariantA],
+  ["B", "Tabs + band columns", VariantB],
+  ["C", "Sidebar + folding bands", VariantC],
+  ...SOL_VARIANTS.map(([k, n, V]) => [k, `${n} · Sol`, V] as (typeof SOL_VARIANTS)[number]),
+];
+type Variant = string;
 
 export type Band = {
   id: string;
@@ -79,16 +82,18 @@ function bandOf(g: Group): Band {
 
 export const openCount = (g: PrGraph) => g.nodes.filter((n) => n.state === "open").length;
 
-function useVariant(): [Variant, (d: 1 | -1) => void] {
+function useVariant(): [Variant, (d: 1 | -1) => void, (v: Variant) => void] {
   const read = () => (new URLSearchParams(location.search).get("variant") ?? "A") as Variant;
   const [v, setV] = useState<Variant>(read);
-  const step = (d: 1 | -1) => {
-    const i = VARIANTS.findIndex(([k]) => k === v);
-    const next = VARIANTS[(i + d + VARIANTS.length) % VARIANTS.length][0];
+  const pick = (next: Variant) => {
     const u = new URL(location.href);
     u.searchParams.set("variant", next);
     history.replaceState(null, "", u);
     setV(next);
+  };
+  const step = (d: 1 | -1) => {
+    const i = VARIANTS.findIndex(([k]) => k === v);
+    pick(VARIANTS[(i + d + VARIANTS.length) % VARIANTS.length][0]);
   };
   useEffect(() => {
     const key = (e: KeyboardEvent) => {
@@ -101,11 +106,10 @@ function useVariant(): [Variant, (d: 1 | -1) => void] {
     window.addEventListener("keydown", key, true);
     return () => window.removeEventListener("keydown", key, true);
   });
-  return [v, step];
+  return [v, step, pick];
 }
 
-function Switcher({ v, step }: { v: Variant; step: (d: 1 | -1) => void }) {
-  const name = VARIANTS.find(([k]) => k === v)![1];
+function Switcher({ v, step, pick }: { v: Variant; step: (d: 1 | -1) => void; pick: (v: Variant) => void }) {
   return (
     <div className="absolute bottom-3 left-1/2 z-50 flex -translate-x-1/2 items-center gap-1 rounded-full bg-foreground px-1 py-1 text-xs text-background shadow-xl">
       <button
@@ -116,9 +120,18 @@ function Switcher({ v, step }: { v: Variant; step: (d: 1 | -1) => void }) {
       >
         <ChevronLeft className="size-4" />
       </button>
-      <span className="px-2 font-semibold">
-        {v} ({name})
-      </span>
+      <select
+        aria-label="Variant"
+        value={v}
+        onChange={(e) => pick(e.target.value)}
+        className="cursor-pointer bg-transparent px-1 font-semibold outline-none"
+      >
+        {VARIANTS.map(([k, n]) => (
+          <option key={k} value={k} className="text-foreground">
+            {k} ({n})
+          </option>
+        ))}
+      </select>
       <button
         type="button"
         aria-label="Next variant"
@@ -192,7 +205,7 @@ export const scopeName = (scope: string, bands: Band[]) => {
   const b = bands.find((x) => `project:${x.id}` === scope);
   if (b) return b.label;
   const m = bands.flatMap((x) => x.maps).find((h) => `map:${h.id}` === scope);
-  return m ? `${m.map!.name}` : scope;
+  return m ? m.map!.name : scope;
 };
 
 /** A: a dropdown next to the title. All stacks the bands down one canvas. No-PR list folds to a count at All. */
@@ -473,10 +486,10 @@ export function ScopedGraphDialog({
   start: string;
   onOpenChange: (open: boolean) => void;
 }) {
-  const [v, step] = useVariant();
+  const [v, step, pick] = useVariant();
   const [scope, setScope] = useState(start);
   const bands = useMemo(() => projects.filter((g) => g.kind === "project").map(bandOf), [projects]);
-  const View = { A: VariantA, B: VariantB, C: VariantC }[v];
+  const View = (VARIANTS.find(([k]) => k === v) ?? VARIANTS[0])[2];
   return (
     <Dialog open onOpenChange={onOpenChange}>
       <DialogContent
@@ -486,7 +499,7 @@ export function ScopedGraphDialog({
         )}
       >
         <View bands={bands} scope={scope} setScope={setScope} />
-        <Switcher v={v} step={step} />
+        <Switcher v={v} step={step} pick={pick} />
       </DialogContent>
     </Dialog>
   );
