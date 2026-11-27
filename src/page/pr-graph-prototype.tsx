@@ -3,7 +3,15 @@
  * Three looks for the scope picker and the project bands, switched by `?variant=A|B|C`
  * or the floating bar (← → keys). Read only. Never merge.
  */
-import { ChevronLeft, ChevronRight, GitBranch, LoaderCircle, RefreshCw } from "lucide-react";
+import {
+  ChevronLeft,
+  ChevronRight,
+  FolderGit2,
+  GitBranch,
+  LoaderCircle,
+  Map as MapIcon,
+  RefreshCw,
+} from "lucide-react";
 import { useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 
 import { Button } from "@/components/ui/button";
@@ -24,6 +32,7 @@ import { buildPrGraph, type PrGraph } from "../shared/pr-graph.ts";
 import { allThreads, type Group, type ThreadNode } from "../shared/tree.ts";
 import { SOL_VARIANTS } from "./pr-graph-prototype-sol.tsx";
 import { Canvas, Legend, Lists, pan, ReviewPrs, StatusMark, useMapGraph } from "./pr-graph.tsx";
+import { ProjectIcon } from "./project-icon.tsx";
 
 /** A to C from this file, D and on from the Sol proposal file. */
 const VARIANTS: [key: string, name: string, View: (p: Props) => ReactNode][] = [
@@ -61,7 +70,8 @@ function bandOf(g: Group): Band {
   const heads = new Set(prs.map((p) => p.head));
   const bases = prs.map((p) => p.base).filter((b): b is string => !!b && !heads.has(b));
   const count = Object.entries(Object.groupBy(bases, (b) => b)).toSorted((a, b) => b[1]!.length - a[1]!.length);
-  const root = count[0]?.[0] ?? "main";
+  /** main, else master, else the most common outside base. */
+  const root = ["main", "master"].find((r) => bases.includes(r)) ?? count[0]?.[0] ?? "main";
   const fake = {
     children: live.map((t) => ({
       ...t,
@@ -147,7 +157,9 @@ function Switcher({ v, step, pick }: { v: Variant; step: (d: 1 | -1) => void; pi
 export function BandLabel({ b, className }: { b: Band; className?: string }) {
   return (
     <div className={cn("flex items-baseline gap-2 text-xs", className)}>
-      <span className="font-semibold text-foreground">{b.label}</span>
+      <span className="flex items-center gap-1.5 self-center font-semibold text-foreground">
+        <ProjectIcon name={b.label} /> {b.label}
+      </span>
       {b.repo && <span className="font-mono text-muted-foreground">{b.repo}</span>}
       <span className="text-muted-foreground">
         root <span className="font-mono">{b.root}</span> · {b.graph.nodes.length} PRs · {openCount(b.graph)} open ·{" "}
@@ -211,7 +223,9 @@ export const scopeName = (scope: string, bands: Band[]) => {
 /** A: a dropdown next to the title. All stacks the bands down one canvas. No-PR list folds to a count at All. */
 function VariantA({ bands, scope, setScope }: Props) {
   const box = useRef<HTMLDivElement>(null);
-  const shown = scope === "all" ? bands : bands.filter((b) => `project:${b.id}` === scope);
+  /** A project with no PR gets no band at All and no picker entry. */
+  const withPrs = bands.filter((b) => b.graph.nodes.length > 0);
+  const shown = scope === "all" ? withPrs : bands.filter((b) => `project:${b.id}` === scope);
   const map = bands.flatMap((b) => b.maps).find((h) => `map:${h.id}` === scope);
   const header = (busy?: boolean, refresh?: () => void, sub?: string) => (
     <DialogHeader className="pr-8 text-left">
@@ -227,20 +241,28 @@ function VariantA({ bands, scope, setScope }: Props) {
             <SelectItem value="all">All projects</SelectItem>
             <SelectSeparator />
             <SelectGroup>
-              <SelectLabel>Projects</SelectLabel>
-              {bands.map((b) => (
+              <SelectLabel className="flex items-center gap-1.5">
+                <FolderGit2 className="size-3.5" aria-hidden /> Projects
+              </SelectLabel>
+              {withPrs.map((b) => (
                 <SelectItem key={b.id} value={`project:${b.id}`}>
+                  <ProjectIcon name={b.label} />
                   {b.label} <span className="text-muted-foreground">· {b.graph.nodes.length}</span>
                 </SelectItem>
               ))}
             </SelectGroup>
             <SelectSeparator />
             <SelectGroup>
-              <SelectLabel>Maps</SelectLabel>
+              <SelectLabel className="flex items-center gap-1.5">
+                <MapIcon className="size-3.5" aria-hidden /> Maps
+              </SelectLabel>
               {bands.flatMap((b) =>
                 b.maps.map((h) => (
                   <SelectItem key={h.id} value={`map:${h.id}`}>
-                    {h.map!.name} <span className="text-muted-foreground">· {b.label}</span>
+                    {h.map!.name}{" "}
+                    <span className="flex items-center gap-1 text-muted-foreground">
+                      · <ProjectIcon name={b.label} /> {b.label}
+                    </span>
                   </SelectItem>
                 )),
               )}
