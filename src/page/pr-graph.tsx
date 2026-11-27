@@ -600,10 +600,8 @@ function ScopePicker({
                   keywords={[x.name, x.project.label]}
                   onSelect={() => pick(`map:${x.key}`)}
                 >
+                  <ProjectIcon name={x.project.label} />
                   <span className="truncate">{x.name}</span>
-                  <span className="flex flex-none items-center gap-1 text-muted-foreground">
-                    · <ProjectIcon name={x.project.label} /> {x.project.label}
-                  </span>
                   {mark(`map:${x.key}`)}
                 </CommandItem>
               ))}
