@@ -19,6 +19,7 @@ function node(id: string, over: Partial<ThreadNode> = {}): ThreadNode {
     updatedAt: "2026-11-13T09:00:00.000Z",
     lastRun: null,
     settled: false,
+    review: false,
     input: false,
     snoozedUntil: null,
     stack: null,

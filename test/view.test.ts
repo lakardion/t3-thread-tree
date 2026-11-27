@@ -47,6 +47,7 @@ const thread = (
   updatedAt: T(0),
   lastRun: run === null ? null : T(run),
   settled: false,
+  review: false,
   input: false,
   snoozedUntil: null,
   stack: null,

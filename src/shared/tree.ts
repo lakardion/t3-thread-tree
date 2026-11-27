@@ -102,6 +102,8 @@ export type ThreadNode = {
   /** Newest of the working run start, the latest run start and the latest run end. Not `updatedAt`, which ticks while a thread works. */
   lastRun: string | null;
   settled: boolean;
+  /** The title starts with "Review #". */
+  review: boolean;
   /** A request with `blocking: false` is pending. */
   input: boolean;
   snoozedUntil: string | null;

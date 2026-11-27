@@ -1,6 +1,6 @@
 import { describe, expect, test } from "bun:test";
 
-import type { MapGraphData } from "../src/shared/map-graph.ts";
+import type { MapGraphPart, PrGraphData } from "../src/shared/pr-graph-data.ts";
 import { buildPrGraph, focusOf, GY, NH, pileLift } from "../src/shared/pr-graph.ts";
 import type { PrNode, ThreadNode } from "../src/shared/tree.ts";
 
@@ -40,16 +40,18 @@ const node = (id: string, over: Partial<ThreadNode> = {}, createdAt: string | nu
 const head = (...children: ThreadNode[]) =>
   node("head", { map: { name: "m", header: false, href: null, key: "m" }, children });
 
-const data = (over: Partial<MapGraphData> = {}): MapGraphData => ({
+const data = (over: Partial<MapGraphPart> & Partial<Pick<PrGraphData, "mates" | "behind">> = {}): PrGraphData => ({
   at: "",
-  lanes: null,
-  stacks: null,
-  settled: [],
-  rows: [],
-  mates: [],
-  behind: {},
-  errors: [],
-  ...over,
+  roots: {},
+  mates: over.mates ?? [],
+  behind: over.behind ?? {},
+  map: {
+    lanes: over.lanes ?? null,
+    stacks: over.stacks ?? null,
+    settled: over.settled ?? [],
+    rows: over.rows ?? [],
+    errors: over.errors ?? [],
+  },
 });
 
 const row = (n: number, over: Partial<PrNode> = {}, threadId: string | null = null) => ({
@@ -474,7 +476,7 @@ describe("Anomalies", () => {
     explicit,
     keys,
   });
-  const build = (prs: PrNode[], d: Partial<MapGraphData> | null = {}, over: Partial<ThreadNode> = {}) =>
+  const build = (prs: PrNode[], d: Parameters<typeof data>[0] | null = {}, over: Partial<ThreadNode> = {}) =>
     buildPrGraph(head(node("a", { prs, ...over })), d && data(d));
   const texts = (g: ReturnType<typeof buildPrGraph>) => g.anomalies.map((a) => a.text);
 
@@ -720,7 +722,7 @@ describe("pileLift", () => {
 });
 
 describe("focusOf", () => {
-  const build = (prs: PrNode[], lanes: MapGraphData["lanes"] = null) =>
+  const build = (prs: PrNode[], lanes: MapGraphPart["lanes"] = null) =>
     buildPrGraph(head(node("a", { prs })), data({ lanes }));
 
   test("with no lanes, a chain shares the focus of its root", () => {

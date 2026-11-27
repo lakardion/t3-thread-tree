@@ -1,5 +1,5 @@
-/** The slow calls behind the PR graph of a map: key queries, behind-base details, `map.md`. */
-import type { MapGraphData } from "../shared/map-graph.ts";
+/** The slow calls behind the PR graph of a scope: key queries, behind-base details, `map.md`, root branches. */
+import { parseScope, type MapGraphPart, type PrGraphData, type Scope } from "../shared/pr-graph-data.ts";
 import { prId, rowMatches } from "../shared/pr-graph.ts";
 import type { PrNode } from "../shared/tree.ts";
 import { issueKey, prNode, statusOf } from "./build-tree.ts";
@@ -8,6 +8,9 @@ import type { ListRow, Thread } from "./t3.ts";
 
 const LINEAR = /^[A-Z][A-Z0-9]*-\d+$/;
 const FRESH_MS = 60_000;
+
+/** The PRs of a thread that count as links: not the stack syncs. */
+export const memberLink = (p: Thread["prs"][number]) => p.source !== "stack" && p.source !== "stack-dismissed";
 
 /** The Linear keys of the lanes, then the issue keys of the member titles, unique. Markdown keys give no query. */
 export const graphKeys = (lanes: MapLane[], memberTitles: string[]): string[] => [
@@ -40,12 +43,14 @@ export function limit(n: number) {
 }
 
 export type GraphCtx = {
-  /** The live, settled and archived members. */
+  /** The graph members. At map scope also the settled and archived ones. */
   members: Thread[];
-  /** The T3 project of the map head. */
-  project: string;
+  /** The projects whose roots the answer carries. `none` is No project, with no path. */
+  projects: { id: string; path: string | null }[];
   threadOf: (repository: string, n: number) => string | null;
   hrefOf: (id: string) => string;
+  /** Set only at map scope. `project` is the T3 project of the map head. */
+  map: { key: string; project: string } | null;
 };
 
 type Ref = { projectId: string; host: string; repository: string; number: number };
@@ -61,32 +66,48 @@ type PrDetail = {
   base: string | null;
 };
 
-export function mapGraph(o: {
+/** The default branch of the repository at `cwd`, from local git. Null when git has none. */
+export async function gitRoot(cwd: string): Promise<string | null> {
+  try {
+    const p = Bun.spawn(["git", "symbolic-ref", "--short", "refs/remotes/origin/HEAD"], {
+      cwd,
+      stdout: "pipe",
+      stderr: "ignore",
+    });
+    const out = (await new Response(p.stdout).text()).trim();
+    return (await p.exited) === 0 && out ? out.replace(/^origin\//, "") : null;
+  } catch {
+    return null;
+  }
+}
+
+export function prGraph(o: {
   list: (projectId: string, query: string) => Promise<{ rows: ListRow[]; error: string | null }>;
   detail: (ref: Ref) => Promise<PrDetail>;
   archived: () => Promise<Thread[]>;
   /** The text of `<key>/map.md`. Null for a key that is no folder, or when the file is missing. */
   readMap: (key: string) => Promise<string | null>;
+  /** The root branch of the repository at a project path. */
+  root: (path: string) => Promise<string | null>;
   now: () => number;
 }) {
   const queue = limit(4);
-  const cache = new Map<string, { at: number; data: MapGraphData }>();
-  const running = new Map<string, Promise<MapGraphData | null>>();
+  const cache = new Map<string, { at: number; data: PrGraphData }>();
+  const running = new Map<string, Promise<PrGraphData | null>>();
 
-  async function build(key: string, ctxOf: (archived: Thread[]) => GraphCtx | null): Promise<MapGraphData | null> {
-    const ctx = ctxOf(await queue(o.archived).catch(() => []));
-    if (!ctx) return null;
-    const text = await o.readMap(key);
-    const map = text === null ? null : parseMapMd(text, key);
+  /** The key queries, `map.md` and the settled members of a map scope. */
+  async function mapPart(ctx: GraphCtx, m: NonNullable<GraphCtx["map"]>) {
+    const text = await o.readMap(m.key);
+    const parsed = text === null ? null : parseMapMd(text, m.key);
     const keys = graphKeys(
-      map?.lanes ?? [],
+      parsed?.lanes ?? [],
       ctx.members.map((t) => t.title),
     );
-    const errors: MapGraphData["errors"] = [];
+    const errors: MapGraphPart["errors"] = [];
     const found = new Map<string, ListRow>();
     await Promise.all(
       keys.map((k) =>
-        queue(() => o.list(ctx.project, k)).then(
+        queue(() => o.list(m.project, k)).then(
           ({ rows, error }) => {
             if (error) errors.push({ key: k, text: error });
             else for (const r of rows) if (rowMatches(r, keys)) found.set(prId(r), r);
@@ -95,13 +116,32 @@ export function mapGraph(o: {
         ),
       ),
     );
+    const now = o.now();
+    const map: MapGraphPart = {
+      lanes: parsed?.lanes ?? null,
+      stacks: parsed?.stacks ?? null,
+      settled: ctx.members
+        .filter((t) => t.settledAt || t.gone)
+        .map((t) => ({
+          id: t.id,
+          title: t.title,
+          status: statusOf(t, now).status,
+          createdAt: t.createdAt,
+          href: ctx.hrefOf(t.id),
+          prs: t.prs.map((p) => prNode(p, [])),
+        })),
+      rows: [...found.values()].map((r) => {
+        const threadId = ctx.threadOf(r.repository, r.n);
+        return { ...r, threadId, threadHref: threadId && ctx.hrefOf(threadId) };
+      }),
+      errors,
+    };
+    return { map, found };
+  }
 
-    const graphIds = new Set([
-      ...ctx.members.flatMap((t) =>
-        t.prs.filter((p) => p.source !== "stack" && p.source !== "stack-dismissed").map(prId),
-      ),
-      ...found.keys(),
-    ]);
+  /** The stack mates and the behind-base counts of the graph PRs and the key rows. */
+  async function details(ctx: GraphCtx, found: Map<string, ListRow>) {
+    const graphIds = new Set([...ctx.members.flatMap((t) => t.prs.filter(memberLink).map(prId)), ...found.keys()]);
     const slots = new Map<string, { t: Thread; p: Thread["prs"][number]; n: number; stack: PrNode["stack"] }>();
     for (const t of ctx.members)
       for (const p of t.prs)
@@ -116,7 +156,7 @@ export function mapGraph(o: {
             });
         }
     const links = ctx.members.flatMap((t) => t.prs).filter((l) => l.source === "stack" && l.head !== null);
-    const mates: MapGraphData["mates"] = [];
+    const mates: PrGraphData["mates"] = [];
     const addMate = (node: PrNode) => {
       const threadId = ctx.threadOf(node.repository, node.n);
       mates.push({ ...node, threadId, threadHref: threadId && ctx.hrefOf(threadId) });
@@ -182,67 +222,66 @@ export function mapGraph(o: {
       ),
     ]);
 
-    const now = o.now();
-    return {
-      at: new Date(now).toISOString(),
-      lanes: map?.lanes ?? null,
-      stacks: map?.stacks ?? null,
-      settled: ctx.members
-        .filter((t) => t.settledAt || t.gone)
-        .map((t) => ({
-          id: t.id,
-          title: t.title,
-          status: statusOf(t, now).status,
-          createdAt: t.createdAt,
-          href: ctx.hrefOf(t.id),
-          prs: t.prs.map((p) => prNode(p, [])),
-        })),
-      rows: [...found.values()].map((r) => {
-        const threadId = ctx.threadOf(r.repository, r.n);
-        return { ...r, threadId, threadHref: threadId && ctx.hrefOf(threadId) };
+    return { mates, behind };
+  }
+
+  async function build(scope: Scope, ctxOf: (archived: Thread[]) => GraphCtx | null): Promise<PrGraphData | null> {
+    const ctx = ctxOf(scope.kind === "map" ? await queue(o.archived).catch(() => []) : []);
+    if (!ctx) return null;
+    const part = ctx.map ? await mapPart(ctx, ctx.map) : null;
+    const { mates, behind } = await details(ctx, part?.found ?? new Map());
+    const roots: PrGraphData["roots"] = {};
+    await Promise.all(
+      ctx.projects.map(async (p) => {
+        const root = p.path && (await o.root(p.path));
+        if (root) roots[p.id] = root;
       }),
-      mates,
-      behind,
-      errors,
-    };
+    );
+    return { at: new Date(o.now()).toISOString(), roots, mates, behind, map: part?.map ?? null };
   }
 
   return {
-    /** The graph data of a map key, null when the key has no member. A running call for the key is shared. */
-    get(key: string, ctxOf: (archived: Thread[]) => GraphCtx | null, refresh: boolean): Promise<MapGraphData | null> {
-      const hit = cache.get(key);
+    /** The graph data of a scope, null when the scope has no member. A running call for the scope id is shared. */
+    get(
+      scopeId: string,
+      scope: Scope,
+      ctxOf: (archived: Thread[]) => GraphCtx | null,
+      refresh: boolean,
+    ): Promise<PrGraphData | null> {
+      const hit = cache.get(scopeId);
       if (hit && isFresh(hit, o.now(), refresh)) return Promise.resolve(hit.data);
-      let call = running.get(key);
+      let call = running.get(scopeId);
       if (!call) {
-        call = build(key, ctxOf)
+        call = build(scope, ctxOf)
           .then((data) => {
-            if (data) cache.set(key, { at: o.now(), data });
+            if (data) cache.set(scopeId, { at: o.now(), data });
             return data;
           })
-          .finally(() => running.delete(key));
-        running.set(key, call);
+          .finally(() => running.delete(scopeId));
+        running.set(scopeId, call);
       }
       return call;
     },
   };
 }
 
-/** `GET /map-graph?key=<map key>[&refresh=1]`. 404 with no key or no member, 503 while T3 is not up. */
-export function mapGraphRoutes(o: {
+/** `GET /pr-graph?scope=<scope id>[&refresh=1]`. 404 with a bad scope or no member, 503 while T3 is not up. */
+export function prGraphRoutes(o: {
   up: () => boolean;
-  get: (key: string, refresh: boolean) => Promise<MapGraphData | null>;
+  get: (scopeId: string, scope: Scope, refresh: boolean) => Promise<PrGraphData | null>;
   timeout: (req: Request) => void;
 }) {
   return {
-    "/map-graph": {
+    "/pr-graph": {
       GET: async (req: Request) => {
         /** The calls can take longer than the idle timeout. */
         o.timeout(req);
         const params = new URL(req.url).searchParams;
-        const key = params.get("key");
-        if (!key) return new Response(null, { status: 404 });
+        const scopeId = params.get("scope");
+        const scope = parseScope(scopeId);
+        if (!scopeId || !scope) return new Response(null, { status: 404 });
         if (!o.up()) return new Response(null, { status: 503 });
-        const data = await o.get(key, params.get("refresh") === "1");
+        const data = await o.get(scopeId, scope, params.get("refresh") === "1");
         return data ? Response.json(data) : new Response(null, { status: 404 });
       },
     },

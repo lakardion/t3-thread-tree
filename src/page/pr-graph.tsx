@@ -17,7 +17,7 @@ import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } f
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import { cn } from "@/lib/utils";
 
-import type { MapGraphData } from "../shared/map-graph.ts";
+import type { PrGraphData } from "../shared/pr-graph-data.ts";
 import {
   buildPrGraph,
   type Edge,
@@ -74,7 +74,7 @@ const place = (col: number, row: number) => ({
 /** The slow part of the graph. A failed read keeps the last answer. */
 function useMapGraph(key: string) {
   const [state, setState] = useState<{
-    data: MapGraphData | null;
+    data: PrGraphData | null;
     busy: boolean;
     down: boolean;
   }>({
@@ -87,8 +87,8 @@ function useMapGraph(key: string) {
     (refresh: boolean) => {
       ctl.current?.abort();
       const c = (ctl.current = new AbortController());
-      fetch(`/map-graph?key=${encodeURIComponent(key)}${refresh ? "&refresh=1" : ""}`, { signal: c.signal })
-        .then((r) => (r.ok ? (r.json() as Promise<MapGraphData>) : Promise.reject(new Error(String(r.status)))))
+      fetch(`/pr-graph?scope=${encodeURIComponent(`map:${key}`)}${refresh ? "&refresh=1" : ""}`, { signal: c.signal })
+        .then((r) => (r.ok ? (r.json() as Promise<PrGraphData>) : Promise.reject(new Error(String(r.status)))))
         .then(
           (data) => setState({ data, busy: false, down: false }),
           () => {
@@ -490,7 +490,7 @@ export function PrGraphDialog({ head, onOpenChange }: { head: ThreadNode; onOpen
             {graph.nodes.length} PRs · {graph.nodes.filter((n) => n.state === "open").length} open
           </DialogDescription>
           {busy && !data && <p className="text-xs text-muted-foreground">Loading PRs from GitHub…</p>}
-          {data?.errors.map((e) => (
+          {data?.map?.errors.map((e) => (
             <p key={e.key} className="text-xs text-muted-foreground">
               Could not read PRs for {e.key}: {e.text} · {retry}
             </p>

@@ -157,7 +157,7 @@ bun start
 Open <http://127.0.0.1:4773>. The app starts even when T3 is not running. Until T3 is back, the page shows the last tree, greyed.
 
 - `bun run desktop` opens the desktop window from source.
-- `bun run demo` serves made-up data at <http://127.0.0.1:4774>, with no T3. Set `CLIS=0` to offer no CLI model, `PUSH=1` to fake a live change every 3 seconds, `SEND=failed` to make a send fail, and `T3CLI=0` to show the `t3` CLI as missing. Set `GRAPH=fail` to make one PR key query of the map PR graph fail, and `GRAPH=down` to make the graph answer that T3 is down.
+- `bun run demo` serves made-up data at <http://127.0.0.1:4774>, with no T3. Set `CLIS=0` to offer no CLI model, `PUSH=1` to fake a live change every 3 seconds, `SEND=failed` to make a send fail, and `T3CLI=0` to show the `t3` CLI as missing. Set `GRAPH=fail` to make one PR key query of a map scope fail, and `GRAPH=down` to make the PR graph answer that T3 is down for every scope.
 - `bun run desktop:demo` shows the demo in the desktop window.
 
 ### Commands

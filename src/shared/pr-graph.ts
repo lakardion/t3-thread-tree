@@ -1,6 +1,6 @@
 /** The pure model of the PR graph of a wayfinder map: nodes, edges, lanes and layout. */
 import type { MapLane } from "../server/map-md.ts";
-import type { MapGraphData } from "./map-graph.ts";
+import type { PrGraphData } from "./pr-graph-data.ts";
 import { bySince, type PrNode, type ThreadNode } from "./tree.ts";
 
 /** A row passes when a key equals its head branch or starts it (`abc-12-x`), or the title has the key as a word. */
@@ -73,7 +73,7 @@ const walk = (n: ThreadNode): ThreadNode[] =>
 type AnomalyCtx = {
   nodes: GraphNode[];
   edges: Edge[];
-  data: MapGraphData | null;
+  data: PrGraphData | null;
   mateIds: Set<string>;
   memberKeys: string[];
 };
@@ -96,7 +96,7 @@ const fanOut = ({ nodes, data }: AnomalyCtx): Anomaly[] =>
           {
             text: `${base} has ${kids.length} open children${
               kids.every((k) =>
-                data?.lanes?.some((l) => l.keys.some((key) => key.base === base && rowMatches(k, [key.key]))),
+                data?.map?.lanes?.some((l) => l.keys.some((key) => key.base === base && rowMatches(k, [key.key]))),
               )
                 ? " (planned)"
                 : ""
@@ -149,7 +149,7 @@ const laneKeyOf = (node: GraphNode, lanes: MapLane[]) => {
 const offLaneChain = ({ nodes, data }: AnomalyCtx): Anomaly[] => {
   const live = (k: string) => nodes.filter((n) => n.state !== "closed" && rowMatches(n, [k]));
   return nodes.flatMap((node) => {
-    const found = open(node) && laneKeyOf(node, data?.lanes ?? []);
+    const found = open(node) && laneKeyOf(node, data?.map?.lanes ?? []);
     if (!found) return [];
     const { lane, key } = found;
     const base = node.base ?? "main";
@@ -170,7 +170,7 @@ const offLaneChain = ({ nodes, data }: AnomalyCtx): Anomaly[] => {
 const stackAcrossLanes = ({ nodes, data }: AnomalyCtx): Anomaly[] =>
   Object.values(
     Object.groupBy(
-      nodes.filter((n) => n.stack && laneKeyOf(n, data?.lanes ?? [])),
+      nodes.filter((n) => n.stack && laneKeyOf(n, data?.map?.lanes ?? [])),
       (n) => stackKey({ repository: n.repository, stack: n.stack! }),
     ),
   ).flatMap((group = []) => {
@@ -186,26 +186,26 @@ const stackAcrossLanes = ({ nodes, data }: AnomalyCtx): Anomaly[] =>
   });
 
 const keyWithSeveralPrs = ({ nodes, data, memberKeys }: AnomalyCtx): Anomaly[] =>
-  [...new Set([...(data?.lanes ?? []).flatMap((l) => l.keys.map((k) => k.key.toUpperCase())), ...memberKeys])].flatMap(
-    (key) => {
-      const all = nodes.filter((n) => rowMatches(n, [key]));
-      const live = all.filter((n) => n.state !== "closed");
-      const closed = all.filter((n) => n.state === "closed");
-      return live.length < 2
-        ? []
-        : [
-            {
-              text: `${key} has ${live.length} PRs: ${refs(live).join(", ")}${closed.length ? ` (closed: ${refs(closed).join(", ")})` : ""}`,
-              prs: ids(all),
-            },
-          ];
-    },
-  );
+  [
+    ...new Set([...(data?.map?.lanes ?? []).flatMap((l) => l.keys.map((k) => k.key.toUpperCase())), ...memberKeys]),
+  ].flatMap((key) => {
+    const all = nodes.filter((n) => rowMatches(n, [key]));
+    const live = all.filter((n) => n.state !== "closed");
+    const closed = all.filter((n) => n.state === "closed");
+    return live.length < 2
+      ? []
+      : [
+          {
+            text: `${key} has ${live.length} PRs: ${refs(live).join(", ")}${closed.length ? ` (closed: ${refs(closed).join(", ")})` : ""}`,
+            prs: ids(all),
+          },
+        ];
+  });
 
 const missingFromStacks = ({ nodes, data }: AnomalyCtx): Anomaly[] =>
-  data?.stacks
+  data?.map?.stacks
     ? nodes
-        .filter((n) => open(n) && n.stack && !data.stacks!.some((s) => s.prs.includes(n.n)))
+        .filter((n) => open(n) && n.stack && !data.map!.stacks!.some((s) => s.prs.includes(n.n)))
         .map((n) => ({ text: `#${n.n} is in a stack, but not in Stacks`, prs: [n.id] }))
     : [];
 
@@ -224,7 +224,7 @@ const findAnomalies = (ctx: AnomalyCtx): Anomaly[] =>
     missingFromStacks,
   ].flatMap((rule) => rule(ctx));
 
-export function buildPrGraph(head: ThreadNode, data: MapGraphData | null): PrGraph {
+export function buildPrGraph(head: ThreadNode, data: PrGraphData | null): PrGraph {
   const tree = walk(head).filter((t) => data || !t.settled);
   const treeIds = new Set(tree.map((t) => t.id));
   const members: Member[] = [
@@ -234,7 +234,7 @@ export function buildPrGraph(head: ThreadNode, data: MapGraphData | null): PrGra
       prs: t.prs,
       settled: t.settled,
     })),
-    ...(data?.settled ?? [])
+    ...(data?.map?.settled ?? [])
       .filter((s) => !treeIds.has(s.id))
       .map((s) => ({
         thread: { id: s.id, href: s.href, title: s.title, status: s.status, live: false },
@@ -244,7 +244,7 @@ export function buildPrGraph(head: ThreadNode, data: MapGraphData | null): PrGra
       })),
   ].toSorted((a, b) => bySince(a.createdAt, b.createdAt));
 
-  const rows = data?.rows ?? [];
+  const rows = data?.map?.rows ?? [];
   const mates = data?.mates ?? [];
   const cands: Cand[] = [
     ...members.flatMap((m) => m.prs.map((pr) => ({ pr, tier: m.settled ? 3 : 1, threadId: null, threadHref: null }))),
@@ -256,7 +256,7 @@ export function buildPrGraph(head: ThreadNode, data: MapGraphData | null): PrGra
 
   const byId = new Map(members.map((m) => [m.thread.id, m.thread]));
   const mateIds = new Set(mates.map(prId));
-  const lanes = data?.lanes ?? [];
+  const lanes = data?.map?.lanes ?? [];
   const threadOf = (id: string): GraphThread | null => {
     const linked = members.find((m) => m.prs.some((p) => prId(p) === id));
     if (linked) return linked.thread;
