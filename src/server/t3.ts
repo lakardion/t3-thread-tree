@@ -300,7 +300,7 @@ export const narrowChecks = (v: string | null): PrNode["checks"] => narrow(v, CH
 export const narrowReview = (v: string | null): PrNode["review"] => narrow(v, REVIEWS_STATE);
 
 /** A PR row of `pullRequests.list`: the node fields, plus where the PR lives. */
-export type ListRow = PrNode & { host: string; repository: string; projectId: string };
+export type ListRow = PrNode & { host: string; projectId: string };
 
 /** Lenient decode of a `pullRequests.list` result. Entries without a number drop out. `error` joins the per-project errors. */
 export function decodeListResult(raw: unknown): { rows: ListRow[]; error: string | null } {
@@ -315,6 +315,7 @@ export function decodeListResult(raw: unknown): { rows: ListRow[]; error: string
     const total = num(stack.size);
     return [
       {
+        repository: str(o.repository) ?? "",
         n,
         url: str(o.url) ?? "",
         state: str(o.state) ?? "open",
@@ -331,7 +332,6 @@ export function decodeListResult(raw: unknown): { rows: ListRow[]; error: string
         changedFiles: null,
         labels: [],
         host: str(o.host) ?? "",
-        repository: str(o.repository) ?? "",
         projectId: str(o.projectId) ?? "",
       },
     ];

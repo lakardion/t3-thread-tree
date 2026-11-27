@@ -31,6 +31,7 @@ function node(id: string, over: Partial<ThreadNode> = {}): ThreadNode {
 
 const pr = (over: object) =>
   ({
+    repository: "a/b",
     n: 12,
     url: "u",
     state: "open",

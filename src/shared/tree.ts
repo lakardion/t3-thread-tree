@@ -19,6 +19,8 @@ export type Status =
 export type Label = { name: string; color: string | null };
 
 export type PrNode = {
+  /** `owner/name`. */
+  repository: string;
   n: number;
   url: string;
   state: string;

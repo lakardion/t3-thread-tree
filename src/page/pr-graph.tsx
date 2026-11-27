@@ -21,6 +21,7 @@ import type { MapGraphData } from "../shared/map-graph.ts";
 import {
   buildPrGraph,
   type Edge,
+  branchKey,
   focusOf,
   GY,
   type GraphNode,
@@ -195,7 +196,7 @@ function NodeCard({
   const { x, y } = place(n.col, n.row);
   return (
     <div
-      data-pr={n.n}
+      data-pr={n.id}
       data-lane={lane ?? undefined}
       tabIndex={-1}
       title={n.title ?? undefined}
@@ -280,7 +281,7 @@ function MergedPile({
         const d = Math.min(pile.length - 1 - i, 3) * 5;
         return (
           <NodeCard
-            key={n.n}
+            key={n.id}
             n={n}
             texts={texts(n)}
             style={{ left: 0, top: 0, "--c": `${d}px ${-d}px`, "--e": `0 ${i * step}px` } as CSSProperties}
@@ -323,14 +324,13 @@ function Canvas({ graph }: { graph: PrGraph }) {
     const l = (e.target as HTMLElement).closest<HTMLElement>("[data-lane]")?.dataset.lane;
     setLane(l ?? null);
   };
-  const anomalyTexts = (n: GraphNode) => graph.anomalies.filter((a) => a.prs.includes(n.n)).map((a) => a.text);
+  const anomalyTexts = (n: GraphNode) => graph.anomalies.filter((a) => a.prs.includes(n.id)).map((a) => a.text);
   const spot = new Map<string, { col: number; row: number }>([
     ["main", { col: 0, row: 0 }],
-    ...graph.nodes.map((n) => [`#${n.n}`, n] as const),
-    ...graph.branches.map((b) => [`b:${b.branch}`, b] as const),
+    ...graph.nodes.map((n) => [n.id, n] as const),
+    ...graph.branches.map((b) => [`b:${branchKey(b)}`, b] as const),
   ]);
-  const at = (e: Edge["from"] | Edge["to"]) =>
-    spot.get(e === "main" ? "main" : typeof e === "number" ? `#${e}` : `b:${e.branch}`)!;
+  const at = (e: Edge["from"] | Edge["to"]) => spot.get(typeof e === "string" ? e : `b:${branchKey(e)}`)!;
   const cols = Math.max(0, ...[...spot.values()].map((s) => s.col)) + 1;
   const rows = Math.max(0, ...[...spot.values()].map((s) => s.row)) + 1;
   const w = 2 * PAD + cols * NW + (cols - 1) * GX;
@@ -366,24 +366,24 @@ function Canvas({ graph }: { graph: PrGraph }) {
       </svg>
       <Pill branch="main" col={0} row={0} />
       {graph.branches.map((b) => (
-        <Pill key={b.branch} {...b} />
+        <Pill key={branchKey(b)} {...b} />
       ))}
       {Object.values(Object.groupBy(graph.nodes, (n) => `${n.col},${n.row}`)).map((pile = []) => {
         if (pile.length < 2)
           return (
             <NodeCard
-              key={pile[0].n}
+              key={pile[0].id}
               n={pile[0]}
               texts={anomalyTexts(pile[0])}
-              className={cn("transition-opacity", dim(focusOf(graph, pile[0].n)))}
-              lane={focusOf(graph, pile[0].n)}
+              className={cn("transition-opacity", dim(focusOf(graph, pile[0].id)))}
+              lane={focusOf(graph, pile[0].id)}
             />
           );
         const sorted = pile.toSorted((a, b) => a.stack!.pos - b.stack!.pos);
-        const focus = focusOf(graph, sorted.at(-1)!.n);
+        const focus = focusOf(graph, sorted.at(-1)!.id);
         return (
           <MergedPile
-            key={pile[0].n}
+            key={pile[0].id}
             pile={sorted}
             texts={anomalyTexts}
             className={dim(focus) || undefined}
@@ -396,8 +396,8 @@ function Canvas({ graph }: { graph: PrGraph }) {
 }
 
 function Lists({ graph, box }: { graph: PrGraph; box: RefObject<HTMLDivElement | null> }) {
-  const jump = (n: number) => {
-    const el = box.current?.querySelector<HTMLElement>(`[data-pr="${n}"]`);
+  const jump = (id: string) => {
+    const el = box.current?.querySelector<HTMLElement>(`[data-pr="${CSS.escape(id)}"]`);
     el?.scrollIntoView({ block: "center", inline: "center" });
     el?.focus({ preventScroll: true });
   };
@@ -420,14 +420,14 @@ function Lists({ graph, box }: { graph: PrGraph; box: RefObject<HTMLDivElement |
               {graph.anomalies.map((a, i) => (
                 <li key={i}>
                   {a.text}{" "}
-                  {a.prs.map((n) => (
+                  {a.prs.map((id) => (
                     <button
-                      key={n}
+                      key={id}
                       type="button"
-                      onClick={() => jump(n)}
+                      onClick={() => jump(id)}
                       className="mr-1 font-mono text-primary hover:underline"
                     >
-                      #{n}
+                      {id.slice(id.lastIndexOf("#"))}
                     </button>
                   ))}
                 </li>

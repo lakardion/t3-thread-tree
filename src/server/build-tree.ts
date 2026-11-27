@@ -117,6 +117,7 @@ const stackMembers = (t: Thread) =>
 export const prNode = (p: Thread["prs"][number], labels: Label[]): PrNode => {
   const pos = p.stackSlots?.indexOf(p.n) ?? -1;
   return {
+    repository: p.repository,
     n: p.n,
     url: p.url,
     state: p.state,

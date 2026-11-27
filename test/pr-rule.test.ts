@@ -5,6 +5,7 @@ import type { ThreadNode } from "../src/shared/tree.ts";
 
 const pr = (over: object) =>
   ({
+    repository: "a/b",
     n: 12,
     url: "u",
     state: "open",

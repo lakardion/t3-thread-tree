@@ -17,7 +17,18 @@ export function rowMatches(row: { head: string | null; title: string | null }, k
 /** `live`: a tree node that is not settled. */
 export type GraphThread = { id: string; href: string; title: string; status: string; live: boolean };
 
+/** The PR id: `owner/name#n`. */
+export const prId = (p: { repository: string; n: number }): string => `${p.repository}#${p.n}`;
+
+/** The key of a stack within its repository: `owner/name#<stack number>`. */
+const stackKey = (p: { repository: string; stack: { number: number } }): string => `${p.repository}#${p.stack.number}`;
+
+/** The key of a foreign base branch within its repository. */
+export const branchKey = (b: { repository: string; branch: string }): string => `${b.repository}#${b.branch}`;
+
 export type GraphNode = PrNode & {
+  /** `prId` of the PR. */
+  id: string;
   /** First issue key of the head branch, else of the title, else the branch, else `#n`. */
   key: string;
   lane: number | null;
@@ -27,16 +38,19 @@ export type GraphNode = PrNode & {
   row: number;
 };
 
-/** A foreign base: a branch that is neither `main` nor the head of a graph PR. */
-export type BranchNode = { branch: string; col: number; row: number };
+/** A foreign base: a branch that is neither `main` nor the head of a graph PR of the same repo. */
+export type BranchNode = { repository: string; branch: string; col: number; row: number };
 
 export type Edge = {
-  from: number | "main" | { branch: string };
-  to: number | { branch: string };
+  /** A node id, `"main"` or a branch. */
+  from: string | { repository: string; branch: string };
+  /** A node id or a branch. */
+  to: string | { repository: string; branch: string };
   kind: "stack" | "base" | "main" | "dim";
 };
 
-export type Anomaly = { text: string; prs: number[] };
+/** `prs` holds PR ids. */
+export type Anomaly = { text: string; prs: string[] };
 
 export type PrGraph = {
   nodes: GraphNode[];
@@ -60,22 +74,23 @@ type AnomalyCtx = {
   nodes: GraphNode[];
   edges: Edge[];
   data: MapGraphData | null;
-  mateNumbers: Set<number>;
+  mateIds: Set<string>;
   memberKeys: string[];
 };
 
 const open = (n: GraphNode) => n.state === "open";
-const nums = (ns: GraphNode[]) => ns.map((n) => n.n);
-const refs = (ns: GraphNode[]) => nums(ns).map((n) => `#${n}`);
+const ids = (ns: GraphNode[]) => ns.map((n) => n.id);
+const refs = (ns: GraphNode[]) => ns.map((n) => `#${n.n}`);
 
 const fanOut = ({ nodes, data }: AnomalyCtx): Anomaly[] =>
   Object.entries(
     Object.groupBy(
       nodes.filter((n) => open(n) && n.base && n.base !== "main"),
-      (n) => n.base!,
+      (n) => `${n.repository}#${n.base}`,
     ),
-  ).flatMap(([base, kids = []]) =>
-    kids.length < 2
+  ).flatMap(([, kids = []]) => {
+    const base = kids[0].base;
+    return kids.length < 2
       ? []
       : [
           {
@@ -86,43 +101,43 @@ const fanOut = ({ nodes, data }: AnomalyCtx): Anomaly[] =>
                 ? " (planned)"
                 : ""
             }`,
-            prs: nums(kids),
+            prs: ids(kids),
           },
-        ],
-  );
+        ];
+  });
 
 const closedParent = ({ nodes, edges }: AnomalyCtx): Anomaly[] =>
   edges.flatMap((e) => {
-    const parent = nodes.find((n) => n.n === e.from);
-    const child = nodes.find((n) => n.n === e.to);
+    const parent = nodes.find((n) => n.id === e.from);
+    const child = nodes.find((n) => n.id === e.to);
     return parent?.state === "closed" && child && open(child)
-      ? [{ text: `#${parent.n} is closed, but #${child.n} builds on it`, prs: [parent.n, child.n] }]
+      ? [{ text: `#${parent.n} is closed, but #${child.n} builds on it`, prs: [parent.id, child.id] }]
       : [];
   });
 
 const conflicts = ({ nodes }: AnomalyCtx): Anomaly[] =>
-  nodes.filter((n) => open(n) && n.conflicting).map((n) => ({ text: `#${n.n} has conflicts`, prs: [n.n] }));
+  nodes.filter((n) => open(n) && n.conflicting).map((n) => ({ text: `#${n.n} has conflicts`, prs: [n.id] }));
 
 const foreignBase = ({ nodes, edges }: AnomalyCtx): Anomaly[] =>
   edges.flatMap((e) => {
-    const node = typeof e.from === "object" && nodes.find((n) => n.n === e.to);
-    return node ? [{ text: `#${node.n} is based on ${node.base}, which is not main or a map PR`, prs: [node.n] }] : [];
+    const node = typeof e.from === "object" && nodes.find((n) => n.id === e.to);
+    return node ? [{ text: `#${node.n} is based on ${node.base}, which is not main or a map PR`, prs: [node.id] }] : [];
   });
 
 const behindBase = ({ nodes, data }: AnomalyCtx): Anomaly[] =>
   nodes
-    .filter((n) => open(n) && n.stack && (data?.behind[n.n] ?? 0) > 0)
-    .map((n) => ({ text: `#${n.n} is ${data!.behind[n.n]} commits behind its base`, prs: [n.n] }));
+    .filter((n) => open(n) && n.stack && (data?.behind[n.id] ?? 0) > 0)
+    .map((n) => ({ text: `#${n.n} is ${data!.behind[n.id]} commits behind its base`, prs: [n.id] }));
 
-const noThread = ({ nodes, mateNumbers }: AnomalyCtx): Anomaly[] =>
+const noThread = ({ nodes, mateIds }: AnomalyCtx): Anomaly[] =>
   nodes
-    .filter((n) => open(n) && !n.thread && !mateNumbers.has(n.n))
-    .map((n) => ({ text: `#${n.n} has no thread`, prs: [n.n] }));
+    .filter((n) => open(n) && !n.thread && !mateIds.has(n.id))
+    .map((n) => ({ text: `#${n.n} has no thread`, prs: [n.id] }));
 
 const stoppedThread = ({ nodes }: AnomalyCtx): Anomaly[] =>
   nodes
     .filter((n) => open(n) && n.thread?.live && ["failed", "interrupted"].includes(n.thread.status))
-    .map((n) => ({ text: `#${n.n}: its thread stopped`, prs: [n.n] }));
+    .map((n) => ({ text: `#${n.n}: its thread stopped`, prs: [n.id] }));
 
 /** The key of the node in an explicit lane, with the base that its lane gives. */
 const laneKeyOf = (node: GraphNode, lanes: MapLane[]) => {
@@ -148,7 +163,7 @@ const offLaneChain = ({ nodes, data }: AnomalyCtx): Anomaly[] => {
     ];
     return ok.includes(base)
       ? []
-      : [{ text: `#${node.n} is based on ${base}; the lane says ${key.base}`, prs: [node.n] }];
+      : [{ text: `#${node.n} is based on ${base}; the lane says ${key.base}`, prs: [node.id] }];
   });
 };
 
@@ -156,7 +171,7 @@ const stackAcrossLanes = ({ nodes, data }: AnomalyCtx): Anomaly[] =>
   Object.values(
     Object.groupBy(
       nodes.filter((n) => n.stack && laneKeyOf(n, data?.lanes ?? [])),
-      (n) => n.stack!.number,
+      (n) => stackKey({ repository: n.repository, stack: n.stack! }),
     ),
   ).flatMap((group = []) => {
     const lanes = [...new Set(group.map((n) => n.lane!))].toSorted((a, b) => a - b);
@@ -165,7 +180,7 @@ const stackAcrossLanes = ({ nodes, data }: AnomalyCtx): Anomaly[] =>
       : [
           {
             text: `Stack #${group[0].stack!.number} spans lanes ${lanes.map((l) => `L${l}`).join(", ")}`,
-            prs: nums(group),
+            prs: ids(group),
           },
         ];
   });
@@ -181,7 +196,7 @@ const keyWithSeveralPrs = ({ nodes, data, memberKeys }: AnomalyCtx): Anomaly[] =
         : [
             {
               text: `${key} has ${live.length} PRs: ${refs(live).join(", ")}${closed.length ? ` (closed: ${refs(closed).join(", ")})` : ""}`,
-              prs: nums(all),
+              prs: ids(all),
             },
           ];
     },
@@ -191,7 +206,7 @@ const missingFromStacks = ({ nodes, data }: AnomalyCtx): Anomaly[] =>
   data?.stacks
     ? nodes
         .filter((n) => open(n) && n.stack && !data.stacks!.some((s) => s.prs.includes(n.n)))
-        .map((n) => ({ text: `#${n.n} is in a stack, but not in Stacks`, prs: [n.n] }))
+        .map((n) => ({ text: `#${n.n} is in a stack, but not in Stacks`, prs: [n.id] }))
     : [];
 
 const findAnomalies = (ctx: AnomalyCtx): Anomaly[] =>
@@ -236,16 +251,16 @@ export function buildPrGraph(head: ThreadNode, data: MapGraphData | null): PrGra
     ...rows.map((pr) => ({ pr, tier: 2, threadId: pr.threadId, threadHref: pr.threadHref })),
     ...mates.map((pr) => ({ pr, tier: 4, threadId: pr.threadId, threadHref: pr.threadHref })),
   ].toSorted((a, b) => a.tier - b.tier);
-  const best = new Map<number, Cand>();
-  for (const c of cands) if (!best.has(c.pr.n)) best.set(c.pr.n, c);
+  const best = new Map<string, Cand>();
+  for (const c of cands) if (!best.has(prId(c.pr))) best.set(prId(c.pr), c);
 
   const byId = new Map(members.map((m) => [m.thread.id, m.thread]));
-  const mateNumbers = new Set(mates.map((m) => m.n));
+  const mateIds = new Set(mates.map(prId));
   const lanes = data?.lanes ?? [];
-  const threadOf = (n: number): GraphThread | null => {
-    const linked = members.find((m) => m.prs.some((p) => p.n === n));
+  const threadOf = (id: string): GraphThread | null => {
+    const linked = members.find((m) => m.prs.some((p) => prId(p) === id));
     if (linked) return linked.thread;
-    const ext = [...rows, ...mates].find((r) => r.n === n && r.threadId && r.threadHref);
+    const ext = [...rows, ...mates].find((r) => prId(r) === id && r.threadId && r.threadHref);
     return ext
       ? (byId.get(ext.threadId!) ?? { id: ext.threadId!, href: ext.threadHref!, title: "", status: "", live: false })
       : null;
@@ -261,10 +276,11 @@ export function buildPrGraph(head: ThreadNode, data: MapGraphData | null): PrGra
       )?.n ?? null;
     return {
       ...pr,
+      id: prId(pr),
       key: keyOf(pr.head) ?? keyOf(pr.title) ?? pr.head ?? `#${pr.n}`,
       lane,
-      outside: mateNumbers.has(pr.n) || (lane === null && lanes.length > 0),
-      thread: threadOf(pr.n),
+      outside: mateIds.has(prId(pr)) || (lane === null && lanes.length > 0),
+      thread: threadOf(prId(pr)),
       col: 1,
       row: 0,
     };
@@ -272,7 +288,7 @@ export function buildPrGraph(head: ThreadNode, data: MapGraphData | null): PrGra
 
   const baseOf = (node: GraphNode): GraphNode | undefined =>
     nodes
-      .filter((p) => p !== node && p.head === node.base)
+      .filter((p) => p !== node && p.repository === node.repository && p.head === node.base)
       .toSorted(
         (a, b) =>
           Number(b.state === "open") - Number(a.state === "open") ||
@@ -283,21 +299,20 @@ export function buildPrGraph(head: ThreadNode, data: MapGraphData | null): PrGra
   /** The merged members of each stack, in stack order. They share the spot of the last one, ahead of the open rest. */
   const piles = Map.groupBy(
     nodes.filter((n) => n.state === "merged" && n.stack).toSorted((a, b) => a.stack!.pos - b.stack!.pos),
-    (n) => n.stack!.number,
+    (n) => stackKey({ repository: n.repository, stack: n.stack! }),
   );
 
   /** A merged pile member is hidden behind the top of its pile, which owns the pile's edges. */
   const pileTop = (n: GraphNode) => {
-    const pile = n.stack && piles.get(n.stack.number);
+    const pile = n.stack && piles.get(stackKey({ repository: n.repository, stack: n.stack }));
     return pile?.includes(n) ? pile.at(-1)! : n;
   };
 
   const branches = new Map<string, BranchNode>();
   const edges: Edge[] = [];
   const children = new Map<string, GraphNode[]>();
-  const vertex = (n: GraphNode) => `#${n.n}`;
   for (const node of nodes) {
-    const pile = node.stack ? piles.get(node.stack.number) : undefined;
+    const pile = node.stack ? piles.get(stackKey({ repository: node.repository, stack: node.stack })) : undefined;
     const top = pile?.at(-1);
     const inPile = pile?.includes(node);
     if (inPile && node !== top) continue;
@@ -306,20 +321,21 @@ export function buildPrGraph(head: ThreadNode, data: MapGraphData | null): PrGra
     const found = toMain ? undefined : baseOf(node);
     const parent = top && !inPile && toMain ? top : found && pileTop(found);
     if (!parent && toMain) {
-      edges.push({ from: "main", to: node.n, kind: dim ? "dim" : "main" });
+      edges.push({ from: "main", to: node.id, kind: dim ? "dim" : "main" });
       children.set("main", [...(children.get("main") ?? []), node]);
     } else if (parent) {
       const stack = parent.stack && node.stack && parent.stack.number === node.stack.number;
-      edges.push({ from: parent.n, to: node.n, kind: dim ? "dim" : stack ? "stack" : "base" });
-      children.set(vertex(parent), [...(children.get(vertex(parent)) ?? []), node]);
+      edges.push({ from: parent.id, to: node.id, kind: dim ? "dim" : stack ? "stack" : "base" });
+      children.set(parent.id, [...(children.get(parent.id) ?? []), node]);
     } else {
-      const base = node.base!;
-      if (!branches.has(base)) {
-        branches.set(base, { branch: base, col: 1, row: 0 });
-        edges.push({ from: "main", to: { branch: base }, kind: "main" });
+      const end = { repository: node.repository, branch: node.base! };
+      const key = `b:${branchKey(end)}`;
+      if (!branches.has(key)) {
+        branches.set(key, { ...end, col: 1, row: 0 });
+        edges.push({ from: "main", to: end, kind: "main" });
       }
-      edges.push({ from: { branch: base }, to: node.n, kind: dim ? "dim" : "base" });
-      children.set(`b:${base}`, [...(children.get(`b:${base}`) ?? []), node]);
+      edges.push({ from: end, to: node.id, kind: dim ? "dim" : "base" });
+      children.set(key, [...(children.get(key) ?? []), node]);
     }
   }
 
@@ -334,18 +350,20 @@ export function buildPrGraph(head: ThreadNode, data: MapGraphData | null): PrGra
       if ("branch" in k) {
         k.col = col;
         k.row = r;
-        place(children.get(`b:${k.branch}`) ?? [], [], col + 1, r);
+        place(children.get(`b:${branchKey(k)}`) ?? [], [], col + 1, r);
       } else if (!seen.has(k)) {
         seen.add(k);
         k.col = col;
         k.row = r;
-        place(children.get(vertex(k)) ?? [], [], col + 1, r);
+        place(children.get(k.id) ?? [], [], col + 1, r);
       }
     });
   };
   place(
     children.get("main") ?? [],
-    [...branches.values()].toSorted((a, b) => a.branch.localeCompare(b.branch)),
+    [...branches.values()].toSorted(
+      (a, b) => a.branch.localeCompare(b.branch) || a.repository.localeCompare(b.repository),
+    ),
     1,
     0,
   );
@@ -370,7 +388,7 @@ export function buildPrGraph(head: ThreadNode, data: MapGraphData | null): PrGra
       nodes,
       edges,
       data,
-      mateNumbers,
+      mateIds,
       memberKeys: members.map((m) => keyOf(m.thread.title)).filter((k) => k !== undefined),
     }),
     noPr: members.filter((m) => m.prs.length === 0).map((m) => m.thread),
@@ -390,9 +408,9 @@ export const pileLift = (row: number, count: number): number =>
 
 /** What hover focuses for a PR: its lane, else the focus of the PR it builds on, else its own chain root. A branch pill has none. */
 export function focusOf(graph: PrGraph, to: Edge["to"]): string | null {
-  if (typeof to !== "number") return null;
-  const own = graph.nodes.find((n) => n.n === to)!.lane;
+  if (typeof to !== "string") return null;
+  const own = graph.nodes.find((n) => n.id === to)!.lane;
   if (own !== null) return `L${own}`;
   const from = graph.edges.find((e) => e.to === to)?.from;
-  return typeof from === "number" ? focusOf(graph, from) : `#${to}`;
+  return typeof from === "string" && from !== "main" ? focusOf(graph, from) : to;
 }
