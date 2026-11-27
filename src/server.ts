@@ -101,6 +101,15 @@ function scanIfNeeded(settledView = false) {
   };
 }
 
+const rows = new Map<string, ReturnType<typeof lineage.row>>();
+/** The thread table row of an id. A missing id stays missing: a spawner row exists before its child. */
+function rowOf(id: string) {
+  if (!rows.has(id)) rows.set(id, lineage.row(id));
+  return rows.get(id)!;
+}
+/** The id is in the thread table, archived and deleted rows included. */
+const known = (id: string) => threads.has(id) || rowOf(id) !== null;
+
 /** The map key of each thread, from its first message. A thread with no user message yet is read again. */
 const mapKeys = new Map<string, string | null>();
 function mapKeyOf(id: string): string | null {
@@ -169,6 +178,7 @@ const treeFor = (settled: boolean, rules = defaultRules(), labels: string[] = []
       stepsOf: (runId) => runSteps.get(runId)?.steps,
       origin: runsOrigin,
       mapKeyOf,
+      rowOf,
     },
     rules,
   ),
@@ -190,12 +200,17 @@ function syncLinear() {
     const key = issueKey(t.title);
     if (key && !t.parentThreadId && !t.sideChat && !t.gone && !t.settledAt) keys.add(key);
   }
-  /** A settled map thread with a key stands in for its Map header. */
+  /** The Issue key of each settled ancestor in the spawner chain of a visible thread: its header needs Linear data. */
   for (const t of threads.values()) {
-    const spawner = spawners.get(t.id);
-    const stand = spawner ? threads.get(spawner) : undefined;
-    const key = stand?.settledAt && !t.settledAt && !t.parentThreadId ? issueKey(stand.title) : null;
-    if (key && mapKeyOf(t.id)) keys.add(key);
+    if (t.parentThreadId || t.sideChat || t.gone || t.settledAt) continue;
+    const seen = new Set([t.id]);
+    for (let id = spawnerOf(t.id); id && !seen.has(id); id = spawnerOf(id)) {
+      seen.add(id);
+      const a = threads.get(id);
+      const title = a ? (a.settledAt || a.gone ? a.title : null) : rowOf(id)?.title;
+      const key = title ? issueKey(title) : null;
+      if (key) keys.add(key);
+    }
   }
   const withSteps = new Set([...threads.values()].flatMap((t) => (t.workflowRun ? [t.workflowRun.runId] : [])));
   for (const r of runsSnapshot?.runs ?? []) {
@@ -384,6 +399,7 @@ const mapCtx = (key: string, archived: Thread[]): GraphCtx | null => {
   const maps = mapsOf({
     ids: pool.map((t) => t.id),
     spawnerOf,
+    known,
     isStep: (id) => !!all.get(id)?.workflowRun,
     keyOf: mapKeyOf,
     createdKey: created,
@@ -392,8 +408,10 @@ const mapCtx = (key: string, archived: Thread[]): GraphCtx | null => {
     .filter((t) => maps.mapOf(t.id) === key)
     .toSorted((a, b) => created(a.id).localeCompare(created(b.id)));
   if (members.length === 0) return null;
-  const mapThread = members.map((t) => maps.threadOf(maps.rootOf(t.id)!, key)).find((id) => id);
-  const project = all.get(mapThread ?? "")?.projectId ?? members[0].projectId;
+  /** The oldest thread with this key as its own and no ancestor with it. Its map thread places the map. */
+  const top = members.find((t) => mapKeyOf(t.id) === key && !maps.ancestors(t.id).some((a) => mapKeyOf(a) === key));
+  const mapThread = top && maps.threadOf(maps.rootOf(top.id)!, key);
+  const project = (mapThread && (all.get(mapThread)?.projectId ?? rowOf(mapThread)?.projectId)) || members[0].projectId;
   return {
     members,
     projects: [{ id: project, path: projects.get(project)?.path ?? null }],
