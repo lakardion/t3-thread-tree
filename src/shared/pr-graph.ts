@@ -1,7 +1,7 @@
 /** The pure model of the PR graph of a wayfinder map: nodes, edges, lanes and layout. */
 import type { MapLane } from "../server/map-md.ts";
 import type { PrGraphData } from "./pr-graph-data.ts";
-import { bySince, type PrNode, type ThreadNode } from "./tree.ts";
+import { bySince, isReviewTitle, type PrNode, type ThreadNode } from "./tree.ts";
 
 /** A row passes when a key equals its head branch or starts it (`abc-12-x`), or the title has the key as a word. */
 export function rowMatches(row: { head: string | null; title: string | null }, keys: string[]): boolean {
@@ -32,17 +32,20 @@ export type GraphNode = PrNode & {
   /** First issue key of the head branch, else of the title, else the branch, else `#n`. */
   key: string;
   lane: number | null;
-  outside: boolean;
+  /** A stack mate gives "outside the map" with a map, else "stack mate". */
+  outside: "outside the map" | "stack mate" | null;
   thread: GraphThread | null;
+  /** The thread is a review thread, and no other thread links the PR. */
+  viaReview: boolean;
   col: number;
   row: number;
 };
 
-/** A foreign base: a branch that is neither `main` nor the head of a graph PR of the same repo. */
+/** A foreign base: a branch that is neither the root nor the head of a graph PR of the same repo. */
 export type BranchNode = { repository: string; branch: string; col: number; row: number };
 
 export type Edge = {
-  /** A node id, `"main"` or a branch. */
+  /** A node id, `"root"` or a branch. */
   from: string | { repository: string; branch: string };
   /** A node id or a branch. */
   to: string | { repository: string; branch: string };
@@ -53,6 +56,8 @@ export type Edge = {
 export type Anomaly = { text: string; prs: string[] };
 
 export type PrGraph = {
+  /** The root branch of the band. */
+  root: string;
   nodes: GraphNode[];
   branches: BranchNode[];
   edges: Edge[];
@@ -60,14 +65,27 @@ export type PrGraph = {
   noPr: GraphThread[];
 };
 
-type Member = { thread: GraphThread; createdAt: string | null; prs: PrNode[]; settled: boolean };
+type Member = { thread: GraphThread; createdAt: string | null; prs: PrNode[]; settled: boolean; review: boolean };
 type Cand = { pr: PrNode; tier: number; threadId: string | null; threadHref: string | null };
 
 const KEY = /\b[A-Z][A-Z0-9]*-\d+\b/i;
 const keyOf = (s: string | null) => s?.match(KEY)?.[0].toUpperCase();
 
+/** The root branch of a band: `entry`, else `main` or `master` when a PR has it as base, else the most common base that is no PR head, else `main`. */
+export function bandRoot(entry: string | undefined, prs: { base: string | null; head: string | null }[]): string {
+  if (entry) return entry;
+  const known = ["main", "master"].find((b) => prs.some((p) => p.base === b));
+  if (known) return known;
+  const heads = new Set(prs.map((p) => p.head));
+  const counts = Map.groupBy(
+    prs.filter((p) => p.base && !heads.has(p.base)),
+    (p) => p.base!,
+  );
+  return [...counts].toSorted((a, b) => b[1].length - a[1].length)[0]?.[0] ?? "main";
+}
+
 /** The thread nodes under `head`. A Map header and a run node leave out their subtree, and a member that heads a sub-map leaves out its children. */
-const walk = (n: ThreadNode): ThreadNode[] =>
+export const walk = (n: ThreadNode): ThreadNode[] =>
   n.children.flatMap((c) => (c.run || c.map?.header ? [] : [c, ...(c.map ? [] : walk(c))]));
 
 type AnomalyCtx = {
@@ -75,6 +93,7 @@ type AnomalyCtx = {
   edges: Edge[];
   data: PrGraphData | null;
   mateIds: Set<string>;
+  root: string;
   memberKeys: string[];
 };
 
@@ -82,10 +101,10 @@ const open = (n: GraphNode) => n.state === "open";
 const ids = (ns: GraphNode[]) => ns.map((n) => n.id);
 const refs = (ns: GraphNode[]) => ns.map((n) => `#${n.n}`);
 
-const fanOut = ({ nodes, data }: AnomalyCtx): Anomaly[] =>
+const fanOut = ({ nodes, data, root }: AnomalyCtx): Anomaly[] =>
   Object.entries(
     Object.groupBy(
-      nodes.filter((n) => open(n) && n.base && n.base !== "main"),
+      nodes.filter((n) => open(n) && n.base && n.base !== root),
       (n) => `${n.repository}#${n.base}`,
     ),
   ).flatMap(([, kids = []]) => {
@@ -118,10 +137,12 @@ const closedParent = ({ nodes, edges }: AnomalyCtx): Anomaly[] =>
 const conflicts = ({ nodes }: AnomalyCtx): Anomaly[] =>
   nodes.filter((n) => open(n) && n.conflicting).map((n) => ({ text: `#${n.n} has conflicts`, prs: [n.id] }));
 
-const foreignBase = ({ nodes, edges }: AnomalyCtx): Anomaly[] =>
+const foreignBase = ({ nodes, edges, root }: AnomalyCtx): Anomaly[] =>
   edges.flatMap((e) => {
     const node = typeof e.from === "object" && nodes.find((n) => n.id === e.to);
-    return node ? [{ text: `#${node.n} is based on ${node.base}, which is not main or a map PR`, prs: [node.id] }] : [];
+    return node
+      ? [{ text: `#${node.n} is based on ${node.base}, which is not ${root} or a graph PR`, prs: [node.id] }]
+      : [];
   });
 
 const behindBase = ({ nodes, data }: AnomalyCtx): Anomaly[] =>
@@ -146,20 +167,20 @@ const laneKeyOf = (node: GraphNode, lanes: MapLane[]) => {
   return lane && key ? { lane, key } : null;
 };
 
-const offLaneChain = ({ nodes, data }: AnomalyCtx): Anomaly[] => {
+const offLaneChain = ({ nodes, data, root }: AnomalyCtx): Anomaly[] => {
   const live = (k: string) => nodes.filter((n) => n.state !== "closed" && rowMatches(n, [k]));
   return nodes.flatMap((node) => {
     const found = open(node) && laneKeyOf(node, data?.map?.lanes ?? []);
     if (!found) return [];
     const { lane, key } = found;
-    const base = node.base ?? "main";
+    const base = node.base ?? root;
     const prev = lane.keys.some((k) => k.key === key.base) ? live(key.base) : null;
     const ok = [
       ...live(key.key)
         .filter((n) => n !== node)
         .map((n) => n.head),
       ...(prev ? prev.map((n) => n.head) : [key.base]),
-      ...(key.base === "main" || prev?.every((n) => n.state === "merged") ? ["main"] : []),
+      ...(key.base === "main" || prev?.every((n) => n.state === "merged") ? [root] : []),
     ];
     return ok.includes(base)
       ? []
@@ -224,15 +245,16 @@ const findAnomalies = (ctx: AnomalyCtx): Anomaly[] =>
     missingFromStacks,
   ].flatMap((rule) => rule(ctx));
 
-export function buildPrGraph(head: ThreadNode, data: PrGraphData | null): PrGraph {
-  const tree = walk(head).filter((t) => data || !t.settled);
+export function buildPrGraph(members: ThreadNode[], root: string, data: PrGraphData | null): PrGraph {
+  const tree = members.filter((t) => data || !t.settled);
   const treeIds = new Set(tree.map((t) => t.id));
-  const members: Member[] = [
+  const threads: Member[] = [
     ...tree.map((t) => ({
       thread: { id: t.id, href: t.href, title: t.title, status: t.status, live: !t.settled },
       createdAt: t.detail.createdAt,
       prs: t.prs,
       settled: t.settled,
+      review: t.review,
     })),
     ...(data?.map?.settled ?? [])
       .filter((s) => !treeIds.has(s.id))
@@ -241,29 +263,32 @@ export function buildPrGraph(head: ThreadNode, data: PrGraphData | null): PrGrap
         createdAt: s.createdAt,
         prs: s.prs,
         settled: true,
+        review: isReviewTitle(s.title),
       })),
   ].toSorted((a, b) => bySince(a.createdAt, b.createdAt));
 
   const rows = data?.map?.rows ?? [];
   const mates = data?.mates ?? [];
   const cands: Cand[] = [
-    ...members.flatMap((m) => m.prs.map((pr) => ({ pr, tier: m.settled ? 3 : 1, threadId: null, threadHref: null }))),
+    ...threads.flatMap((m) => m.prs.map((pr) => ({ pr, tier: m.settled ? 3 : 1, threadId: null, threadHref: null }))),
     ...rows.map((pr) => ({ pr, tier: 2, threadId: pr.threadId, threadHref: pr.threadHref })),
     ...mates.map((pr) => ({ pr, tier: 4, threadId: pr.threadId, threadHref: pr.threadHref })),
   ].toSorted((a, b) => a.tier - b.tier);
   const best = new Map<string, Cand>();
   for (const c of cands) if (!best.has(prId(c.pr))) best.set(prId(c.pr), c);
 
-  const byId = new Map(members.map((m) => [m.thread.id, m.thread]));
+  const byId = new Map(threads.map((m) => [m.thread.id, m.thread]));
   const mateIds = new Set(mates.map(prId));
   const lanes = data?.map?.lanes ?? [];
-  const threadOf = (id: string): GraphThread | null => {
-    const linked = members.find((m) => m.prs.some((p) => prId(p) === id));
-    if (linked) return linked.thread;
+  const threadOf = (id: string): { thread: GraphThread | null; viaReview: boolean } => {
+    const linked = threads.filter((m) => m.prs.some((p) => prId(p) === id));
+    const mate = linked.find((m) => !m.review) ?? linked[0];
+    if (mate) return { thread: mate.thread, viaReview: mate.review };
     const ext = [...rows, ...mates].find((r) => prId(r) === id && r.threadId && r.threadHref);
-    return ext
+    const thread = ext
       ? (byId.get(ext.threadId!) ?? { id: ext.threadId!, href: ext.threadHref!, title: "", status: "", live: false })
       : null;
+    return { thread, viaReview: false };
   };
 
   const nodes: GraphNode[] = [...best.values()].map(({ pr }) => {
@@ -274,13 +299,20 @@ export function buildPrGraph(head: ThreadNode, data: PrGraphData | null): PrGrap
           l.keys.map((k) => k.key),
         ),
       )?.n ?? null;
+    const via = threadOf(prId(pr));
     return {
       ...pr,
       id: prId(pr),
       key: keyOf(pr.head) ?? keyOf(pr.title) ?? pr.head ?? `#${pr.n}`,
       lane,
-      outside: mateIds.has(prId(pr)) || (lane === null && lanes.length > 0),
-      thread: threadOf(prId(pr)),
+      outside: mateIds.has(prId(pr))
+        ? data?.map
+          ? "outside the map"
+          : "stack mate"
+        : lane === null && lanes.length > 0
+          ? "outside the map"
+          : null,
+      ...via,
       col: 1,
       row: 0,
     };
@@ -317,12 +349,12 @@ export function buildPrGraph(head: ThreadNode, data: PrGraphData | null): PrGrap
     const inPile = pile?.includes(node);
     if (inPile && node !== top) continue;
     const dim = node.state !== "open";
-    const toMain = inPile || !node.base || node.base === "main";
-    const found = toMain ? undefined : baseOf(node);
-    const parent = top && !inPile && toMain ? top : found && pileTop(found);
-    if (!parent && toMain) {
-      edges.push({ from: "main", to: node.id, kind: dim ? "dim" : "main" });
-      children.set("main", [...(children.get("main") ?? []), node]);
+    const toRoot = inPile || !node.base || node.base === root;
+    const found = toRoot ? undefined : baseOf(node);
+    const parent = top && !inPile && toRoot ? top : found && pileTop(found);
+    if (!parent && toRoot) {
+      edges.push({ from: "root", to: node.id, kind: dim ? "dim" : "main" });
+      children.set("root", [...(children.get("root") ?? []), node]);
     } else if (parent) {
       const stack = parent.stack && node.stack && parent.stack.number === node.stack.number;
       edges.push({ from: parent.id, to: node.id, kind: dim ? "dim" : stack ? "stack" : "base" });
@@ -332,7 +364,7 @@ export function buildPrGraph(head: ThreadNode, data: PrGraphData | null): PrGrap
       const key = `b:${branchKey(end)}`;
       if (!branches.has(key)) {
         branches.set(key, { ...end, col: 1, row: 0 });
-        edges.push({ from: "main", to: end, kind: "main" });
+        edges.push({ from: "root", to: end, kind: "main" });
       }
       edges.push({ from: end, to: node.id, kind: dim ? "dim" : "base" });
       children.set(key, [...(children.get(key) ?? []), node]);
@@ -360,7 +392,7 @@ export function buildPrGraph(head: ThreadNode, data: PrGraphData | null): PrGrap
     });
   };
   place(
-    children.get("main") ?? [],
+    children.get("root") ?? [],
     [...branches.values()].toSorted(
       (a, b) => a.branch.localeCompare(b.branch) || a.repository.localeCompare(b.repository),
     ),
@@ -381,6 +413,7 @@ export function buildPrGraph(head: ThreadNode, data: PrGraphData | null): PrGrap
   }
 
   return {
+    root,
     nodes,
     branches: [...branches.values()],
     edges,
@@ -389,9 +422,10 @@ export function buildPrGraph(head: ThreadNode, data: PrGraphData | null): PrGrap
       edges,
       data,
       mateIds,
-      memberKeys: members.map((m) => keyOf(m.thread.title)).filter((k) => k !== undefined),
+      root,
+      memberKeys: threads.map((m) => keyOf(m.thread.title)).filter((k) => k !== undefined),
     }),
-    noPr: members.filter((m) => m.prs.length === 0).map((m) => m.thread),
+    noPr: threads.filter((m) => m.prs.length === 0).map((m) => m.thread),
   };
 }
 
@@ -412,5 +446,5 @@ export function focusOf(graph: PrGraph, to: Edge["to"]): string | null {
   const own = graph.nodes.find((n) => n.id === to)!.lane;
   if (own !== null) return `L${own}`;
   const from = graph.edges.find((e) => e.to === to)?.from;
-  return typeof from === "string" && from !== "main" ? focusOf(graph, from) : to;
+  return typeof from === "string" && from !== "root" ? focusOf(graph, from) : to;
 }
