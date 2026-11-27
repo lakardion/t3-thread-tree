@@ -1,4 +1,4 @@
-import { Archive, LocateFixed, Search, SearchX, Workflow as WorkflowIcon } from "lucide-react";
+import { Archive, GitBranch, LocateFixed, Search, SearchX, Workflow as WorkflowIcon } from "lucide-react";
 import { useEffect, useRef, useState, type KeyboardEvent } from "react";
 
 import { Button } from "@/components/ui/button";
@@ -11,6 +11,7 @@ import { find, type Hit } from "../shared/find.ts";
 import { CATCH_UP, isIn } from "../shared/status.ts";
 import type { Workflow } from "../shared/workflow-start.ts";
 import { ago, agoAt } from "./format.ts";
+import { graphActionMatches } from "./graph-scope.ts";
 import { IconState } from "./icon-state.tsx";
 import { needsYou } from "./needs-you.ts";
 import { StatusIcon } from "./status-icon.tsx";
@@ -91,6 +92,7 @@ type BodyProps = {
   show: (id: string) => void;
   workflows: Workflow[] | null;
   start: (w: Workflow) => void;
+  openGraph: () => void;
 };
 
 /** The "Start a workflow" group of the `>` mode. `text` is the query after the `>`. */
@@ -132,7 +134,7 @@ function StartGroup({
 }
 
 /** The search and the results. It mounts with the dialog, so the query and the settled search reset on close. */
-function FindBody({ list, canShow, now, open, show, workflows, start }: BodyProps) {
+function FindBody({ list, canShow, now, open, show, workflows, start, openGraph }: BodyProps) {
   const [q, setQ] = useState("");
   const [sel, setSel] = useState("");
   const [settledMode, setSettledMode] = useState(false);
@@ -197,6 +199,15 @@ function FindBody({ list, canShow, now, open, show, workflows, start }: BodyProp
         {!startMode && settled.length > 0 && (
           <CommandGroup heading="Settled">{settled.map((h) => row(h))}</CommandGroup>
         )}
+        {!startMode && graphActionMatches(query) && (
+          <CommandGroup heading="Actions">
+            <CommandItem value="action:pr-graph" onSelect={openGraph} className="gap-2.5 py-2">
+              <GitBranch className="size-4 text-muted-foreground" />
+              PR graph
+              <Kbd className="ml-auto">G</Kbd>
+            </CommandItem>
+          </CommandGroup>
+        )}
         {offerSettled && !startMode && (
           <CommandGroup>
             <CommandItem
@@ -250,6 +261,7 @@ export function FindDialog({
   now,
   workflows,
   start,
+  openGraph,
 }: {
   open: boolean;
   setOpen: (o: boolean) => void;
@@ -260,6 +272,8 @@ export function FindDialog({
   workflows: Workflow[] | null;
   /** Called with the picked workflow. The dialog closes first. */
   start: (w: Workflow) => void;
+  /** Called when the PR graph action is picked. The dialog closes first. */
+  openGraph: () => void;
 }) {
   /** Set while a Show in tree closes the dialog, so the focus return does not fight the scroll. */
   const revealing = useRef(false);
@@ -285,6 +299,10 @@ export function FindDialog({
           start={(w) => {
             setOpen(false);
             start(w);
+          }}
+          openGraph={() => {
+            setOpen(false);
+            openGraph();
           }}
           open={(h) => {
             setOpen(false);

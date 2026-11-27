@@ -21,7 +21,20 @@ export type KeyContext = {
 export function pageKey(
   e: KeyEvent,
   ctx: KeyContext,
-): "next" | "triage" | "find" | "down" | "up" | "toggle" | "expand" | "collapse" | "send" | "pin" | "graph" | null {
+):
+  | "next"
+  | "triage"
+  | "find"
+  | "down"
+  | "up"
+  | "toggle"
+  | "expand"
+  | "collapse"
+  | "send"
+  | "pin"
+  | "graph"
+  | "graphAll"
+  | null {
   if (
     e.key.toLowerCase() === "k" &&
     !e.altKey &&
@@ -29,8 +42,12 @@ export function pageKey(
     (ctx.mac ? e.metaKey && !e.ctrlKey : e.ctrlKey && !e.metaKey)
   )
     return ctx.overlay === "dialog" || ctx.overlay === "menu" ? null : "find";
-  if (e.metaKey || e.ctrlKey || e.altKey || e.shiftKey || e.defaultPrevented) return null;
+  /** Shift with `g`, so Caps Lock alone does not open it. */
+  const graphAll = e.shiftKey && e.key.toLowerCase() === "g" && !e.metaKey && !e.ctrlKey && !e.altKey;
+  if (!graphAll && (e.metaKey || e.ctrlKey || e.altKey || e.shiftKey)) return null;
+  if (e.defaultPrevented) return null;
   if (ctx.field || ctx.panel || ctx.overlay) return null;
+  if (graphAll) return e.repeat ? null : "graphAll";
   /** Moves repeat; the arrows move only from a stop, else the page scrolls. */
   if (e.key === "j" || (ctx.stop && e.key === "ArrowDown")) return "down";
   if (e.key === "k" || (ctx.stop && e.key === "ArrowUp")) return "up";
