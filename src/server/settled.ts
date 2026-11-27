@@ -21,10 +21,14 @@ export function settledSignature(threads: Iterable<Thread>): string {
   return count ? `${count}:${key}:${updated}` : "";
 }
 
-const settledIn = (b: Group): ThreadNode[] => [...b.groups.flatMap(settledIn), ...b.threads.filter((t) => t.settled)];
+const withChildren = (t: ThreadNode): ThreadNode[] => [t, ...t.children.flatMap(withChildren)];
+const settledIn = (b: Group): ThreadNode[] => [
+  ...b.groups.flatMap(settledIn),
+  ...b.threads.flatMap(withChildren).filter((t) => t.settled),
+];
 
 /**
- * One page of settled threads, newest settle first. `projects` is the unnested tree with settled threads.
+ * One page of settled threads, newest settle first. `projects` is the tree with settled threads; nested rows count.
  * `after` is the `next` of the previous page. `next` is null on the last page.
  */
 export function settledPage(projects: Group[], threads: Map<string, Thread>, after: string | null, limit: number) {
@@ -32,7 +36,10 @@ export function settledPage(projects: Group[], threads: Map<string, Thread>, aft
     .flatMap((p) =>
       /** A Map header takes `settled` from its thread but has its own id, such as `map:<key>`. */
       settledIn(p)
-        .filter((t) => threads.has(t.id))
+        .filter((t) => {
+          const th = threads.get(t.id);
+          return !!th && listed(th);
+        })
         .map((t) => ({
           project: { id: p.id, label: p.label, kind: "project", repo: p.repo, groups: [], threads: [] } as Group,
           t,

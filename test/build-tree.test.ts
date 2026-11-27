@@ -1,6 +1,7 @@
 import { describe, expect, test } from "bun:test";
 import { homedir } from "node:os";
 
+import { pinIdOf } from "../src/page/order.ts";
 import { flatten, sortFlat } from "../src/page/view.ts";
 import {
   buildLinearTree,
@@ -246,24 +247,10 @@ describe("placement", () => {
     expect(ts[1].detail.launchedBy).toEqual({ title: "Wayfinder map", href: "t3code://threads/env-1/map" });
   });
 
-  test("keyed thread stays under its key even with a visible spawner", () => {
+  test("a keyed thread nests under its visible spawner", () => {
     const tree = build([shell("a", "SHOP-4312 parent"), shell("mcp:b", "SHOP-4313 child")], { "mcp:b": "a" });
-    expect(labels(tree[0].groups).toSorted()).toEqual(["SHOP-4312", "SHOP-4313"]);
-  });
-
-  test("spawner in another project is not followed", () => {
-    const tree = build([shell("a", "Adapt planning"), shell("mcp:b", "t3exp work", { projectId: "p2" })], {
-      "mcp:b": "a",
-    });
-    expect(labels(tree).toSorted()).toEqual(["backend", "frontend"]);
-    expect(titles(child(tree, "backend").threads)).toEqual(["t3exp work"]);
-  });
-
-  test("no visible spawner in the chain → directly in the project", () => {
-    const tree = build([shell("x", "gone", { settledAt: "2026-11-12T09:00:00.000Z" }), shell("mcp:b", "orphan")], {
-      "mcp:b": "x",
-    });
-    expect(titles(child(tree, "frontend").threads)).toEqual(["orphan"]);
+    expect(labels(tree[0].groups)).toEqual(["SHOP-4312"]);
+    expect(titles(child(tree, "frontend", "SHOP-4312").threads[0].children)).toEqual(["SHOP-4313 child"]);
   });
 
   test("a spawner cycle does not hang", () => {
@@ -413,7 +400,7 @@ describe("PR stack", () => {
     expect("stack" in child(tree, "frontend")).toBe(false);
   });
 
-  test("keyless launched stack threads share one stack group instead of nesting", () => {
+  test("launched stack threads sit together under their spawner instead of nesting in each other", () => {
     const tree = build(
       [
         shell("lead", "dispatch"),
@@ -423,15 +410,13 @@ describe("PR stack", () => {
       ],
       { a: "lead", b: "a", c: "b" },
     );
-    expect(labels(tree[0].groups)).toEqual(["PR stack #61"]);
-    const g = child(tree, "frontend", "PR stack #61");
-    expect(g.stack).toEqual({ id: "s61", total: 3, base: null });
-    expect(g.threads.map((t) => [t.title, t.stack?.pos, t.children.length])).toEqual([
-      ["wait-time-04 one", 1, 0],
-      ["wait-time-05 two", 2, 0],
-      ["wait-time-06 three", 3, 0],
+    expect(tree[0].groups).toEqual([]);
+    const [head] = tree[0].threads;
+    expect(head.children.map((t) => [t.title, t.stack?.pos, t.children.length, t.rail?.id])).toEqual([
+      ["wait-time-04 one", 1, 0, "s61"],
+      ["wait-time-05 two", 2, 0, "s61"],
+      ["wait-time-06 three", 3, 0, "s61"],
     ]);
-    expect(child(tree, "frontend").threads[0].children).toEqual([]);
   });
 
   test("T3 stack layers set the order; an agent-linked PR is the thread's own", () => {
@@ -753,10 +738,10 @@ describe("status", () => {
 });
 
 describe("details", () => {
-  const node = (raws: object[], id: string, spawners: Record<string, string> = {}) => {
+  const node = (raws: object[], id: string, spawners: Record<string, string> = {}, rules = defaultRules()) => {
     const walk = (ts: ThreadNode[]): ThreadNode[] => ts.flatMap((t) => [t, ...walk(t.children)]);
     const walkB = (b: Group): ThreadNode[] => [...walk(b.threads), ...b.groups.flatMap(walkB)];
-    return build(raws, spawners)
+    return buildTree(inputOf(raws, spawners), rules)
       .flatMap(walkB)
       .find((t) => t.id === id)!;
   };
@@ -857,14 +842,16 @@ describe("details", () => {
 
   describe("launchedBy", () => {
     const spawner = { title: "Spawner", href: "t3code://threads/env-1/sp" };
-    test("set for a keyed thread", () => {
-      expect(node([shell("sp", "Spawner"), shell("k", "SHOP-1 keyed")], "k", { k: "sp" }).detail.launchedBy).toEqual(
-        spawner,
-      );
+    test("null for a member that nests under its spawner", () => {
+      expect(node([shell("sp", "Spawner"), shell("k", "SHOP-1 keyed")], "k", { k: "sp" }).detail.launchedBy).toBeNull();
     });
-    test("set on a loose thread when the spawner is in another project", () => {
+    test("set for a keyed thread when Lineage group is off", () => {
+      const raws = [shell("sp", "Spawner"), shell("k", "SHOP-1 keyed")];
+      expect(node(raws, "k", { k: "sp" }, NO_LINEAGE).detail.launchedBy).toEqual(spawner);
+    });
+    test("set on a loose thread when Lineage group is off and the spawner is in another project", () => {
       const raws = [shell("sp", "Spawner", { projectId: "p2" }), shell("k", "keyless")];
-      expect(node(raws, "k", { k: "sp" }).detail.launchedBy).toEqual(spawner);
+      expect(node(raws, "k", { k: "sp" }, NO_LINEAGE).detail.launchedBy).toEqual(spawner);
     });
     test("null when the spawner id is unknown", () => {
       const tree = buildTree(inputOf([shell("k", "keyless")], { k: "gone" }), NO_LINEAGE);
@@ -1145,7 +1132,7 @@ describe("buildLinearTree", () => {
     expect(tree[2].threads[1].t3Project).toEqual({ id: "p2", label: "backend" });
   });
 
-  test("a keyless stack thread does not nest under its keyless spawner", () => {
+  test("keyless stack threads of a group nest under its head", () => {
     const tree = buildL(
       [
         shell("p", "parent"),
@@ -1156,9 +1143,9 @@ describe("buildLinearTree", () => {
       { s1: "p" },
     );
     expect(titles(tree[0].threads)).toEqual(["parent"]);
-    expect(titles(tree[0].groups[0].threads)).toEqual(["one", "two"]);
-    expect(tree[0].threads[0].children).toEqual([]);
-    expect(tree[0].groups[0].threads[0].detail.launchedBy?.title).toBe("parent");
+    expect(tree[0].groups).toEqual([]);
+    expect(titles(tree[0].threads[0].children)).toEqual(["one", "two"]);
+    expect(tree[0].threads[0].children[0].detail.launchedBy).toBeNull();
   });
 
   test("a keyless launched thread is loose and names its spawner", () => {
@@ -1168,11 +1155,10 @@ describe("buildLinearTree", () => {
     expect(tree[0].threads[1].detail.launchedBy?.title).toBe("parent");
   });
 
-  test("a keyless thread does not nest under a keyless review", () => {
+  test("a keyless thread nests under a keyless review", () => {
     const tree = buildL([shell("r", "Review #1"), shell("c", "child")], {}, { c: "r" });
-    expect(ids(tree)).toEqual(["lf:reviews", "lf:loose"]);
-    expect(titles(tree[1].threads)).toEqual(["child"]);
-    expect(tree[1].threads[0].detail.launchedBy?.title).toBe("Review #1");
+    expect(ids(tree)).toEqual(["lf:reviews"]);
+    expect(titles(tree[0].threads[0].children)).toEqual(["child"]);
   });
 
   test("stack mates take the place of their oldest member among unrelated threads", () => {
@@ -1531,223 +1517,301 @@ describe("runs", () => {
   });
 });
 
-describe("Map groups", () => {
+describe("Lineage groups", () => {
   const SETTLED = { settledAt: "2026-11-12T09:00:00.000Z", settledOverride: "settled" };
   const keys = (m: Record<string, string>) => ({ mapKeyOf: (id: string) => m[id] ?? null });
   const mapped = (raws: object[], m: Record<string, string>, spawners: Record<string, string> = {}) =>
     build(raws, spawners, keys(m));
   const loose = (tree: Group[]) => child(tree, "frontend").threads;
   const hrefOf = (id: string) => `t3code://threads/env-1/${id}`;
+  const stack = (own: number) => [
+    pr(own, "created"),
+    ...[10, 11, 12].filter((n) => n !== own).map((n) => pr(n, "stack")),
+  ];
 
-  test("a member leaves its key group and nests under the map thread", () => {
-    const tree = mapped(
-      [shell("chart", "Wayfinder: Search"), shell("t1", "SHOP-1 a"), shell("t2", "SHOP-2 b")],
-      { t1: "/m/search", t2: "/m/search" },
-      { t1: "chart", t2: "chart" },
-    );
+  test("a keyless and a keyed launched thread both sit under the root", () => {
+    const tree = build([shell("root", "root"), shell("a", "a"), shell("k", "SHOP-1 k")], { a: "root", k: "root" });
     expect(tree[0].groups).toEqual([]);
     const [head] = loose(tree);
-    expect(head.map).toEqual({ name: "Search", header: false, href: null, key: "/m/search" });
-    expect(titles(head.children)).toEqual(["SHOP-1 a", "SHOP-2 b"]);
+    expect(titles(head.children)).toEqual(["a", "SHOP-1 k"]);
+    expect(head.map).toEqual({ name: "root", header: false, href: null });
+    expect(pinIdOf(head)).toBe("t:root");
   });
 
-  test("the map group shows only while a member is visible", () => {
-    const tree = mapped(
-      [shell("chart", "Wayfinder"), shell("t1", "SHOP-1 a", SETTLED)],
-      { t1: "/m/x" },
-      { t1: "chart" },
-    );
+  test("a root with no visible member is a plain row", () => {
+    const tree = mapped([shell("root", "root"), shell("a", "a", SETTLED)], { a: "/m/x", root: "/m/x" }, { a: "root" });
     expect(loose(tree)[0].map).toBeUndefined();
-  });
-
-  test("a non-member never nests under the map thread", () => {
-    const tree = mapped(
-      [shell("chart", "Wayfinder"), shell("t1", "SHOP-1 a"), shell("free", "free thread")],
-      { t1: "/m/x" },
-      { t1: "chart", free: "chart" },
-    );
-    expect(titles(loose(tree))).toEqual(["Wayfinder", "free thread"]);
-    expect(titles(loose(tree)[0].children)).toEqual(["SHOP-1 a"]);
-  });
-
-  test("a settled map thread gives a header at its place", () => {
-    const tree = mapped(
-      [shell("chart", "Wayfinder: Search", SETTLED), shell("t1", "SHOP-1 a"), shell("t2", "b")],
-      { t1: "/m/search", t2: "/m/search" },
-      { t1: "chart", t2: "chart" },
-    );
-    const [header] = loose(tree);
-    expect(header).toMatchObject({ id: "chart", map: { name: "Search", header: true, href: hrefOf("chart") } });
-    expect(titles(header.children)).toEqual(["SHOP-1 a", "b"]);
-  });
-
-  test("a map with no map thread puts its header at the oldest member's place", () => {
-    const tree = mapped([shell("t1", "SHOP-1 a"), shell("t2", "SHOP-2 b")], { t1: "/m/alpha-map", t2: "/m/alpha-map" });
-    expect(labels(tree[0].groups)).toEqual(["SHOP-1"]);
-    const [header] = child(tree, "frontend", "SHOP-1").threads;
-    expect(header).toMatchObject({ id: "map:/m/alpha-map", map: { name: "Alpha map", header: true, href: null } });
-    expect(titles(header.children)).toEqual(["SHOP-1 a", "SHOP-2 b"]);
-  });
-
-  test("a map thread of several maps heads one header per map, oldest map first", () => {
-    const raws = [shell("chart", "Charting"), shell("y", "y"), shell("x", "x")];
-    const tree = mapped(raws, { x: "/m/k", y: "/m/l" }, { x: "chart", y: "chart" });
-    const [head] = loose(tree);
-    expect(head.map).toMatchObject({ header: false });
-    expect(head.map?.key).toBeUndefined();
-    expect(head.children.map((c) => c.map?.key)).toEqual(["/m/l", "/m/k"]);
-    expect(head.children.map((c) => c.id)).toEqual(["map:/m/l", "map:/m/k"]);
-    expect(head.children.map((c) => c.map?.name)).toEqual(["L", "K"]);
-    expect(head.children.map((c) => c.map?.href)).toEqual([null, null].map(() => hrefOf("chart")));
-  });
-
-  test("a settled map thread of several maps gives one header per map", () => {
-    const tree = mapped(
-      [shell("chart", "Charting", SETTLED), shell("x", "x"), shell("y", "y")],
-      { x: "/m/k", y: "/m/l" },
-      { x: "chart", y: "chart" },
-    );
-    expect(loose(tree).map((t) => t.id)).toEqual(["map:/m/k", "map:/m/l"]);
+    expect(loose(tree)[0].children).toEqual([]);
   });
 
   test("members nest by spawner chain; a settled member is skipped", () => {
-    const tree = mapped(
+    const tree = build(
       [
-        shell("chart", "Wayfinder"),
+        shell("root", "root"),
         shell("d", "dispatch"),
         shell("t2", "t2", SETTLED),
-        shell("s", "start-issue"),
+        shell("s", "start"),
         shell("t3", "t3"),
       ],
-      { d: "/m/x", t2: "/m/x", t3: "/m/x" },
-      { d: "chart", s: "d", t2: "d", t3: "t2" },
+      { d: "root", s: "d", t2: "d", t3: "t2" },
     );
     const [head] = loose(tree);
     expect(titles(head.children)).toEqual(["dispatch"]);
-    expect(titles(head.children[0].children)).toEqual(["start-issue", "t3"]);
+    expect(titles(head.children[0].children)).toEqual(["start", "t3"]);
   });
 
-  test("the rail carries the stack number, on a key group and on a Map member", () => {
-    const stack = (own: number) => [
-      pr(own, "created", "open", { number: 42, base: "main" }),
-      ...[10, 11, 12].filter((n) => n !== own).map((n) => pr(n, "stack")),
+  describe("Lineage header", () => {
+    const raws = (...members: string[]) => [
+      shell("root", "SHOP-1 root", SETTLED),
+      ...members.map((id) => shell(id, id)),
     ];
-    const tree = mapped(
-      [
-        shell("chart", "Wayfinder"),
-        shell("other", "WEB-9 other", { pullRequests: stack(12) }),
-        shell("mate", "mate", { pullRequests: stack(11) }),
-        shell("m", "SHOP-1 member", { pullRequests: stack(10) }),
-      ],
-      { m: "/m/x" },
-      { m: "chart" },
-    );
-    expect(child(tree, "frontend", "WEB-9").stack?.number).toBe(42);
-    expect(loose(tree)[0].children[0].rail?.number).toBe(42);
+    const spawners = { a: "root", b: "root" };
+
+    test("a settled root gives a header with its id at the place of its key group", () => {
+      const tree = build(raws("a", "b"), spawners);
+      const [header] = child(tree, "frontend", "SHOP-1").threads;
+      expect(header).toMatchObject({
+        id: "root",
+        prs: [],
+        stack: null,
+        lastRun: null,
+        map: { name: "SHOP-1 root", header: true, href: hrefOf("root") },
+      });
+      expect(titles(header.children)).toEqual(["a", "b"]);
+      expect(header.children.map((c) => c.detail.launchedBy)).toEqual([null, null]);
+    });
+
+    test("it shows also over one member, with the same id", () => {
+      const tree = build(raws("a"), spawners);
+      expect(child(tree, "frontend", "SHOP-1").threads.map((t) => t.id)).toEqual(["root"]);
+    });
+
+    test("an archived root is known by its table row", () => {
+      const row = { title: "Old root", projectId: "p2", createdAt: "2026-11-12T07:00:00.000Z" };
+      const tree = build([shell("a", "a")], { a: "gone" }, { rowOf: (id) => (id === "gone" ? row : null) });
+      const [header] = child(tree, "backend").threads;
+      expect(header).toMatchObject({ id: "gone", title: "Old root", map: { header: true } });
+      expect(titles(header.children)).toEqual(["a"]);
+    });
+
+    test("an unknown spawner id makes the topmost known thread the root", () => {
+      const tree = build([shell("a", "a"), shell("b", "b")], { b: "a", a: "gone" });
+      const [head] = loose(tree);
+      expect(head).toMatchObject({ id: "a", map: { header: false } });
+      expect(titles(head.children)).toEqual(["b"]);
+    });
   });
 
-  test("keyless stack mates join the group with a rail; a keyed non-member stays", () => {
-    const stack = (own: number) => [
-      pr(own, "created"),
-      ...[10, 11, 12].filter((n) => n !== own).map((n) => pr(n, "stack")),
-    ];
-    const tree = mapped(
-      [
-        shell("chart", "Wayfinder"),
-        shell("other", "WEB-9 other", { pullRequests: stack(12) }),
-        shell("mate", "mate", { pullRequests: stack(11) }),
-        shell("m", "SHOP-1 member", { pullRequests: stack(10) }),
-      ],
-      { m: "/m/x" },
-      { m: "chart" },
-    );
-    const [head] = loose(tree);
-    expect(titles(head.children)).toEqual(["SHOP-1 member", "mate"]);
-    expect(head.children.map((c) => c.rail)).toEqual([
-      { id: "s10", total: 3, base: null },
-      { id: "s10", total: 3, base: null },
-    ]);
-    expect(labels(tree[0].groups)).toEqual(["WEB-9"]);
+  describe("map look", () => {
+    test("a root that is the map thread of one map takes the map", () => {
+      const tree = mapped(
+        [shell("chart", "Wayfinder: Search"), shell("t1", "SHOP-1 a"), shell("t2", "SHOP-2 b")],
+        { t1: "/m/search", t2: "/m/search" },
+        { t1: "chart", t2: "chart" },
+      );
+      expect(tree[0].groups).toEqual([]);
+      const [head] = loose(tree);
+      expect(head.map).toEqual({ name: "Search", header: false, href: null, key: "/m/search" });
+      expect(pinIdOf(head)).toBe("map:/m/search");
+      expect(titles(head.children)).toEqual(["SHOP-1 a", "SHOP-2 b"]);
+    });
+
+    test("a keyed root anchors its own label", () => {
+      const tree = mapped([shell("r", "root"), shell("c", "c")], { r: "/m/own-map" }, { c: "r" });
+      const [head] = loose(tree);
+      expect(head.map).toEqual({ name: "Own map", header: false, href: null, key: "/m/own-map" });
+      expect(titles(head.children)).toEqual(["c"]);
+    });
+
+    test("a program root gets no key and one Map header per map, oldest map first", () => {
+      const raws = [shell("chart", "Charting"), shell("y", "y"), shell("x", "x"), shell("h", "helper")];
+      const tree = mapped(raws, { x: "/m/k", y: "/m/l" }, { x: "chart", y: "chart", h: "chart" });
+      const [head] = loose(tree);
+      expect(head.map).toEqual({ name: "Charting", header: false, href: null });
+      expect(pinIdOf(head)).toBe("t:chart");
+      expect(head.children.map((c) => c.id)).toEqual(["map:/m/l", "map:/m/k", "h"]);
+      expect(head.children.slice(0, 2).map((c) => [c.map?.key, c.map?.name, c.map?.href])).toEqual([
+        ["/m/l", "L", hrefOf("chart")],
+        ["/m/k", "K", hrefOf("chart")],
+      ]);
+      expect(titles(head.children[0].children)).toEqual(["y"]);
+      expect(head.children[0].children[0].detail.launchedBy).toBeNull();
+    });
+
+    test("a settled program root gives a Lineage header over the Map headers", () => {
+      const tree = mapped(
+        [shell("chart", "Charting", SETTLED), shell("x", "x"), shell("y", "y")],
+        { x: "/m/k", y: "/m/l" },
+        { x: "chart", y: "chart" },
+      );
+      const [header] = loose(tree);
+      expect(header).toMatchObject({ id: "chart", map: { header: true } });
+      expect(header.map?.key).toBeUndefined();
+      expect(header.children.map((c) => c.id)).toEqual(["map:/m/k", "map:/m/l"]);
+    });
+
+    test("a settled map thread inside a group gives a Map header with its id at its place", () => {
+      const tree = mapped(
+        [shell("root", "root"), shell("chart", "Wayfinder: Search", SETTLED), shell("t1", "a"), shell("t2", "b")],
+        { t1: "/m/search", t2: "/m/search" },
+        { chart: "root", t1: "chart", t2: "chart" },
+      );
+      const [head] = loose(tree);
+      const [header] = head.children;
+      expect(header).toMatchObject({ id: "chart", map: { name: "Search", header: true, href: hrefOf("chart") } });
+      expect(titles(header.children)).toEqual(["a", "b"]);
+    });
+
+    test("a settled map thread in another project gives a Map header with its project", () => {
+      const tree = mapped(
+        [shell("root", "root"), shell("chart", "Wayfinder", { ...SETTLED, projectId: "p2" }), shell("t1", "a")],
+        { t1: "/m/x" },
+        { chart: "root", t1: "chart" },
+      );
+      const [header] = loose(tree)[0].children;
+      expect(header).toMatchObject({ id: "chart", t3Project: { id: "p2", label: "backend" } });
+    });
+
+    test("a sub-map nests in the parent group at its map thread", () => {
+      const tree = mapped(
+        [shell("chart", "Wayfinder"), shell("t", "ticket"), shell("s", "sub ticket")],
+        { t: "/m/p", s: "/m/s" },
+        { t: "chart", s: "t" },
+      );
+      const [head] = loose(tree);
+      const [t] = head.children;
+      expect(t.map).toMatchObject({ header: false, key: "/m/s" });
+      expect(titles(t.children)).toEqual(["sub ticket"]);
+    });
+
+    test("a settled sub-map thread puts its Map header in the parent group", () => {
+      const tree = mapped(
+        [
+          shell("chart", "Wayfinder"),
+          shell("t", "ticket", SETTLED),
+          shell("u", "other ticket"),
+          shell("s", "sub ticket"),
+        ],
+        { t: "/m/p", u: "/m/p", s: "/m/s" },
+        { t: "chart", u: "chart", s: "t" },
+      );
+      const [head] = loose(tree);
+      expect(head.children.map((c) => [c.id, c.map?.header])).toEqual([
+        ["t", true],
+        ["u", undefined],
+      ]);
+      expect(titles(head.children[0].children)).toEqual(["sub ticket"]);
+    });
   });
 
-  test("in a stack of two maps, each member stays and mates go to the lowest member", () => {
-    const stack = (own: number) => [
-      pr(own, "created"),
-      ...[10, 11, 12].filter((n) => n !== own).map((n) => pr(n, "stack")),
-    ];
-    const tree = mapped(
-      [
-        shell("c1", "Map one"),
-        shell("c2", "Map two"),
-        shell("m1", "SHOP-1 a", { pullRequests: stack(10) }),
-        shell("m2", "SHOP-2 b", { pullRequests: stack(11) }),
-        shell("mate", "mate", { pullRequests: stack(12) }),
-      ],
-      { m1: "/m/one", m2: "/m/two" },
-      { m1: "c1", m2: "c2" },
-    );
-    const [one, two] = loose(tree);
-    expect(titles(one.children)).toEqual(["SHOP-1 a", "mate"]);
-    expect(one.children.every((c) => c.rail)).toBe(true);
-    expect(titles(two.children)).toEqual(["SHOP-2 b"]);
-    expect(two.children[0].rail).toBeUndefined();
-  });
+  describe("PR stack", () => {
+    test("the rail carries the stack number", () => {
+      const withNumber = (own: number) => [
+        pr(own, "created", "open", { number: 42, base: "main" }),
+        ...[10, 11].filter((n) => n !== own).map((n) => pr(n, "stack")),
+      ];
+      const tree = build(
+        [
+          shell("root", "root"),
+          shell("a", "a", { pullRequests: withNumber(10) }),
+          shell("b", "b", { pullRequests: withNumber(11) }),
+        ],
+        { a: "root", b: "root" },
+      );
+      expect(loose(tree)[0].children.map((c) => c.rail?.number)).toEqual([42, 42]);
+    });
 
-  test("a sub-map nests in the parent group at its map thread", () => {
-    const tree = mapped(
-      [shell("chart", "Wayfinder"), shell("t", "ticket"), shell("s", "sub ticket")],
-      { t: "/m/p", s: "/m/s" },
-      { t: "chart", s: "t" },
-    );
-    const [head] = loose(tree);
-    const [t] = head.children;
-    expect(t.map?.header).toBe(false);
-    expect(titles(t.children)).toEqual(["sub ticket"]);
-  });
+    test("a keyless stack mate with no spawner joins the group; a keyed non-member stays", () => {
+      const tree = build(
+        [
+          shell("root", "root"),
+          shell("other", "WEB-9 other", { pullRequests: stack(12) }),
+          shell("mate", "mate", { pullRequests: stack(11) }),
+          shell("m", "SHOP-1 member", { pullRequests: stack(10) }),
+        ],
+        { m: "root" },
+      );
+      const [head] = loose(tree);
+      expect(titles(head.children)).toEqual(["SHOP-1 member", "mate"]);
+      expect(head.children.map((c) => c.rail)).toEqual([
+        { id: "s10", total: 3, base: null },
+        { id: "s10", total: 3, base: null },
+      ]);
+      expect(labels(tree[0].groups)).toEqual(["WEB-9"]);
+    });
 
-  test("a member never nests under the head of another map", () => {
-    const tree = mapped(
-      [shell("chart", "Wayfinder"), shell("s", "S ticket"), shell("k", "K ticket"), shell("x", "X loose")],
-      { s: "/m/p", k: "/m/k" },
-      { s: "chart", k: "s", x: "s" },
-    );
-    const [head] = loose(tree);
-    expect(titles(head.children)).toEqual(["S ticket", "X loose"]);
-    expect(titles(head.children[0].children)).toEqual(["K ticket"]);
-  });
+    test("in a stack of two groups, each member stays and mates go to the lowest member", () => {
+      const tree = build(
+        [
+          shell("c1", "Group one"),
+          shell("c2", "Group two"),
+          shell("m1", "SHOP-1 a", { pullRequests: stack(10) }),
+          shell("m2", "SHOP-2 b", { pullRequests: stack(11) }),
+          shell("mate", "mate", { pullRequests: stack(12) }),
+        ],
+        { m1: "c1", m2: "c2" },
+      );
+      const [one, two] = loose(tree);
+      expect(titles(one.children)).toEqual(["SHOP-1 a", "mate"]);
+      expect(one.children.every((c) => c.rail)).toBe(true);
+      expect(titles(two.children)).toEqual(["SHOP-2 b"]);
+      expect(two.children[0].rail).toBeUndefined();
+    });
 
-  test("a settled sub-map thread puts its header in the parent group", () => {
-    const tree = mapped(
-      [
-        shell("chart", "Wayfinder"),
-        shell("t", "ticket", SETTLED),
-        shell("u", "other ticket"),
-        shell("s", "sub ticket"),
-      ],
-      { t: "/m/p", u: "/m/p", s: "/m/s" },
-      { t: "chart", u: "chart", s: "t" },
-    );
-    const [head] = loose(tree);
-    expect(head.children.map((c) => [c.id, c.map?.header])).toEqual([
-      ["t", true],
-      ["u", undefined],
-    ]);
-    expect(titles(head.children[0].children)).toEqual(["sub ticket"]);
+    test("mates that spawned each other sit together at the topmost mate, not nested", () => {
+      const tree = build(
+        [
+          shell("root", "root"),
+          shell("s3", "s3", { pullRequests: stack(12) }),
+          shell("s1", "s1", { pullRequests: stack(10) }),
+          shell("s2", "s2", { pullRequests: stack(11) }),
+          shell("kid", "kid"),
+        ],
+        { s1: "root", s2: "s1", s3: "s2", kid: "s2" },
+      );
+      const [head] = loose(tree);
+      expect(titles(head.children)).toEqual(["s1", "s2", "s3"]);
+      expect(head.children.every((c) => c.rail)).toBe(true);
+      expect(titles(head.children[1].children)).toEqual(["kid"]);
+    });
+
+    test("a root in the stack stays the head and its member mates nest under it", () => {
+      const tree = build(
+        [
+          shell("root", "root", { pullRequests: stack(10) }),
+          shell("s1", "s1", { pullRequests: stack(11) }),
+          shell("s2", "s2", { pullRequests: stack(12) }),
+        ],
+        { s1: "root", s2: "s1" },
+      );
+      expect(labels(tree[0].groups)).toEqual(["PR stack #10"]);
+      const [head] = child(tree, "frontend", "PR stack #10").threads;
+      expect(head.id).toBe("root");
+      expect(titles(head.children)).toEqual(["s1", "s2"]);
+      expect(head.children.every((c) => c.rail)).toBe(true);
+    });
   });
 
   test("a member from another project gets its project", () => {
-    const tree = mapped(
-      [shell("chart", "Wayfinder"), shell("t1", "a", { projectId: "p2" }), shell("t2", "b")],
-      { t1: "/m/x", t2: "/m/x" },
-      { t1: "chart", t2: "chart" },
-    );
+    const tree = build([shell("root", "root"), shell("t1", "a", { projectId: "p2" }), shell("t2", "b")], {
+      t1: "root",
+      t2: "root",
+    });
     const [head] = loose(tree);
     expect(head.children.map((c) => c.t3Project)).toEqual([{ id: "p2", label: "backend" }, undefined]);
   });
 
+  test("with Lineage group off, no group shows and launchedBy is set", () => {
+    const tree = buildTree(inputOf([shell("root", "root"), shell("a", "a")], { a: "root" }), NO_LINEAGE);
+    const [root, a] = loose(tree);
+    expect(root.map).toBeUndefined();
+    expect(root.children).toEqual([]);
+    expect(a.detail.launchedBy?.title).toBe("root");
+  });
+
   test("a step thread is never a member", () => {
     const raws = [
-      shell("chart", "Wayfinder"),
+      shell("root", "root"),
       shell("t1", "a"),
       shell("st", "step", { workflowRun: { runId: "r1", workflow: "w", step: "go" }, status: "running" }),
     ];
@@ -1762,9 +1826,8 @@ describe("Map groups", () => {
     const tree = buildTree(
       inputOf(
         raws,
-        { t1: "chart", st: "chart" },
+        { t1: "root", st: "root" },
         {
-          ...keys({ t1: "/m/x", st: "/m/x" }),
           runs: {
             runs: [
               {
@@ -1791,32 +1854,24 @@ describe("Map groups", () => {
       "SHOP-1": { project: { id: "x", name: "Proj x", url: "u" }, milestone: null },
       "SHOP-2": { project: { id: "y", name: "Proj y", url: "u" }, milestone: null },
     };
-    const buildL = (raws: object[], m: Record<string, string>, spawners: Record<string, string> = {}) =>
-      buildLinearTree(inputOf(raws, spawners, { linearOf: (k) => answers[k], ...keys(m) }), defaultRules());
+    const buildL = (raws: object[], spawners: Record<string, string> = {}, over: Partial<BuildInput> = {}) =>
+      buildLinearTree(inputOf(raws, spawners, { linearOf: (k) => answers[k], ...over }), defaultRules());
 
-    test("the group follows the map thread; a member in another Linear project stays", () => {
-      const tree = buildL(
-        [shell("chart", "Wayfinder"), shell("t1", "SHOP-1 a"), shell("t2", "SHOP-2 b")],
-        { t1: "/m/x", t2: "/m/x" },
-        { t1: "chart", t2: "chart" },
-      );
-      expect(tree.map((b) => b.id)).toEqual(["lf:loose"]);
-      const [head] = tree[0].threads;
-      expect(titles(head.children)).toEqual(["SHOP-1 a", "SHOP-2 b"]);
-      expect(head.children.map((c) => c.t3Project?.id)).toEqual(["p1", "p1"]);
+    test("the group follows the root's key; a member in another Linear project stays", () => {
+      const tree = buildL([shell("root", "SHOP-1 root"), shell("t2", "SHOP-2 b")], { t2: "root" });
+      expect(tree.map((b) => b.id)).toEqual(["lp:x"]);
+      const [head] = tree[0].groups[0].threads;
+      expect(titles(head.children)).toEqual(["SHOP-2 b"]);
+      expect(head.children[0].t3Project?.id).toBe("p1");
     });
 
-    test("a settled map thread puts the header at its place", () => {
-      const tree = buildL(
-        [shell("chart", "Wayfinder", SETTLED), shell("t1", "SHOP-1 a"), shell("t2", "SHOP-2 b")],
-        { t1: "/m/x", t2: "/m/x" },
-        { t1: "chart", t2: "chart" },
-      );
-      expect(tree.map((b) => b.id)).toEqual(["lf:loose"]);
-      expect(tree[0].threads[0]).toMatchObject({ id: "chart", map: { header: true } });
+    test("a settled root puts the header at the root's place", () => {
+      const tree = buildL([shell("root", "SHOP-1 root", SETTLED), shell("t2", "SHOP-2 b")], { t2: "root" });
+      expect(tree.map((b) => b.id)).toEqual(["lp:x"]);
+      expect(tree[0].groups[0].threads[0]).toMatchObject({ id: "root", map: { header: true } });
     });
 
-    test("a keyless map thread goes to the Linear project its members share", () => {
+    test("a keyless root goes to the Linear project its members share", () => {
       const m = { id: "m1", name: "M1", targetDate: null };
       const shared: Record<string, LinearIssue> = {
         "SHOP-1": { project: { id: "x", name: "Proj x", url: "u" }, milestone: m },
@@ -1826,7 +1881,7 @@ describe("Map groups", () => {
         inputOf(
           [shell("chart", "Wayfinder"), shell("t1", "SHOP-1 a"), shell("t3", "SHOP-3 c")],
           { t1: "chart", t3: "chart" },
-          { linearOf: (k) => shared[k], ...keys({ t1: "/m/x", t3: "/m/x" }) },
+          { linearOf: (k) => shared[k] },
         ),
         defaultRules(),
       );
@@ -1835,7 +1890,7 @@ describe("Map groups", () => {
       expect(titles(tree[0].groups[0].threads[0].children)).toEqual(["SHOP-1 a", "SHOP-3 c"]);
     });
 
-    test("a keyless thread of several maps goes to the Linear project their members share", () => {
+    test("a keyless program root goes to the Linear project its members share", () => {
       const shared: Record<string, LinearIssue> = {
         "SHOP-1": { project: { id: "x", name: "Proj x", url: "u" }, milestone: null },
         "SHOP-3": { project: { id: "x", name: "Proj x", url: "u" }, milestone: null },
@@ -1850,37 +1905,6 @@ describe("Map groups", () => {
       );
       expect(tree.map((b) => b.id)).toEqual(["lp:x"]);
       expect(tree[0].groups[0].threads[0].children.map((c) => c.id)).toEqual(["map:/m/x", "map:/m/y"]);
-    });
-
-    test("a map with no map thread puts the header at the oldest member's place", () => {
-      const tree = buildL([shell("t1", "SHOP-1 a"), shell("t2", "SHOP-2 b")], { t1: "/m/x", t2: "/m/x" });
-      expect(tree.map((b) => b.id)).toEqual(["lp:x"]);
-      expect(tree[0].groups[0].threads[0]).toMatchObject({ id: "map:/m/x", map: { header: true } });
-    });
-  });
-
-  describe("stack mates that spawned each other", () => {
-    const stack = (own: number) => [
-      pr(own, "created"),
-      ...[10, 11, 12].filter((n) => n !== own).map((n) => pr(n, "stack")),
-    ];
-    const threads = () => [
-      shell("chart", "Wayfinder"),
-      shell("s3", "s3", { pullRequests: stack(12) }),
-      shell("s1", "s1", { pullRequests: stack(10) }),
-      shell("s2", "s2", { pullRequests: stack(11) }),
-      shell("kid", "kid"),
-    ];
-    const spawners = { s1: "chart", s2: "s1", s3: "s2", kid: "s2" };
-    const check = (tree: Group[]) => {
-      const [head] = loose(tree);
-      expect(titles(head.children)).toEqual(["s1", "s2", "s3"]);
-      expect(head.children.every((c) => c.rail)).toBe(true);
-      expect(titles(head.children[1].children)).toEqual(["kid"]);
-    };
-
-    test("a native key: the mates sit together in stack order, not nested", () => {
-      check(mapped(threads(), { s1: "/m/x", s2: "/m/x", s3: "/m/x" }, spawners));
     });
   });
 });
