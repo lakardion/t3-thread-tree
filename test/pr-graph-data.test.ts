@@ -13,9 +13,10 @@ describe("parseScope", () => {
   test("map keys keep a colon inside", () => {
     expect(parseScope("map:/wiki/design-system")).toEqual({ kind: "map", key: "/wiki/design-system" });
     expect(parseScope("map:https://x.dev/a:b")).toEqual({ kind: "map", key: "https://x.dev/a:b" });
+    expect(parseScope("lineage:abc")).toEqual({ kind: "lineage", id: "abc" });
   });
   test("empty id or key, unknown prefix and null give null", () => {
-    for (const s of ["project:", "map:", "bad", "all:", "ALL", "", null]) expect(parseScope(s)).toBeNull();
+    for (const s of ["project:", "map:", "lineage:", "bad", "all:", "ALL", "", null]) expect(parseScope(s)).toBeNull();
   });
 });
 

@@ -675,10 +675,10 @@ export function PrGraphDialog({
     const members = walk(map.head);
     const prs = [
       ...members.flatMap((m) => m.prs),
-      ...(data?.map?.rows ?? []),
-      ...(data?.map?.settled ?? []).flatMap((s) => s.prs),
+      ...(data?.group?.rows ?? []),
+      ...(data?.group?.settled ?? []).flatMap((s) => s.prs),
     ];
-    return buildPrGraph(members, bandRoot(Object.values(data?.roots ?? {})[0], prs), data);
+    return buildPrGraph(members, bandRoot(Object.values(data?.roots ?? {})[0], prs), data, true);
   }, [map, data]);
   const graphs = mapGraph ? [mapGraph] : shown.map((b) => b.graph);
   const all = scope === "all";
@@ -738,7 +738,7 @@ export function PrGraphDialog({
             {prCount} PRs · {openPrs} open
           </DialogDescription>
           {busy && !data && <p className="text-xs text-muted-foreground">Loading PRs from GitHub…</p>}
-          {data?.map?.errors.map((e) => (
+          {data?.group?.errors.map((e) => (
             <p key={e.key} className="text-xs text-muted-foreground">
               Could not read PRs for {e.key}: {e.text} · {retry}
             </p>

@@ -260,12 +260,22 @@ The app does not run `gh`.
     group: {
       lanes: { n: number; label: string; keys: { key: string; base: string }[]; explicit: boolean }[] | null; // null at lineage scope
       stacks: { prs: number[] }[] | null; // `## Stacks` chains, bottom first; null with no such section, and at lineage scope
-      settled: { id: string; title: string; status: string; createdAt: string | null; href: string; prs: PrNode[] }[]; // settled members
-      rows: GraphPr[]; // key query rows that passed the filter
+      settled: {
+        id: string;
+        title: string;
+        status: string;
+        createdAt: string | null;
+        href: string;
+        prs: PrNode[];
+        projectId: string;
+      }[]; // settled members
+      rows: (GraphPr & { projectId: string })[]; // key query rows that passed the filter
       errors: { key: string; text: string }[]; // key queries that failed
     } | null; // only at map and lineage scope
   };
   ```
+
+  `projectId` on `settled` and `rows` is the T3 project of the thread or of the key query. At lineage scope, the page puts each item in the band of its project.
 
 - **Root.** For each project of the scope, the server runs `git symbolic-ref --short refs/remotes/origin/HEAD` in the project `workspaceRoot` and drops the `origin/` prefix. It is local, with no network call. When git fails, or the project has no path, `roots` has no entry for that project. The map scope reads the project of the map head: the map thread of the Lineage group with the earliest topmost keyed thread (by `createdAt`), else the oldest member. The lineage scope reads each project of the group, one band and one `roots` entry each.
 - **Band root on the page.** The root of a band is its `roots` entry. With no entry, or before the first answer, it is `main` when a band PR has the base `main`, else `master` when a band PR has the base `master`, else the most common base of the band that is no graph head, else `main`.

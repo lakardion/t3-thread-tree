@@ -1,6 +1,6 @@
 import { describe, expect, test } from "bun:test";
 
-import type { MapGraphPart, PrGraphData } from "../src/shared/pr-graph-data.ts";
+import type { GroupGraphPart, PrGraphData } from "../src/shared/pr-graph-data.ts";
 import { bandRoot, buildPrGraph as buildBand, focusOf, GY, NH, pileLift, walk } from "../src/shared/pr-graph.ts";
 import type { PrNode, ThreadNode } from "../src/shared/tree.ts";
 
@@ -40,12 +40,12 @@ const node = (id: string, over: Partial<ThreadNode> = {}, createdAt: string | nu
 const head = (...children: ThreadNode[]) =>
   node("head", { map: { name: "m", header: false, href: null, key: "m" }, children });
 
-const data = (over: Partial<MapGraphPart> & Partial<Pick<PrGraphData, "mates" | "behind">> = {}): PrGraphData => ({
+const data = (over: Partial<GroupGraphPart> & Partial<Pick<PrGraphData, "mates" | "behind">> = {}): PrGraphData => ({
   at: "",
   roots: {},
   mates: over.mates ?? [],
   behind: over.behind ?? {},
-  map: {
+  group: {
     lanes: over.lanes ?? null,
     stacks: over.stacks ?? null,
     settled: over.settled ?? [],
@@ -56,6 +56,7 @@ const data = (over: Partial<MapGraphPart> & Partial<Pick<PrGraphData, "mates" | 
 
 const row = (n: number, over: Partial<PrNode> = {}, threadId: string | null = null) => ({
   ...pr(n, over),
+  projectId: "p",
   threadId,
   threadHref: threadId && `t3://${threadId}`,
 });
@@ -69,7 +70,7 @@ const lane = (n: number, keys: string[]) => ({
 
 const id = (n: number) => `a/b#${n}`;
 
-const buildPrGraph = (h: ThreadNode, d: PrGraphData | null, root = "main") => buildBand(walk(h), root, d);
+const buildPrGraph = (h: ThreadNode, d: PrGraphData | null, root = "main") => buildBand(walk(h), root, d, true);
 
 const byN = (g: ReturnType<typeof buildPrGraph>, n: number) => g.nodes.find((x) => x.n === n)!;
 
@@ -113,7 +114,11 @@ describe("PR set", () => {
   test("a PR of a data.settled member only", () => {
     const g = buildPrGraph(
       head(),
-      data({ settled: [{ id: "s", title: "S", status: "done", createdAt: null, href: "t3://s", prs: [pr(1)] }] }),
+      data({
+        settled: [
+          { id: "s", title: "S", status: "done", createdAt: null, href: "t3://s", prs: [pr(1)], projectId: "p" },
+        ],
+      }),
     );
     expect(byN(g, 1).thread).toEqual({ id: "s", href: "t3://s", title: "S", status: "done", live: false });
   });
@@ -464,7 +469,11 @@ describe("Threads with no PR", () => {
         node("old", { settled: true }, "2026-01-01"),
         node("undated"),
       ),
-      data({ settled: [{ id: "s", title: "S", status: "done", createdAt: "2026-02-01", href: "t3://s", prs: [] }] }),
+      data({
+        settled: [
+          { id: "s", title: "S", status: "done", createdAt: "2026-02-01", href: "t3://s", prs: [], projectId: "p" },
+        ],
+      }),
     );
     expect(g.noPr.map((t) => t.id)).toEqual(["old", "s", "young", "undated"]);
   });
@@ -724,7 +733,7 @@ describe("pileLift", () => {
 });
 
 describe("focusOf", () => {
-  const build = (prs: PrNode[], lanes: MapGraphPart["lanes"] = null) =>
+  const build = (prs: PrNode[], lanes: GroupGraphPart["lanes"] = null) =>
     buildPrGraph(head(node("a", { prs })), data({ lanes }));
 
   test("with no lanes, a chain shares the focus of its root", () => {
@@ -803,7 +812,7 @@ describe("Thread link", () => {
 describe("Graph without a map", () => {
   const mapless = (): PrGraphData => ({
     ...data(),
-    map: null,
+    group: null,
     mates: [row(9, { stack: { number: 7, pos: 2, total: 2 } })],
   });
 
@@ -843,19 +852,43 @@ describe("Graph without a map", () => {
       "#2 is in a stack, but not in Stacks",
       "#3 is in a stack, but not in Stacks",
     ]);
-    const off = run({ ...withMap, map: null });
+    const off = run({ ...withMap, group: null });
     expect(off.filter((x) => mapRules.test(x))).toEqual([]);
     expect(off).toContain("x has 2 open children");
     expect(off).toContain("K-1 has 4 PRs: #1, #2, #4, #5");
   });
 
   test("a mate is a stack mate", () => {
-    const g = buildPrGraph(head(node("a", { prs: [pr(1)] })), mapless());
+    const g = buildBand(walk(head(node("a", { prs: [pr(1)] }))), "main", mapless());
     expect(byN(g, 9).outside).toBe("stack mate");
   });
 
   test("noPr comes from the passed members", () => {
     const g = buildBand([node("a"), node("b", { prs: [pr(1)] })], "main", null);
     expect(g.noPr.map((t) => t.id)).toEqual(["a"]);
+  });
+});
+
+describe("Graph at lineage scope", () => {
+  const members = [node("a", { prs: [pr(1)] })];
+  const lineage = (over: Partial<GroupGraphPart> & Partial<Pick<PrGraphData, "mates">> = {}) => ({
+    ...data({ ...over, lanes: null, stacks: null }),
+    mates: over.mates ?? [],
+  });
+
+  test("a mate reads stack mate with the group set, outside the map only at map scope", () => {
+    const d = lineage({ mates: [row(9)] });
+    expect(byN(buildBand(members, "main", d), 9).outside).toBe("stack mate");
+    expect(byN(buildBand(members, "main", d, true), 9).outside).toBe("outside the map");
+  });
+
+  test("an open row PR with no thread is No thread", () => {
+    const g = buildBand(members, "main", lineage({ rows: [row(2)] }));
+    expect(g.anomalies).toContainEqual({ text: "#2 has no thread", prs: [id(2)] });
+  });
+
+  test("noPr holds a settled member with no PR", () => {
+    const settled = node("s", { settled: true });
+    expect(buildBand([...members, settled], "main", lineage()).noPr.map((t) => t.id)).toEqual(["s"]);
   });
 });

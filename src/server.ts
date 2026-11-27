@@ -3,7 +3,15 @@ import { dirname, join } from "node:path";
 
 import index from "./page/index.html";
 import upNext from "./page/up-next.html";
-import { buildLinearTree, buildTree, defaultRules, hrefOf, issueKey, parseRules } from "./server/build-tree.ts";
+import {
+  buildLinearTree,
+  buildTree,
+  computeStacks,
+  defaultRules,
+  hrefOf,
+  issueKey,
+  parseRules,
+} from "./server/build-tree.ts";
 import { catchUpService } from "./server/catch-up.ts";
 import { findRoutes } from "./server/find.ts";
 import { labelStore } from "./server/labels.ts";
@@ -20,7 +28,7 @@ import {
   readLocalConfig,
   readPickFile,
 } from "./server/model.ts";
-import { gitRoot, memberLink, prGraph, prGraphRoutes, type GraphCtx } from "./server/pr-graph.ts";
+import { gitRoot, lineageMembers, memberLink, prGraph, prGraphRoutes, type GraphCtx } from "./server/pr-graph.ts";
 import { runItems } from "./server/runs.ts";
 import { checkCli, cliPath, projectChoices, sendService } from "./server/send.ts";
 import { settleRoutes } from "./server/settle.ts";
@@ -415,15 +423,43 @@ const mapCtx = (key: string, archived: Thread[]): GraphCtx | null => {
   return {
     members,
     projects: [{ id: project, path: projects.get(project)?.path ?? null }],
-    map: { key, project },
+    group: { mapKey: key, projectOf: () => project },
+    ...linkLookup(all.values().filter((t) => !t.parentThreadId && !t.sideChat)),
+  };
+};
+
+/** A thread of an unknown project is in the No project band. */
+const bandOf = (t: Thread) => (projects.has(t.projectId) ? t.projectId : "none");
+
+/** The members of a Lineage group, with the archived threads that the stream leaves out. Null when `id` is no group root. */
+const lineageCtx = (id: string, archived: Thread[]): GraphCtx | null => {
+  const all = new Map([...archived, ...threads.values()].map((t) => [t.id, t]));
+  const created = (tid: string) => `${all.get(tid)?.createdAt ?? ""} ${tid}`;
+  const pool = [...all.values()].filter((t) => !t.parentThreadId && !t.sideChat && !t.workflowRun);
+  const stacks = computeStacks(
+    pool.filter((t) => !t.gone && threads.has(t.id)).toSorted((a, b) => created(a.id).localeCompare(created(b.id))),
+  ).map((st) => st.threads.map((t) => t.id));
+  const members = lineageMembers({
+    root: id,
+    threads: pool,
+    spawnerOf,
+    known,
+    isStep: (tid) => !!all.get(tid)?.workflowRun,
+    createdKey: created,
+    stacks,
+    issueKeyOf: (tid) => !!issueKey(all.get(tid)?.title ?? ""),
+  });
+  if (!members) return null;
+  return {
+    members,
+    projects: [...new Set(members.map(bandOf))].map((pid) => ({ id: pid, path: projects.get(pid)?.path ?? null })),
+    group: { mapKey: null, projectOf: (k) => members.find((t) => issueKey(t.title) === k)!.projectId },
     ...linkLookup(all.values().filter((t) => !t.parentThreadId && !t.sideChat)),
   };
 };
 
 /** The live graph members of All or of one project. Null when a project scope names no project. */
 const bandCtx = (scope: Scope): GraphCtx | null => {
-  /** A thread of an unknown project is in the No project band. */
-  const bandOf = (t: Thread) => (projects.has(t.projectId) ? t.projectId : "none");
   if (scope.kind === "project" && scope.id !== "none" && !projects.has(scope.id)) return null;
   const members = [...threads.values()].filter(
     (t) =>
@@ -434,13 +470,17 @@ const bandCtx = (scope: Scope): GraphCtx | null => {
   return {
     members,
     projects: ids.map((id) => ({ id, path: projects.get(id)?.path ?? null })),
-    map: null,
+    group: null,
     ...linkLookup(threads.values()),
   };
 };
 
 const graphCtx = (scope: Scope) => (archived: Thread[]) =>
-  scope.kind === "map" ? mapCtx(scope.key, archived) : bandCtx(scope);
+  scope.kind === "map"
+    ? mapCtx(scope.key, archived)
+    : scope.kind === "lineage"
+      ? lineageCtx(scope.id, archived)
+      : bandCtx(scope);
 
 /** `PUT /local-model` saves the Local model config here. */
 const localModelFile = process.env.LOCAL_MODEL_FILE ?? join(homedir(), ".config", "t3-thread-tree", "local-model");
