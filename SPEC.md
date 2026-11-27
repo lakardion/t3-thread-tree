@@ -94,9 +94,9 @@ A **Run** with a **Step thread** shows in the tree as a **run row**. The step th
 
 ### Rules
 
-- **Step threads.** A step thread is never a top-level thread, and never a **Map member** (see "Map groups"). It is not in the tree, the flat view or the Settled list. It shows only under its run. A subagent or side chat with `workflowRun` stays hidden.
+- **Step threads.** A step thread is never a top-level thread, and never a member of a **Lineage group** (see "Lineage groups"). It is not in the tree, the flat view or the Settled list. It shows only under its run. A subagent or side chat with `workflowRun` stays hidden.
 - **Which runs show.** A run shows when it has at least one step thread, and its status is `running`, `waiting` or `paused`, or one of its step threads is `working`, `starting`, `needs-input` or `plan-ready`. A run that is not in the snapshot counts as ended. Its title is the `workflow` of its first step thread. A run with no step thread is not in the tree. Its question or pause still shows in Needs you, Triage and Up next.
-- **Placement.** A root run has no `parentRunId`, or its parent run does not show. It enters the pool like a top-level thread (see "Placement rules"), in the project of its first step thread (the oldest `createdAt`). Its issue key is the first key in the run title, else the key of its first step thread. Only the Reviews rule (a title that starts with `Review #`) and the Issue key rule claim a run. Map group, PR stack and Launch nesting skip it. A run that no rule claims is a **Loose thread**.
+- **Placement.** A root run has no `parentRunId`, or its parent run does not show. It enters the pool like a top-level thread (see "Placement rules"), in the project of its first step thread (the oldest `createdAt`). Its issue key is the first key in the run title, else the key of its first step thread. Only the Reviews rule (a title that starts with `Review #`) and the Issue key rule claim a run. Lineage group and PR stack skip it. A run that no rule claims is a **Loose thread**.
 - **Children.** Under a run: all its step threads (from any project, settled or not) and its child runs, to any depth. A child run nests under its parent run and is never placed by itself. A step thread from another project than its run shows a muted project chip. A step thread in a PR stack stays under its run and keeps its stack badge. Its keyless stack mates still go to the stack group. The snooze rules apply to step threads as to threads. Subagents stay hidden (Tree rule 2).
 - **Order.** Children sort by `createdAt` (a child run by `startedAt`), oldest first. A tie goes to the id. A run row drags like a top-level thread in its group. With "Last updated", a run sorts by the newest of its `updatedAt` and the **Last run** of its step threads. The row shows that same time (see "Row time").
 - **Row data.** The status and phrase of the run:
@@ -122,16 +122,25 @@ A **Run** with a **Step thread** shows in the tree as a **run row**. The step th
 - **Link:** the run title, "Open run in T3" and the Find result open `<T3 origin>/workflows?run=<runId>` in a new window (see "Run questions").
 - **Theme:** only theme tokens, so light and dark both work.
 
-## Map groups
+## Lineage groups
 
-Source: wayfinder map `map-groups` in the wiki (`t3-thread-tree/issues/map-groups/`). Ticket 01 reads the first messages in `statev2.sqlite` (research in `research/01-first-message-facts.md`). Ticket 02 fixes the **Map key**, the **Map thread** and membership. Ticket 03 ranks membership against the tree rules. Ticket 04 picks the look; the prototype is on branch `prototype/map-group-look` (`src/page/map-group.prototype.tsx`, variant B). Ticket 05 fixes the flat view and the Linear tree. Ticket 06 settles the fold, a callback to a settled map thread, and a thread that anchors several maps.
+Source: wayfinder map `lineage-groups` in the wiki (`t3-thread-tree/issues/lineage-groups/`). Research 01 reads how T3 records a skill call, research 02 measures the spawn trees of real data. Ticket 03 fixes the rank and the members, ticket 04 the map label, ticket 05 the look, ticket 06 the PR graph scope, ticket 07 the migration. The map key parser and the Map rail come from the earlier map `map-groups`.
 
-The threads of one wayfinder map show as one **Map group** under their **Map thread**. The Map group placement rule places them (see "Placement rules"). It is on by default, and the user can switch it off in Settings › Grouping. With it off, no map group shows, and each member places by the other rules. The feature shows no map progress. Only the PR graph reads `map.md` (see "PR graph").
+Every spawn tree shows as one **Lineage group** under its **Lineage root**. Only T3 records place it: the spawner chain of "Launched-thread lineage". So every user gets the same groups, with no setup. A wayfinder map is an optional **Map label** on a part of a group. The Lineage group placement rule places the groups (see "Placement rules"). It is on by default, and the user can switch it off in Settings › Grouping. With it off, no Lineage group shows, no thread nests under its spawner, and each thread places by the other rules. The feature shows no map progress. Only the PR graph reads `map.md` (see "PR graph").
 
-### Data
+### Members
+
+- **Edges.** Launch and delegate edges only: the spawner of "Launched-thread lineage" (`t3_thread_launch`, `create_threads`, `delegate_task`, `senderThreadId`). A subagent keeps its native parent and is not in the tree. A **Step thread** stays under its run. It is never a member and never a root. A thread is an **ancestor** of another when it is on that thread's spawner chain.
+- **Lineage root.** The top of a spawner chain: a top-level thread with no spawner. When a spawner id is not in the thread table (archived and deleted rows stay in it), the topmost known thread of the chain is the root. A thread that the user started by hand is its own root, whatever its first message says.
+- **Member.** Each top-level thread with the root on its spawner chain, live or settled. A member stays in the group also when it has an **Issue key**, a `Review #…` title or another project.
+- **Stack mates.** A thread with no Issue key and no spawner, that spawned no thread, joins the group of a member in its PR stack, in stack order. A thread with an Issue key stays in its key group. In a stack with members of two groups, each member stays in its own group, and these stack mates go to the group of the lowest member.
+- **When a group shows.** When the root has one or more visible members. A root with no visible member is a plain row and places by the later rules, also when it has a **Map key**.
+- **No split.** A group never splits: not at another Issue key, another project or a sub-map. Research 02 finds no root that spawns unrelated work. A group can hold several maps.
+
+### Map label
 
 - **First message.** The server reads the first user message of each top-level thread from `orchestration_v2_projection_messages`, in the SQLite module of "Launched-thread lineage". For an id with `mcp:` (also `mcp:launch:`), the row has `message_id = thread_id`: a primary-key lookup. For other ids (`thread:mcp:…:N`, `<uuid>`, `import:claudeAgent:<uuid>`), use `WHERE thread_id = ? AND role = 'user' ORDER BY created_at, message_id LIMIT 1` (index `orchestration_v2_projection_messages_thread_created_idx`). Read it for each visible thread and each thread on its spawner chain. Cache the key by thread id in memory. All 2578 threads take about 0.26 s.
-- **Skill call.** The parser accepts four forms, with the skill `wayfinder` or `wayfinder-implement`:
+- **Skill call.** The parser accepts four forms, with the skill `wayfinder` or `wayfinder-implement`. No T3 record names a map in another way (research 01), so this text is the only source of the label. A failed parse costs the label, never the group.
   - `/wayfinder …` as the first characters;
   - `$wayfinder …` as the first characters;
   - `Invoke the wayfinder skill with arguments: …`;
@@ -139,96 +148,97 @@ The threads of one wayfinder map show as one **Map group** under their **Map thr
 - **Map key.** Take the first whitespace-separated token after the skill name (after `with arguments:`, inside `<command-args>`). The token can come after a newline. Strip a trailing `</command-args>`.
   - An `http(s)` URL: the key is the URL with no query and no fragment. This covers GitHub and Linear issue URLs.
   - A token that ends in `map.md`: replace a leading `~` with the home folder, keep an absolute path, join `.wayfinder/…` to the `workspace_root` of the thread's project, and join any other relative path to `~/repos/wiki`. Normalize the path. The key is the folder that holds `map.md`.
-  - Any other token gives no key. There is no rule for a bare issue key such as `ENG-5432`.
+  - Any other token gives no key, so `$wayfinder-implement <folder>` gives a plain Lineage group with no label. There is no rule for a bare issue key such as `ENG-5432`.
   - The key is internal and never shows. A moved map with two path spellings gives two keys and two maps.
-- **Marked map thread.** The user can mark any thread as a map thread, for a map that has no `map.md` path or issue URL, such as `$wayfinder-implement <folder>`.
-  - The marked ids are a JSON array in the server file `~/.config/t3-thread-tree/map-threads` (env `MAP_THREADS_FILE`). The server reads it on each tree build, so a hand edit shows on the next change. The Details block of a thread has a "Mark as map thread" or "Unmark map thread" button. It is not on a run, a Map header or a step thread. The head of a marked map shows an unmark button in place of its map icon (see below). `POST /map-threads` with `{ id, marked }` edits the file.
-  - A direct child of a marked thread that has no own **Map key** gets the key `thread:<id>`. Deeper descendants join through the nearest keyed ancestor. The marked thread is the map thread, not a member. `mapKey()` does not change.
-  - A real key on a child wins. Then the marked thread anchors several maps, and each map gets one Map header. A marked thread that is a member of a real map holds its keyless children in a nested `thread:` group inside that map.
-  - The name of a `thread:` map is the title of the marked thread with "Wayfinder" removed, else the thread id.
-  - The map icon at the left of a marked map group is a button. On hover and focus it shows an X, and its tooltip says "Unmark map thread". A click unmarks the thread. The head row has no Details button, so this is the way to unmark from the tree. A settled marked thread gives a Map header whose id is the thread id, and its icon does the same. A Map header with a `map:` id has no button. An id of a thread that does not exist does nothing.
-- **Spawner chain.** As in "Launched-thread lineage". A thread is an **ancestor** of another when it is on that thread's spawner chain.
-
-### Membership
-
-- **Map thread.** For each key, the topmost keyed threads are the threads with that key and no ancestor with the same key. Their spawner is the map thread. It is usually the charting thread, which has no key, and it gets the `/t3-handoff` callbacks.
-  - With two such spawners, the spawner of the earliest keyed thread (by `createdAt`) is the map thread. The keyed threads from the other spawner join its group.
-  - A hand-started keyed thread (no spawner) joins the group of its map thread when the map has one.
-  - A ticket thread is never the map thread. A map whose topmost keyed threads have no spawner has no map thread.
+- **Map thread.** In one Lineage group, for each key, the topmost keyed threads are the members with that key and no ancestor with the same key. The spawner of the earliest of them (by `createdAt`) is the **Map thread**. It is usually the charting thread, and it gets the `/t3-handoff` callbacks. It is always in the same group, because it is a spawner. It is not always the root: a program root that charts several maps, a sub-map and a relay chain each put it lower.
+  - A keyed root has no spawner. Its own label anchors at the root, and the map has no map thread in that group.
   - One thread can be the map thread of several maps.
-  - A map thread can be a member of another map (a sub-map charted in a ticket thread of a parent map).
-- **One map for each thread.** The first match wins:
-  1. its own key;
-  2. else the map of its nearest ancestor that has a key (a dispatch's `start-issue` threads join this way);
-  3. else the map that it anchors as map thread.
-- A **Map member** is a thread with a map by step 1 or 2. A map thread joins only through a parent map. A sub-map's ticket threads belong to the sub-map, and the sub-map's map thread belongs to the parent map.
-- Keyless threads with no keyed ancestor (`$wayfinder continue with the next ticket`) are not members. They place by the tree rules.
-- **Runs ignore maps.** A step thread is never a member, also when its first message names a map. It stays under its run.
-- **Display name.** The title of the map thread with the word "Wayfinder" removed, case ignored. This also removes a prefix or suffix such as "Wayfinder:". When the map thread anchors several maps, or the map has no map thread, the name is the folder name of the key, made readable: `workflow-runs-tree` gives "Workflow runs tree". When two visible maps have the same folder name, add the parent folder: `TIB-3860/wayfinder`. A URL key uses its last path part, for example `#33`.
+  - A map thread can be a **Map member** of another map: a sub-map charted in a ticket thread of a parent map.
+- **Map member.** One map for each thread. The first match wins: its own key, else the key of its nearest ancestor that has a key. A map thread joins a map only this way. A member with no keyed ancestor and no own key (a helper that the map thread launched) is in the Lineage group, but in no map. A step thread is never a map member.
+- **No key edges.** A keyed thread with no spawner stays in its own lineage. It does not join the group of its map thread. The same key can then label parts of two groups, each with its own anchor and the same name.
+- **Display name.** The title of the map thread with the word "Wayfinder" removed, case ignored. This also removes a prefix or suffix such as "Wayfinder:". When the map thread anchors several maps, or the map has no map thread in the group, the name is the folder name of the key, made readable: `workflow-runs-tree` gives "Workflow runs tree". When two visible maps have the same folder name, add the parent folder: `TIB-3860/wayfinder`. A URL key uses its last path part, for example `#33`.
 
 ### Placement
 
-- **First rule.** The Map group rule is always first in the rule chain. A map member goes into its map group, before Reviews, PR stack, Issue key and Launch nesting can claim it. A `Review #…` member goes into the group too. A member never places by itself.
-- **The head.** The map thread is a normal row and places by the later rules in its own project. Its map group comes with it. When the map thread is a member of a parent map, it nests in the parent's group. A snoozed map thread stays as a muted row.
-- **Map header.** A **Map header** is the head instead of the map thread row when:
-  - the map thread is settled or archived: the header takes the place that the map thread would have by the rules;
-  - the map has no map thread: the header takes the place of the oldest visible member;
-  - the map thread anchors several maps: the map thread row is the head, and under it each map gets one map header with its own rail, oldest map first (by its oldest member).
-- The header follows `settledAt` of the map thread and nothing else. A callback (`/t3-handoff <map>`) to a settled map thread brings back the row only when T3 unsettles the thread.
-- A map group shows only while one or more members are visible.
-- **Stack mates.** A keyless non-member in a PR stack with a map member goes into that map's group, in stack order, next to the member. A keyed non-member stays in its key group. In a stack with members of two maps, each member stays in its own map, and keyless non-members go to the map of the lowest member.
+- **First rule.** The Lineage group rule is always first in the rule chain. It claims each member, and the stack mates of "Members", under the head of the group, before Reviews, PR stack and Issue key can claim them. A member never places by itself.
+- **The head.** The root is a normal row and places by the later rules in its own project. The group comes with it. The PR stack rule can claim the root, because the root is not a member. The root then sits in its stack group, and its group comes with it. A snoozed root stays as a muted row.
+- **Lineage header.** When the root is settled, archived or deleted, a **Lineage header** takes the place that the root would have by the later rules. Its id is the root id. It shows also over one visible member, so the id, the fold, the pin and the PR graph button stay the same when a second member comes. The header follows `settledAt` of the root and nothing else. A callback to a settled root brings back the row only when T3 unsettles the thread.
+- **Map header.** A **Map header** heads a **Map label** whose anchor row does not show:
+  - a settled map thread that is not the root: the Map header takes its place on the group rail, with the map thread id;
+  - a root that anchors several maps: under the root row (or its Lineage header), each map gets one Map header with its own rail, oldest map first (by its oldest member), with the id `map:<key>`.
 - **Other projects.** A member from another project than the head shows in the group, with the muted project chip, as a step thread does.
-- **Inside a group.** Members nest by spawner chain (a dispatch holds its `start-issue` threads), whatever the Launch nesting switch. A settled member is hidden, and its visible children move up to the next visible ancestor. Each list sorts by `createdAt`, oldest first, and a tie goes to the id. Stack mates stay together in stack order. Stack mates that spawned each other do not nest. They sit together where the topmost mate sits.
-- **Nested maps.** A sub-map's group nests in the parent's group, at the place of the sub-map's map thread, to any depth. If that map thread is settled, its map header takes that place.
+- **Inside a group.** Members nest by spawner chain. A settled member is hidden, and its visible children move up to the next visible ancestor. Each list sorts by `createdAt`, oldest first, and a tie goes to the id. Members in one PR stack sit together in stack order, in a small stack rail, at the place of the topmost mate. Stack mates that spawned each other do not nest. When the root is in the stack, it stays the head, and its member mates nest under it in stack order.
+- **Nested labels.** A map label nests on the group rail at its map thread, to any depth. A sub-map label nests in the label of the parent map.
 
 ### Order and drag
 
-- Only the head is in a stored order list: `thread-tree:order`, `thread-tree:order-linear`, and the list `flat` in each. The head id is the map thread id, also while the header shows for a settled map thread, so the header keeps the place of its map thread. A map with no map thread uses `map:<key>`.
+- Only the head is in a stored order list: `thread-tree:order`, `thread-tree:order-linear`, and the list `flat` in each. The head id is the root id, also while the Lineage header shows.
 - The group drags as one block with its head. Members keep the base order and do not drag.
 - "Last updated" sorts the group by its block time: the newest **Last run** of its counted threads, the head included (see "Row time").
-- The user pins the group with its head. The pin id is `map:<key>`, so the pin stays when the head changes (see "Pins").
+- The user pins the group with its head. A group with the map look (see "Look") uses the pin id `map:<key>`. Any other group uses the root id (see "Pins").
 
 ### Look
 
-The **Map rail**, in amber: `amber-500` for the rail, `amber-600` (light) and `amber-400` (dark) for the icon. Use theme tokens beside it, so light and dark both work.
+Every group uses one **group rail**. The color and the icon tell a plain lineage from a map. Use theme tokens, so light and dark both work.
 
-- **Map node.** A round node with the lucide `Map` icon in an amber ring, left of the head.
-- **Map thread row.** The normal thread row with no details fold. At the right end, the member count, the PR graph button and the map fold take the place of the details fold.
-- **Map header.** The map node, the fold, the map icon, the display name, the member count, the PR graph button and, only when a map thread exists, "Open map thread in T3" (`t3code://threads/<environmentId>/<threadId>`). It shows no age. Its hover shows "Last run <date> · <title>" for its block time. It has no status, no Settle and no Send. It is not a thread: no count, Needs you, Open next, Triage, Looks done or Find takes it.
-- **Rail.** An amber rail drops from the map node. Members hang on it, nested like subthreads. It is one continuous line and ends in a rounded elbow into the last member. A sub-map nests on the parent's rail with its own map node and rail.
+- **Plain lineage.** A neutral rail (`muted-foreground`), a node ring in `border`, the lucide `Network` icon. The name is the root title.
+- **Map label.** The amber Map rail: `amber-500` for the rail, `amber-600` (light) and `amber-400` (dark) for the icon, the lucide `Map` icon, the map display name. Amber means a map, and nothing else.
+- **Map look for the whole group.** When the root is the map thread of exactly one map, or a keyed root anchors its own label, the whole group takes the map look: one amber rail, `Map` icon, map name. A keyless helper of the root sits on that rail too. There is no second rail.
+- **Program root.** A root that anchors several maps keeps the neutral rail. Each map gets a Map header with its own amber rail. The keyless children of the root sit directly on the neutral rail.
+- **Node.** A round node with the icon in its ring, left of the head.
+- **Rail.** The rail drops from the node. Members hang on it, nested like subthreads. It is one continuous line and ends in a rounded elbow into the last member. A map label nests on the rail with its own amber node and rail.
+- **Root row.** The normal thread row with no details fold. At the right end, the count, the PR graph button (see "PR graph" › Where it opens) and the group fold take the place of the details fold. A map thread row inside a group looks the same, with the count of its label.
+- **Lineage header.** The node, the fold, the icon, the name, the count, the PR graph button when the group has one, and "Open root thread in T3" (`t3code://threads/<environmentId>/<threadId>`). It shows no age. Its hover shows "Last run <date> · <title>" for its block time. It has no status, no Settle and no Send. It is not a thread: no count, Needs you, Open next, Triage, Looks done or Find takes it. With the map look, it has the `Map` icon, amber and the map name.
+- **Map header.** As the Lineage header, with the map look, the map name and, only when a map thread exists, "Open map thread in T3".
 - **PR stack inside.** The stack mates sit together in a small stack rail inside the group: the PR stack rail of today, a dashed box with a line of PR stops and numbered PR nodes on the rows. The rows show no `1/2` badges. The rail folds the same way as the stack rail: see "PR stack rail folds".
-- **Count.** The count of visible members, sub-map members included.
-- **Fold.** The map fold hides the rail and the members. The head stays. The closed state is saved in `thread-tree:closed` under the head id; a map header under a map thread of several maps uses `map:<key>`.
-- **Keys.** The map fold and the map header fold are stops. On the map thread row, `o`, `l` and `h` act on the map fold. On a map header, Enter folds and unfolds, and `s` does nothing.
+- **Count.** Each node counts the visible rows on its rail, nested rails included. The head count is the whole visible group. A map label counts its visible map members and the helpers on its rail.
+- **Fold.** The group fold hides the rail and the members. The head stays. The closed state is saved in `thread-tree:closed` under the root id, also while the Lineage header shows. A nested map label folds under its map thread id. A Map header under a root of several maps uses `map:<key>`.
+- **Keys.** The group fold and each header fold are stops. On a root row and a map thread row, `o`, `l` and `h` act on the fold. On a header, Enter folds and unfolds, and `s` does nothing. `g` works on a head that has a PR graph button.
 
 ### Flat view
 
-- **One unit.** The head and all members, nested by spawner chain, never split over sections, in every "Group by" choice. The map header shows at the head of the unit, as a run row does. It does not count as a thread in a section header.
-- **Group by Status.** The unit goes to the section of its most urgent member, the map thread included. The other members are context rows. As in a PR stack, a row folds when it and all its subthreads are context rows, and a "+N other threads" button shows them. In the waiting sections, the unit sorts by the oldest Wait of its members.
+- **One unit.** The head and all members, nested by spawner chain, never split over sections, in every "Group by" choice. A header shows at the head of the unit, as a run row does. It does not count as a thread in a section header. Rails and nested map labels show as in the tree.
+- **Group by Status.** The unit goes to the section of its most urgent member, the root included. The other members are context rows. As in a PR stack, a row folds when it and all its subthreads are context rows, and a "+N other threads" button shows them. In the waiting sections, the unit sorts by the oldest Wait of its members.
 - **Group by None.** The unit sits at its place in the flat order.
 - **Group by Linear project.** The unit goes to the section of its head, as in the Linear tree.
 
 ### Linear tree
 
-- The map thread places by the Linear placement rules: its key gives the project and milestone. A keyless map thread takes the Linear project that all its members with a project share, and their milestone when they all share one, else "No milestone". With no shared project, it is a loose thread. The whole group follows it.
-- A member whose key is in another Linear project stays in the group (the Map group rule is first).
-- A settled map thread puts the map header at the place the map thread would have. With no map thread, the header goes to the place of the oldest visible member.
+- The root places by the Linear placement rules: its key gives the project and milestone. A root with no Issue key takes the Linear project that all its members with a project share, and their milestone when they all share one, else "No milestone". With no shared project, it is a loose thread. The whole group follows it.
+- A member whose key is in another Linear project stays in the group (the Lineage group rule is first).
+- A settled root puts the Lineage header at the place the root would have.
+
+### Migration
+
+The update changes saved state in these ways. The page writes no other migration.
+
+- **Rules.** `thread-tree:rules` with a `map` id: the page reads it as `lineage`, at the same place. The Lineage group rule is on when the saved `map` or `nest` was on, because both grouped spawn trees. The page drops a saved `nest`. It no longer reads `thread-tree:nest`. The server ignores `map` and `nest` as unknown ids.
+- **Order.** A head id that changes drops out by `prune`, and the group goes to its base order. This is the case for a map with no map thread (`map:<key>`) and for a map thread that is not the root. A map thread that is the root keeps its place.
+- **Folds.** The root id, the map thread id and the `map:<key>` of a Map header keep their folds. The fold of a map with no map thread (`map:<key>`) no longer matches, so that group shows open.
+- **Pins.** A pin of a map whose map thread is the root keeps its `map:<key>` id. A pin of a map that now nests in a larger group sleeps, because that group pins by its root id.
+- **Hand marks.** The server no longer reads `~/.config/t3-thread-tree/map-threads` and leaves the file on disk. `MAP_THREADS_FILE` and `POST /map-threads` go, and the "Mark as map thread" button goes. A thread that the user marked shows as the root of a plain Lineage group when it launched threads.
+
+### README
+
+In the build change, replace "Map groups" in "What you get" with "Lineage groups": threads that an agent launched sit in one group under the thread that started them, with a count and a fold. A group that works on one Wayfinder map has an amber rail and the map name. When the first thread is settled, a header keeps its place. Remove the hand mark and its file.
 
 ### Left out
 
 - Map progress (tickets closed, frontier count). The app reads no ticket file. Only the PR graph reads `map.md` (see "PR graph").
 - Map marks in Find and on Triage cards.
-- Any change to T3 Code or to the `t3-handoff` and `wayfinder` skills.
+- A group joined by first-message text alone, such as a hand-started thread with a map key.
+- Any change to T3 Code or to the `t3-handoff`, `wayfinder` and `wayfinder-implement` skills.
 
 ## PR graph
 
-Source: two wayfinder maps in the wiki (`t3-thread-tree/issues/`). `map-pr-graph` picks T3 as the only PR source, the map PR set, the lanes from `map.md`, the anomalies, the look and the updates. `user-pr-graph` adds the **Graph scopes**: research in `research/01-map-coupling.md`, the look in ticket 02 (prototype branch `prototype/user-pr-graph-02-all-scope-look`, variant A), the data in ticket 03, this section in ticket 04.
+Source: two wayfinder maps in the wiki (`t3-thread-tree/issues/`). `map-pr-graph` picks T3 as the only PR source, the map PR set, the lanes from `map.md`, the anomalies, the look and the updates. `user-pr-graph` adds the **Graph scopes**: research in `research/01-map-coupling.md`, the look in ticket 02 (prototype branch `prototype/user-pr-graph-02-all-scope-look`, variant A), the data in ticket 03, this section in ticket 04. `lineage-groups` ticket 06 adds the lineage scope.
 
 The **PR graph** shows PRs as a left-to-right graph from a root branch. Each PR is one node, with an edge to its base. A node links to the PR on GitHub and to its thread in T3. The graph shows the gh stacks and the **Anomalies**. One modal shows it. Its **Graph scope** picks the PR set:
 
 - **All** (scope id `all`): the PRs of every project, each project in its own **Band**. This is the default.
 - **Project** (`project:<project id>`): the PRs of one T3 project, in one band. The "No project" band has the id `project:none`.
-- **Map** (`map:<map key>`): the PRs of one map, in one band. It adds the **Lanes** of `map.md`, the key rows, the settled members and the map-only anomalies. Every map kind has a map scope: a path key, a URL key and a **Marked map thread**. A map with no `map.md` has no lanes and no lane anomalies.
+- **Map** (`map:<map key>`): the PRs of one map, in one band. It adds the **Lanes** of `map.md`, the key rows, the settled members and the map-only anomalies. A path key and a URL key each have a map scope. A map with no `map.md` has no lanes and no lane anomalies. The scope spans every Lineage group that has the key.
+- **Lineage** (`lineage:<root thread id>`): the PRs of one **Lineage group**, its root and its members, live and settled, with no lanes. It has one band for each project of the group. The id stays when the root settles, because the Lineage header has the root id.
 
 The app does not run `gh`.
 
@@ -237,8 +247,8 @@ The app does not run `gh`.
 - **Stream.** `decodeThread` decodes `snapshot.headBranch` and `snapshot.baseBranch` of each PR link. Each `PrNode` has `repository` (`owner/name`), `head` and `base` (string or null) and `stack`: `{ number, pos, total }` from the thread's `stack.layers`, or null when the PR is in no stack.
 - **PR id.** `<owner/name>#<number>`. Every key in the model, in the route answer and on the page is the PR id: nodes, edges, anomalies, `behind`, `mates`, `data-pr` and focus. Two repos with the same PR number or the same branch name never merge into one node. A card shows `#<number>`.
 - **Review flag.** `build-tree.ts` sets `review: boolean` on each `ThreadNode`. It is true when the title starts with "Review #", the **Review thread** rule.
-- **Graph members.** At All and project scope, a graph member is a live thread that is not settled, is not a **Step thread**, and links a PR. Subthreads and side chats count. A project scope filters by the T3 `projectId`, never by a view group. Threads with no project are in the "No project" band. The server and the page use the same rule. At map scope, the graph members are the **Map members**, settled ones too.
-- **Route.** `GET /pr-graph?scope=<scope id>` answers the parts that the tree does not hold. `&refresh=1` skips the cache. A missing or bad scope, an unknown project or an unknown map key gives `404`. T3 down gives `503`.
+- **Graph members.** At All and project scope, a graph member is a live thread that is not settled, is not a **Step thread**, and links a PR. Subthreads and side chats count. A project scope filters by the T3 `projectId`, never by a view group. Threads with no project are in the "No project" band. The server and the page use the same rule. At map scope, the graph members are the **Map members** of the key in every Lineage group, settled ones too. A sub-map member is a member of the sub-map only. A helper with no key is not a map member. At lineage scope, the graph members are the root and every member of the Lineage group (stack mates included), settled ones too. Step threads and subthreads are never graph members at map and lineage scope.
+- **Route.** `GET /pr-graph?scope=<scope id>` answers the parts that the tree does not hold. `&refresh=1` skips the cache. A missing or bad scope, an unknown project or an unknown map key gives `404`. A lineage id gives `404` when it is not a thread, has a spawner, or has no member, live or settled. T3 down gives `503`.
 
   ```ts
   type GraphPr = PrNode & { threadId: string | null; threadHref: string | null };
@@ -247,37 +257,37 @@ The app does not run `gh`.
     roots: Record<string, string>; // project id ("none" for No project) → root branch; no entry when git gave none
     mates: GraphPr[]; // outside stack mates
     behind: Record<string, number>; // PR id → behindBy, only for answers that came
-    map: {
-      lanes: { n: number; label: string; keys: { key: string; base: string }[]; explicit: boolean }[] | null;
-      stacks: { prs: number[] }[] | null; // `## Stacks` chains, bottom first; null with no such section
+    group: {
+      lanes: { n: number; label: string; keys: { key: string; base: string }[]; explicit: boolean }[] | null; // null at lineage scope
+      stacks: { prs: number[] }[] | null; // `## Stacks` chains, bottom first; null with no such section, and at lineage scope
       settled: { id: string; title: string; status: string; createdAt: string | null; href: string; prs: PrNode[] }[]; // settled members
       rows: GraphPr[]; // key query rows that passed the filter
       errors: { key: string; text: string }[]; // key queries that failed
-    } | null; // only at map scope
+    } | null; // only at map and lineage scope
   };
   ```
 
-- **Root.** For each project of the scope, the server runs `git symbolic-ref --short refs/remotes/origin/HEAD` in the project `workspaceRoot` and drops the `origin/` prefix. It is local, with no network call. When git fails, or the project has no path, `roots` has no entry for that project. The map scope reads the project of the map head: the map thread, else the oldest member.
+- **Root.** For each project of the scope, the server runs `git symbolic-ref --short refs/remotes/origin/HEAD` in the project `workspaceRoot` and drops the `origin/` prefix. It is local, with no network call. When git fails, or the project has no path, `roots` has no entry for that project. The map scope reads the project of the map head: the map thread of the Lineage group with the earliest topmost keyed thread (by `createdAt`), else the oldest member. The lineage scope reads each project of the group, one band and one `roots` entry each.
 - **Band root on the page.** The root of a band is its `roots` entry. With no entry, or before the first answer, it is `main` when a band PR has the base `main`, else `master` when a band PR has the base `master`, else the most common base of the band that is no graph head, else `main`.
 - **map.md.** Map scope only. For a path key, the server reads `<key>/map.md` on each call that is not cached. A missing file gives `lanes: null` and `stacks: null`. The parse (`src/server/map-md.ts`, pure, tested) follows the minimum parse of the `map-pr-graph` research 03:
   - `## Route` up to the next `## `. A `### ` heading that starts with `Lane` opens a lane, and the rest of the heading is its label. Any other `### ` heading also opens a lane. Lines before the first lane heading, or a route with no lane heading, form one implicit lane (`explicit: false`).
   - A numbered line (`^\d+\. `, from `0.`) gives a key: a Linear key `[A-Z]+-\d+` at the start (also `KEY:`), else a link to `tickets/NN-<slug>.md`, which gives the key `<map folder>-<NN>`.
   - `` stack on `<branch>` `` (with or without `virtual`) sets the base of that key. Else the first key of a lane has the base `main`, and each later key has the key before it.
   - `## Stacks` up to the next `## ` or the end of the file. Each `(#N)` after a branch name is a PR of the chain, and `←` joins two PRs. Any other `#N` is not a PR. The model matches these numbers to the PRs of the band.
-- **Key query.** Map scope only. The keys are the Linear keys of the lanes plus the **Issue keys** in the titles of the **Map members**. A markdown key gives no query, because GitHub search does not match branch names. For each key, the server calls `pullRequests.list` with `state: all` and `query: <key>`, in the project of the map head. It keeps a row only when its head branch or its title has a queried key: a Linear key `ABC-12` matches a branch that starts with `abc-12-` or equals `abc-12`. `threadId` is the live or settled thread that links the PR, else null.
-- **Behind base.** All scopes. For each open PR with a stack, from the stream and the rows, the server calls `pullRequests.detail` with `allowStale: false` and keeps `behindBy`. The call runs in the project of the graph member that links the PR. A key row uses the project of the map head.
+- **Key query.** Map and lineage scope. At map scope, the keys are the Linear keys of the lanes plus the **Issue keys** in the titles of the **Map members**. At lineage scope, the keys are the Issue keys in the titles of the root and the members. A markdown key gives no query, because GitHub search does not match branch names. For each key, the server calls `pullRequests.list` with `state: all` and `query: <key>`: at map scope in the project of the map head, at lineage scope in the project of the oldest graph member whose title has the key. It keeps a row only when its head branch or its title has a queried key: a Linear key `ABC-12` matches a branch that starts with `abc-12-` or equals `abc-12`. `threadId` is the live or settled thread that links the PR, else null.
+- **Behind base.** All scopes. For each open PR with a stack, from the stream and the rows, the server calls `pullRequests.detail` with `allowStale: false` and keeps `behindBy`. The call runs in the project of the graph member that links the PR. A key row uses the project of its key query.
 - **Stack mates.** All scopes. A **graph PR** is the PR of a member link (not a `stack` or `stack-dismissed` link) or of a row. Each slot of the `stack.layers` of a graph PR that is no graph PR is a mate. A `stack` link of a live thread with a synced head gives the mate with no call. Else the server calls `pullRequests.detail` once for the slot, in the project of the member that links the stack's PR, and keeps `behindBy` of an open mate. A failed call adds no mate. A mate has its place in the stack and the T3 thread that links it, if any.
 - **Calls.** At most 4 graph calls run at a time, in one queue of their own for all scopes. There is no cap on the count. A failed key query adds one `errors` item and does not stop the others. A failed detail call adds nothing. The route answers when all calls end.
 - **Cache.** The server keeps the last answer for each scope id, and runs one build per scope id at a time. A call without `refresh=1` gets the kept answer when it is less than 60 s old. An All answer does not serve a project scope. The server never calls T3 for the graph at other times: no prefetch and no call on a stream change.
-- **Settled members.** Map scope only. `map.settled` holds the settled and archived **Map members** that the tree leaves out, so their PRs and T3 links stay in the graph.
+- **Settled members.** Map and lineage scope. `group.settled` holds the settled and archived graph members that the tree leaves out, so their PRs and T3 links stay in the graph. At lineage scope, the server finds them on the spawner chain.
 
 ### Graph model
 
-`buildPrGraph` in `src/shared/pr-graph.ts` is pure, and `bun test` covers it. It builds one band from the band's graph members, the band root and the last `PrGraphData` (or none). The page makes the member list: `walk(head)` of the map group at map scope, the graph member rule at the other scopes. It calls `buildPrGraph` once for each band.
+`buildPrGraph` in `src/shared/pr-graph.ts` is pure, and `bun test` covers it. It builds one band from the band's graph members, the band root and the last `PrGraphData` (or none). The page makes the member list: the Map members of the key in the live tree at map scope, the root and the members of the Lineage group at lineage scope, the graph member rule at the other scopes. It calls `buildPrGraph` once for each band.
 
 - **PR set.**
   - **Member links:** every PR that a graph member links. At map scope, also when its keys belong to another map.
-  - **Key rows:** at map scope, the `rows` of the key query.
+  - **Key rows:** at map and lineage scope, the `rows` of the key query.
   - **Stack mates:** the `mates`.
   - One node for each PR id. For a PR of a live thread, the stream data wins. For a PR of a settled thread or with no thread, the row wins, because T3 does not sync settled threads.
 - **T3 link.** A PR gets the T3 link of the oldest member that links it and is no **Review thread**. When only Review threads link it, it gets the link of the oldest of them, and the node has the "review" mark.
@@ -291,6 +301,7 @@ The app does not run `gh`.
 - **Empty project.** A project with no graph PR has no band at All and no entry in the scope picker.
 - **Threads with no PR.**
   - Map scope: the live and settled Map members that link no PR, oldest first. Step threads and subagents are not members, so they are not in it.
+  - Lineage scope: the root and the members that link no PR, live and settled, oldest first.
   - Project scope: the live threads of the project that the graph member rule takes, except that they link no PR, oldest first.
   - All: no list.
 
@@ -305,7 +316,7 @@ Each **Anomaly** names its PRs. One severity only. The model finds the anomalies
 | Conflicts            | All   | An open PR with mergeability `conflicting`. `unknown` is not an anomaly.                                                                                                                                           | "#N has conflicts"                                                                                       |
 | Foreign base         | All   | A foreign base node.                                                                                                                                                                                               | "#N is based on <branch>, which is not <root> or a graph PR"                                             |
 | Behind base          | All   | An open stacked PR with `behindBy > 0`. Not shown while the detail call runs or after it fails.                                                                                                                    | "#N is N commits behind its base"                                                                        |
-| No thread            | All   | An open PR with no thread. Not for outside stack mates. Outside a map scope every other PR has a thread, so it shows only at map scope.                                                                            | "#N has no thread"                                                                                       |
+| No thread            | All   | An open PR with no thread. Not for outside stack mates. Outside a map or lineage scope every other PR has a thread, so it shows only at map and lineage scope.                                                     | "#N has no thread"                                                                                       |
 | Stopped thread       | All   | An open PR whose thread is `failed`, `interrupted` or cancelled. A settled thread is normal.                                                                                                                       | "#N: its thread stopped"                                                                                 |
 | Key with several PRs | All   | A key with 2 or more PRs that are not closed. The keys are the lane keys and the Issue keys of the member titles at map scope, and the Issue keys of the member titles at the other scopes.                        | "<key> has N PRs: #A, #B" (and "closed: #C")                                                             |
 | Off the lane chain   | Map   | An open PR of a key whose base is not the lane base. Only with explicit lanes. The base also passes when it is the root and the previous key has no open PR, or when it is the head of another PR of the same key. | "#N is based on <branch>; the lane says <base>"                                                          |
@@ -320,7 +331,7 @@ The `t3-map-pr-graph` skill's "keyed thread with no PR" is not an anomaly: the "
 - **Scope change.** A new scope calls `/pr-graph` once for that scope. The server cache answers when its answer is less than 60 s old. The graph of the new scope shows at once from the tree.
 - **Live.** While the modal is open, each `/events` push builds the graph again with the new tree and the last `PrGraphData` of the scope, at any age. A push never calls `/pr-graph`.
 - **Refresh.** A "Refresh" button in the header calls `/pr-graph` with `refresh=1`. It shows a spinner while the call runs.
-- **Errors.** At map scope, each `errors` item shows a line "Could not read PRs for <key>: <text>" with a "Retry" link, which does a refresh. A `503` or a network error shows one line "Could not read PRs from T3" with "Retry". The graph from the tree stays.
+- **Errors.** At map and lineage scope, each `errors` item shows a line "Could not read PRs for <key>: <text>" with a "Retry" link, which does a refresh. A `503` or a network error shows one line "Could not read PRs from T3" with "Retry". The graph from the tree stays.
 
 ### Where it opens
 
@@ -330,21 +341,28 @@ The `t3-map-pr-graph` skill's "keyed thread with no PR" is not an anomaly: the "
   - With an empty input, the group shows after "Recent", or after the empty icon state when there is no Recent thread.
   - With a query, the group shows after the thread results when every query word is a substring of "pr graph" (case-insensitive). The "No thread matches" state then shows above it.
   - In the `>` mode, the group does not show.
-- **Map head button.** A ghost icon button with the lucide `GitBranch` icon, after the member count, always visible. It is on a map thread row and on a **Map header**. The tooltip is "PR graph". The button shows no count: the count needs the slow calls. A map thread row that anchors several maps has no button. Each of its Map headers has one. It opens the modal at the map scope of that map.
-- **Key `g`.** On a focused map thread row or Map header stop that has a button, `g` opens the modal at the map scope of that map. It is a row key (see "UI" › Row keys). The key hint `g Graph` shows on the focused map head.
+- **Group head button.** A ghost icon button with the lucide `GitBranch` icon, after the count. The tooltip is "PR graph". The button shows no count: the count needs the slow calls.
+  - A head (root row or **Lineage header**) that anchors exactly one map label opens that map scope.
+  - A head that anchors no map label, or several, opens the lineage scope. A program root with sub-maps thus opens the whole program.
+  - Each map label anchor below the head (a map thread row or a **Map header**) opens its own map scope.
+  - A map scope button is always visible. A lineage scope button shows only when the root or a live member links a PR, because most groups are small and link no PR.
+- **Key `g`.** On a focused head stop that has a button, `g` opens the modal at the scope of that button. It is a row key (see "UI" › Row keys). The key hint `g Graph` shows on the focused head.
 - The modal does not store a scope. Each open starts at the scope of its entry.
 
 ### Modal
 
 The look is in [DESIGN-SPEC.md](DESIGN-SPEC.md) › PR graph.
 
-- **Header.** The title "PR graph", then the scope picker, then the graph sort menu at All only, then the Refresh button at the right end. The subtitle is "N projects · M PRs · K open" at All and "M PRs · K open" at project and map scope.
-- **Scope picker.** A searchable list with "All projects" first. Typing filters the projects and maps by name. Then a "Projects" group: each project with a band, in the graph sort order, with its project icon, its name and its PR count. Then a "Maps" group: each **Map group** of the live tree with a member that links a PR, by map name, with the project icon and the map name. With no such map, the "Maps" group does not show, and the search field reads "Find a project". A pick changes the scope. The map of the open map scope stays in the list.
+- **Header.** The title "PR graph", then the scope picker, then the graph sort menu at All only, then the Refresh button at the right end. The subtitle is "N projects · M PRs · K open" at All and "M PRs · K open" at project, map and lineage scope.
+- **Scope picker.** A searchable list with "All projects" first. Typing filters the projects and groups by name. Then a "Projects" group: each project with a band, in the graph sort order, with its project icon, its name and its PR count. Then a "Groups" group:
+  - each map label of the live tree with a member that links a PR, once for each key, by map name, with the `Map` icon;
+  - each **Lineage group** whose head opens the lineage scope and that has a member that links a PR, by its name (the root title), with the `Network` icon.
+  - With no such item, the "Groups" group does not show, and the search field reads "Find a project". A pick changes the scope. The item of the open map or lineage scope stays in the list.
 - **Graph sort.** A menu with three choices. The page keeps the choice in `localStorage` under `thread-tree:graph-sort` (`"title"`, `"open"`, `"tree"`). It orders the bands at All and the Projects group of the picker. "No project" is always last.
   - **Title** (the default): the project title, A to Z.
   - **Most open PRs:** the count of open PRs in the band, most first, then the title. A push can move a band.
   - **Tree order:** the order of the T3 project groups in the tree with "Manual" sort, pins first: `arrange` over the stored list `projects` of `thread-tree:order`. A project that is not in that list follows, by title. The sort reads this order also while the page shows the Linear tree or the flat view.
-- **Band label.** At All and project scope, each band has a label at its top left that stays in view while the canvas scrolls: the project icon, the name, the repo, and "root <branch> · N PRs · M open · K anomalies". A dashed line divides two bands. A band does not fold. The map scope has no band label.
+- **Band label.** At All, project and lineage scope, each band has a label at its top left that stays in view while the canvas scrolls: the project icon, the name, the repo, and "root <branch> · N PRs · M open · K anomalies". A dashed line divides two bands. A band does not fold. The map scope has no band label.
 - **Legend.** One line over the graph with the edge kinds ("base root" for the root edge), then "! anomaly (hover)", then "L lane" at map scope only.
 - **Graph box.** Drag on the empty area to pan, by mouse or by touch. A drag that starts on a link or a button does not pan. A wheel or a trackpad scrolls. No zoom.
 - **Node.** Four lines:
@@ -358,23 +376,23 @@ The look is in [DESIGN-SPEC.md](DESIGN-SPEC.md) › PR graph.
 - **Badge.** The `!` badge shows on hover or focus the texts of the node's anomalies.
 - **Links.** A PR link opens GitHub in a new tab. A thread link opens the thread in T3 (`t3code://threads/<environmentId>/<threadId>`), and the modal stays open.
 - **Lists.** Under the graph, a fold, closed at first, that shows the counts. Open, it has two columns: "Anomalies" and "Threads with no PR". Each anomaly item names its PRs as `#N`. A click on `#N` scrolls the graph to the node and focuses it. Each thread item links to the thread in T3. An empty list says "None". At All, the second column is the line "N threads with no PR. Pick a project to list them."
-- **Scope gone.** When the project of a project scope has no band any more, or the map of a map scope leaves the tree, the scope goes back to All.
+- **Scope gone.** When the project of a project scope has no band any more, or the map of a map scope or the Lineage group of a lineage scope leaves the live tree, the scope goes back to All.
 - **Close.** Escape, the close button or a click outside.
 
 ### Demo stub
 
-`scripts/demo.ts` answers `/pr-graph` after 1 s with a fixture. At map scope: two explicit lanes, a `## Stacks` chain, one key row of a gone thread, one outside stack mate, one foreign base, one PR behind its base and a stack with merged PRs. At All and project scope: `roots` with `master` for one project and no entry for one project, one stack mate and one PR behind its base. The demo tree has a Review thread that links a PR. `GRAPH=fail` makes one key query of the map scope fail. `GRAPH=down` answers `503` for every scope.
+`scripts/demo.ts` answers `/pr-graph` after 1 s with a fixture. At map scope: two explicit lanes, a `## Stacks` chain, one key row of a gone thread, one outside stack mate, one foreign base, one PR behind its base and a stack with merged PRs. At All and project scope: `roots` with `master` for one project and no entry for one project, one stack mate and one PR behind its base. At lineage scope: a group over two projects, with one key row and one settled member. The demo tree has a Review thread that links a PR. `GRAPH=fail` makes one key query of the map scope fail. `GRAPH=down` answers `503` for every scope.
 
 ### Left out
 
-- A count of anomalies on the map head or on the top bar button.
+- A count of anomalies on a group head or on the top bar button.
 - Zoom, and a fold for a band.
-- PRs with no T3 thread outside a map scope: the app runs no author query on GitHub.
-- PRs of settled threads outside a map scope.
-- PRs of a gone thread in a markdown-ticket map or a keyless map: no key query finds them.
+- PRs with no T3 thread outside a map or lineage scope: the app runs no author query on GitHub.
+- PRs of settled threads outside a map or lineage scope.
+- PRs of a gone thread in a markdown-ticket map, or with no Issue key in its title: no key query finds them.
 - Local-only gh stacks: T3 knows only the stacks on GitHub.
 - A graph button on a project header, and a stored last scope.
-- A graph for a group that is not a project or a map, such as a PR stack or an Issue key group.
+- A graph for a group that is not a project, a map or a Lineage group, such as a PR stack or an Issue key group.
 - Any change to the `t3-map-pr-graph` skill.
 
 ## Start workflow
@@ -457,17 +475,17 @@ A **top-level thread** has no native `parentThreadId`. A **subagent** has `relat
 3. **Snoozed** threads stay visible, unless "Show snoozed threads" is off. They are shown muted, with their wake time. When it is off, a page filter hides them. A snoozed thread with a visible subthread stays as a muted context row.
 4. **Issue key:** the first match of `/\b[A-Z][A-Z0-9]+-\d+\b/` in the title of a top-level thread. `Review #15708 JED-4319` gives `JED-4319`.
 5. **Visible spawner:** start at the thread's spawner and go up the spawner chain. Skip threads that are not visible, and stop at the first visible one. If no thread in the chain is visible, the thread has no visible spawner.
-6. **Placement.** A thread is always placed in its own `projectId`, except a **Map member**, which goes into its map group (see "Map groups"). The chain of **Placement rules** decides the rest (see "Placement rules").
+6. **Placement.** A thread is always placed in its own `projectId`, except a member of a **Lineage group**, which goes into its group (see "Lineage groups"). The chain of **Placement rules** decides the rest (see "Placement rules").
 7. **Launcher threads** get no special rule.
 8. **PR stack:** it adds no level to the tree. Each thread in a stack shows a badge with its position, for example `⧉ 3/6`. Key groups and the stack group in one project that share a stack sit next to each other, in stack order. A group with no PR of its own in the stack goes after the others.
    - Stack membership: the thread's open PRs with `source` `created`, `stack` or `agent`, and every PR that T3 lists in the stack layers of those PRs, merged ones too. A stack of fewer than 2 such PRs is not a stack.
    - Stack order: as computed by `build.py` on branch `prototype/005-tree-ui`.
 9. **Order:**
    - Projects are sorted by their oldest thread, oldest first.
-   - In a project, the groups (Reviews, issue-key groups, PR stack groups, map groups) and the **Loose threads** form one list. It is sorted by the oldest thread of each item, oldest first, with stack mates kept together at the slot of the oldest member. No item has a fixed first or last place.
+   - In a project, the groups (Reviews, issue-key groups, PR stack groups, Lineage groups) and the **Loose threads** form one list. It is sorted by the oldest thread of each item, oldest first, with stack mates kept together at the slot of the oldest member. No item has a fixed first or last place.
    - Threads and nested threads are sorted by `createdAt`, oldest first. A tie goes to the thread id.
    - A new item goes at the end of its list. A status change, a new PR or a new run does not move a row.
-   - The user can reorder project cards, the items of a project list (a stack run moves as one block), review groups and top-level threads by drag. A map group moves as one block with its head (see "Map groups"). The page stores the order of each list in `localStorage`. An id that is not in the stored list goes after the stored ones, in base order. Ids that no longer exist drop out. Subthreads keep the base order. No drag crosses lists.
+   - The user can reorder project cards, the items of a project list (a stack run moves as one block), review groups and top-level threads by drag. A Lineage group moves as one block with its head (see "Lineage groups"). The page stores the order of each list in `localStorage`. An id that is not in the stored list goes after the stored ones, in base order. Ids that no longer exist drop out. Subthreads keep the base order. No drag crosses lists.
    - A **Pin** puts an item at the top of its own list (see "Pins"). A drag works inside the pinned part or inside the unpinned part of a list.
    - A save keeps only the ids of the current view. Settled threads are never in the view, so they are never in the stored order.
    - A live push during a drag does not change the dragged list until the drop.
@@ -477,30 +495,28 @@ A **top-level thread** has no native `parentThreadId`. A **subagent** has `relat
 
 Source: wayfinder map `thread-organization` in the wiki (`t3-thread-tree/issues/thread-organization/`). Ticket 01 audits the placement of today, ticket 03 fixes the rule model, ticket 07 picks the Settings control (prototype on branch `prototype/07-settings-rules-ui`, variant A). The design is in [ADR 0001](docs/adr/0001-placement-rule-chain.md).
 
-The server places every thread with one ordered chain of **Placement rules**. The user can switch each rule on or off and reorder the middle rules. The page owns all order after placement: drag order, drag freeze, filters, sort, sections and pins.
+The server places every thread with one ordered chain of **Placement rules**. The user can switch each rule on or off and reorder the last three rules. The page owns all order after placement: drag order, drag freeze, filters, sort, sections and pins.
 
 ### The chain
 
 - **Pool.** The **Pool** starts as the visible top-level threads (Tree rules 1 to 3) and the root runs (see "Runs in the tree").
-- **Claim.** Each rule that is on gets the pool, in chain order. It claims a set of threads, each one `into` a group or `under` a row (a map head or a spawner). A claimed thread leaves the pool. So the first claim wins, and a thread never has two places. A rule reads facts (stacks, keys, spawner chain, maps, Linear data) and never changes a node. The Map group rule can also add Map headers, which the later rules place.
+- **Claim.** Each rule that is on gets the pool, in chain order. It claims a set of threads, each one `into` a group or `under` a row (a group head). A claimed thread leaves the pool. So the first claim wins, and a thread never has two places. A rule reads facts (stacks, keys, spawner chain, maps, Linear data) and never changes a node. The Lineage group rule can also add Lineage headers, which the later rules place.
 - **Loose thread.** A thread that no rule claims is a **Loose thread**. It sits directly under its project (project layout) or at the top level (Linear layout).
 - **Module.** One deep module, `place(input, rules, layout)`, on the server. It holds the facts, the rule list and the two layouts. A developer adds a rule in the rule list only. Rule ids and labels for Settings are in a shared module with no logic.
 
 ### Rules
 
-| Rule           | Id       | It claims                                                                                                                           | Place in the chain                                            | Default |
-| -------------- | -------- | ----------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------- | ------- |
-| Map group      | `map`    | A **Map member**, and the keyless stack mates of a member, under the map head (see "Map groups").                                   | Always first: it adds the Map headers that later rules place. | On      |
-| Reviews        | `review` | A thread whose title starts with `Review #` into Reviews: into the subgroup of its issue key, or directly into Reviews with no key. | The user can reorder it.                                      | On      |
-| PR stack       | `stack`  | The threads of a PR stack (Tree rule 8). A stack outranks the spawner.                                                              | The user can reorder it.                                      | On      |
-| Issue key      | `key`    | A thread with an issue key (Tree rule 4) into the group of its key.                                                                 | The user can reorder it.                                      | On      |
-| Launch nesting | `nest`   | A keyless thread that is not a review, under its visible spawner (Tree rule 5), when both have the same **Home**.                   | Always last: it needs the place of the spawner.               | Off     |
+| Rule          | Id        | It claims                                                                                                                           | Place in the chain                                                | Default |
+| ------------- | --------- | ----------------------------------------------------------------------------------------------------------------------------------- | ----------------------------------------------------------------- | ------- |
+| Lineage group | `lineage` | Each member of a **Lineage group**, and the stack mates of a member, under the group head (see "Lineage groups").                   | Always first: it adds the Lineage headers that later rules place. | On      |
+| Reviews       | `review`  | A thread whose title starts with `Review #` into Reviews: into the subgroup of its issue key, or directly into Reviews with no key. | The user can reorder it.                                          | On      |
+| PR stack      | `stack`   | The threads of a PR stack (Tree rule 8). A stack outranks the spawner.                                                              | The user can reorder it.                                          | On      |
+| Issue key     | `key`     | A thread with an issue key (Tree rule 4) into the group of its key.                                                                 | The user can reorder it.                                          | On      |
 
 - **PR stack, project layout.** A stack thread with an issue key goes to its own key group while the Issue key rule is on. The other stack threads go to `Project › PR stack #<n>`, where `<n>` is the bottom open PR of the stack, or the first PR in the T3 stack layers when no PR is open. All keyless threads of one stack share this group, and it gets the stack rail.
-- **PR stack rail folds.** Merged rows show by default. The merged fold (`merged:<stack id>` in `thread-tree:closed`) hides them: they become one pile at the place of the first merged row, shown as up to 4 purple dots and the caption "N merged". The same count shows in the header as one button. A closed rail keeps the threads of its two bottom open PRs. Its other rows become one pile with the caption "N more". A click on a pile opens the rail and the merged fold. A click on the dot of a merged row sets the merged fold; a click on the dot of another row closes an open rail. A rail in a map group or in the flat list has no chevron. It folds through its dots and piles. "Collapse all" and "Show in tree" set the merged fold with the rail fold.
+- **PR stack rail folds.** Merged rows show by default. The merged fold (`merged:<stack id>` in `thread-tree:closed`) hides them: they become one pile at the place of the first merged row, shown as up to 4 purple dots and the caption "N merged". The same count shows in the header as one button. A closed rail keeps the threads of its two bottom open PRs. Its other rows become one pile with the caption "N more". A click on a pile opens the rail and the merged fold. A click on the dot of a merged row sets the merged fold; a click on the dot of another row closes an open rail. A rail in a Lineage group or in the flat list has no chevron. It folds through its dots and piles. "Collapse all" and "Show in tree" set the merged fold with the rail fold.
 - **PR stack, Linear layout.** The lowest free stack thread that has an issue key and is not a review places the full stack. Each other stack thread uses the key of that thread in the Linear layout. A stack with no such thread is a set of loose threads.
-- **Home.** The container of the layout that the node's own key and review flag give it. Project layout: its T3 project. Linear layout: Reviews, its milestone, No project or the top level. One nest condition serves both layouts. It gives the same tree as the two conditions of today, and the tests must show this.
-- **Runs.** A run enters the pool. Map group, PR stack and Launch nesting skip it, so only Reviews and Issue key place it.
+- **Runs.** A run enters the pool. Lineage group and PR stack skip it, so only Reviews and Issue key place it.
 - **Not rules.** Visibility (Tree rules 1 to 3), runs, loose threads, the Linear project and milestone levels, drag order, sort, sections and pins.
 
 ### Layouts
@@ -519,11 +535,11 @@ The flat view and the Linear sections use the output of a layout and place nothi
 
 ### Rule order
 
-- The default order is Map group, Reviews, PR stack, Issue key, Launch nesting. It gives the placement of today, with no fixed group places.
+- The default order is Lineage group, Reviews, PR stack, Issue key. There are no fixed group places.
 - Only two swaps change the tree:
   - Reviews below PR stack: a review thread in a PR stack shows in its stack, not in Reviews.
   - Issue key above PR stack: a stack thread with a key goes to its key group. In the Linear tree it goes to its own milestone, and the stack can split. Stack mates with no key stay in the stack.
-- A rule that is off claims nothing. Its threads fall to the next rules. Map group off: no map group shows. Reviews off: a review places by its key. PR stack off: no stack group shows, and the Linear tree has no stack placer. The stack badge and the stack rail data stay. Issue key off: no key group shows; the Linear tree shows little.
+- A rule that is off claims nothing. Its threads fall to the next rules. Lineage group off: no Lineage group shows, and no thread nests under its spawner. Reviews off: a review places by its key. PR stack off: no stack group shows, and the Linear tree has no stack placer. The stack badge and the stack rail data stay. Issue key off: no key group shows; the Linear tree shows little.
 - No combination is invalid. Settings shows a hint and blocks nothing.
 
 ### Groups
@@ -534,17 +550,17 @@ The flat view and the Linear sections use the output of a layout and place nothi
 
 ### Settings and stream
 
-- **Storage.** `localStorage` key `thread-tree:rules`: the rule ids in chain order, each with its switch. With no saved value, the page uses the defaults. When `thread-tree:nest` holds `"1"` and `thread-tree:rules` has no value, the page turns Launch nesting on, one time.
+- **Storage.** `localStorage` key `thread-tree:rules`: the rule ids in chain order, each with its switch. With no saved value, the page uses the defaults. A saved `map` or `nest` id reads as in "Lineage groups" › Migration.
 - **Stream.** The page sends `rules=<ids>` on `/events`: the ids of the rules that are on, in chain order, joined with `,`. An empty value means that all rules are off. It replaces `nest=1`. The value joins the stream cache key, so the server builds one tree for each set.
-- **Server check.** With no `rules` parameter, the server uses the default chain. It ignores an unknown or a repeated id. It always puts `map` first and `nest` last.
-- **Grouping section.** Settings has a **Grouping** section between View and Setup. One list of five rows, in chain order. Each row has the rule name, a one-line hint and a switch at the right.
-  - Map group and Launch nesting show a lock icon. Their hints end in "Always first." and "Always last.".
+- **Server check.** With no `rules` parameter, the server uses the default chain. It ignores an unknown or a repeated id. It always puts `lineage` first.
+- **Grouping section.** Settings has a **Grouping** section between View and Setup. One list of four rows, in chain order. Each row has the rule name, a one-line hint and a switch at the right.
+  - Lineage group shows a lock icon. Its hint ends in "Always first.".
   - Reviews, PR stack and Issue key have drag handles. The user drags them to reorder them.
-  - Hints. Map group: "Threads of a wayfinder map go under the map." Reviews: "Review threads go in one Reviews group." PR stack: "Threads with stacked PRs go in their stack." Issue key: "Threads go in the group of their issue key." Launch nesting: "A launched thread goes under the thread that launched it."
+  - Hints. Lineage group: "Threads that an agent launched go under the thread that started them." Reviews: "Review threads go in one Reviews group." PR stack: "Threads with stacked PRs go in their stack." Issue key: "Threads go in the group of their issue key."
   - Under the list, one line says "A thread goes to the first rule that fits it, top to bottom." Below it, one plain line for each difference from the default, else "Default placement.":
     - Reviews below PR stack: "A review thread in a PR stack shows in its stack, not in Reviews."
     - Issue key above PR stack: "A stack thread with a key goes to its key group" (Linear tree: "to its own milestone"). "Stack mates without a key stay in the stack."
-    - One line for each of Map group, Reviews, PR stack and Issue key that is off, and one line for Launch nesting on.
+    - One line for each of Lineage group, Reviews, PR stack and Issue key that is off.
   - In the Linear tree with Issue key off, a warning box under the list says that the Linear tree groups by issue key, and that most threads then show as loose threads. It does not block the change.
   - A change applies at once. There is no Save button.
 
@@ -555,9 +571,9 @@ Source: ticket 02 of the wayfinder map `thread-organization` in the wiki. Propos
 A row shows the same time that it sorts by.
 
 - **Last run.** The time of a thread for sort and age: `lastRun` (the newest of `activityRunStartedAt`, `latestRunStartedAt` and `latestRunCompletedAt`), else `createdAt` when the thread has no run. Never `updatedAt`, which changes about once a second while a thread works.
-- **Block time.** A row that heads a block (a parent with subthreads, a map thread row) sorts by and shows the newest **Last run** of the counted threads of the block.
+- **Block time.** A row that heads a block (a parent with subthreads, a group head row) sorts by and shows the newest **Last run** of the counted threads of the block.
 - **Counted threads.** The threads that the view shows. Settled threads count only when all threads of the block are settled. Snoozed threads count only while "Show snoozed threads" is on; when all are snoozed, all count. Folded threads still count, so a fold never moves a row.
-- **Headers.** A PR stack rail, an issue-key group, a Map header and Reviews show no age. They sort by the block time of their threads, and their hover shows "Last run <date> · <title>". Linear project and milestone order does not change with the sort.
+- **Headers.** A PR stack rail, an issue-key group, a Lineage header, a Map header and Reviews show no age. They sort by the block time of their threads, and their hover shows "Last run <date> · <title>". Linear project and milestone order does not change with the sort.
 - **Tooltip of a row age.** "Last run <date>". When another thread of the block gives the time: "Last run <date> · <thread title>". With no run: "Created <date>".
 - **Run row.** It sorts by the newest of its `updatedAt` and the Last run of its step threads, shows that time, and its tooltip is "Last activity <date>".
 - **Scope.** The same time in both sorts, in the tree and the flat view, and in Find (the Recent list and the row age). Details keeps "Updated" and adds a "Last run" line.
@@ -568,8 +584,8 @@ Source: ticket 04 of the wayfinder map `thread-organization` in the wiki. Propos
 
 The user can **Pin** an item, so that it stays at the top of its own list, whatever the sort. A pin is local to the page. It is not T3's own thread pin, and it is not a placement rule: it orders a list that the server already built.
 
-- **What can be pinned.** What the user can drag: a top-level thread (a loose thread or a run row), a map group, a PR stack run, an issue-key group, Reviews, a Reviews key subgroup, No project, a T3 project card and a Linear project. A subthread, a map member, a stack member and a Linear milestone cannot be pinned. Reviews starts unpinned.
-- **Ids.** A pin uses the drag id of its item. A map pin uses `map:<key>`, so it stays when the head of the map changes.
+- **What can be pinned.** What the user can drag: a top-level thread (a loose thread or a run row), a Lineage group, a PR stack run, an issue-key group, Reviews, a Reviews key subgroup, No project, a T3 project card and a Linear project. A subthread, a member of a Lineage group, a stack member and a Linear milestone cannot be pinned. Reviews starts unpinned.
+- **Ids.** A pin uses the drag id of its item. A Lineage group with the map look pins as `map:<key>`, any other as its root id. Both stay when the root settles.
 - **Place.** A pinned item leads its own list, in every view. It never moves to another list, project or section.
   - Status sections: a pinned item leads its own section. In Needs input, Plan ready and Your turn, the pin goes before the Wait order, and Wait order applies inside the pinned part and the unpinned part. The Open next queue and Triage keep pure Wait order.
   - Flat view: thread and stack pins work. A group pin and a project pin do nothing there, because the flat view has no header for them. With "Group by Linear project", a pinned top-level item leads the sections.
@@ -581,9 +597,9 @@ The user can **Pin** an item, so that it stays at the top of its own list, whate
 
 ## UI
 
-The page shows an outline tree: Project, group, thread. Each thread row has a status icon, a title link to `t3code://threads/<environmentId>/<threadId>`, a stack badge, PR links and, when a PR has a Watched label, a Label pill (see "Label pills"). A row that waits on the user (needs input, plan ready or your turn) shows its phrase and the Wait beside the icon, for example "Approval 12m". The Wait is the time since `since`. A guest message has no `since`, so it shows the phrase only. A failed row shows "Failed" with no time. Other rows show no text. This reverses `d602e6e` (#18) for these rows only. The row end shows the age of the row's **Last run**, or of its block time (see "Row time"). Closed rows are saved in `localStorage`. A toggle shows the Settled list below the tree or the flat list. A toggle "Show snoozed threads" hides snoozed threads when it is off; it saves `"0"` under `thread-tree:snoozed`, and it is on by default. It changes the page only: the Needs-you count, the Dock badge and the notifications do not change, and the server gets no parameter. The Launch nesting rule in Settings › Grouping nests launched threads (see "Placement rules"). When a Linear workspace is set, an issue key links to its Linear issue. With team keys set, only a key of a listed team links. The Settings panel keeps the workspace and teams in `localStorage`; `LINEAR_WORKSPACE` and `LINEAR_TEAMS` give the default. A banner shows when T3 is down, when no token is set, or when T3 rejects the token. The token banners open the Settings panel.
+The page shows an outline tree: Project, group, thread. Each thread row has a status icon, a title link to `t3code://threads/<environmentId>/<threadId>`, a stack badge, PR links and, when a PR has a Watched label, a Label pill (see "Label pills"). A row that waits on the user (needs input, plan ready or your turn) shows its phrase and the Wait beside the icon, for example "Approval 12m". The Wait is the time since `since`. A guest message has no `since`, so it shows the phrase only. A failed row shows "Failed" with no time. Other rows show no text. This reverses `d602e6e` (#18) for these rows only. The row end shows the age of the row's **Last run**, or of its block time (see "Row time"). Closed rows are saved in `localStorage`. A toggle shows the Settled list below the tree or the flat list. A toggle "Show snoozed threads" hides snoozed threads when it is off; it saves `"0"` under `thread-tree:snoozed`, and it is on by default. It changes the page only: the Needs-you count, the Dock badge and the notifications do not change, and the server gets no parameter. The Lineage group rule in Settings › Grouping nests launched threads (see "Lineage groups"). When a Linear workspace is set, an issue key links to its Linear issue. With team keys set, only a key of a listed team links. The Settings panel keeps the workspace and teams in `localStorage`; `LINEAR_WORKSPACE` and `LINEAR_TEAMS` give the default. A banner shows when T3 is down, when no token is set, or when T3 rejects the token. The token banners open the Settings panel.
 
-The header holds the title, the filter ("All", "Needs you"), "Triage", the PR graph button (see "PR graph" › Where it opens), a sort menu ("Manual", "Last updated"), a Tree / Flat switch, a "Group by" menu ("T3 project", "Linear project" in the tree; "None", "Status", "Linear project" in the flat view), in the tree a fold all button beside it, and a Settings button (a cog). The "Needs you" chip shows the Needs-you count as a badge. Then it shows the your-turn count as a muted number. A "·" sits between them when both show. Each count shows only when above 0. The tooltip reads "N need you, M your turn". The cog opens the Settings panel on the right, beside the tree. Its header stays in view while the panel scrolls, and Escape closes it. The panel has four groups. "Updates" (desktop app only) has the version, the update state and its action. "View" has show settled, show snoozed, show key hints, reset order (it clears the tree order and the Linear tree order) and the theme as three icons (Light, System, Dark). "Grouping" has the placement rules (see "Placement rules"). "Setup" has seven folds, closed at first: T3 token, Linear links (the workspace and team keys, and an API key field with its own Save, see "Linear grouping"), Catch-up (see "Catch-up fold"), Local model (see "Model picks"), Watched labels (see "Label pills"), the status icon legend and Keys. A fold shows its state at the right: green text when set, yellow text with a warning sign when not set (Local model shows "Checking…" in neutral text until the first `GET /local-model` answers, then "Ready", or "Not reachable", "Model not found" or "Not set" in yellow; Watched labels shows a neutral "None" instead), a blue info icon for the legend and for Keys. The Keys fold lists `j k ↑ ↓` Move, Enter Open, `o` Details or fold, `l h` Expand, collapse, `s` Send, `p` Pin, `g` Map PR graph, `G` PR graph, `n` Open next, `t` Triage and ⌘K (Ctrl+K off macOS) Find, each key as a `Kbd` (the shadcn component). The token banners open the panel with the T3 token fold open. When the panel opens in the desktop app, it checks for updates, but not when the last good check is less than 60 s old.
+The header holds the title, the filter ("All", "Needs you"), "Triage", the PR graph button (see "PR graph" › Where it opens), a sort menu ("Manual", "Last updated"), a Tree / Flat switch, a "Group by" menu ("T3 project", "Linear project" in the tree; "None", "Status", "Linear project" in the flat view), in the tree a fold all button beside it, and a Settings button (a cog). The "Needs you" chip shows the Needs-you count as a badge. Then it shows the your-turn count as a muted number. A "·" sits between them when both show. Each count shows only when above 0. The tooltip reads "N need you, M your turn". The cog opens the Settings panel on the right, beside the tree. Its header stays in view while the panel scrolls, and Escape closes it. The panel has four groups. "Updates" (desktop app only) has the version, the update state and its action. "View" has show settled, show snoozed, show key hints, reset order (it clears the tree order and the Linear tree order) and the theme as three icons (Light, System, Dark). "Grouping" has the placement rules (see "Placement rules"). "Setup" has seven folds, closed at first: T3 token, Linear links (the workspace and team keys, and an API key field with its own Save, see "Linear grouping"), Catch-up (see "Catch-up fold"), Local model (see "Model picks"), Watched labels (see "Label pills"), the status icon legend and Keys. A fold shows its state at the right: green text when set, yellow text with a warning sign when not set (Local model shows "Checking…" in neutral text until the first `GET /local-model` answers, then "Ready", or "Not reachable", "Model not found" or "Not set" in yellow; Watched labels shows a neutral "None" instead), a blue info icon for the legend and for Keys. The Keys fold lists `j k ↑ ↓` Move, Enter Open, `o` Details or fold, `l h` Expand, collapse, `s` Send, `p` Pin, `g` Group PR graph, `G` PR graph, `n` Open next, `t` Triage and ⌘K (Ctrl+K off macOS) Find, each key as a `Kbd` (the shadcn component). The token banners open the panel with the T3 token fold open. When the panel opens in the desktop app, it checks for updates, but not when the last good check is less than 60 s old.
 
 The tree choice of the "Group by" menu is saved under `thread-tree:tree-group` (`"t3"` or `"linear"`). "Linear project" is disabled unless the key state is `ok`, and the tree shows T3 projects while the state is `no-key`. While the tree groups by Linear project and the key state is `rejected`, a banner reads "Linear rejected the API key." Its "Set the key" link opens the panel with the "Linear links" fold open. The tree keeps the last good data.
 
@@ -593,7 +609,7 @@ A pending request wins over snooze. A snoozed thread with a pending request show
 
 The sort menu keeps its choice in `localStorage` under `thread-tree:sort`. "Last updated" sorts by the **Last run** of a row, or by its block time (see "Row time"). The page sorts the arranged tree. Projects keep their order. In a project, the groups and the loose threads sort together, newest first, and a group or PR stack sorts by the block time of its counted threads. Pins lead each list (see "Pins"). Ties keep the manual order. Drag is off in "Last updated".
 
-The flat view lists all threads of all projects in one list. The switch keeps its choice in `localStorage` under `thread-tree:layout`, and "Group by" under `thread-tree:group`. With "Group by Status", each section header is a fold button. A closed section keeps its header and its count, and shows no rows, so its rows have no drag. The closed sections are saved as a JSON list of section keys under `thread-tree:sections`. With no saved list, "Idle and snoozed" and "Done" are closed. A new thread does not open a closed section. The "Needs you" filter and the sort keep the folds. "Group by None" has no folds. The flat list has no fold-all button. Drag works with "Manual" sort and is off in "Last updated". The flat list keeps its own order in the stored orders (`thread-tree:order`, list key `flat`), so "Reset order" clears it. It starts as the tree order, flattened, and a new thread goes last. A flat drag never changes the tree order, and the reverse. With "Group by Status", a row drags only inside its section; all sections share the one flat order. A stack run is one block, and subthreads stay under their parent. "Manual" keeps the tree order, flattened. "Last updated" sorts the whole list. "Group by Linear project" makes sections from the Linear tree (see "Linear grouping"). The sections follow the top-level list: a pinned top-level item leads, and "Last updated" sorts them by block time, newest first. "Group by Status" makes sections in this order: Needs input, Plan ready, Your turn, Failed (`failed`, `interrupted`), Working (`working`, `starting`, `waiting`), Idle and snoozed, Done. A section with no thread is hidden. A unit (a thread, a stack or a map group) goes to the section of its most urgent thread, subthreads included. Settled threads do not pull; a unit with only settled threads goes by all of them. With "Group by Status", Needs input, Plan ready and Your turn sort by Wait, oldest first, with both sort choices. A row with no Wait goes last, and a unit sorts by the oldest Wait of its threads in the section, subthreads included, settled threads left out. Drag is off there. The stored flat order does not change, so a row that stops waiting goes back to its place. A **context row** is a thread row in a section whose status is not one of the section's statuses, or that is settled. A section header counts the threads that match the section, subthreads included, settled threads left out. A context row shows muted title text. In a PR stack or a map group, a row folds when it and all its subthreads are context rows. The rail header then shows a "+N other threads" button that shows and hides them. The open state is not saved. Saved tree folds stay unchanged.
+The flat view lists all threads of all projects in one list. The switch keeps its choice in `localStorage` under `thread-tree:layout`, and "Group by" under `thread-tree:group`. With "Group by Status", each section header is a fold button. A closed section keeps its header and its count, and shows no rows, so its rows have no drag. The closed sections are saved as a JSON list of section keys under `thread-tree:sections`. With no saved list, "Idle and snoozed" and "Done" are closed. A new thread does not open a closed section. The "Needs you" filter and the sort keep the folds. "Group by None" has no folds. The flat list has no fold-all button. Drag works with "Manual" sort and is off in "Last updated". The flat list keeps its own order in the stored orders (`thread-tree:order`, list key `flat`), so "Reset order" clears it. It starts as the tree order, flattened, and a new thread goes last. A flat drag never changes the tree order, and the reverse. With "Group by Status", a row drags only inside its section; all sections share the one flat order. A stack run is one block, and subthreads stay under their parent. "Manual" keeps the tree order, flattened. "Last updated" sorts the whole list. "Group by Linear project" makes sections from the Linear tree (see "Linear grouping"). The sections follow the top-level list: a pinned top-level item leads, and "Last updated" sorts them by block time, newest first. "Group by Status" makes sections in this order: Needs input, Plan ready, Your turn, Failed (`failed`, `interrupted`), Working (`working`, `starting`, `waiting`), Idle and snoozed, Done. A section with no thread is hidden. A unit (a thread, a stack or a Lineage group) goes to the section of its most urgent thread, subthreads included. Settled threads do not pull; a unit with only settled threads goes by all of them. With "Group by Status", Needs input, Plan ready and Your turn sort by Wait, oldest first, with both sort choices. A row with no Wait goes last, and a unit sorts by the oldest Wait of its threads in the section, subthreads included, settled threads left out. Drag is off there. The stored flat order does not change, so a row that stops waiting goes back to its place. A **context row** is a thread row in a section whose status is not one of the section's statuses, or that is settled. A section header counts the threads that match the section, subthreads included, settled threads left out. A context row shows muted title text. In a PR stack or a Lineage group, a row folds when it and all its subthreads are context rows. The rail header then shows a "+N other threads" button that shows and hides them. The open state is not saved. Saved tree folds stay unchanged.
 
 **Open next** opens in T3 the thread, Run question or Paused run that has waited longest. The page owns the target and the skip memory; the key `n`, the menu-bar item and the Up next window share them.
 
@@ -618,7 +634,7 @@ The flat view lists all threads of all projects in one list. The switch keeps it
 
 - **Candidate.** A thread of the tree, subthreads included, that is not settled. Its status is `your-turn`, `done` or `idle`. Its `lastRun` is set and older than 1 h. It is not pinned in T3 (`detail.pinned`) and not in the skip list. A page **Pin** does not count. No subthread has the status `working`, `starting`, `waiting`, `needs-input` or `plan-ready`.
 - **Reason.** A thread with 1 or more PRs, all merged or closed, has the reason `prs`. Else a Catch-up with `state` `done`, `doneLike` and a `pick` other than `local` gives the reason `catch-up`. A thread with no reason is not offered. The Local model never gives a reason. The Apple model does.
-- **Views.** Every node of the tree is a T3 top-level thread, so the T3 tree and the Linear tree offer the same threads. The subthread rule reads `children`, so it sees a launched thread only while it nests. Map members always nest, so a busy member holds back its map thread in both trees. With Launch nesting on, a keyed thread with a busy keyless launched thread is held back in the T3 tree and offered in the Linear tree. A subagent is not in the tree: a thread that waits for one has the status `waiting`.
+- **Views.** Every node of the tree is a T3 top-level thread, so the T3 tree and the Linear tree offer the same threads. The subthread rule reads `children`, so it sees a launched thread only while it nests. With the Lineage group rule on, members always nest, so a busy member holds back its spawner in both trees. A subagent is not in the tree: a thread that waits for one has the status `waiting`.
 - **Chip.** A "N look done" button after "Triage" (icon `CircleCheckBig`). It is hidden at 0. At phone width, it shows the icon and the count. The tooltip reads "N threads look done".
 - **Dialog.** One row for each thread: a checkbox (checked), the status icon, the title, the project and the reason, "N PRs merged" (or "merged or closed") or "Catch-up: <did>". The rows stay while the tree changes. "Settle N" (N is the checked count) is disabled at 0. "Cancel" closes the dialog.
 - **Settle.** One `POST /t3/settle` for each checked thread, one after the other. A thread that failed stays in the dialog with its error and stays checked, and the dialog stays open. With no failure, it closes.
@@ -637,7 +653,7 @@ The flat view lists all threads of all projects in one list. The switch keeps it
 
 **Page keys.** One `keydown` handler holds all page keys (`pageKey` in `src/page/keys.ts` decides). A plain key does nothing with a modifier (`G` takes Shift and no other modifier), on key repeat (except `j`, `k`, ↑ and ↓), when the event is handled, while focus is in an input, a textarea or a contenteditable element, while the Settings panel is open, and while Find, a dialog, an alert dialog, a menu or a listbox is open.
 
-**Row keys.** A stop is an element with `data-stop`: the title link of each visible thread row, and the fold button of each project, group, PR stack, map header and flat section. Focus is real DOM focus, and the tab order does not change. The stop list is the stops in DOM order inside the list. It skips an inert row, a row in a closed fold and a hidden row. `j` and `k` focus the next or previous stop, and do nothing at the ends. With no stop focused, the first one focuses the first stop that lies inside the list view. ↑ and ↓ do the same only when a stop has focus, and call `preventDefault` only when they move, so the page scrolls otherwise. A move scrolls the stop into view only as needed. On a thread stop, Enter opens the thread (the link), and `s` opens the Send dialog for the row when the `t3` CLI is available. On a header, Enter folds or unfolds, and `s` does nothing. On a stop whose item can be pinned, `p` pins or unpins it (see "Pins"). On a map head with a graph button, `g` opens the PR graph of the map (see "PR graph"). `o` toggles the details of a thread (the map fold on a map thread row) or the fold of a header, `l` opens them and `h` closes them, as in vim. `l` on an open fold and `h` on a closed fold do nothing. The drag handle is not a stop. While a stop has focus, the page keeps its id and index. When a render moves the row and focus is lost, focus returns to the row. When the row leaves, focus goes to the stop at the old index, or to the page when no stop is left. When a fold closes with focus inside it, focus goes to its header. The focus ring is an inset outline on the row or header, not only on the link or button.
+**Row keys.** A stop is an element with `data-stop`: the title link of each visible thread row, and the fold button of each project, group, PR stack, Lineage header, Map header and flat section. Focus is real DOM focus, and the tab order does not change. The stop list is the stops in DOM order inside the list. It skips an inert row, a row in a closed fold and a hidden row. `j` and `k` focus the next or previous stop, and do nothing at the ends. With no stop focused, the first one focuses the first stop that lies inside the list view. ↑ and ↓ do the same only when a stop has focus, and call `preventDefault` only when they move, so the page scrolls otherwise. A move scrolls the stop into view only as needed. On a thread stop, Enter opens the thread (the link), and `s` opens the Send dialog for the row when the `t3` CLI is available. On a header, Enter folds or unfolds, and `s` does nothing. On a stop whose item can be pinned, `p` pins or unpins it (see "Pins"). On a group head with a graph button, `g` opens the PR graph of its scope (see "PR graph"). `o` toggles the details of a thread (the group fold on a group head row) or the fold of a header, `l` opens them and `h` closes them, as in vim. `l` on an open fold and `h` on a closed fold do nothing. The drag handle is not a stop. While a stop has focus, the page keeps its id and index. When a render moves the row and focus is lost, focus returns to the row. When the row leaves, focus goes to the stop at the old index, or to the page when no stop is left. When a fold closes with focus inside it, focus goes to its header. The focus ring is an inset outline on the row or header, not only on the link or button.
 
 - **`n`.** Open next.
 - **`G` (Shift+g).** Opens the PR graph at All (see "PR graph" › Where it opens).
@@ -645,7 +661,7 @@ The flat view lists all threads of all projects in one list. The switch keeps it
 - **Cmd+K (Ctrl+K off macOS).** Opens Find, also from a text field. It calls `preventDefault`. It does nothing while another dialog or a menu is open. In the open Find dialog it closes Find.
 - **`/`.** Not a page key.
 
-**Key hints.** No key hint shows at first. `useKeyHints` (`src/page/key-hints.tsx`) and `holdRule` (`src/page/key-hints.ts`) set `data-key-hints` on `<html>` after the user holds Alt/Option alone for 300 ms. The hold hides on Alt key up, on any other keydown, on pointerdown and on window blur. A shorter tap shows nothing. A repeated Alt keydown does not hide. Alt with Cmd, Ctrl or Shift starts no hold. The hold calls no `preventDefault` and changes no key. Every key hint floats (`position: absolute`, `pointer-events: none`) and takes no space, so no element moves. The hints are: `t` on the Triage button (hidden at 720 px and below), `o Details` and `s Send` on the thread row that has a stop in focus (`s` only when Send is available), `g Graph` on the map head in focus that has a graph button, `G` on the PR graph button in the header, the key of each control in the Triage card, and a bar over the bottom of the Find list (`↑↓ Move`, `↵ Open`, `⇧↵ Show in tree`, `esc Close`). The "Show key hints" switch in the View group sets `thread-tree:key-hints` (on by default). Off, the hold does nothing. A touch device (`(hover: none), (pointer: coarse)`) has no hold and no hints. The ⌖ button in a Find row always has the tooltip "Show in tree (Shift+Enter)".
+**Key hints.** No key hint shows at first. `useKeyHints` (`src/page/key-hints.tsx`) and `holdRule` (`src/page/key-hints.ts`) set `data-key-hints` on `<html>` after the user holds Alt/Option alone for 300 ms. The hold hides on Alt key up, on any other keydown, on pointerdown and on window blur. A shorter tap shows nothing. A repeated Alt keydown does not hide. Alt with Cmd, Ctrl or Shift starts no hold. The hold calls no `preventDefault` and changes no key. Every key hint floats (`position: absolute`, `pointer-events: none`) and takes no space, so no element moves. The hints are: `t` on the Triage button (hidden at 720 px and below), `o Details` and `s Send` on the thread row that has a stop in focus (`s` only when Send is available), `g Graph` on the group head in focus that has a graph button, `G` on the PR graph button in the header, the key of each control in the Triage card, and a bar over the bottom of the Find list (`↑↓ Move`, `↵ Open`, `⇧↵ Show in tree`, `esc Close`). The "Show key hints" switch in the View group sets `thread-tree:key-hints` (on by default). Off, the hold does nothing. A touch device (`(hover: none), (pointer: coarse)`) has no hold and no hints. The ⌖ button in a Find row always has the tooltip "Show in tree (Shift+Enter)".
 
 The header has a System / Light / Dark choice. The full design is in [DESIGN-SPEC.md](DESIGN-SPEC.md).
 
@@ -681,8 +697,8 @@ The server knows the Linear project and milestone of each issue key in the tree.
 With `linear=1`, the server builds `projects` with `buildLinearTree`, not `buildTree`. The levels are Linear project, then milestone, then thread. There is no T3 project level and no issue-key level. Each thread node carries `t3Project` (`{ id, label }`), the T3 project of the thread, also on nested threads. Other users of the tree (`/find`, `/settled`) never send `linear=1`.
 
 - **Stack placement.** With the default rule order, a PR stack stays whole in one milestone (see "PR stack, Linear layout" in "Placement rules").
-- **Placement.** The same chain of placement rules as the T3 tree, with the Linear layout (see "Placement rules"). A **Map member** goes into its map group, which follows its head (see "Map groups"). A keyless thread with a keyed spawner is a loose thread, not under the spawner, because the two have another **Home**.
-- **Launched by.** A thread that has a spawner and does not nest under it gets `launchedBy`, as in the T3 tree.
+- **Placement.** The same chain of placement rules as the T3 tree, with the Linear layout (see "Placement rules"). A member of a **Lineage group** goes into its group, which follows its root (see "Lineage groups"), whatever its own key.
+- **Launched by.** A thread that has a spawner and does not nest under it (the Lineage group rule is off) gets `launchedBy`, as in the T3 tree.
 - **Top level.** The Linear projects, Reviews, "No project" and the loose threads form one list. No item has a fixed place. A group with no thread is left out. Reviews keeps one subgroup per issue key, in first-seen order, and its keyless reviews directly in it.
 - **Loose threads.** They have no group header and no fold. The server sends them in one branch with the id `lf:loose` and an empty label. The page puts each one in the top-level list as its own item.
 - **Order.**
@@ -712,7 +728,7 @@ The flat view has a third "Group by" choice, "Linear project", saved under `thre
 
 - **Sections.** One fold section per milestone, headed "Project · Milestone" or "Project · No milestone", with the target date in muted text beside the name, and one for Reviews and one for "No project". The order is the order of the Linear tree. A section with no thread is hidden.
 - **Loose threads.** They are rows with no header and no fold, at their place in the order of the Linear tree, among the sections.
-- **Units.** A thread goes to the section that holds it. Reviews keeps one section for all its key subgroups. The Linear tree keeps a PR stack in one milestone, so all its threads are in one section. A map group is one unit in the section of its head. Each thread is one row.
+- **Units.** A thread goes to the section that holds it. Reviews keeps one section for all its key subgroups. The Linear tree keeps a PR stack in one milestone, so all its threads are in one section. A Lineage group is one unit in the section of its head. Each thread is one row.
 - **Count.** A header counts all threads of its rows, subthreads and settled threads included, as the Tree does.
 - **No context rows.** A section groups by place, not by status. So no row shows muted, no PR stack folds, and no "+N other threads" button shows.
 - **Rows.** A row shows its issue key as a chip and its T3 project as a muted chip, as in the Tree. It shows no Linear project column.
