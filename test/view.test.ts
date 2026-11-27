@@ -1,7 +1,7 @@
 import { describe, expect, test } from "bun:test";
 
 import { foldIds } from "../src/page/format.ts";
-import { applyOrder, arrange, pinnedList } from "../src/page/order.ts";
+import { applyOrder, arrange, pinFirst, pinnedList } from "../src/page/order.ts";
 import {
   ageTip,
   blockTime,
@@ -9,6 +9,7 @@ import {
   counted,
   FLAT,
   flatLists,
+  flatPinId,
   flatten,
   folds,
   groupTime,
@@ -676,11 +677,11 @@ describe("Linear tree", () => {
   ];
   const sorted = () => sortTree(arrange(tree(), {}).projects);
 
-  test("sortTree keeps project and milestone order and sorts loose threads newest first", () => {
+  test("sortTree sorts the top level newest first, keeps milestone order and sorts loose threads newest first", () => {
     const out = sorted();
-    expect(ids(out)).toEqual(["lp:a", "lp:b", "lf:reviews", "lf:none"]);
-    expect(ids(out[0].groups)).toEqual(["lm:m1", "lm:m2"]);
-    expect(ids(out[0].groups[0].groups)).toEqual(["t:new", "t:old"]);
+    expect(ids(out)).toEqual(["lp:b", "lp:a", "lf:reviews", "lf:none"]);
+    expect(ids(out[1].groups)).toEqual(["lm:m1", "lm:m2"]);
+    expect(ids(out[1].groups[0].groups)).toEqual(["t:new", "t:old"]);
     expect(ids(out[3].groups)).toEqual(["t:n2", "t:n1"]);
   });
 
@@ -720,9 +721,19 @@ describe("Linear tree", () => {
     expect(ids(out.groups[0].threads)).toEqual(["a", "c"]);
   });
 
-  test("sortTree keeps the top level order and does not sort a loose item", () => {
+  test("sortTree sorts the Linear top level newest first, a loose item among the groups", () => {
     const top = [loose(thread("l1", 1)), ...tree(), loose(thread("l2", 9))];
-    expect(ids(sortTree(top))).toEqual(["t:l1", "lp:a", "lp:b", "lf:reviews", "lf:none", "t:l2"]);
+    expect(ids(sortTree(top))).toEqual(["lp:b", "lp:a", "t:l2", "lf:reviews", "lf:none", "t:l1"]);
+  });
+
+  test("sortTree leads the Linear top level with a pinned loose item, against recency", () => {
+    const top = [...tree(), loose(thread("l1", 1))];
+    expect(ids(sortTree(top, true, new Set(["t:l1"])))[0]).toBe("t:l1");
+  });
+
+  test("sortTree keeps the top level order of the T3 shape", () => {
+    const top = [project("p1", [branch("g1", [thread("a", 1)])]), project("p2", [branch("g2", [thread("b", 9)])])];
+    expect(ids(sortTree(top))).toEqual(["p1", "p2"]);
   });
 
   test("foldIds and pathFolds reach the rail of a stack in a milestone", () => {
@@ -898,6 +909,19 @@ describe("Linear flat", () => {
     const m1 = (units: ReturnType<typeof flatten>) => ids(seq([], units).slice(1, 3));
     expect(m1(flatten(tree()))).toEqual(["t:old", "t:new"]);
     expect(m1(sortFlat(flatten(tree())))).toEqual(["t:new", "t:old"]);
+  });
+
+  test("sequence follows a sorted top level: a newer loose thread above a project, a pinned old one first", () => {
+    const top = [...tree(), ...looseTop(thread("l9", 30))];
+    const threads = (pins: ReadonlySet<string>) => {
+      const sorted = sortTree(top, true, pins);
+      const units = pinFirst(sortFlat(flatten(top)), flatPinId, pins);
+      return sequence(units, "linear", new Set(), true, sorted, pins)
+        .filter((i) => i.kind === "thread")
+        .map((i) => i.id);
+    };
+    expect(threads(new Set())).toEqual(["t:l9", "t:new", "t:old", "t:x", "t:r2", "t:r1", "t:n2", "t:n1", "t:k1"]);
+    expect(threads(new Set(["t:k1"]))[0]).toBe("t:k1");
   });
 
   test("a shut section keeps its header and count, and no units", () => {

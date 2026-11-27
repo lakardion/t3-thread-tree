@@ -170,6 +170,7 @@ import {
   runUnitId,
   threadUnitId,
   threadsKey,
+  unitPinId,
   type Arranged,
   type Freeze,
   type Orders,
@@ -3046,7 +3047,11 @@ const pipeline = (ps: Group[], c: Cfg): { full: Arranged; view: Arranged & { fla
     );
     /** The payload can still have the T3 shape just after the choice changes: it groups as None until the Linear tree arrives. */
     const groupBy = c.groupBy === "linear" && !isLinear(ps) ? "none" : c.groupBy;
-    const flat = sequence(units, groupBy, c.shutSections, c.snoozed, view.projects, c.pins);
+    const top =
+      c.sortBy === "updated"
+        ? sortTree(view.projects, c.snoozed, c.pins)
+        : pinFirst(view.projects, (p) => unitPinId(p.id, p), c.pins);
+    const flat = sequence(units, groupBy, c.shutSections, c.snoozed, top, c.pins);
     return { full, view: { ...view, lists: flatLists(flat, c.pins), flat } };
   }
   return {
