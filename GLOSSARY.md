@@ -64,12 +64,8 @@ A chain of dependent PRs. T3 reports every PR in a thread's stack.
 Stacked dots in a **PR stack** rail. They stand for rows that the user folded. A caption gives the count, for example "3 merged" or "2 more".
 
 **Group**:
-A named set of rows in the tree: a **Project**, an **Issue key**, a **PR stack**, a **Map group**, the Reviews group, No project, or a Linear project or milestone.
+A named set of rows in the tree: a **Project**, an **Issue key**, a **PR stack**, a **Lineage group**, the Reviews group, No project, or a Linear project or milestone.
 _Avoid_: branch (that word is for git)
-
-**Launch nesting**:
-The last **Placement rule**: it shows a keyless **Launched thread** under its visible spawner when both have the same **Home**. It is off by default.
-_Avoid_: launcher nesting, lineage view
 
 **Status section**:
 A group of the flat view, with "Group by Status", that holds the threads of one or more statuses, most urgent first.
@@ -81,7 +77,7 @@ A row that shows only to give context: a thread outside the statuses of its **St
 ### Placement
 
 **Placement rule**:
-One step of the ordered chain that decides where a thread goes: Map group, Reviews, PR stack, Issue key or **Launch nesting**. The user can switch each one on or off and reorder the middle three.
+One step of the ordered chain that decides where a thread goes: **Lineage group**, Reviews, PR stack or Issue key. The user can switch each one on or off and reorder the last three.
 _Avoid_: grouping, group rule, placement mode
 
 **Pool**:
@@ -95,10 +91,6 @@ _Avoid_: match, assign
 **Layout**:
 The shape that turns the claims into groups: the project layout (the T3 tree) or the Linear layout (the Linear tree).
 _Avoid_: view (the flat view uses a layout and places nothing)
-
-**Home**:
-The container that a thread's own **Issue key** and review title give it in a **Layout**.
-_Avoid_: parent, slot
 
 **Loose thread**:
 A thread that no **Placement rule** claims. It sits directly under its **Project**, or at the top level of the Linear tree.
@@ -222,30 +214,38 @@ _Avoid_: failed run, stuck run
 One new **Run** of a **Workflow** from the page, which the user confirms first. The page fills the input from where the user starts it: a thread, a PR, a PR stack or the checked **Looks done** threads.
 _Avoid_: launch, trigger, kick off
 
-### Maps
+### Lineages and maps
+
+**Lineage root**:
+The top of a **Spawn lineage** made of **Launched threads**: a top-level thread that no other thread launched or delegated.
+_Avoid_: root thread, parent, launcher
+
+**Lineage group**:
+A **Lineage root** and every top-level thread that it launched or delegated, at any depth, shown under the root as one unit in every view. It is the first **Placement rule**.
+_Avoid_: map group, spawn tree, family
+
+**Lineage header**:
+The row that takes the place of a settled, archived or deleted **Lineage root**, so that its **Lineage group** keeps its place. It is not a thread.
+_Avoid_: root header, group row
 
 **Map key**:
 The wayfinder map that a thread works on, read from its first message. It is internal and never shows.
 _Avoid_: map id, map slug
 
 **Map thread**:
-The thread that launched the topmost threads of a **Map key**, usually the thread that charted the map. It heads the **Map group**.
+In one **Lineage group**, the thread that launched the earliest topmost threads of a **Map key**, usually the thread that charted the map. It anchors the **Map label**. It is not always the **Lineage root**.
 _Avoid_: charting thread, launcher, root thread
-
-**Marked map thread**:
-A **Map thread** that the user marked by hand, for a map with no **Map key**. Its direct children with no own key form its **Map group**.
-_Avoid_: manual map, fake map
 
 **Map member**:
 A thread that belongs to a map: by its own **Map key**, else by the key of its nearest ancestor on the spawner chain. A thread belongs to one map at most. A **Step thread** is never a member.
 _Avoid_: map thread (that is the head), ticket thread
 
-**Map group**:
-The **Map members** of one map, shown under their **Map thread**. It is one unit in every view.
-_Avoid_: map stack, map section
+**Map label**:
+The map look on a part of a **Lineage group**: the map name and an amber rail, anchored at a **Map thread**, that holds its **Map members**. A lineage with no **Map key** has no label.
+_Avoid_: map group, map stack, map section
 
 **Map header**:
-The row that heads a **Map group** when its **Map thread** is settled or missing, or heads several maps. It is not a thread.
+The row that heads a **Map label** whose anchor row does not show: a settled **Map thread** inside a group, or one of several maps of one **Lineage root**. It is not a thread.
 _Avoid_: map row, map title
 
 **PR graph**:
@@ -253,8 +253,12 @@ The PRs of the user's live threads, drawn as a graph in a modal: one node per PR
 _Avoid_: PR map, stack graph, DAG
 
 **Graph scope**:
-The PR set of a **PR graph**: All (every **Project**), one **Project**, or one map. The map scope adds the **Lanes**, the PRs found by the map's keys and the PRs of settled **Map members**.
+The PR set of a **PR graph**: All (every **Project**), one **Project**, one map, or one **Lineage group**. The map scope adds the **Lanes**, the PRs found by the map's keys and the PRs of settled **Map members**.
 _Avoid_: graph filter, graph view
+
+**Lineage scope**:
+The **Graph scope** of one **Lineage group**: the PRs of its root and its members, live and settled, with no **Lanes**.
+_Avoid_: group scope, tree scope
 
 **Band**:
 The part of a **PR graph** that holds the PRs of one **Project**, drawn from the project's root branch, such as `main`. All shows one band for each project that has PRs.
@@ -287,10 +291,11 @@ _Avoid_: mini window, small window, Needs-you window
 - A **Project** holds many **Issue keys**; an **Issue key** holds one or more **Spawn lineage** trees.
 - A **Thread** has zero or one parent and zero or more **Subthreads**.
 - A **PR stack** can span threads of more than one **Issue key**.
-- A thread goes to the first **Placement rule** that **Claims** it. With the default order, a thread in a **PR stack** shows in its stack block, whatever its **Issue key**, spawner or **Launch nesting**; a **Review thread** stays in Reviews, and a **Map member** shows in its **Map group**, with its stack mates inside the group.
+- A thread goes to the first **Placement rule** that **Claims** it. With the default order, a thread in a **PR stack** shows in its stack block, whatever its **Issue key**; but a member of a **Lineage group** shows in its group first, with its stack mates inside the group, and a **Review thread** outside a lineage stays in Reviews.
 - A **Pin** orders a list that the **Placement rules** already built. It never moves an item to another list.
-- A **PR graph** at All has one **Band** per **Project**. A **Map group** is one **Graph scope**: its nodes are the PRs of its **Map members** and the PRs of its keys.
-- A **Map thread** heads one **Map group** for each map it launched. A **Map group** can hold the **Map group** of a sub-map, at the place of its **Map thread**.
+- A **PR graph** at All has one **Band** per **Project**. A **Map label** and a **Lineage group** are each one **Graph scope**.
+- A **Lineage group** never splits. It can hold several **Map labels**, and a **Map label** can hold the label of a sub-map, at the place of its **Map thread**.
+- One **Map key** can label parts of two **Lineage groups**; its map scope spans both.
 - The keyless threads of one **PR stack** share one group, named after the bottom open PR, or the first PR of the stack when no PR is open (`PR stack #61`).
 
 ## Example dialogue
