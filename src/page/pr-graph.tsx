@@ -6,6 +6,7 @@ import {
   GitBranch,
   LoaderCircle,
   Map as MapIcon,
+  Network,
   RefreshCw,
 } from "lucide-react";
 import {
@@ -53,16 +54,19 @@ import {
   pileLift,
   PILE_GAP,
   type PrGraph,
-  walk,
 } from "../shared/pr-graph.ts";
-import type { Group, Status } from "../shared/tree.ts";
+import { bySince, NO_PROJECT, type Group, type Status } from "../shared/tree.ts";
 import {
   bandMates,
   bandsOf,
   GRAPH_SORTS,
   type GraphSort,
+  type LineageEntry,
+  lineagesOf,
   type MapEntry,
   mapsOf,
+  NONE,
+  projectOf,
   sortBands,
   treeOrder,
 } from "./graph-scope.ts";
@@ -71,7 +75,7 @@ import { oneOf, usePref } from "./prefs.ts";
 import { ProjectIcon } from "./project-icon.tsx";
 import { STATUS } from "./status-icon.tsx";
 
-/** Opens the PR graph of a scope: `all`, `project:<id>` or `map:<key>`. */
+/** Opens the PR graph of a scope: `all`, `project:<id>`, `map:<key>` or `lineage:<id>`. */
 export const OpenGraph = createContext<(scope: string) => void>(() => {});
 
 const NW = 210;
@@ -512,17 +516,19 @@ function Lists({
 
 const openCount = (g: PrGraph) => g.nodes.filter((n) => n.state === "open").length;
 
-/** The scope picker: a searchable list of All, the projects with a band and the maps. */
+/** The scope picker: a searchable list of All, the projects with a band, the maps and the Lineage groups. */
 function ScopePicker({
   scope,
   setScope,
   projects,
   maps,
+  lineages,
 }: {
   scope: string;
   setScope: (scope: string) => void;
   projects: { id: string; label: string; prs: number }[];
   maps: MapEntry[];
+  lineages: LineageEntry[];
 }) {
   const [open, setOpen] = useState(false);
   const listId = useId();
@@ -533,7 +539,8 @@ function ScopePicker({
   const mark = (s: string) => <Check className={cn("ml-auto", s !== scope && "invisible")} aria-hidden />;
   const p = projects.find((x) => `project:${x.id}` === scope);
   const m = maps.find((x) => `map:${x.key}` === scope);
-  const icon = p?.label ?? m?.project.label;
+  const l = lineages.find((x) => `lineage:${x.head.id}` === scope);
+  const icon = p?.label;
   return (
     <Popover open={open} onOpenChange={setOpen}>
       <PopoverTrigger asChild>
@@ -548,14 +555,18 @@ function ScopePicker({
         >
           <span className="flex min-w-0 items-center gap-1.5">
             {icon && <ProjectIcon name={icon} />}
-            <span className="truncate">{p?.label ?? m?.name ?? "All projects"}</span>
+            {m && <MapIcon className="size-3.5 flex-none text-amber-600 dark:text-amber-400" aria-hidden />}
+            {l && <Network className="size-3.5 flex-none text-muted-foreground" aria-hidden />}
+            <span className="truncate">{p?.label ?? m?.name ?? l?.name ?? "All projects"}</span>
           </span>
           <ChevronsUpDown className="opacity-50" aria-hidden />
         </Button>
       </PopoverTrigger>
       <PopoverContent id={listId} align="start" className="w-80 p-0">
         <Command>
-          <CommandInput placeholder={maps.length > 0 ? "Find a project or map" : "Find a project"} />
+          <CommandInput
+            placeholder={maps.length + lineages.length > 0 ? "Find a project or group" : "Find a project"}
+          />
           <CommandList>
             <CommandEmpty>No scope matches</CommandEmpty>
             <CommandGroup>
@@ -585,13 +596,13 @@ function ScopePicker({
                 </CommandItem>
               ))}
             </CommandGroup>
-            {maps.length > 0 && (
+            {maps.length + lineages.length > 0 && (
               <>
                 <CommandSeparator />
                 <CommandGroup
                   heading={
                     <span className="flex items-center gap-1.5">
-                      <MapIcon className="size-3.5" aria-hidden /> Maps
+                      <Network className="size-3.5" aria-hidden /> Groups
                     </span>
                   }
                 >
@@ -602,9 +613,21 @@ function ScopePicker({
                       keywords={[x.name, x.project.label]}
                       onSelect={() => pick(`map:${x.key}`)}
                     >
-                      <ProjectIcon name={x.project.label} />
+                      <MapIcon className="size-3.5 flex-none text-amber-600 dark:text-amber-400" aria-hidden />
                       <span className="truncate">{x.name}</span>
                       {mark(`map:${x.key}`)}
+                    </CommandItem>
+                  ))}
+                  {lineages.map((x) => (
+                    <CommandItem
+                      key={x.head.id}
+                      value={`lineage:${x.head.id}`}
+                      keywords={[x.name, x.project.label]}
+                      onSelect={() => pick(`lineage:${x.head.id}`)}
+                    >
+                      <Network className="size-3.5 flex-none text-muted-foreground" aria-hidden />
+                      <span className="truncate">{x.name}</span>
+                      {mark(`lineage:${x.head.id}`)}
                     </CommandItem>
                   ))}
                 </CommandGroup>
@@ -618,7 +641,7 @@ function ScopePicker({
 }
 
 /**
- * The PR graph of a scope: `all`, `project:<id>` or `map:<key>`. `projects` is the raw tree, so every member counts.
+ * The PR graph of a scope: `all`, `project:<id>`, `map:<key>` or `lineage:<id>`. `projects` is the raw tree, so every member counts.
  * `orders` and `pins` give the Tree order sort.
  */
 export function PrGraphDialog({
@@ -639,11 +662,14 @@ export function PrGraphDialog({
   const [sort, setSort] = usePref("thread-tree:graph-sort", oneOf(GRAPH_SORTS, "title"));
   const bands = useMemo(() => bandsOf(projects), [projects]);
   const maps = useMemo(() => mapsOf(projects), [projects]);
+  const lineages = useMemo(() => lineagesOf(projects), [projects]);
   const parsed = parseScope(wanted);
   const map = parsed?.kind === "map" ? maps.find((m) => m.key === parsed.key) : undefined;
+  const lineage = parsed?.kind === "lineage" ? lineages.find((l) => l.head.id === parsed.id) : undefined;
   const gone =
     !parsed ||
     (parsed.kind === "map" && !map) ||
+    (parsed.kind === "lineage" && !lineage) ||
     (parsed.kind === "project" && !bands.some((b) => b.id === parsed.id && b.members.length > 0));
   const scope = gone ? "all" : wanted;
   useEffect(() => {
@@ -669,16 +695,60 @@ export function PrGraphDialog({
     [bands, data, projectId],
   );
   const sorted = sortBands(built, sort, (b) => b.open, treeOrder(orders, pins));
-  const shown = map ? [] : projectId ? sorted.filter((b) => b.id === projectId) : sorted;
+  /** One band per project of the group, with the rows and settled members of that project. */
+  const lineageBuilt = useMemo(() => {
+    if (!lineage) return [];
+    const labels = new Map([
+      ...bands.map((b) => [b.id, b.label] as const),
+      ...lineage.members.map((m) => {
+        const { id, label } = projectOf(m, lineage.project);
+        return [id, label] as const;
+      }),
+      [NONE, NO_PROJECT] as const,
+    ]);
+    const bandOf = (id: string) => (labels.has(id) ? id : NONE);
+    const byBand = Map.groupBy(lineage.members, (m) => bandOf(projectOf(m, lineage.project).id));
+    for (const id of [...(data?.group?.rows ?? []), ...(data?.group?.settled ?? [])].map((x) => bandOf(x.projectId)))
+      if (!byBand.has(id)) byBand.set(id, []);
+    return [...byBand].map(([id, members]) => {
+      const part = data?.group && {
+        ...data.group,
+        rows: data.group.rows.filter((r) => bandOf(r.projectId) === id),
+        settled: data.group.settled.filter((s) => bandOf(s.projectId) === id),
+      };
+      const prs = [
+        ...members.flatMap((m) => m.prs),
+        ...(part?.rows ?? []),
+        ...(part?.settled ?? []).flatMap((s) => s.prs),
+      ];
+      const graph = buildPrGraph(
+        members,
+        bandRoot(data?.roots[id], prs),
+        data && { ...data, group: part ?? null, mates: bandMates(data.mates, prs) },
+      );
+      return { id, label: labels.get(id)!, graph, open: openCount(graph) };
+    });
+  }, [lineage, bands, data]);
+  const shown = map
+    ? []
+    : lineage
+      ? sortBands(
+          lineageBuilt.filter((b) => b.graph.nodes.length > 0),
+          "title",
+          () => 0,
+          [],
+        )
+      : projectId
+        ? sorted.filter((b) => b.id === projectId)
+        : sorted;
   const mapGraph = useMemo(() => {
     if (!map) return null;
-    const members = walk(map.head);
     const prs = [
-      ...members.flatMap((m) => m.prs),
+      ...map.members.flatMap((m) => m.prs),
       ...(data?.group?.rows ?? []),
       ...(data?.group?.settled ?? []).flatMap((s) => s.prs),
     ];
-    return buildPrGraph(members, bandRoot(Object.values(data?.roots ?? {})[0], prs), data, true);
+    return buildPrGraph(map.members, bandRoot(Object.values(data?.roots ?? {})[0], prs), data, true);
   }, [map, data]);
   const graphs = mapGraph ? [mapGraph] : shown.map((b) => b.graph);
   const all = scope === "all";
@@ -687,9 +757,17 @@ export function PrGraphDialog({
   const anomalies =
     mapGraph?.anomalies ??
     shown.flatMap((b) => b.graph.anomalies.map((a) => (all ? { ...a, text: `${b.label}: ${a.text}` } : a)));
+  const created = new Map([
+    ...(lineage?.members ?? []).map((m) => [m.id, m.detail.createdAt] as const),
+    ...(data?.group?.settled ?? []).map((s) => [s.id, s.createdAt] as const),
+  ]);
   const noPr = all
     ? bands.reduce((n, b) => n + b.threads.filter((t) => t.prs.length === 0).length, 0)
-    : ((mapGraph ?? shown[0]?.graph)?.noPr ?? []);
+    : lineage
+      ? lineageBuilt
+          .flatMap((b) => b.graph.noPr)
+          .toSorted((a, b) => bySince(created.get(a.id) ?? null, created.get(b.id) ?? null))
+      : ((mapGraph ?? shown[0]?.graph)?.noPr ?? []);
   const box = useRef<HTMLDivElement>(null);
   const retry = (
     <button type="button" onClick={() => refresh()} className="underline">
@@ -710,6 +788,7 @@ export function PrGraphDialog({
               setScope={setScope}
               projects={sorted.map((b) => ({ id: b.id, label: b.label, prs: b.graph.nodes.length }))}
               maps={maps.filter((m) => m.hasPrs || m.key === map?.key)}
+              lineages={lineages.filter((l) => l.hasPrs || l === lineage)}
             />
             {all && (
               <Select value={sort} onValueChange={(v) => setSort(v as GraphSort)}>
