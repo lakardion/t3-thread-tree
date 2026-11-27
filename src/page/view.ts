@@ -11,7 +11,7 @@ import {
   type ThreadNode,
 } from "../shared/tree.ts";
 import { stackRuns } from "./format.ts";
-import { pinFirst, pinIdOf, pinnedList, runUnitId, unitPinId } from "./order.ts";
+import { isLinear, pinFirst, pinIdOf, pinnedList, runUnitId, unitPinId } from "./order.ts";
 
 export type SortBy = "manual" | "updated";
 export type Layout = "tree" | "flat";
@@ -70,7 +70,8 @@ export const byNewest = <T>(items: T[], by: (t: T) => number): T[] =>
   items.toSorted((a, b) => Number(by(b) > by(a)) - Number(by(b) < by(a)));
 
 /**
- * Sorts an arranged tree by Last run (`snoozed`: whether snoozed threads count). Top-level items keep their order.
+ * Sorts an arranged tree by Last run (`snoozed`: whether snoozed threads count). In the Linear shape, the top-level
+ * items sort by block time, newest first. In the T3 shape, they keep their order.
  * In every container, the groups, stack runs and loose threads sort together, newest first; a stack run moves as one
  * block and keeps its inner order. A key group sorts its threads. Milestones of a Linear project keep their order.
  * Subthreads keep their order. Ties keep the input order. The input is not changed.
@@ -98,9 +99,16 @@ export function sortTree(projects: Group[], snoozed = true, pins: ReadonlySet<st
       pins,
     ).flatMap((run) => (run[0].stack ? run : run.map(sortGroup))),
   });
-  return projects.map((p) =>
+  const top = projects.map((p) =>
     p.kind === "loose" ? p : p.kind === "linear-project" ? { ...p, groups: p.groups.map(sortList) } : sortList(p),
   );
+  return isLinear(projects)
+    ? pinFirst(
+        byNewest(top, (p) => groupTime([p], snoozed).at),
+        (p) => unitPinId(p.id, p),
+        pins,
+      )
+    : top;
 }
 
 /** The `view-transition-name` of a thread row (`t`), a stack rail (`s`) or a section header (`sec`). */
