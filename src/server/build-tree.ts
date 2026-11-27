@@ -22,7 +22,7 @@ import {
   type ThreadNode,
 } from "../shared/tree.ts";
 import { catchUpThreads } from "./catch-up.ts";
-import { mapName, mapsOf, markedKey } from "./maps.ts";
+import { mapName, mapsOf } from "./maps.ts";
 import { suggestedReplies } from "./replies.ts";
 import {
   narrowChecks,
@@ -98,7 +98,7 @@ export type BuildInput = {
   origin?: string;
   /** The map key of a thread, from its first message. Unset: no Map groups. */
   mapKeyOf?: (id: string) => string | null;
-  /** The ids of marked map threads: their keyless children form a map group. */
+  /** The ids of marked map threads: sets the `mapMarked` detail. */
   marked?: Set<string>;
 };
 
@@ -471,6 +471,8 @@ function prepare(input: BuildInput) {
     return null;
   };
 
+  const created = (id: string) => timeKey(all.get(id)?.createdAt ?? null, id);
+
   /**
    * Rule 6.0. Claims each Map member, and each keyless stack mate of a member, under its nearest ancestor in the same
    * map. A group hangs on its map thread, or on a Map header that the pool then holds.
@@ -479,12 +481,12 @@ function prepare(input: BuildInput) {
   const groupMaps = (): Ruled => {
     const claims = new Map<Node, Claim>();
     const marks = new Map<Node, MapInfo>();
-    const markedKeyOf = markedKey(input.mapKeyOf!, spawnerOf, input.marked ?? new Set());
     const maps = mapsOf({
       ids: [...visible.keys()],
       spawnerOf,
-      keyOf: (id) => (all.get(id)?.workflowRun ? null : markedKeyOf(id)),
-      createdKey: (id) => timeKey(all.get(id)?.createdAt ?? null, id),
+      isStep: (id) => !!all.get(id)?.workflowRun,
+      keyOf: input.mapKeyOf!,
+      createdKey: created,
     });
     const keyOf = new Map<string, string>();
     for (const id of visible.keys()) {
@@ -492,6 +494,13 @@ function prepare(input: BuildInput) {
       if (k) keyOf.set(id, k);
     }
     const members = new Set(keyOf.keys());
+    /** The map thread of a key: the first by creation among the members whose group has one. */
+    const mapThreadOf = (key: string) =>
+      [...members]
+        .filter((id) => keyOf.get(id) === key)
+        .toSorted((a, b) => created(a).localeCompare(created(b)))
+        .map((id) => maps.threadOf(maps.rootOf(id)!, key))
+        .find((id) => id);
     const lowest = new Map<number, Node>();
     for (const n of [...members].map((id) => nodes.get(id)!).toSorted(byPos)) {
       const si = stackIdOf.get(n.id);
@@ -517,7 +526,7 @@ function prepare(input: BuildInput) {
     const header = (key: string, id: string, t: Thread, mapThread: Thread | undefined): Node => {
       const alone = mapThread && anchored(mapThread.id).length === 1;
       const href = mapThread ? hrefOf(environmentId, mapThread.id) : null;
-      const title = key.startsWith("thread:") ? (all.get(key.slice(7))?.title ?? null) : alone ? mapThread.title : null;
+      const title = alone ? mapThread.title : null;
       const n: Node = {
         ...nodeOf(t),
         id,
@@ -531,7 +540,7 @@ function prepare(input: BuildInput) {
       return n;
     };
     for (const key of shown) {
-      const mt = maps.threadOf.get(key);
+      const mt = mapThreadOf(key);
       const mapThread = mt ? all.get(mt) : undefined;
       const head = mt ? nodes.get(mt) : undefined;
       if (head) {

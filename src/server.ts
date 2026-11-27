@@ -12,7 +12,7 @@ import { mayBeLaunched, needsScan, openLineage } from "./server/lineage.ts";
 import { fetchLinear } from "./server/linear-api.ts";
 import { linearStore } from "./server/linear.ts";
 import { mapThreadRoutes, readMapThreads } from "./server/map-threads.ts";
-import { mapKey, mapsOf, markedKey } from "./server/maps.ts";
+import { mapKey, mapsOf } from "./server/maps.ts";
 import {
   appleHelperPath,
   createModels,
@@ -196,12 +196,11 @@ function syncLinear() {
     if (key && !t.parentThreadId && !t.sideChat && !t.gone && !t.settledAt) keys.add(key);
   }
   /** A settled map thread with a key stands in for its Map header. */
-  const keyOfMapped = markedKey(mapKeyOf, (id) => spawners.get(id), readMapThreads(mapThreadsFile));
   for (const t of threads.values()) {
     const spawner = spawners.get(t.id);
     const stand = spawner ? threads.get(spawner) : undefined;
     const key = stand?.settledAt && !t.settledAt && !t.parentThreadId ? issueKey(stand.title) : null;
-    if (key && keyOfMapped(t.id)) keys.add(key);
+    if (key && mapKeyOf(t.id)) keys.add(key);
   }
   const withSteps = new Set([...threads.values()].flatMap((t) => (t.workflowRun ? [t.workflowRun.runId] : [])));
   for (const r of runsSnapshot?.runs ?? []) {
@@ -385,15 +384,21 @@ const linkLookup = (list: Iterable<Thread>): Pick<GraphCtx, "hrefOf" | "threadOf
 /** The members of a map, with the archived threads that the stream leaves out. Null when the map has none. */
 const mapCtx = (key: string, archived: Thread[]): GraphCtx | null => {
   const all = new Map([...archived, ...threads.values()].map((t) => [t.id, t]));
-  const keyOfMarked = markedKey(mapKeyOf, spawnerOf, readMapThreads(mapThreadsFile));
   const created = (id: string) => `${all.get(id)?.createdAt ?? ""} ${id}`;
   const pool = [...all.values()].filter((t) => !t.parentThreadId && !t.sideChat && !t.workflowRun);
-  const maps = mapsOf({ ids: pool.map((t) => t.id), spawnerOf, keyOf: keyOfMarked, createdKey: created });
+  const maps = mapsOf({
+    ids: pool.map((t) => t.id),
+    spawnerOf,
+    isStep: (id) => !!all.get(id)?.workflowRun,
+    keyOf: mapKeyOf,
+    createdKey: created,
+  });
   const members = pool
     .filter((t) => maps.mapOf(t.id) === key)
     .toSorted((a, b) => created(a.id).localeCompare(created(b.id)));
   if (members.length === 0) return null;
-  const project = all.get(maps.threadOf.get(key) ?? "")?.projectId ?? members[0].projectId;
+  const mapThread = members.map((t) => maps.threadOf(maps.rootOf(t.id)!, key)).find((id) => id);
+  const project = all.get(mapThread ?? "")?.projectId ?? members[0].projectId;
   return {
     members,
     projects: [{ id: project, path: projects.get(project)?.path ?? null }],

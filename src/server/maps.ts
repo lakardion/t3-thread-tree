@@ -28,70 +28,100 @@ export function mapKey(text: string, projectPath: string | undefined, home: stri
 }
 
 export type MapsInput = {
-  /** The visible threads. */
+  /** The candidate top-level threads. */
   ids: string[];
   spawnerOf: (id: string) => string | null | undefined;
-  /** The map key of a thread, null when it has none or may not be a member. */
+  /** The id is in the thread table, archived and deleted rows included. A chain stops before an unknown id. Default: all. */
+  known?: (id: string) => boolean;
+  /** A step thread: never a member or a root, and a chain stops before it. */
+  isStep: (id: string) => boolean;
+  /** The own map key of a thread, null when it has none. */
   keyOf: (id: string) => string | null;
   /** A string that orders threads by creation. */
   createdKey: (id: string) => string;
+  /** The PR stacks of the candidates, each lowest first. */
+  stacks?: string[][];
+  /** The thread has an Issue key. */
+  issueKeyOf?: (id: string) => boolean;
 };
 
 /**
- * The maps of the visible threads and their spawner chains. `mapOf`: the own key of a thread, else the key of its
- * nearest keyed ancestor. `threadOf`: the map thread of each key, the spawner of its earliest topmost keyed thread
- * that has one. `anchors`: the keys that a thread is the map thread of, in map order. `ancestors`: the spawner chain
- * of a thread, nearest first.
+ * The lineage groups of the candidate threads. `ancestors`: the spawner chain inside the lineage, nearest first.
+ * `rootOf`: the topmost thread of the chain, null for a step thread. `groups`: each root with its members, the
+ * candidates below it. `mates`: stack mates and the root they join. `mapOf`: the own key of a thread, else the key of
+ * its nearest keyed ancestor. `threadOf`: the map thread of a key in the lineage of a root, undefined when the
+ * topmost keyed thread is the root. `anchors`: the keys that a thread is the map thread of, in map order.
  */
-export function mapsOf({ ids, spawnerOf, keyOf, createdKey }: MapsInput) {
+export function mapsOf({
+  ids,
+  spawnerOf,
+  known = () => true,
+  isStep,
+  keyOf,
+  createdKey,
+  stacks = [],
+  issueKeyOf = () => false,
+}: MapsInput) {
   const keys = new Map<string, string | null>();
   const key = (id: string) => {
     if (!keys.has(id)) keys.set(id, keyOf(id));
     return keys.get(id)!;
   };
-  const chain = (id: string): string[] => {
+  const ancestors = (id: string): string[] => {
     const out: string[] = [];
+    if (isStep(id)) return out;
     const seen = new Set([id]);
-    for (let c = spawnerOf(id); c && !seen.has(c); c = spawnerOf(c)) {
+    for (let c = spawnerOf(id); c && !seen.has(c) && known(c) && !isStep(c); c = spawnerOf(c)) {
       out.push(c);
       seen.add(c);
     }
     return out;
   };
+  const rootOf = (id: string): string | null => (isStep(id) ? null : (ancestors(id).at(-1) ?? id));
   const mapOf = (id: string): string | null =>
-    key(id) ??
-    chain(id)
-      .map(key)
-      .find((k) => k) ??
-    null;
+    isStep(id)
+      ? null
+      : (key(id) ??
+        ancestors(id)
+          .map(key)
+          .find((k) => k) ??
+        null);
+  const byCreated = (a: string, b: string) => createdKey(a).localeCompare(createdKey(b));
 
-  const pool = new Set(ids.flatMap((id) => [id, ...chain(id)]));
-  const topmost = new Map<string, string[]>();
-  for (const id of pool) {
-    const k = key(id);
-    if (k && !chain(id).some((a) => key(a) === k)) topmost.set(k, [...(topmost.get(k) ?? []), id]);
+  const candidates = ids.filter((id) => !isStep(id));
+  const groups = new Map<string, string[]>();
+  for (const id of candidates.toSorted(byCreated)) {
+    const root = rootOf(id)!;
+    if (root !== id) groups.set(root, [...(groups.get(root) ?? []), id]);
   }
-  const threadOf = new Map<string, string>();
+
+  const pool = new Set(candidates.flatMap((id) => [id, ...ancestors(id)]));
+  const threadByRoot = new Map<string, Map<string, string>>();
   const anchors = new Map<string, string[]>();
-  for (const [k, tops] of topmost) {
-    const spawned = tops.filter((id) => spawnerOf(id)).toSorted((a, b) => createdKey(a).localeCompare(createdKey(b)));
-    const thread = spawned[0] && spawnerOf(spawned[0]);
-    if (!thread) continue;
-    threadOf.set(k, thread);
+  const topmost = [...pool]
+    .filter((id) => key(id) && ancestors(id).length > 0 && !ancestors(id).some((a) => key(a) === key(id)))
+    .toSorted(byCreated);
+  for (const id of topmost) {
+    const root = rootOf(id)!;
+    const k = key(id);
+    if (threadByRoot.get(root)?.has(k)) continue;
+    const thread = ancestors(id)[0];
+    threadByRoot.set(root, (threadByRoot.get(root) ?? new Map()).set(k, thread));
     anchors.set(thread, [...(anchors.get(thread) ?? []), k]);
   }
-  return { mapOf, threadOf, anchors, ancestors: chain };
-}
+  const threadOf = (root: string, k: string) => threadByRoot.get(root)?.get(k);
 
-/**
- * `keyOf` with the synthetic key `thread:<spawner>` for a thread that has no own key and whose spawner is in `marked`.
- */
-export const markedKey =
-  (keyOf: (id: string) => string | null, spawnerOf: (id: string) => string | null | undefined, marked: Set<string>) =>
-  (id: string): string | null => {
-    const spawner = spawnerOf(id);
-    return keyOf(id) ?? (spawner && marked.has(spawner) ? `thread:${spawner}` : null);
-  };
+  const spawners = new Set(candidates.flatMap(ancestors));
+  const mates = new Map<string, string>();
+  for (const stack of stacks) {
+    const low = stack.find((id) => rootOf(id) !== null && rootOf(id) !== id);
+    if (!low) continue;
+    for (const id of stack) {
+      if (rootOf(id) === id && !issueKeyOf(id) && !spawners.has(id)) mates.set(id, rootOf(low)!);
+    }
+  }
+  return { ancestors, rootOf, groups, mates, mapOf, threadOf, anchors };
+}
 
 /** The readable name of a folder: `workflow-runs-tree` gives "Workflow runs tree". */
 const readable = (s: string) => {
@@ -101,13 +131,11 @@ const readable = (s: string) => {
 
 /**
  * The display name of a map. `title` is the title of its map thread when that thread anchors this map only, else null.
- * For a `thread:` key it is the title of the marked thread.
  * `keys` are the keys of all visible maps: a folder name that two of them share gets its parent folder.
  */
 export function mapName(key: string, title: string | null, keys: string[]): string {
   const named = title?.replace(/\s*[:-]?\s*wayfinder\s*[:-]?\s*/i, " ").trim();
   if (named) return named;
-  if (key.startsWith("thread:")) return key.slice(7);
   if (/^https?:\/\//.test(key)) {
     const last = key.split("/").at(-1)!;
     return /^\d+$/.test(last) ? `#${last}` : last;

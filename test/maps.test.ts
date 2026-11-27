@@ -1,6 +1,6 @@
 import { describe, expect, test } from "bun:test";
 
-import { mapKey, mapName, mapsOf, markedKey } from "../src/server/maps.ts";
+import { mapKey, mapName, mapsOf } from "../src/server/maps.ts";
 
 const HOME = "/home/u";
 const WS = "/work/app";
@@ -69,112 +69,157 @@ describe("mapName", () => {
   });
 });
 
-/** Threads as `id: [spawner, key, createdAt]`. */
-function maps(table: Record<string, [string | null, string | null, number]>, visible: string[]) {
+type Row = [spawner: string | null, key: string | null, created: number, step?: boolean];
+
+/** Threads as `id: [spawner, key, createdAt, isStep]`. Ids missing from the table are unknown. */
+function maps(table: Record<string, Row>, ids: string[], extra: { stacks?: string[][]; issueKeys?: string[] } = {}) {
   return mapsOf({
-    ids: visible,
+    ids,
     spawnerOf: (id) => table[id]?.[0],
+    known: (id) => id in table,
+    isStep: (id) => !!table[id]?.[3],
     keyOf: (id) => table[id]?.[1] ?? null,
     createdKey: (id) => String(table[id]?.[2] ?? 0).padStart(4, "0"),
+    stacks: extra.stacks,
+    issueKeyOf: (id) => !!extra.issueKeys?.includes(id),
   });
 }
 
 describe("mapsOf", () => {
-  test("map thread is the spawner of the topmost keyed threads; members by own key or keyed ancestor", () => {
+  test("a map thread that is the root", () => {
+    const m = maps({ root: [null, null, 1], t1: ["root", "K", 2], t2: ["root", "K", 3], s: ["t1", null, 4] }, [
+      "root",
+      "t1",
+      "t2",
+      "s",
+    ]);
+    expect(m.threadOf("root", "K")).toBe("root");
+    expect(m.anchors.get("root")).toEqual(["K"]);
+    expect(m.mapOf("t1")).toBe("K");
+    expect(m.mapOf("s")).toBe("K");
+    expect(m.mapOf("root")).toBeNull();
+  });
+
+  test("a program root with several maps", () => {
+    const m = maps({ root: [null, null, 1], a: ["root", "K", 2], b: ["root", "L", 3] }, ["root", "a", "b"]);
+    expect(m.anchors.get("root")).toEqual(["K", "L"]);
+  });
+
+  test("a sub-map in a ticket thread", () => {
+    const m = maps({ root: [null, null, 1], t: ["root", "P", 2], s: ["t", "S", 3] }, ["root", "t", "s"]);
+    expect(m.threadOf("root", "S")).toBe("t");
+    expect(m.mapOf("t")).toBe("P");
+    expect(m.groups.get("root")).toEqual(["t", "s"]);
+  });
+
+  test("a relay chain with the root many hops above the charting thread", () => {
     const m = maps(
       {
-        chart: [null, null, 1],
-        t1: ["chart", "K", 2],
-        t2: ["chart", "K", 3],
-        sub: ["t1", null, 4],
-        loose: ["chart", null, 5],
+        root: [null, null, 1],
+        r1: ["root", null, 2],
+        r2: ["r1", null, 3],
+        chart: ["r2", null, 4],
+        t1: ["chart", "K", 5],
+        t2: ["chart", "K", 6],
       },
-      ["chart", "t1", "t2", "sub", "loose"],
+      ["root", "r1", "r2", "chart", "t1", "t2"],
     );
-    expect(m.threadOf.get("K")).toBe("chart");
-    expect(m.mapOf("t1")).toBe("K");
-    expect(m.mapOf("sub")).toBe("K");
-    expect(m.mapOf("loose")).toBeNull();
-    expect(m.mapOf("chart")).toBeNull();
-    expect(m.anchors.get("chart")).toEqual(["K"]);
+    expect(m.threadOf("root", "K")).toBe("chart");
+    expect(m.rootOf("t1")).toBe("root");
+    expect(m.groups.get("root")).toEqual(["r1", "r2", "chart", "t1", "t2"]);
   });
 
-  test("two spawners: the spawner of the earliest keyed thread wins", () => {
-    const m = maps({ a: [null, null, 1], b: [null, null, 2], x: ["b", "K", 3], y: ["a", "K", 4] }, [
-      "a",
-      "b",
-      "x",
-      "y",
-    ]);
-    expect(m.threadOf.get("K")).toBe("b");
+  test("a keyed root has no map thread", () => {
+    const m = maps({ root: [null, "K", 1], a: ["root", null, 2] }, ["root", "a"]);
+    expect(m.threadOf("root", "K")).toBeUndefined();
+    expect(m.mapOf("a")).toBe("K");
   });
 
-  test("hand-started keyed thread joins; no spawner anywhere means no map thread", () => {
-    const m = maps({ c: [null, null, 1], x: ["c", "K", 2], h: [null, "K", 3], o: [null, "L", 4] }, [
-      "c",
-      "x",
-      "h",
-      "o",
-    ]);
-    expect(m.threadOf.get("K")).toBe("c");
-    expect(m.mapOf("h")).toBe("K");
-    expect(m.threadOf.has("L")).toBe(false);
+  test("a keyed hand-started thread is its own root; one key in two groups has a map thread each", () => {
+    const m = maps(
+      {
+        c1: [null, null, 1],
+        x: ["c1", "K", 2],
+        h: [null, "K", 3],
+        c2: [null, null, 4],
+        y: ["c2", "K", 5],
+      },
+      ["c1", "x", "h", "c2", "y"],
+    );
+    expect(m.rootOf("h")).toBe("h");
+    expect(m.groups.get("c1")).toEqual(["x"]);
+    expect(m.threadOf("c1", "K")).toBe("c1");
+    expect(m.threadOf("c2", "K")).toBe("c2");
   });
 
-  test("a keyed ancestor with the same key is not topmost", () => {
-    const m = maps({ c: [null, null, 1], x: ["c", "K", 2], y: ["x", "K", 3] }, ["c", "x", "y"]);
-    expect(m.threadOf.get("K")).toBe("c");
-    expect(m.anchors.get("x")).toBeUndefined();
+  test("an unknown spawner ends the chain", () => {
+    const m = maps({ a: ["b", null, 3], b: ["x", null, 2], k: ["x", "K", 4] }, ["a", "b", "k"]);
+    expect(m.rootOf("a")).toBe("b");
+    expect(m.threadOf("k", "K")).toBeUndefined();
+    expect(m.groups.has("k")).toBe(false);
   });
 
-  test("one thread can anchor several maps", () => {
-    const m = maps({ c: [null, null, 1], x: ["c", "K", 2], y: ["c", "L", 3] }, ["c", "x", "y"]);
-    expect(m.anchors.get("c")).toEqual(["K", "L"]);
+  test("a step thread is never a member or a root; its child is its own root", () => {
+    const m = maps({ root: [null, null, 1], st: ["root", null, 2, true], c: ["st", null, 3] }, ["root", "st", "c"]);
+    expect(m.rootOf("st")).toBeNull();
+    expect(m.mapOf("st")).toBeNull();
+    expect(m.rootOf("c")).toBe("c");
+    expect([...m.groups.values()].flat()).toEqual([]);
   });
 
-  test("sub-map: its map thread is a member of the parent", () => {
-    const m = maps({ c: [null, null, 1], t: ["c", "P", 2], s: ["t", "S", 3], u: ["t", "P", 4] }, ["c", "t", "s", "u"]);
-    expect(m.threadOf.get("S")).toBe("t");
-    expect(m.mapOf("t")).toBe("P");
-    expect(m.mapOf("s")).toBe("S");
+  test("stack mates join the group of the lowest member", () => {
+    const m = maps(
+      {
+        a: [null, null, 1],
+        m1: ["a", null, 2],
+        lone: [null, null, 3],
+        b: [null, null, 4],
+        m2: ["b", null, 5],
+        issue: [null, null, 6],
+        child: [null, null, 7],
+        kid: ["child", null, 8],
+        spawned: ["a", null, 9],
+      },
+      ["a", "m1", "lone", "b", "m2", "issue", "child", "kid", "spawned"],
+      { stacks: [["m1", "lone", "m2", "issue", "child", "spawned"]], issueKeys: ["issue"] },
+    );
+    expect(m.mates.get("lone")).toBe("a");
+    expect(m.mates.has("m2")).toBe(false);
+    expect(m.mates.has("issue")).toBe(false);
+    expect(m.mates.has("child")).toBe(false);
+    expect(m.mates.has("spawned")).toBe(false);
+  });
+
+  test("a group shows only while a member is in ids", () => {
+    const table: Record<string, Row> = { root: [null, "K", 1], a: ["root", null, 2], b: ["root", null, 3] };
+    expect(maps(table, ["root"]).groups.has("root")).toBe(false);
+    expect(maps(table, ["root", "b"]).groups.get("root")).toEqual(["b"]);
+    const plain: Record<string, Row> = { root: [null, null, 1], a: ["root", "K", 2] };
+    expect(maps(plain, ["root"]).groups.has("root")).toBe(false);
+  });
+
+  test("the lone mate goes to the group of the lowest member", () => {
+    const m = maps(
+      { a: [null, null, 1], m1: ["a", null, 2], lone: [null, null, 3], b: [null, null, 4], m2: ["b", null, 5] },
+      ["a", "m1", "lone", "b", "m2"],
+      { stacks: [["m2", "lone", "m1"]] },
+    );
+    expect(m.mates.get("lone")).toBe("b");
+  });
+
+  test("a spawner-less thread that spawned a candidate is no mate", () => {
+    const m = maps(
+      { a: [null, null, 1], m1: ["a", null, 2], p: [null, null, 3], q: ["p", null, 4] },
+      ["a", "m1", "p", "q"],
+      { stacks: [["m1", "p"]] },
+    );
+    expect(m.groups.get("p")).toEqual(["q"]);
+    expect(m.mates.has("p")).toBe(false);
   });
 
   test("a hidden keyed ancestor still gives its key; chain loops end", () => {
     const m = maps({ c: [null, null, 1], d: ["c", "K", 2], s: ["d", null, 3] }, ["s"]);
     expect(m.mapOf("s")).toBe("K");
     expect(() => maps({ a: ["b", null, 1], b: ["a", null, 2] }, ["a"])).not.toThrow();
-  });
-});
-
-describe("marked map threads", () => {
-  const spawners: Record<string, string> = { a: "plan", b: "plan", c: "a" };
-  const own: Record<string, string> = { b: "K" };
-  const keyOf = markedKey(
-    (id) => own[id] ?? null,
-    (id) => spawners[id],
-    new Set(["plan"]),
-  );
-
-  test("a keyless child of a marked thread gets thread:<id>; an own key wins; a grandchild gets none", () => {
-    expect(keyOf("a")).toBe("thread:plan");
-    expect(keyOf("b")).toBe("K");
-    expect(keyOf("c")).toBeNull();
-  });
-
-  test("the marked thread is the map thread and the grandchild is a member", () => {
-    const m = mapsOf({
-      ids: ["plan", "a", "c"],
-      spawnerOf: (id) => spawners[id],
-      keyOf,
-      createdKey: (id) => id,
-    });
-    expect(m.threadOf.get("thread:plan")).toBe("plan");
-    expect(m.mapOf("c")).toBe("thread:plan");
-    expect(m.mapOf("plan")).toBeNull();
-  });
-
-  test("a thread: key names the title, else the id", () => {
-    expect(mapName("thread:x", null, [])).toBe("x");
-    expect(mapName("thread:x", "Wayfinder: Plan lanes", [])).toBe("Plan lanes");
   });
 });
