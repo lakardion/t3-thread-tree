@@ -526,16 +526,23 @@ A row of the Up next window with a Catch-up has a second line under the top line
 
 ### PR graph
 
-The modal of SPEC.md › "Map PR graph". Variant A of the prototype (map `map-pr-graph`, ticket 05).
+The modal of SPEC.md › "PR graph". Variant A of the prototype of map `map-pr-graph` (ticket 05), with the scope picker and the bands of variant A of map `user-pr-graph` (ticket 02).
 
-- **Button.** Ghost icon button, lucide `GitBranch`, the size of the map fold, after the member count. Always visible. Tooltip "PR graph".
+- **Map head button.** Ghost icon button, lucide `GitBranch`, the size of the map fold, after the member count. Always visible. Tooltip "PR graph".
+- **Top bar button.** Ghost icon button, lucide `GitBranch`, the size of the Settings button, before it. Tooltip "PR graph (G)".
+- **Header.** The title with a 16 px `GitBranch` icon and "PR graph" in `text-base`. Then the scope picker, a shadcn `Select` with a small trigger, `w-56`. Then, at All, the graph sort as a small `Select`. A spacer, then the outline Refresh button. The row wraps on a phone.
+- **Scope picker list.** "All projects", a separator, the "Projects" group, a separator, the "Maps" group. A group heading has a 14 px icon: lucide `FolderGit2` for Projects, lucide `Map` for Maps. A project item: `ProjectIcon`, the name, then "· N" in `--muted-foreground`. A map item: the map name, then "·", the `ProjectIcon` and the project name in `--muted-foreground`.
+- **Band.** A `<section>` with a dashed bottom border; the last band has none. The label is `sticky top-0 left-0`, `w-fit`, `rounded-br-md`, `bg-background/85` with a backdrop blur, `px-4 pt-3 pb-1`, 12 px text: the `ProjectIcon` and the name in `font-semibold`, the repo in mono `--muted-foreground`, then "root `<branch>` · N PRs · M open · K anomalies" in `--muted-foreground`, the branch in mono.
 - **Dialog.** The app `Dialog`, `max-w-[1200px]`, at most 860 px high, with a 1rem margin. On a phone it takes the full width minus 2rem.
 - **Graph box.** It hides its scrollbars. The cursor is `grab`, and `grabbing` while a drag pans. The background is two soft gradients on `--background`: `--primary` at 10% from the top left and `--status-plan` at 6% from the bottom right.
-- **Edges.** An SVG layer under the nodes, never a `<canvas>`. gh stack: `--primary`, solid. Plain base: `--status-needs-input`, dashed. Base `main`: `--muted-foreground`, solid. Closed or merged child: `--border`.
+- **Edges.** An SVG layer under the nodes, never a `<canvas>`. gh stack: `--primary`, solid. Plain base: `--status-needs-input`, dashed. Base root: `--muted-foreground`, solid. Closed or merged child: `--border`.
 - **Node card.** 210 × 92 px, `bg-card`, `shadow-md`, radius 8 px, four lines with `justify-between`, 11 px text, the branch in mono. A draft or an outside stack mate has a dashed border. A closed or merged node has 55% opacity. A foreign base is a small dashed pill with the branch in mono.
 - **State tones.** Open: `--status-done-fg`. Draft: `--muted-foreground`. Merged: `--pr-merged`. Closed, "conflicts" and "no thread": `--destructive`.
 - **`!` badge.** A 16 px round badge, `--destructive` on white text, at the end of line 1. It is a button, so focus shows its tooltip.
-- **Lists.** Two columns under the graph, each with its own scroll, together at most 30% of the dialog height. One column on a phone. 12 px text, `#N` as a link button.
+- **"review" mark.** A chip on line 1: lucide `Eye` 12 px and "review", 10 px sans text, `--status-plan` on `--status-plan` at 15%, radius 4 px.
+- **Pile.** Up to 4 cards offset by 5 px, the lower ones at 75% brightness with a `--pr-merged` border at 40%. A "N merged" caption sits on the bottom right corner, in `--pr-merged`. On hover the cards fan out in stack order, with a 2 px `--pr-merged` ring at 60%, a soft dark halo and a backdrop blur. With reduced motion, nothing animates.
+- **Focus dim.** The cards and edges of other lanes go to 25% opacity.
+- **Lists.** A fold under the graph, closed at first, with the counts in its button. Open, two columns, each with its own scroll, together at most 30% of the dialog height. One column on a phone. 12 px text, `#N` as a link button. At All, the line "N threads with no PR. Pick a project to list them." is 12 px `--muted-foreground`.
 - **Themes.** Only theme tokens, so light and dark both work.
 
 ### Typography and focus

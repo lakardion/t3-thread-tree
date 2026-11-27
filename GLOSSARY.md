@@ -249,8 +249,16 @@ The row that heads a **Map group** when its **Map thread** is settled or missing
 _Avoid_: map row, map title
 
 **PR graph**:
-The PRs of one map, drawn as a graph from `main` in a modal: one node per PR, an edge to its base, with **Lanes**, gh stacks and **Anomalies**.
+The PRs of the user's live threads, drawn as a graph in a modal: one node per PR, an edge to its base, with gh stacks and **Anomalies**. Its **Graph scope** picks which PRs it shows.
 _Avoid_: PR map, stack graph, DAG
+
+**Graph scope**:
+The PR set of a **PR graph**: All (every **Project**), one **Project**, or one map. The map scope adds the **Lanes**, the PRs found by the map's keys and the PRs of settled **Map members**.
+_Avoid_: graph filter, graph view
+
+**Band**:
+The part of a **PR graph** that holds the PRs of one **Project**, drawn from the project's root branch, such as `main`. All shows one band for each project that has PRs.
+_Avoid_: lane (that is a chain of map keys), swimlane, section
 
 **Lane**:
 One chain of keys in the Route of `map.md`, under a `### Lane N` heading. A Route with no lane heading has one implicit lane.
@@ -281,7 +289,7 @@ _Avoid_: mini window, small window, Needs-you window
 - A **PR stack** can span threads of more than one **Issue key**.
 - A thread goes to the first **Placement rule** that **Claims** it. With the default order, a thread in a **PR stack** shows in its stack block, whatever its **Issue key**, spawner or **Launch nesting**; a **Review thread** stays in Reviews, and a **Map member** shows in its **Map group**, with its stack mates inside the group.
 - A **Pin** orders a list that the **Placement rules** already built. It never moves an item to another list.
-- A **Map group** has one **PR graph**. Its nodes are the PRs of its **Map members** and the PRs of its keys.
+- A **PR graph** at All has one **Band** per **Project**. A **Map group** is one **Graph scope**: its nodes are the PRs of its **Map members** and the PRs of its keys.
 - A **Map thread** heads one **Map group** for each map it launched. A **Map group** can hold the **Map group** of a sub-map, at the place of its **Map thread**.
 - The keyless threads of one **PR stack** share one group, named after the bottom open PR, or the first PR of the stack when no PR is open (`PR stack #61`).
 

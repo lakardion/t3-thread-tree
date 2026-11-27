@@ -126,7 +126,7 @@ A **Run** with a **Step thread** shows in the tree as a **run row**. The step th
 
 Source: wayfinder map `map-groups` in the wiki (`t3-thread-tree/issues/map-groups/`). Ticket 01 reads the first messages in `statev2.sqlite` (research in `research/01-first-message-facts.md`). Ticket 02 fixes the **Map key**, the **Map thread** and membership. Ticket 03 ranks membership against the tree rules. Ticket 04 picks the look; the prototype is on branch `prototype/map-group-look` (`src/page/map-group.prototype.tsx`, variant B). Ticket 05 fixes the flat view and the Linear tree. Ticket 06 settles the fold, a callback to a settled map thread, and a thread that anchors several maps.
 
-The threads of one wayfinder map show as one **Map group** under their **Map thread**. The Map group placement rule places them (see "Placement rules"). It is on by default, and the user can switch it off in Settings › Grouping. With it off, no map group shows, and each member places by the other rules. The feature shows no map progress. Only the PR graph reads `map.md` (see "Map PR graph").
+The threads of one wayfinder map show as one **Map group** under their **Map thread**. The Map group placement rule places them (see "Placement rules"). It is on by default, and the user can switch it off in Settings › Grouping. With it off, no map group shows, and each member places by the other rules. The feature shows no map progress. Only the PR graph reads `map.md` (see "PR graph").
 
 ### Data
 
@@ -216,124 +216,165 @@ The **Map rail**, in amber: `amber-500` for the rail, `amber-600` (light) and `a
 
 ### Left out
 
-- Map progress (tickets closed, frontier count). The app reads no ticket file. Only the PR graph reads `map.md` (see "Map PR graph").
+- Map progress (tickets closed, frontier count). The app reads no ticket file. Only the PR graph reads `map.md` (see "PR graph").
 - Map marks in Find and on Triage cards.
 - Any change to T3 Code or to the `t3-handoff` and `wayfinder` skills.
 
-## Map PR graph
+## PR graph
 
-Source: wayfinder map `map-pr-graph` in the wiki (`t3-thread-tree/issues/map-pr-graph/`). Ticket 01 picks T3 as the only PR source (research in `research/01-pr-data-source.md`). Ticket 02 fixes the PR set. Ticket 03 reads lanes and stacks from `map.md` (research in `research/03-lanes-from-map-md.md`). Ticket 04 picks the anomalies. Ticket 05 picks the look; the prototype is on branch `prototype/map-pr-graph-05-modal-look` (variant A). Ticket 06 settles the updates, the call cost and the key.
+Source: two wayfinder maps in the wiki (`t3-thread-tree/issues/`). `map-pr-graph` picks T3 as the only PR source, the map PR set, the lanes from `map.md`, the anomalies, the look and the updates. `user-pr-graph` adds the **Graph scopes**: research in `research/01-map-coupling.md`, the look in ticket 02 (prototype branch `prototype/user-pr-graph-02-all-scope-look`, variant A), the data in ticket 03, this section in ticket 04.
 
-The **PR graph** of a map shows its PRs as a left-to-right graph from `main`. Each PR is one node, with an edge to its base. A node links to the PR on GitHub and to its thread in T3. The graph shows the **Lanes** of `map.md`, the gh stacks and the **Anomalies**. It opens in a modal from the map head. Every map kind has a graph: a path key, a URL key and a **Marked map thread**. A map with no `map.md` has no lanes and no lane anomalies. The app does not run `gh`.
+The **PR graph** shows PRs as a left-to-right graph from a root branch. Each PR is one node, with an edge to its base. A node links to the PR on GitHub and to its thread in T3. The graph shows the gh stacks and the **Anomalies**. One modal shows it. Its **Graph scope** picks the PR set:
+
+- **All** (scope id `all`): the PRs of every project, each project in its own **Band**. This is the default.
+- **Project** (`project:<project id>`): the PRs of one T3 project, in one band. The "No project" band has the id `project:none`.
+- **Map** (`map:<map key>`): the PRs of one map, in one band. It adds the **Lanes** of `map.md`, the key rows, the settled members and the map-only anomalies. Every map kind has a map scope: a path key, a URL key and a **Marked map thread**. A map with no `map.md` has no lanes and no lane anomalies.
+
+The app does not run `gh`.
 
 ### Data
 
-- **Stream.** `decodeThread` also decodes `snapshot.headBranch` and `snapshot.baseBranch` of each PR link. Each `PrNode` gets `head` and `base` (string or null) and `stack`: `{ number, pos, total }` from the thread's `stack.layers`, or null when the PR is in no stack.
-- **Route.** `GET /map-graph?key=<map key>` answers the parts that the tree does not hold. `&refresh=1` skips the cache. A missing or unknown key gives `404`. T3 down gives `503`.
+- **Stream.** `decodeThread` decodes `snapshot.headBranch` and `snapshot.baseBranch` of each PR link. Each `PrNode` has `repository` (`owner/name`), `head` and `base` (string or null) and `stack`: `{ number, pos, total }` from the thread's `stack.layers`, or null when the PR is in no stack.
+- **PR id.** `<owner/name>#<number>`. Every key in the model, in the route answer and on the page is the PR id: nodes, edges, anomalies, `behind`, `mates`, `data-pr` and focus. Two repos with the same PR number or the same branch name never merge into one node. A card shows `#<number>`.
+- **Review flag.** `build-tree.ts` sets `review: boolean` on each `ThreadNode`. It is true when the title starts with "Review #", the **Review thread** rule.
+- **Graph members.** At All and project scope, a graph member is a live thread that is not settled, is not a **Step thread**, and links a PR. Subthreads and side chats count. A project scope filters by the T3 `projectId`, never by a view group. Threads with no project are in the "No project" band. The server and the page use the same rule. At map scope, the graph members are the **Map members**, settled ones too.
+- **Route.** `GET /pr-graph?scope=<scope id>` answers the parts that the tree does not hold. `&refresh=1` skips the cache. A missing or bad scope, an unknown project or an unknown map key gives `404`. T3 down gives `503`.
 
   ```ts
-  type MapGraphData = {
+  type GraphPr = PrNode & { threadId: string | null; threadHref: string | null };
+  type PrGraphData = {
     at: string; // ISO time of the slow calls
-    lanes: { n: number; label: string; keys: { key: string; base: string }[]; explicit: boolean }[] | null;
-    stacks: { prs: number[] }[] | null; // `## Stacks` chains, bottom first; null with no such section
-    settled: { id: string; title: string; status: string; createdAt: string | null; href: string; prs: PrNode[] }[]; // settled members
-    rows: (PrNode & { threadId: string | null; threadHref: string | null })[]; // key query rows that passed the filter
-    mates: (PrNode & { threadId: string | null; threadHref: string | null })[]; // outside stack mates
-    behind: Record<number, number>; // PR number → behindBy, only for answers that came
-    errors: { key: string; text: string }[]; // key queries that failed
+    roots: Record<string, string>; // project id ("none" for No project) → root branch; no entry when git gave none
+    mates: GraphPr[]; // outside stack mates
+    behind: Record<string, number>; // PR id → behindBy, only for answers that came
+    map: {
+      lanes: { n: number; label: string; keys: { key: string; base: string }[]; explicit: boolean }[] | null;
+      stacks: { prs: number[] }[] | null; // `## Stacks` chains, bottom first; null with no such section
+      settled: { id: string; title: string; status: string; createdAt: string | null; href: string; prs: PrNode[] }[]; // settled members
+      rows: GraphPr[]; // key query rows that passed the filter
+      errors: { key: string; text: string }[]; // key queries that failed
+    } | null; // only at map scope
   };
   ```
 
-- **map.md.** For a path key, the server reads `<key>/map.md` on each call that is not cached. A missing file gives `lanes: null` and `stacks: null`. The parse (`src/server/map-md.ts`, pure, tested) follows the minimum parse of research 03:
+- **Root.** For each project of the scope, the server runs `git symbolic-ref --short refs/remotes/origin/HEAD` in the project `workspaceRoot` and drops the `origin/` prefix. It is local, with no network call. When git fails, or the project has no path, `roots` has no entry for that project. The map scope reads the project of the map head: the map thread, else the oldest member.
+- **Band root on the page.** The root of a band is its `roots` entry. With no entry, or before the first answer, it is `main` when a band PR has the base `main`, else `master` when a band PR has the base `master`, else the most common base of the band that is no graph head, else `main`.
+- **map.md.** Map scope only. For a path key, the server reads `<key>/map.md` on each call that is not cached. A missing file gives `lanes: null` and `stacks: null`. The parse (`src/server/map-md.ts`, pure, tested) follows the minimum parse of the `map-pr-graph` research 03:
   - `## Route` up to the next `## `. A `### ` heading that starts with `Lane` opens a lane, and the rest of the heading is its label. Any other `### ` heading also opens a lane. Lines before the first lane heading, or a route with no lane heading, form one implicit lane (`explicit: false`).
   - A numbered line (`^\d+\. `, from `0.`) gives a key: a Linear key `[A-Z]+-\d+` at the start (also `KEY:`), else a link to `tickets/NN-<slug>.md`, which gives the key `<map folder>-<NN>`.
   - `` stack on `<branch>` `` (with or without `virtual`) sets the base of that key. Else the first key of a lane has the base `main`, and each later key has the key before it.
-  - `## Stacks` up to the next `## ` or the end of the file. Each `(#N)` after a branch name is a PR of the chain, and `←` joins two PRs. Any other `#N` is not a PR.
-- **Key query.** The keys are the Linear keys of the lanes plus the **Issue keys** in the titles of the **Map members**. A markdown key gives no query, because GitHub search does not match branch names. For each key, the server calls `pullRequests.list` with `state: all` and `query: <key>`, in the project of the map head (the map thread, else the oldest member). It keeps a row only when its head branch or its title has a queried key: a Linear key `ABC-12` matches a branch that starts with `abc-12-` or equals `abc-12`. `threadId` is the live or settled thread that links the PR, else null.
-- **Behind base.** For each open PR with a stack, from the stream and the rows, the server calls `pullRequests.detail` with `allowStale: false` and keeps `behindBy`.
-- **Stack mates.** A **graph number** is the number of a member link (not a `stack` or `stack-dismissed` link) or of a row. Each slot of the `stack.layers` of a member PR that is no graph number is a mate. A `stack` link of a thread with a synced head gives the mate with no call. Else the server calls `pullRequests.detail` once for the slot, and keeps `behindBy` of an open mate. A failed call adds no mate. A mate has its place in the stack and the T3 thread that links it, if any.
-- **Calls.** At most 4 graph calls run at a time, in a queue of their own. A failed key query adds one `errors` item and does not stop the others. A failed detail call adds nothing. The route answers when all calls end.
-- **Cache.** The server keeps the last answer for each map key. A call without `refresh=1` gets the kept answer when it is less than 60 s old. The server never calls T3 for the graph at other times: no prefetch and no call on a stream change.
-- **Settled members.** `settled` holds the settled and archived **Map members** that the tree leaves out, so their PRs and T3 links stay in the graph.
+  - `## Stacks` up to the next `## ` or the end of the file. Each `(#N)` after a branch name is a PR of the chain, and `←` joins two PRs. Any other `#N` is not a PR. The model matches these numbers to the PRs of the band.
+- **Key query.** Map scope only. The keys are the Linear keys of the lanes plus the **Issue keys** in the titles of the **Map members**. A markdown key gives no query, because GitHub search does not match branch names. For each key, the server calls `pullRequests.list` with `state: all` and `query: <key>`, in the project of the map head. It keeps a row only when its head branch or its title has a queried key: a Linear key `ABC-12` matches a branch that starts with `abc-12-` or equals `abc-12`. `threadId` is the live or settled thread that links the PR, else null.
+- **Behind base.** All scopes. For each open PR with a stack, from the stream and the rows, the server calls `pullRequests.detail` with `allowStale: false` and keeps `behindBy`. The call runs in the project of the graph member that links the PR. A key row uses the project of the map head.
+- **Stack mates.** All scopes. A **graph PR** is the PR of a member link (not a `stack` or `stack-dismissed` link) or of a row. Each slot of the `stack.layers` of a graph PR that is no graph PR is a mate. A `stack` link of a live thread with a synced head gives the mate with no call. Else the server calls `pullRequests.detail` once for the slot, in the project of the member that links the stack's PR, and keeps `behindBy` of an open mate. A failed call adds no mate. A mate has its place in the stack and the T3 thread that links it, if any.
+- **Calls.** At most 4 graph calls run at a time, in one queue of their own for all scopes. There is no cap on the count. A failed key query adds one `errors` item and does not stop the others. A failed detail call adds nothing. The route answers when all calls end.
+- **Cache.** The server keeps the last answer for each scope id, and runs one build per scope id at a time. A call without `refresh=1` gets the kept answer when it is less than 60 s old. An All answer does not serve a project scope. The server never calls T3 for the graph at other times: no prefetch and no call on a stream change.
+- **Settled members.** Map scope only. `map.settled` holds the settled and archived **Map members** that the tree leaves out, so their PRs and T3 links stay in the graph.
 
 ### Graph model
 
-`buildPrGraph` in `src/shared/pr-graph.ts` is pure, and `bun test` covers it. The page calls it with the map group of the tree and the last `MapGraphData` (or none).
+`buildPrGraph` in `src/shared/pr-graph.ts` is pure, and `bun test` covers it. It builds one band from the band's graph members, the band root and the last `PrGraphData` (or none). The page makes the member list: `walk(head)` of the map group at map scope, the graph member rule at the other scopes. It calls `buildPrGraph` once for each band.
 
-- **PR set.** The union of two sources:
-  - **Member links:** every PR that a live or settled **Map member** links, also when its keys belong to another map.
-  - **Key rows:** the `rows` of the key query.
-  - One node for each PR. For a PR of a live thread, the stream data wins. For a PR of a settled thread or with no thread, the row wins, because T3 does not sync settled threads.
-  - A PR that two members link gets the T3 link of the oldest member.
-- **Stack mates.** A PR in the same gh stack as a graph PR, with no member link and no key match, is a node with the mark "outside the map". The `mates` of `MapGraphData` hold these PRs.
-- **Edges.** Each PR has one edge to its base: a graph PR, `main`, or a **Foreign base**. A foreign base is a branch that is neither `main` nor the head of a graph PR. It is a small branch node hung off `main`.
-- **Edge kinds.** gh stack (both PRs in one stack), plain base (the base is a graph PR, with no shared stack), base `main`, and closed or merged (the child is closed or merged).
-- **Lanes.** A node of a lane key shows `L<n>`. A node with no lane key and a stack mate show "outside the map" when the map has lanes.
-- **Layout.** The column of a node is its depth from `main`. Nodes sort by lane, then by stack position, then by PR number. Lines go from the right of the base to the left of the child.
-- **Threads with no PR.** The live and settled Map members that link no PR, oldest first. Step threads and subagents are not members, so they are not in it.
+- **PR set.**
+  - **Member links:** every PR that a graph member links. At map scope, also when its keys belong to another map.
+  - **Key rows:** at map scope, the `rows` of the key query.
+  - **Stack mates:** the `mates`.
+  - One node for each PR id. For a PR of a live thread, the stream data wins. For a PR of a settled thread or with no thread, the row wins, because T3 does not sync settled threads.
+- **T3 link.** A PR gets the T3 link of the oldest member that links it and is no **Review thread**. When only Review threads link it, it gets the link of the oldest of them, and the node has the "review" mark.
+- **Stack mates.** A PR in the same gh stack as a graph PR, with no member link and no key match, is a node with a dashed border. Its mark is "outside the map" at map scope and "stack mate" at the other scopes.
+- **Edges.** Each PR has one edge to its base: a graph PR of the same repo, the band root, or a **Foreign base**. A foreign base is a branch that is neither the band root nor the head of a graph PR of the same repo. It is a small branch node hung off the root.
+- **Edge kinds.** gh stack (both PRs in one stack), plain base (the base is a graph PR, with no shared stack), base root, and closed or merged (the child is closed or merged).
+- **Merged piles.** A merged PR of a gh stack stays in its stack: the model connects it by stack position, not by base, because GitHub moves its base to the root. The merged members of one stack get one column and one row, and the page draws them as one pile. A PR built on a pile member chains on from the pile top.
+- **Lanes.** Map scope only. A node of a lane key shows `L<n>`. A node with no lane key takes the lane of the PR it builds on. A node with no lane and a stack mate show "outside the map" when the map has lanes.
+- **Layout.** The column of a node is its depth from the band root. Nodes sort by lane, then by stack position, then by PR number. Lines go from the right of the base to the left of the child. The bands stack down one canvas: each band starts at the row after the last row of the band above.
+- **Band order.** The graph sort of the modal (see "Modal"). "No project" is always last.
+- **Empty project.** A project with no graph PR has no band at All and no entry in the scope picker.
+- **Threads with no PR.**
+  - Map scope: the live and settled Map members that link no PR, oldest first. Step threads and subagents are not members, so they are not in it.
+  - Project scope: the live threads of the project that the graph member rule takes, except that they link no PR, oldest first.
+  - All: no list.
 
 ### Anomalies
 
-Each **Anomaly** names its PRs. One severity only. The rules (ticket 04):
+Each **Anomaly** names its PRs. One severity only. The model finds the anomalies of each band apart. At All, each text starts with the project name and a colon. "Root" is the band root.
 
-| Anomaly              | Rule                                                                                                                                                                                                             | Text                                                                                       |
-| -------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------ |
-| Fan-out              | A base other than `main` with 2 or more open child PRs.                                                                                                                                                          | "<base> has N open children". "(planned)" when `map.md` has `stack on` for those children. |
-| Closed parent        | A closed PR with open children.                                                                                                                                                                                  | "#N is closed, but #M builds on it"                                                        |
-| Conflicts            | An open PR with mergeability `conflicting`. `unknown` is not an anomaly.                                                                                                                                         | "#N has conflicts"                                                                         |
-| Foreign base         | A foreign base node.                                                                                                                                                                                             | "#N is based on <branch>, which is not main or a map PR"                                   |
-| Behind base          | An open stacked PR with `behindBy > 0`. Not shown while the detail call runs or after it fails.                                                                                                                  | "#N is N commits behind its base"                                                          |
-| No thread            | An open PR with no thread. Not for outside stack mates.                                                                                                                                                          | "#N has no thread"                                                                         |
-| Stopped thread       | An open PR whose thread is `failed`, `interrupted` or cancelled. A settled thread is normal.                                                                                                                     | "#N: its thread stopped"                                                                   |
-| Off the lane chain   | An open PR of a key whose base is not the lane base. Only with explicit lanes. The base also passes when it is `main` and the previous key has no open PR, or when it is the head of another PR of the same key. | "#N is based on <branch>; the lane says <base>"                                            |
-| Stack across lanes   | One gh stack with PRs of two or more lanes. Only with explicit lanes.                                                                                                                                            | "Stack #S spans lanes L1, L2"                                                              |
-| Key with several PRs | A key with 2 or more PRs that are not closed. Not for keyless maps.                                                                                                                                              | "<key> has N PRs: #A, #B" (and "closed: #C")                                               |
-| Missing from Stacks  | An open stacked PR that `## Stacks` does not list. Only when the map has that section.                                                                                                                           | "#N is in a stack, but not in Stacks"                                                      |
+| Anomaly              | Scope | Rule                                                                                                                                                                                                               | Text                                                                                                     |
+| -------------------- | ----- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ | -------------------------------------------------------------------------------------------------------- |
+| Fan-out              | All   | A base other than the root with 2 or more open child PRs.                                                                                                                                                          | "<base> has N open children". At map scope, "(planned)" when `map.md` has `stack on` for those children. |
+| Closed parent        | All   | A closed PR with open children.                                                                                                                                                                                    | "#N is closed, but #M builds on it"                                                                      |
+| Conflicts            | All   | An open PR with mergeability `conflicting`. `unknown` is not an anomaly.                                                                                                                                           | "#N has conflicts"                                                                                       |
+| Foreign base         | All   | A foreign base node.                                                                                                                                                                                               | "#N is based on <branch>, which is not <root> or a graph PR"                                             |
+| Behind base          | All   | An open stacked PR with `behindBy > 0`. Not shown while the detail call runs or after it fails.                                                                                                                    | "#N is N commits behind its base"                                                                        |
+| No thread            | All   | An open PR with no thread. Not for outside stack mates. Outside a map scope every other PR has a thread, so it shows only at map scope.                                                                            | "#N has no thread"                                                                                       |
+| Stopped thread       | All   | An open PR whose thread is `failed`, `interrupted` or cancelled. A settled thread is normal.                                                                                                                       | "#N: its thread stopped"                                                                                 |
+| Key with several PRs | All   | A key with 2 or more PRs that are not closed. The keys are the lane keys and the Issue keys of the member titles at map scope, and the Issue keys of the member titles at the other scopes.                        | "<key> has N PRs: #A, #B" (and "closed: #C")                                                             |
+| Off the lane chain   | Map   | An open PR of a key whose base is not the lane base. Only with explicit lanes. The base also passes when it is the root and the previous key has no open PR, or when it is the head of another PR of the same key. | "#N is based on <branch>; the lane says <base>"                                                          |
+| Stack across lanes   | Map   | One gh stack with PRs of two or more lanes. Only with explicit lanes.                                                                                                                                              | "Stack #S spans lanes L1, L2"                                                                            |
+| Missing from Stacks  | Map   | An open stacked PR that `## Stacks` does not list. Only when the map has that section.                                                                                                                             | "#N is in a stack, but not in Stacks"                                                                    |
 
-The skill's "keyed thread with no PR" is not an anomaly: the "Threads with no PR" list shows it.
+The `t3-map-pr-graph` skill's "keyed thread with no PR" is not an anomaly: the "Threads with no PR" list shows it.
 
 ### Updates
 
-- **Open.** The modal calls `/map-graph` once. While it waits, the graph shows at once from the tree, with no lanes and no key rows, and a muted line "Loading PRs from GitHub…" under the subtitle.
-- **Live.** While the modal is open, each `/events` push builds the graph again with the new tree and the last `MapGraphData`, at any age. A push never calls `/map-graph`.
-- **Refresh.** A "Refresh" button in the header calls `/map-graph` with `refresh=1`. It shows a spinner while the call runs.
-- **Errors.** Each `errors` item shows a line "Could not read PRs for <key>: <text>" with a "Retry" link, which does a refresh. A `503` or a network error shows one line "Could not read PRs from T3" with "Retry". The graph from the tree stays.
+- **Open.** The modal calls `/pr-graph` once for its scope. While it waits, the graph shows at once from the tree, with no lanes and no key rows, and a muted line "Loading PRs from GitHub…" under the subtitle.
+- **Scope change.** A new scope calls `/pr-graph` once for that scope. The server cache answers when its answer is less than 60 s old. The graph of the new scope shows at once from the tree.
+- **Live.** While the modal is open, each `/events` push builds the graph again with the new tree and the last `PrGraphData` of the scope, at any age. A push never calls `/pr-graph`.
+- **Refresh.** A "Refresh" button in the header calls `/pr-graph` with `refresh=1`. It shows a spinner while the call runs.
+- **Errors.** At map scope, each `errors` item shows a line "Could not read PRs for <key>: <text>" with a "Retry" link, which does a refresh. A `503` or a network error shows one line "Could not read PRs from T3" with "Retry". The graph from the tree stays.
 
 ### Where it opens
 
-- **Button.** A ghost icon button with the lucide `GitBranch` icon, after the member count, always visible. It is on a map thread row and on a **Map header**. The tooltip is "PR graph". The button shows no count: the count needs the slow calls.
-- A map thread row that anchors several maps has no button. Each of its Map headers has one.
-- **Key `g`.** On a focused map thread row or Map header stop that has a button, `g` opens the graph. It is a row key (see "UI" › Row keys). The Keys fold lists `g` PR graph. The key hint `g Graph` shows on the focused map head.
+- **Top bar button.** A ghost icon button with the lucide `GitBranch` icon in the page header, before the Settings button. The tooltip is "PR graph (G)". It opens the modal at All.
+- **Key `G`.** Shift with `g` (`shiftKey` and `key.toLowerCase() === "g"`, so Caps Lock with no Shift does not count), with no other modifier. It opens the modal at All, with or without a focused stop. The page key guards of "UI" › Page keys apply.
+- **Find.** Find has an "Actions" group with one item "PR graph": the `GitBranch` icon, the name, and `G` as a `Kbd` at the end. A pick closes Find and opens the modal at All.
+  - With an empty input, the group shows after "Recent", or after the empty icon state when there is no Recent thread.
+  - With a query, the group shows after the thread results when every query word is a substring of "pr graph" (case-insensitive). The "No thread matches" state then shows above it.
+  - In the `>` mode, the group does not show.
+- **Map head button.** A ghost icon button with the lucide `GitBranch` icon, after the member count, always visible. It is on a map thread row and on a **Map header**. The tooltip is "PR graph". The button shows no count: the count needs the slow calls. A map thread row that anchors several maps has no button. Each of its Map headers has one. It opens the modal at the map scope of that map.
+- **Key `g`.** On a focused map thread row or Map header stop that has a button, `g` opens the modal at the map scope of that map. It is a row key (see "UI" › Row keys). The key hint `g Graph` shows on the focused map head.
+- The modal does not store a scope. Each open starts at the scope of its entry.
 
 ### Modal
 
 The look is in [DESIGN-SPEC.md](DESIGN-SPEC.md) › PR graph.
 
-- **Header.** The title "<map name> · PR graph". The subtitle "N PRs · M open". The Refresh button.
-- **Legend.** One line over the graph with the edge kinds, then "! anomaly (hover)" and "L lane".
+- **Header.** The title "PR graph", then the scope picker, then the graph sort menu at All only, then the Refresh button at the right end. The subtitle is "N projects · M PRs · K open" at All and "M PRs · K open" at project and map scope.
+- **Scope picker.** A select with "All projects" first. Then a "Projects" group: each project with a band, in the graph sort order, with its project icon, its name and its PR count. Then a "Maps" group: each **Map group** of the live tree, by map name, with the map name, the project icon and the project name. A pick changes the scope.
+- **Graph sort.** A menu with three choices. The page keeps the choice in `localStorage` under `thread-tree:graph-sort` (`"title"`, `"open"`, `"tree"`). It orders the bands at All and the Projects group of the picker. "No project" is always last.
+  - **Title** (the default): the project title, A to Z.
+  - **Most open PRs:** the count of open PRs in the band, most first, then the title. A push can move a band.
+  - **Tree order:** the order of the T3 project groups in the tree with "Manual" sort, pins first: `arrange` over the stored list `projects` of `thread-tree:order`. A project that is not in that list follows, by title. The sort reads this order also while the page shows the Linear tree or the flat view.
+- **Band label.** At All and project scope, each band has a label at its top left that stays in view while the canvas scrolls: the project icon, the name, the repo, and "root <branch> · N PRs · M open · K anomalies". A dashed line divides two bands. A band does not fold. The map scope has no band label.
+- **Legend.** One line over the graph with the edge kinds ("base root" for the root edge), then "! anomaly (hover)", then "L lane" at map scope only.
 - **Graph box.** Drag on the empty area to pan, by mouse or by touch. A drag that starts on a link or a button does not pan. A wheel or a trackpad scrolls. No zoom.
 - **Node.** Four lines:
-  1. The thread status icon and the key, as one link to the T3 thread, then `L<n>` or "outside the map", then the `!` badge.
+  1. The thread status icon and the key, as one link to the T3 thread, then `L<n>`, "outside the map" or "stack mate", then the "review" mark, then the `!` badge.
   2. The `#<n>` link to GitHub, the state and "conflicts".
   3. The head branch.
   4. "stack <pos>/<total>" or "no stack". A node with no thread adds "no thread".
   - The PR title shows on hover. A node with no thread has no T3 link. The key is the first Issue key of the head branch, else of the title, else the branch.
+- **Pile.** A pile shows as stacked cards with the caption "N merged". On hover, its cards fan out in stack order and stay inside the canvas.
+- **Focus.** Hover or focus on a card dims the other lanes of its band. With no lanes (every scope but a map with lanes), each chain from the band root acts as a lane.
 - **Badge.** The `!` badge shows on hover or focus the texts of the node's anomalies.
 - **Links.** A PR link opens GitHub in a new tab. A thread link opens the thread in T3 (`t3code://threads/<environmentId>/<threadId>`), and the modal stays open.
-- **Lists.** Under the graph, two columns: "Anomalies" and "Threads with no PR". Each anomaly item names its PRs as `#N`. A click on `#N` scrolls the graph to the node and focuses it. Each thread item links to the thread in T3. An empty list says "None".
-- **Close.** Escape, the close button or a click outside. The modal state is not stored.
+- **Lists.** Under the graph, a fold, closed at first, that shows the counts. Open, it has two columns: "Anomalies" and "Threads with no PR". Each anomaly item names its PRs as `#N`. A click on `#N` scrolls the graph to the node and focuses it. Each thread item links to the thread in T3. An empty list says "None". At All, the second column is the line "N threads with no PR. Pick a project to list them."
+- **Scope gone.** When the project of a project scope has no band any more, or the map of a map scope leaves the tree, the scope goes back to All.
+- **Close.** Escape, the close button or a click outside.
 
 ### Demo stub
 
-`scripts/demo.ts` answers `/map-graph` after 1 s with a fixture: two explicit lanes, a `## Stacks` chain, one key row of a gone thread, one outside stack mate, one foreign base and one PR behind its base. `GRAPH=fail` makes one key query fail. `GRAPH=down` answers `503`.
+`scripts/demo.ts` answers `/pr-graph` after 1 s with a fixture. At map scope: two explicit lanes, a `## Stacks` chain, one key row of a gone thread, one outside stack mate, one foreign base, one PR behind its base and a stack with merged PRs. At All and project scope: `roots` with `master` for one project and no entry for one project, one stack mate and one PR behind its base. The demo tree has a Review thread that links a PR. `GRAPH=fail` makes one key query of the map scope fail. `GRAPH=down` answers `503` for every scope.
 
 ### Left out
 
-- A count of anomalies on the map head.
-- Zoom.
+- A count of anomalies on the map head or on the top bar button.
+- Zoom, and a fold for a band.
+- PRs with no T3 thread outside a map scope: the app runs no author query on GitHub.
+- PRs of settled threads outside a map scope.
 - PRs of a gone thread in a markdown-ticket map or a keyless map: no key query finds them.
 - Local-only gh stacks: T3 knows only the stacks on GitHub.
-- A graph for a group that is not a map, such as a PR stack or an Issue key group.
+- A graph button on a project header, and a stored last scope.
+- A graph for a group that is not a project or a map, such as a PR stack or an Issue key group.
 - Any change to the `t3-map-pr-graph` skill.
 
 ## Start workflow
@@ -542,7 +583,7 @@ The user can **Pin** an item, so that it stays at the top of its own list, whate
 
 The page shows an outline tree: Project, group, thread. Each thread row has a status icon, a title link to `t3code://threads/<environmentId>/<threadId>`, a stack badge, PR links and, when a PR has a Watched label, a Label pill (see "Label pills"). A row that waits on the user (needs input, plan ready or your turn) shows its phrase and the Wait beside the icon, for example "Approval 12m". The Wait is the time since `since`. A guest message has no `since`, so it shows the phrase only. A failed row shows "Failed" with no time. Other rows show no text. This reverses `d602e6e` (#18) for these rows only. The row end shows the age of the row's **Last run**, or of its block time (see "Row time"). Closed rows are saved in `localStorage`. A toggle shows the Settled list below the tree or the flat list. A toggle "Show snoozed threads" hides snoozed threads when it is off; it saves `"0"` under `thread-tree:snoozed`, and it is on by default. It changes the page only: the Needs-you count, the Dock badge and the notifications do not change, and the server gets no parameter. The Launch nesting rule in Settings › Grouping nests launched threads (see "Placement rules"). When a Linear workspace is set, an issue key links to its Linear issue. With team keys set, only a key of a listed team links. The Settings panel keeps the workspace and teams in `localStorage`; `LINEAR_WORKSPACE` and `LINEAR_TEAMS` give the default. A banner shows when T3 is down, when no token is set, or when T3 rejects the token. The token banners open the Settings panel.
 
-The header holds the title, the filter ("All", "Needs you"), "Triage", a sort menu ("Manual", "Last updated"), a Tree / Flat switch, a "Group by" menu ("T3 project", "Linear project" in the tree; "None", "Status", "Linear project" in the flat view), in the tree a fold all button beside it, and a Settings button (a cog). The "Needs you" chip shows the Needs-you count as a badge. Then it shows the your-turn count as a muted number. A "·" sits between them when both show. Each count shows only when above 0. The tooltip reads "N need you, M your turn". The cog opens the Settings panel on the right, beside the tree. Its header stays in view while the panel scrolls, and Escape closes it. The panel has four groups. "Updates" (desktop app only) has the version, the update state and its action. "View" has show settled, show snoozed, show key hints, reset order (it clears the tree order and the Linear tree order) and the theme as three icons (Light, System, Dark). "Grouping" has the placement rules (see "Placement rules"). "Setup" has seven folds, closed at first: T3 token, Linear links (the workspace and team keys, and an API key field with its own Save, see "Linear grouping"), Catch-up (see "Catch-up fold"), Local model (see "Model picks"), Watched labels (see "Label pills"), the status icon legend and Keys. A fold shows its state at the right: green text when set, yellow text with a warning sign when not set (Local model shows "Checking…" in neutral text until the first `GET /local-model` answers, then "Ready", or "Not reachable", "Model not found" or "Not set" in yellow; Watched labels shows a neutral "None" instead), a blue info icon for the legend and for Keys. The Keys fold lists `j k ↑ ↓` Move, Enter Open, `o` Details or fold, `l h` Expand, collapse, `s` Send, `p` Pin, `g` PR graph, `n` Open next, `t` Triage and ⌘K (Ctrl+K off macOS) Find, each key as a `Kbd` (the shadcn component). The token banners open the panel with the T3 token fold open. When the panel opens in the desktop app, it checks for updates, but not when the last good check is less than 60 s old.
+The header holds the title, the filter ("All", "Needs you"), "Triage", the PR graph button (see "PR graph" › Where it opens), a sort menu ("Manual", "Last updated"), a Tree / Flat switch, a "Group by" menu ("T3 project", "Linear project" in the tree; "None", "Status", "Linear project" in the flat view), in the tree a fold all button beside it, and a Settings button (a cog). The "Needs you" chip shows the Needs-you count as a badge. Then it shows the your-turn count as a muted number. A "·" sits between them when both show. Each count shows only when above 0. The tooltip reads "N need you, M your turn". The cog opens the Settings panel on the right, beside the tree. Its header stays in view while the panel scrolls, and Escape closes it. The panel has four groups. "Updates" (desktop app only) has the version, the update state and its action. "View" has show settled, show snoozed, show key hints, reset order (it clears the tree order and the Linear tree order) and the theme as three icons (Light, System, Dark). "Grouping" has the placement rules (see "Placement rules"). "Setup" has seven folds, closed at first: T3 token, Linear links (the workspace and team keys, and an API key field with its own Save, see "Linear grouping"), Catch-up (see "Catch-up fold"), Local model (see "Model picks"), Watched labels (see "Label pills"), the status icon legend and Keys. A fold shows its state at the right: green text when set, yellow text with a warning sign when not set (Local model shows "Checking…" in neutral text until the first `GET /local-model` answers, then "Ready", or "Not reachable", "Model not found" or "Not set" in yellow; Watched labels shows a neutral "None" instead), a blue info icon for the legend and for Keys. The Keys fold lists `j k ↑ ↓` Move, Enter Open, `o` Details or fold, `l h` Expand, collapse, `s` Send, `p` Pin, `g` Map PR graph, `G` PR graph, `n` Open next, `t` Triage and ⌘K (Ctrl+K off macOS) Find, each key as a `Kbd` (the shadcn component). The token banners open the panel with the T3 token fold open. When the panel opens in the desktop app, it checks for updates, but not when the last good check is less than 60 s old.
 
 The tree choice of the "Group by" menu is saved under `thread-tree:tree-group` (`"t3"` or `"linear"`). "Linear project" is disabled unless the key state is `ok`, and the tree shows T3 projects while the state is `no-key`. While the tree groups by Linear project and the key state is `rejected`, a banner reads "Linear rejected the API key." Its "Set the key" link opens the panel with the "Linear links" fold open. The tree keeps the last good data.
 
@@ -591,18 +632,20 @@ The flat view lists all threads of all projects in one list. The switch keeps it
 - **Row.** The status icon, the full title (it wraps), and at the right the Wait text as in the tree (`phrase · age` for a thread that needs the user, the phrase only with no `since` or for a failed thread), else the age of its **Last run** (see "Row time"). A muted second line shows project, issue key and branch, and "in <parent title>" for a subthread. There are no PR badges. A settled result has a muted title.
 - **Actions.** Enter or a click opens the thread in T3, like the row link, and closes the dialog. **Show in tree**, a row button and Shift+Enter, closes the dialog, then shows the row. It first unfolds the path to the row and stores the folds: in the tree, the project, the groups and the PR stack on the path; in the flat view with "Group by Status" or "Group by Linear project", the shut section that holds the thread. It then scrolls to the row (instant with reduced motion), and the row flashes for about 1.5 s. A result that a view setting hides ("Needs you" filter, hidden snoozed) and a settled result have no Show in tree. Find never changes a view setting.
 - **Settled search.** With a query, the last row is "Search settled threads". A pick calls `GET /find?q=<query>`. The server runs `find` over the settled threads of the settled tree and returns `{ t, project, parent }` rows, with `t.children` empty. The rows show in a "Settled" group below the active ones. For the rest of the dialog session, a change of the query fetches the group again after 200 ms, and a newer query cancels the older request. On close, Find goes back to active threads only. A missing or blank `q` gives `[]`.
+- **Actions group.** The "Actions" group holds the PR graph item (see "PR graph" › Where it opens).
 - **Empty and no match.** An empty input lists the threads with the newest **Last run**, up to 8 ("Recent"). With none, an icon state reads "Find by title, issue key, project, branch or #PR". With no match, an icon state reads "No thread matches", plus the "Search settled threads" row when it applies.
 
-**Page keys.** One `keydown` handler holds all page keys (`pageKey` in `src/page/keys.ts` decides). A plain key does nothing with a modifier, on key repeat (except `j`, `k`, ↑ and ↓), when the event is handled, while focus is in an input, a textarea or a contenteditable element, while the Settings panel is open, and while Find, a dialog, an alert dialog, a menu or a listbox is open.
+**Page keys.** One `keydown` handler holds all page keys (`pageKey` in `src/page/keys.ts` decides). A plain key does nothing with a modifier (`G` takes Shift and no other modifier), on key repeat (except `j`, `k`, ↑ and ↓), when the event is handled, while focus is in an input, a textarea or a contenteditable element, while the Settings panel is open, and while Find, a dialog, an alert dialog, a menu or a listbox is open.
 
-**Row keys.** A stop is an element with `data-stop`: the title link of each visible thread row, and the fold button of each project, group, PR stack, map header and flat section. Focus is real DOM focus, and the tab order does not change. The stop list is the stops in DOM order inside the list. It skips an inert row, a row in a closed fold and a hidden row. `j` and `k` focus the next or previous stop, and do nothing at the ends. With no stop focused, the first one focuses the first stop that lies inside the list view. ↑ and ↓ do the same only when a stop has focus, and call `preventDefault` only when they move, so the page scrolls otherwise. A move scrolls the stop into view only as needed. On a thread stop, Enter opens the thread (the link), and `s` opens the Send dialog for the row when the `t3` CLI is available. On a header, Enter folds or unfolds, and `s` does nothing. On a stop whose item can be pinned, `p` pins or unpins it (see "Pins"). On a map head with a graph button, `g` opens the PR graph (see "Map PR graph"). `o` toggles the details of a thread (the map fold on a map thread row) or the fold of a header, `l` opens them and `h` closes them, as in vim. `l` on an open fold and `h` on a closed fold do nothing. The drag handle is not a stop. While a stop has focus, the page keeps its id and index. When a render moves the row and focus is lost, focus returns to the row. When the row leaves, focus goes to the stop at the old index, or to the page when no stop is left. When a fold closes with focus inside it, focus goes to its header. The focus ring is an inset outline on the row or header, not only on the link or button.
+**Row keys.** A stop is an element with `data-stop`: the title link of each visible thread row, and the fold button of each project, group, PR stack, map header and flat section. Focus is real DOM focus, and the tab order does not change. The stop list is the stops in DOM order inside the list. It skips an inert row, a row in a closed fold and a hidden row. `j` and `k` focus the next or previous stop, and do nothing at the ends. With no stop focused, the first one focuses the first stop that lies inside the list view. ↑ and ↓ do the same only when a stop has focus, and call `preventDefault` only when they move, so the page scrolls otherwise. A move scrolls the stop into view only as needed. On a thread stop, Enter opens the thread (the link), and `s` opens the Send dialog for the row when the `t3` CLI is available. On a header, Enter folds or unfolds, and `s` does nothing. On a stop whose item can be pinned, `p` pins or unpins it (see "Pins"). On a map head with a graph button, `g` opens the PR graph of the map (see "PR graph"). `o` toggles the details of a thread (the map fold on a map thread row) or the fold of a header, `l` opens them and `h` closes them, as in vim. `l` on an open fold and `h` on a closed fold do nothing. The drag handle is not a stop. While a stop has focus, the page keeps its id and index. When a render moves the row and focus is lost, focus returns to the row. When the row leaves, focus goes to the stop at the old index, or to the page when no stop is left. When a fold closes with focus inside it, focus goes to its header. The focus ring is an inset outline on the row or header, not only on the link or button.
 
 - **`n`.** Open next.
+- **`G` (Shift+g).** Opens the PR graph at All (see "PR graph" › Where it opens).
 - **`t`.** Opens Triage mode. While Triage mode is open, the page keys stop, except Cmd+K.
 - **Cmd+K (Ctrl+K off macOS).** Opens Find, also from a text field. It calls `preventDefault`. It does nothing while another dialog or a menu is open. In the open Find dialog it closes Find.
 - **`/`.** Not a page key.
 
-**Key hints.** No key hint shows at first. `useKeyHints` (`src/page/key-hints.tsx`) and `holdRule` (`src/page/key-hints.ts`) set `data-key-hints` on `<html>` after the user holds Alt/Option alone for 300 ms. The hold hides on Alt key up, on any other keydown, on pointerdown and on window blur. A shorter tap shows nothing. A repeated Alt keydown does not hide. Alt with Cmd, Ctrl or Shift starts no hold. The hold calls no `preventDefault` and changes no key. Every key hint floats (`position: absolute`, `pointer-events: none`) and takes no space, so no element moves. The hints are: `t` on the Triage button (hidden at 720 px and below), `o Details` and `s Send` on the thread row that has a stop in focus (`s` only when Send is available), `g Graph` on the map head in focus that has a graph button, the key of each control in the Triage card, and a bar over the bottom of the Find list (`↑↓ Move`, `↵ Open`, `⇧↵ Show in tree`, `esc Close`). The "Show key hints" switch in the View group sets `thread-tree:key-hints` (on by default). Off, the hold does nothing. A touch device (`(hover: none), (pointer: coarse)`) has no hold and no hints. The ⌖ button in a Find row always has the tooltip "Show in tree (Shift+Enter)".
+**Key hints.** No key hint shows at first. `useKeyHints` (`src/page/key-hints.tsx`) and `holdRule` (`src/page/key-hints.ts`) set `data-key-hints` on `<html>` after the user holds Alt/Option alone for 300 ms. The hold hides on Alt key up, on any other keydown, on pointerdown and on window blur. A shorter tap shows nothing. A repeated Alt keydown does not hide. Alt with Cmd, Ctrl or Shift starts no hold. The hold calls no `preventDefault` and changes no key. Every key hint floats (`position: absolute`, `pointer-events: none`) and takes no space, so no element moves. The hints are: `t` on the Triage button (hidden at 720 px and below), `o Details` and `s Send` on the thread row that has a stop in focus (`s` only when Send is available), `g Graph` on the map head in focus that has a graph button, `G` on the PR graph button in the header, the key of each control in the Triage card, and a bar over the bottom of the Find list (`↑↓ Move`, `↵ Open`, `⇧↵ Show in tree`, `esc Close`). The "Show key hints" switch in the View group sets `thread-tree:key-hints` (on by default). Off, the hold does nothing. A touch device (`(hover: none), (pointer: coarse)`) has no hold and no hints. The ⌖ button in a Find row always has the tooltip "Show in tree (Shift+Enter)".
 
 The header has a System / Light / Dark choice. The full design is in [DESIGN-SPEC.md](DESIGN-SPEC.md).
 
