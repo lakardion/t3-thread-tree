@@ -339,7 +339,7 @@ The `t3-map-pr-graph` skill's "keyed thread with no PR" is not an anomaly: the "
 The look is in [DESIGN-SPEC.md](DESIGN-SPEC.md) › PR graph.
 
 - **Header.** The title "PR graph", then the scope picker, then the graph sort menu at All only, then the Refresh button at the right end. The subtitle is "N projects · M PRs · K open" at All and "M PRs · K open" at project and map scope.
-- **Scope picker.** A select with "All projects" first. Then a "Projects" group: each project with a band, in the graph sort order, with its project icon, its name and its PR count. Then a "Maps" group: each **Map group** of the live tree, by map name, with the map name, the project icon and the project name. A pick changes the scope.
+- **Scope picker.** A searchable list with "All projects" first. Typing filters the projects and maps by name. Then a "Projects" group: each project with a band, in the graph sort order, with its project icon, its name and its PR count. Then a "Maps" group: each **Map group** of the live tree with a member that links a PR, by map name, with the project icon and the map name. With no such map, the "Maps" group does not show, and the search field reads "Find a project". A pick changes the scope. The map of the open map scope stays in the list.
 - **Graph sort.** A menu with three choices. The page keeps the choice in `localStorage` under `thread-tree:graph-sort` (`"title"`, `"open"`, `"tree"`). It orders the bands at All and the Projects group of the picker. "No project" is always last.
   - **Title** (the default): the project title, A to Z.
   - **Most open PRs:** the count of open PRs in the band, most first, then the title. A push can move a band.

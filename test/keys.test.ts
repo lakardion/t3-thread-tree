@@ -41,6 +41,26 @@ describe("graph key", () => {
   });
 });
 
+describe("graph at all key", () => {
+  test("G opens with or without a stop", () => {
+    expect(pageKey(ev("G", { shiftKey: true }), ctx())).toBe("graphAll");
+    expect(pageKey(ev("g", { shiftKey: true }), ctx({ stop: "thread" }))).toBe("graphAll");
+  });
+  test("Caps Lock G with no Shift does nothing", () => {
+    expect(pageKey(ev("G"), ctx())).toBeNull();
+    expect(pageKey(ev("G"), ctx({ stop: "thread" }))).toBeNull();
+  });
+  test("does nothing with another modifier, in a field, with an overlay, the panel or on repeat", () => {
+    expect(pageKey(ev("G", { shiftKey: true, metaKey: true }), ctx())).toBeNull();
+    expect(pageKey(ev("G", { shiftKey: true, altKey: true }), ctx())).toBeNull();
+    expect(pageKey(ev("G", { shiftKey: true }), ctx({ field: true }))).toBeNull();
+    expect(pageKey(ev("G", { shiftKey: true }), ctx({ overlay: "dialog" }))).toBeNull();
+    expect(pageKey(ev("G", { shiftKey: true }), ctx({ panel: true }))).toBeNull();
+    expect(pageKey(ev("G", { shiftKey: true, repeat: true }), ctx())).toBeNull();
+    expect(pageKey(ev("G", { shiftKey: true, defaultPrevented: true }), ctx())).toBeNull();
+  });
+});
+
 describe("plain keys", () => {
   test("n acts on a free page, 1 does nothing", () => {
     expect(pageKey(ev("n"), ctx())).toBe("next");

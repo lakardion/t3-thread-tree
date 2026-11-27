@@ -74,7 +74,8 @@ function UnmarkDot({ id }: { id: string }) {
 /** The PR graph button of a map head. A head that anchors several maps has no map key and no button. */
 function GraphButton({ t }: { t: ThreadNode }) {
   const open = useContext(OpenGraph);
-  if (!t.map?.key) return null;
+  const key = t.map?.key;
+  if (!key) return null;
   return (
     <Tooltip>
       <TooltipTrigger asChild>
@@ -84,7 +85,7 @@ function GraphButton({ t }: { t: ThreadNode }) {
           className="relative z-10 size-5 flex-none rounded-[6px] text-muted-foreground pointer-coarse:min-h-11 pointer-coarse:min-w-11"
           aria-label="PR graph"
           data-graph-for={t.id}
-          onClick={() => open(t.id)}
+          onClick={() => open(`map:${key}`)}
         >
           <GitBranch className="size-3.5" aria-hidden />
         </Button>

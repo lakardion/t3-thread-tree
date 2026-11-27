@@ -21,7 +21,8 @@ export type GraphThread = { id: string; href: string; title: string; status: str
 export const prId = (p: { repository: string; n: number }): string => `${p.repository}#${p.n}`;
 
 /** The key of a stack within its repository: `owner/name#<stack number>`. */
-const stackKey = (p: { repository: string; stack: { number: number } }): string => `${p.repository}#${p.stack.number}`;
+export const stackKey = (p: { repository: string; stack: { number: number } }): string =>
+  `${p.repository}#${p.stack.number}`;
 
 /** The key of a foreign base branch within its repository. */
 export const branchKey = (b: { repository: string; branch: string }): string => `${b.repository}#${b.branch}`;

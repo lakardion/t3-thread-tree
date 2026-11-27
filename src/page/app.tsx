@@ -21,6 +21,7 @@ import {
   Contrast,
   ExternalLink,
   Eye,
+  GitBranch,
   Rows3,
   GripVertical,
   Inbox,
@@ -131,7 +132,7 @@ import {
 } from "./format.ts";
 import { GroupingSection } from "./grouping.tsx";
 import { IconState } from "./icon-state.tsx";
-import { useKeyHints } from "./key-hints.tsx";
+import { Hint, useKeyHints } from "./key-hints.tsx";
 import { pageKey } from "./keys.ts";
 import { liveStream, type LiveState } from "./live.ts";
 import { SetupDialog } from "./local-setup-dialog.tsx";
@@ -2907,15 +2908,6 @@ function ProjectBlock({ b, closed, toggle, fold }: { b: Group } & Fold) {
   );
 }
 
-/** The map head with this id in the raw tree, so the filters never drop a member from its graph. */
-const mapHead = (groups: Group[], id: string): ThreadNode | undefined => {
-  const down = (t: ThreadNode): ThreadNode | undefined =>
-    t.id === id && t.map?.key ? t : t.children.map(down).find(Boolean);
-  const inGroup = (g: Group): ThreadNode | undefined =>
-    g.threads.map(down).find(Boolean) ?? g.groups.map(inGroup).find(Boolean);
-  return groups.map(inGroup).find(Boolean);
-};
-
 const KEYS: [keys: string, action: string][] = [
   ["j k ↑ ↓", "Move"],
   ["Enter", "Open"],
@@ -2923,7 +2915,8 @@ const KEYS: [keys: string, action: string][] = [
   ["l h", "Expand, collapse"],
   ["s", "Send"],
   ["p", "Pin"],
-  ["g", "PR graph"],
+  ["g", "Map PR graph"],
+  ["G", "PR graph"],
   ["n", "Open next"],
   ["t", "Triage"],
   [FIND_KEY, "Find"],
@@ -3173,8 +3166,8 @@ function App() {
   const [catchUpOn, setCatchUpOn] = useState<boolean>();
   const [t3cli, setT3cli] = useState<CliStatus | null>(null);
   const [sendTo, setSendTo] = useState({ id: "", open: false });
-  /** The id of the map head whose PR graph is open. */
-  const [graphFor, setGraphFor] = useState<string | null>(null);
+  /** The scope id of the open PR graph: `all`, `project:<id>` or `map:<key>`. */
+  const [graphScope, setGraphScope] = useState<string | null>(null);
   const [wfStart, setWfStart] = useState<{ req: StartRequest | null; open: boolean }>({ req: null, open: false });
   const [wfStarted, setWfStarted] = useState<{ name: string; runId: string } | null>(null);
   const [orders, setOrders] = useState(() => parseOrders(load(ORDER_KEY)));
@@ -3382,9 +3375,6 @@ function App() {
     if (body.pick) setCli(body.pick);
     void putPick(body).then((saved) => saved !== null && setCatchUpOn(saved));
   };
-  const graphHead = graphFor ? mapHead(tree?.projects ?? [], graphFor) : undefined;
-  /** A head that leaves the tree closes its graph for good, so it does not open again when the head comes back. */
-  if (graphFor && !graphHead) setGraphFor(null);
   const live = new Map((tree?.projects ?? []).flatMap(allThreads).map((t) => [t.id, t]));
   /** Threads and run items, for Triage. Skip and Send use `live`, which holds threads only. */
   const triageLive = new Map<string, ThreadNode | RunItem>([...live, ...runs.map((r) => [r.id, r] as const)]);
@@ -3481,7 +3471,9 @@ function App() {
         if (stop) listRef.current?.querySelector<HTMLElement>(`[data-pin-for="${CSS.escape(stop)}"]`)?.click();
       } else if (action === "graph") {
         const stop = active instanceof HTMLElement ? active.dataset.stop?.replace(/^fold:/, "") : undefined;
-        if (stop && listRef.current?.querySelector(`[data-graph-for="${CSS.escape(stop)}"]`)) setGraphFor(stop);
+        if (stop) listRef.current?.querySelector<HTMLElement>(`[data-graph-for="${CSS.escape(stop)}"]`)?.click();
+      } else if (action === "graphAll") {
+        setGraphScope("all");
       } else if (action === "send") {
         const id = active?.closest<HTMLElement>(".thread-row")?.dataset.thread;
         if (id && latest.current.t3cli?.available !== false) setSendTo({ id, open: true });
@@ -3707,6 +3699,23 @@ function App() {
               <GroupMenu flat={layout === "flat"} value={groupValue} set={pickGroupBy} linearKey={tree?.linearKey} />
             )}
           </div>
+          <Tooltip>
+            <TooltipTrigger asChild>
+              <Button
+                variant="ghost"
+                size="icon-sm"
+                aria-label="PR graph"
+                aria-keyshortcuts="Shift+G"
+                onClick={() => setGraphScope("all")}
+              >
+                <GitBranch />
+                <Hint surface="header" className="-top-2 -right-2">
+                  G
+                </Hint>
+              </Button>
+            </TooltipTrigger>
+            <TooltipContent>PR graph (G)</TooltipContent>
+          </Tooltip>
           <SettingsButton
             buttonRef={settingsButtonRef}
             update={update}
@@ -3812,7 +3821,7 @@ function App() {
                               <Card className="gap-0 overflow-clip rounded-[12px] px-2 py-0 shadow-none">
                                 <ul className={cn("m-0 list-none p-0", layout === "flat" && "p-1")}>
                                   <SendTo value={sendToApi}>
-                                    <OpenGraph value={setGraphFor}>
+                                    <OpenGraph value={setGraphScope}>
                                       <WorkflowStarter value={workflowStarter}>
                                         <Folds value={{ closed, toggle, fold }}>
                                           <ShowSnoozed value={snoozed}>
@@ -3932,6 +3941,7 @@ function App() {
         now={now}
         workflows={tree?.workflows ?? null}
         start={(workflow) => workflowStarter.open({ workflow, point: { kind: "none" } })}
+        openGraph={() => setGraphScope("all")}
       />
       <WorkflowStarter value={workflowStarter}>
         <LooksDoneDialog
@@ -3960,7 +3970,16 @@ function App() {
         />
       )}
       {undoIds && <UndoToast key={undoIds.join()} ids={undoIds} onClose={() => setUndoIds(null)} />}
-      {graphHead && <PrGraphDialog key={graphHead.id} head={graphHead} onOpenChange={() => setGraphFor(null)} />}
+      {graphScope && (
+        <PrGraphDialog
+          projects={tree?.projects ?? []}
+          orders={orders}
+          pins={pins}
+          scope={graphScope}
+          setScope={setGraphScope}
+          onOpenChange={() => setGraphScope(null)}
+        />
+      )}
       <SendDialog
         fixed
         open={sendTo.open}

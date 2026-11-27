@@ -1,8 +1,18 @@
-import { AlertTriangle, GitBranch, LoaderCircle, RefreshCw } from "lucide-react";
+import {
+  AlertTriangle,
+  Check,
+  ChevronsUpDown,
+  FolderGit2,
+  GitBranch,
+  LoaderCircle,
+  Map as MapIcon,
+  RefreshCw,
+} from "lucide-react";
 import {
   createContext,
   useCallback,
   useEffect,
+  useId,
   useMemo,
   useRef,
   useState,
@@ -13,12 +23,24 @@ import {
 } from "react";
 
 import { Button } from "@/components/ui/button";
+import {
+  Command,
+  CommandEmpty,
+  CommandGroup,
+  CommandInput,
+  CommandItem,
+  CommandList,
+  CommandSeparator,
+} from "@/components/ui/command";
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "@/components/ui/dialog";
+import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import { cn } from "@/lib/utils";
 
-import type { PrGraphData } from "../shared/pr-graph-data.ts";
+import { parseScope, type PrGraphData } from "../shared/pr-graph-data.ts";
 import {
+  type Anomaly,
   bandRoot,
   buildPrGraph,
   type Edge,
@@ -33,16 +55,32 @@ import {
   type PrGraph,
   walk,
 } from "../shared/pr-graph.ts";
-import type { Status, ThreadNode } from "../shared/tree.ts";
+import type { Group, Status } from "../shared/tree.ts";
+import {
+  bandMates,
+  bandsOf,
+  GRAPH_SORTS,
+  type GraphSort,
+  type MapEntry,
+  mapsOf,
+  sortBands,
+  treeOrder,
+} from "./graph-scope.ts";
+import type { Orders } from "./order.ts";
+import { oneOf, usePref } from "./prefs.ts";
+import { ProjectIcon } from "./project-icon.tsx";
 import { STATUS } from "./status-icon.tsx";
 
-/** Opens the PR graph of the map head with this id. */
-export const OpenGraph = createContext<(id: string) => void>(() => {});
+/** Opens the PR graph of a scope: `all`, `project:<id>` or `map:<key>`. */
+export const OpenGraph = createContext<(scope: string) => void>(() => {});
 
 const NW = 210;
 const GX = 44;
 const PAD = 16;
 const MAIN_W = 64;
+
+/** The width of the root pill: it grows with the branch name, up to a card. */
+const rootWidth = (root: string) => Math.min(NW, Math.max(MAIN_W, Math.ceil(root.length * 7.5) + 26));
 
 const EDGE: Record<Edge["kind"], string> = {
   stack: "stroke-primary",
@@ -54,7 +92,7 @@ const EDGE: Record<Edge["kind"], string> = {
 const EDGE_LEGEND: [Edge["kind"], string][] = [
   ["stack", "gh stack"],
   ["base", "plain base"],
-  ["main", "base main"],
+  ["main", "base root"],
   ["dim", "closed or merged"],
 ];
 
@@ -73,39 +111,36 @@ const place = (col: number, row: number) => ({
   y: PAD + row * (NH + GY),
 });
 
-/** The slow part of the graph. A failed read keeps the last answer. */
-function useMapGraph(key: string) {
-  const [state, setState] = useState<{
-    data: PrGraphData | null;
-    busy: boolean;
-    down: boolean;
-  }>({
-    data: null,
-    busy: true,
-    down: false,
-  });
+type Slot = { scope: string; data: PrGraphData | null; busy: boolean; down: boolean };
+const fresh = (scope: string): Slot => ({ scope, data: null, busy: true, down: false });
+
+/** The slow part of the graph of a scope. A failed read keeps the last answer. A new scope starts empty. */
+function useGraphData(scope: string) {
+  const [slot, setSlot] = useState(() => fresh(scope));
+  const state = slot.scope === scope ? slot : fresh(scope);
   const ctl = useRef<AbortController | null>(null);
   const run = useCallback(
     (refresh: boolean) => {
       ctl.current?.abort();
       const c = (ctl.current = new AbortController());
-      fetch(`/pr-graph?scope=${encodeURIComponent(`map:${key}`)}${refresh ? "&refresh=1" : ""}`, { signal: c.signal })
+      fetch(`/pr-graph?scope=${encodeURIComponent(scope)}${refresh ? "&refresh=1" : ""}`, { signal: c.signal })
         .then((r) => (r.ok ? (r.json() as Promise<PrGraphData>) : Promise.reject(new Error(String(r.status)))))
         .then(
-          (data) => setState({ data, busy: false, down: false }),
+          (data) => setSlot({ scope, data, busy: false, down: false }),
           () => {
-            if (!c.signal.aborted) setState((s) => ({ ...s, busy: false, down: true }));
+            if (!c.signal.aborted)
+              setSlot((s) => ({ ...(s.scope === scope ? s : fresh(scope)), busy: false, down: true }));
           },
         );
     },
-    [key],
+    [scope],
   );
   useEffect(() => {
     run(false);
     return () => ctl.current?.abort();
   }, [run]);
   const refresh = () => {
-    setState((s) => ({ ...s, busy: true }));
+    setSlot((s) => ({ ...(s.scope === scope ? s : fresh(scope)), busy: true }));
     run(true);
   };
   return [state, refresh] as const;
@@ -143,7 +178,7 @@ function StatusMark({ thread }: { thread: GraphThread }) {
   return s ? <s.icon className={cn("size-3.5 flex-none", s.shape)} aria-hidden /> : null;
 }
 
-function Legend() {
+function Legend({ lanes }: { lanes: boolean }) {
   return (
     <div className="flex flex-wrap gap-x-4 gap-y-1 text-[11px] text-muted-foreground">
       {EDGE_LEGEND.map(([kind, text]) => (
@@ -155,7 +190,7 @@ function Legend() {
         </span>
       ))}
       <span>! anomaly (hover)</span>
-      <span>L lane</span>
+      {lanes && <span>L lane</span>}
     </div>
   );
 }
@@ -299,7 +334,7 @@ function MergedPile({
   );
 }
 
-function Pill({ branch, col, row }: { branch: string; col: number; row: number }) {
+function Pill({ branch, col, row, width }: { branch: string; col: number; row: number; width?: number }) {
   const { x, y } = place(col, row);
   return (
     <div
@@ -307,7 +342,7 @@ function Pill({ branch, col, row }: { branch: string; col: number; row: number }
         left: x,
         top: y + NH / 2 - 14,
         height: 28,
-        width: col === 0 ? MAIN_W : NW,
+        width: width ?? NW,
       }}
       className={cn(
         "absolute flex items-center justify-center rounded-full border bg-muted px-3 font-mono text-xs font-semibold",
@@ -336,6 +371,7 @@ function Canvas({ graph }: { graph: PrGraph }) {
   const at = (e: Edge["from"] | Edge["to"]) => spot.get(typeof e === "string" ? e : `b:${branchKey(e)}`)!;
   const cols = Math.max(0, ...[...spot.values()].map((s) => s.col)) + 1;
   const rows = Math.max(0, ...[...spot.values()].map((s) => s.row)) + 1;
+  const rootW = rootWidth(graph.root);
   const w = 2 * PAD + cols * NW + (cols - 1) * GX;
   const h = 2 * PAD + rows * NH + (rows - 1) * GY;
   return (
@@ -351,7 +387,7 @@ function Canvas({ graph }: { graph: PrGraph }) {
         {graph.edges.map((e, i) => {
           const a = at(e.from);
           const b = at(e.to);
-          const x1 = place(a.col, a.row).x + (e.from === "root" ? MAIN_W : NW);
+          const x1 = place(a.col, a.row).x + (e.from === "root" ? rootW : NW);
           const y1 = place(a.col, a.row).y + NH / 2;
           const x2 = place(b.col, b.row).x;
           const y2 = place(b.col, b.row).y + NH / 2;
@@ -367,7 +403,7 @@ function Canvas({ graph }: { graph: PrGraph }) {
           );
         })}
       </svg>
-      <Pill branch={graph.root} col={0} row={0} />
+      <Pill branch={graph.root} col={0} row={0} width={rootW} />
       {graph.branches.map((b) => (
         <Pill key={branchKey(b)} {...b} />
       ))}
@@ -398,7 +434,17 @@ function Canvas({ graph }: { graph: PrGraph }) {
   );
 }
 
-function Lists({ graph, box }: { graph: PrGraph; box: RefObject<HTMLDivElement | null> }) {
+/** `noPr` is the list of the threads with no PR, or only their count at All. */
+function Lists({
+  anomalies,
+  noPr,
+  box,
+}: {
+  anomalies: Anomaly[];
+  noPr: GraphThread[] | number;
+  box: RefObject<HTMLDivElement | null>;
+}) {
+  const noPrCount = typeof noPr === "number" ? noPr : noPr.length;
   const jump = (id: string) => {
     const el = box.current?.querySelector<HTMLElement>(`[data-pr="${CSS.escape(id)}"]`);
     el?.scrollIntoView({ block: "center", inline: "center" });
@@ -407,20 +453,20 @@ function Lists({ graph, box }: { graph: PrGraph; box: RefObject<HTMLDivElement |
   return (
     <details className="flex-none text-xs">
       <summary className="flex cursor-pointer items-center gap-1.5 font-semibold text-muted-foreground">
-        <AlertTriangle className="size-3.5" aria-hidden /> {graph.anomalies.length}{" "}
-        {graph.anomalies.length === 1 ? "anomaly" : "anomalies"} · {graph.noPr.length}{" "}
-        {graph.noPr.length === 1 ? "thread" : "threads"} with no PR
+        <AlertTriangle className="size-3.5" aria-hidden /> {anomalies.length}{" "}
+        {anomalies.length === 1 ? "anomaly" : "anomalies"} · {noPrCount} {noPrCount === 1 ? "thread" : "threads"} with
+        no PR
       </summary>
       <div className="mt-2 grid max-h-[calc(min(860px,100dvh-2rem)*0.3)] grid-rows-[minmax(0,1fr)] gap-4 sm:grid-cols-2">
         <section className="min-h-0 overflow-auto">
           <h3 className="mb-1.5 flex items-center gap-1.5 font-semibold text-muted-foreground">
             <AlertTriangle className="size-3.5" aria-hidden /> Anomalies
           </h3>
-          {graph.anomalies.length === 0 ? (
+          {anomalies.length === 0 ? (
             <p className="text-muted-foreground">None</p>
           ) : (
             <ul className="space-y-1">
-              {graph.anomalies.map((a, i) => (
+              {anomalies.map((a, i) => (
                 <li key={i}>
                   {a.text}{" "}
                   {a.prs.map((id) => (
@@ -440,11 +486,15 @@ function Lists({ graph, box }: { graph: PrGraph; box: RefObject<HTMLDivElement |
         </section>
         <section className="min-h-0 overflow-auto">
           <h3 className="mb-1.5 font-semibold text-muted-foreground">Threads with no PR</h3>
-          {graph.noPr.length === 0 ? (
+          {typeof noPr === "number" ? (
+            <p className="text-muted-foreground">
+              {noPr} {noPr === 1 ? "thread" : "threads"} with no PR. Pick a project to list them.
+            </p>
+          ) : noPr.length === 0 ? (
             <p className="text-muted-foreground">None</p>
           ) : (
             <ul className="space-y-1">
-              {graph.noPr.map((t) => (
+              {noPr.map((t) => (
                 <li key={t.id} className="flex items-center gap-1.5">
                   <StatusMark thread={t} />
                   <a href={t.href} className="min-w-0 truncate hover:underline">
@@ -460,19 +510,186 @@ function Lists({ graph, box }: { graph: PrGraph; box: RefObject<HTMLDivElement |
   );
 }
 
-/** The PR graph of the map that `head` heads. `head` comes from the raw tree, so every member counts. */
-export function PrGraphDialog({ head, onOpenChange }: { head: ThreadNode; onOpenChange: (open: boolean) => void }) {
-  const key = head.map!.key!;
-  const [{ data, busy, down }, refresh] = useMapGraph(key);
-  const graph = useMemo(() => {
-    const members = walk(head);
+const openCount = (g: PrGraph) => g.nodes.filter((n) => n.state === "open").length;
+
+/** The scope picker: a searchable list of All, the projects with a band and the maps. */
+function ScopePicker({
+  scope,
+  setScope,
+  projects,
+  maps,
+}: {
+  scope: string;
+  setScope: (scope: string) => void;
+  projects: { id: string; label: string; prs: number }[];
+  maps: MapEntry[];
+}) {
+  const [open, setOpen] = useState(false);
+  const listId = useId();
+  const pick = (s: string) => {
+    setScope(s);
+    setOpen(false);
+  };
+  const mark = (s: string) => <Check className={cn("ml-auto", s !== scope && "invisible")} aria-hidden />;
+  const p = projects.find((x) => `project:${x.id}` === scope);
+  const m = maps.find((x) => `map:${x.key}` === scope);
+  const icon = p?.label ?? m?.project.label;
+  return (
+    <Popover open={open} onOpenChange={setOpen}>
+      <PopoverTrigger asChild>
+        <Button
+          variant="outline"
+          size="sm"
+          role="combobox"
+          aria-expanded={open}
+          aria-controls={listId}
+          aria-label="Scope"
+          className="w-56 justify-between font-normal"
+        >
+          <span className="flex min-w-0 items-center gap-1.5">
+            {icon && <ProjectIcon name={icon} />}
+            <span className="truncate">{p?.label ?? m?.name ?? "All projects"}</span>
+          </span>
+          <ChevronsUpDown className="opacity-50" aria-hidden />
+        </Button>
+      </PopoverTrigger>
+      <PopoverContent id={listId} align="start" className="w-80 p-0">
+        <Command>
+          <CommandInput placeholder={maps.length > 0 ? "Find a project or map" : "Find a project"} />
+          <CommandList>
+            <CommandEmpty>No scope matches</CommandEmpty>
+            <CommandGroup>
+              <CommandItem value="all" keywords={["All projects"]} onSelect={() => pick("all")}>
+                All projects
+                {mark("all")}
+              </CommandItem>
+            </CommandGroup>
+            <CommandSeparator />
+            <CommandGroup
+              heading={
+                <span className="flex items-center gap-1.5">
+                  <FolderGit2 className="size-3.5" aria-hidden /> Projects
+                </span>
+              }
+            >
+              {projects.map((x) => (
+                <CommandItem
+                  key={x.id}
+                  value={`project:${x.id}`}
+                  keywords={[x.label]}
+                  onSelect={() => pick(`project:${x.id}`)}
+                >
+                  <ProjectIcon name={x.label} />
+                  {x.label} <span className="text-muted-foreground">· {x.prs}</span>
+                  {mark(`project:${x.id}`)}
+                </CommandItem>
+              ))}
+            </CommandGroup>
+            {maps.length > 0 && (
+              <>
+                <CommandSeparator />
+                <CommandGroup
+                  heading={
+                    <span className="flex items-center gap-1.5">
+                      <MapIcon className="size-3.5" aria-hidden /> Maps
+                    </span>
+                  }
+                >
+                  {maps.map((x) => (
+                    <CommandItem
+                      key={x.key}
+                      value={`map:${x.key}`}
+                      keywords={[x.name, x.project.label]}
+                      onSelect={() => pick(`map:${x.key}`)}
+                    >
+                      <ProjectIcon name={x.project.label} />
+                      <span className="truncate">{x.name}</span>
+                      {mark(`map:${x.key}`)}
+                    </CommandItem>
+                  ))}
+                </CommandGroup>
+              </>
+            )}
+          </CommandList>
+        </Command>
+      </PopoverContent>
+    </Popover>
+  );
+}
+
+/**
+ * The PR graph of a scope: `all`, `project:<id>` or `map:<key>`. `projects` is the raw tree, so every member counts.
+ * `orders` and `pins` give the Tree order sort.
+ */
+export function PrGraphDialog({
+  projects,
+  orders,
+  pins,
+  scope: wanted,
+  setScope,
+  onOpenChange,
+}: {
+  projects: Group[];
+  orders: Orders;
+  pins: ReadonlySet<string>;
+  scope: string;
+  setScope: (scope: string) => void;
+  onOpenChange: (open: boolean) => void;
+}) {
+  const [sort, setSort] = usePref("thread-tree:graph-sort", oneOf(GRAPH_SORTS, "title"));
+  const bands = useMemo(() => bandsOf(projects), [projects]);
+  const maps = useMemo(() => mapsOf(projects), [projects]);
+  const parsed = parseScope(wanted);
+  const map = parsed?.kind === "map" ? maps.find((m) => m.key === parsed.key) : undefined;
+  const gone =
+    !parsed ||
+    (parsed.kind === "map" && !map) ||
+    (parsed.kind === "project" && !bands.some((b) => b.id === parsed.id && b.members.length > 0));
+  const scope = gone ? "all" : wanted;
+  useEffect(() => {
+    if (gone) setScope("all");
+  }, [gone, setScope]);
+  const [{ data, busy, down }, refresh] = useGraphData(scope);
+  const projectId = parsed?.kind === "project" && !gone ? parsed.id : null;
+  const built = useMemo(
+    () =>
+      bands
+        .filter((b) => b.members.length > 0)
+        .map((b) => {
+          const prs = b.members.flatMap((m) => m.prs);
+          const mates = bandMates(data?.mates ?? [], prs);
+          const graph = buildPrGraph(
+            b.id === projectId ? b.threads : b.members,
+            bandRoot(data?.roots[b.id], prs),
+            data && { ...data, mates },
+          );
+          return { ...b, graph, open: openCount(graph) };
+        })
+        .filter((b) => b.graph.nodes.length > 0),
+    [bands, data, projectId],
+  );
+  const sorted = sortBands(built, sort, (b) => b.open, treeOrder(orders, pins));
+  const shown = map ? [] : projectId ? sorted.filter((b) => b.id === projectId) : sorted;
+  const mapGraph = useMemo(() => {
+    if (!map) return null;
+    const members = walk(map.head);
     const prs = [
       ...members.flatMap((m) => m.prs),
       ...(data?.map?.rows ?? []),
       ...(data?.map?.settled ?? []).flatMap((s) => s.prs),
     ];
     return buildPrGraph(members, bandRoot(Object.values(data?.roots ?? {})[0], prs), data);
-  }, [head, data]);
+  }, [map, data]);
+  const graphs = mapGraph ? [mapGraph] : shown.map((b) => b.graph);
+  const all = scope === "all";
+  const prCount = graphs.reduce((n, g) => n + g.nodes.length, 0);
+  const openPrs = graphs.reduce((n, g) => n + openCount(g), 0);
+  const anomalies =
+    mapGraph?.anomalies ??
+    shown.flatMap((b) => b.graph.anomalies.map((a) => (all ? { ...a, text: `${b.label}: ${a.text}` } : a)));
+  const noPr = all
+    ? bands.reduce((n, b) => n + b.threads.filter((t) => t.prs.length === 0).length, 0)
+    : ((mapGraph ?? shown[0]?.graph)?.noPr ?? []);
   const box = useRef<HTMLDivElement>(null);
   const retry = (
     <button type="button" onClick={() => refresh()} className="underline">
@@ -483,11 +700,30 @@ export function PrGraphDialog({ head, onOpenChange }: { head: ThreadNode; onOpen
     <Dialog open onOpenChange={onOpenChange}>
       <DialogContent className="h-[min(860px,calc(100dvh-2rem))] max-w-[calc(100%-2rem)] grid-cols-[minmax(0,1fr)] grid-rows-[auto_auto_minmax(0,1fr)_auto] gap-3 sm:max-w-[1200px]">
         <DialogHeader className="pr-8 text-left">
-          <div className="flex flex-wrap items-center justify-between gap-2">
-            <DialogTitle className="flex min-w-0 flex-1 basis-40 items-center gap-2 text-base">
+          <div className="flex flex-wrap items-center gap-2">
+            <DialogTitle className="flex flex-none items-center gap-2 text-base">
               <GitBranch className="size-4 flex-none" aria-hidden />
-              <span className="truncate">{head.map!.name} · PR graph</span>
+              PR graph
             </DialogTitle>
+            <ScopePicker
+              scope={scope}
+              setScope={setScope}
+              projects={sorted.map((b) => ({ id: b.id, label: b.label, prs: b.graph.nodes.length }))}
+              maps={maps.filter((m) => m.hasPrs || m.key === map?.key)}
+            />
+            {all && (
+              <Select value={sort} onValueChange={(v) => setSort(v as GraphSort)}>
+                <SelectTrigger size="sm" className="w-40" aria-label="Sort projects">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent position="popper">
+                  <SelectItem value="title">Title</SelectItem>
+                  <SelectItem value="open">Most open PRs</SelectItem>
+                  <SelectItem value="tree">Tree order</SelectItem>
+                </SelectContent>
+              </Select>
+            )}
+            <span className="flex-1" />
             <Button className="flex-none" variant="outline" size="sm" disabled={busy} onClick={() => refresh()}>
               {busy ? (
                 <LoaderCircle className="animate-spin motion-reduce:animate-none" aria-hidden />
@@ -498,7 +734,8 @@ export function PrGraphDialog({ head, onOpenChange }: { head: ThreadNode; onOpen
             </Button>
           </div>
           <DialogDescription>
-            {graph.nodes.length} PRs · {graph.nodes.filter((n) => n.state === "open").length} open
+            {all && `${shown.length} projects · `}
+            {prCount} PRs · {openPrs} open
           </DialogDescription>
           {busy && !data && <p className="text-xs text-muted-foreground">Loading PRs from GitHub…</p>}
           {data?.map?.errors.map((e) => (
@@ -508,15 +745,37 @@ export function PrGraphDialog({ head, onOpenChange }: { head: ThreadNode; onOpen
           ))}
           {down && <p className="text-xs text-muted-foreground">Could not read PRs from T3 · {retry}</p>}
         </DialogHeader>
-        <Legend />
+        <Legend lanes={!!map} />
         <div
           ref={box}
           onPointerDown={pan}
           className="min-h-0 cursor-grab touch-none [scrollbar-width:none] overflow-auto rounded-md border bg-[radial-gradient(ellipse_at_top_left,color-mix(in_oklch,var(--primary)_10%,transparent),transparent_60%),linear-gradient(315deg,color-mix(in_oklch,var(--status-plan)_6%,var(--background)),var(--background)_50%)] select-none [&::-webkit-scrollbar]:hidden"
         >
-          <Canvas graph={graph} />
+          <div className="w-max min-w-full">
+            {mapGraph ? (
+              <Canvas graph={mapGraph} />
+            ) : (
+              shown.map((b, i) => (
+                <section key={b.id} className={cn(i < shown.length - 1 && "border-b border-dashed")}>
+                  <div className="sticky top-0 left-0 z-20 flex w-fit items-baseline gap-2 rounded-br-md bg-background/85 px-4 pt-3 pb-1 text-xs backdrop-blur">
+                    <span className="flex items-center gap-1.5 self-center font-semibold text-foreground">
+                      <ProjectIcon name={b.label} /> {b.label}
+                    </span>
+                    {b.graph.nodes[0] && (
+                      <span className="font-mono text-muted-foreground">{b.graph.nodes[0].repository}</span>
+                    )}
+                    <span className="text-muted-foreground">
+                      root <span className="font-mono">{b.graph.root}</span> · {b.graph.nodes.length} PRs · {b.open}{" "}
+                      open · {b.graph.anomalies.length} anomalies
+                    </span>
+                  </div>
+                  <Canvas graph={b.graph} />
+                </section>
+              ))
+            )}
+          </div>
         </div>
-        <Lists graph={graph} box={box} />
+        <Lists anomalies={anomalies} noPr={noPr} box={box} />
       </DialogContent>
     </Dialog>
   );
