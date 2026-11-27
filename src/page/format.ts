@@ -21,8 +21,8 @@ export const ownPos = (g: Group): number | undefined =>
 /** The label of a stack stop: its PR number, or its position when it has no PR. */
 export const stopLabel = (n: number | undefined, pr: number | undefined): string => (pr ? `#${pr}` : n ? `${n}` : "");
 
-type RailStop = { id: string; label: string; p: PrNode | undefined; n: number | undefined };
-type RailRow = { t: ThreadNode; chip: string | undefined; stop: RailStop; n: number | undefined };
+export type RailStop = { id: string; label: string; p: PrNode | undefined; n: number | undefined };
+export type RailRow = { t: ThreadNode; chip: string | undefined; stop: RailStop; n: number | undefined };
 
 /**
  * The stops and rows of one stack run. Each thread with a stack position is a stop, in position order;
@@ -36,7 +36,8 @@ export function railRows(run: Group[]): { stops: RailStop[]; rows: RailRow[] } {
     const chip = isKeyGroup(g) ? g.label : undefined;
     const byPos = g.threads.filter((t) => t.stack?.pos).toSorted((a, b) => a.stack!.pos! - b.stack!.pos!);
     const own = new Map(byPos.map((t) => [t.id, { id: t.id, label: g.label, p: t.prs[0], n: t.stack!.pos! }]));
-    const first = own.values().next().value ?? { id: g.id, label: g.label, p: ownPr(g), n: ownPos(g) };
+    const merged = g.threads[0]?.prs[0]?.state === "merged" ? g.threads[0].prs[0] : undefined;
+    const first = own.values().next().value ?? { id: g.id, label: g.label, p: ownPr(g) ?? merged, n: ownPos(g) };
     stops.push(...(own.size ? own.values() : [first]));
     [...byPos, ...g.threads.filter((x) => !own.has(x.id))].forEach((t, j) => {
       const stop = own.get(t.id);
@@ -45,6 +46,38 @@ export function railRows(run: Group[]): { stops: RailStop[]; rows: RailRow[] } {
     });
   }
   return { stops, rows };
+}
+
+/** A stop with no number whose PR is merged. */
+export const isMergedStop = (s: RailStop): boolean => !s.n && s.p?.state === "merged";
+
+/** A row with no number whose thread's first PR is merged. */
+export const isMergedRow = (r: RailRow): boolean => !r.n && r.t.prs[0]?.state === "merged";
+
+export type RailItem = { kind: "row"; row: RailRow } | { kind: "pile"; what: "merged" | "more"; rows: RailRow[] };
+
+/**
+ * The body items of a rail. Merged rows form one pile when `mergedOpen` is off or the rail is closed.
+ * A closed rail keeps the rows of its first two other stops; the remaining rows form one `more` pile after them.
+ */
+export function railView(rows: RailRow[], { open, mergedOpen }: { open: boolean; mergedOpen: boolean }): RailItem[] {
+  const merged = open && mergedOpen ? [] : rows.filter(isMergedRow);
+  const rest = rows.filter((r) => !merged.includes(r));
+  const kept = new Set(
+    rest
+      .map((r) => r.stop.id)
+      .filter((id, i, ids) => ids.indexOf(id) === i)
+      .slice(0, 2),
+  );
+  const more = open ? [] : rest.filter((r) => !kept.has(r.stop.id));
+  const items: RailItem[] = [];
+  for (const row of rows) {
+    const what = merged.includes(row) ? "merged" : more.includes(row) ? "more" : null;
+    if (!what) items.push({ kind: "row", row });
+    else if (!items.some((i) => i.kind === "pile" && i.what === what))
+      items.push({ kind: "pile", what, rows: what === "merged" ? merged : more });
+  }
+  return items;
 }
 
 /**
@@ -105,7 +138,7 @@ const mapFolds = (t: ThreadNode): string[] => [...(t.map ? [t.id] : []), ...t.ch
 /** The fold ids of the rows in a project: its groups, its PR stacks and the Map heads of its threads. */
 export const foldIds = (project: Group): string[] => [
   ...stackRuns(project.groups).flatMap((run) =>
-    run[0].stack ? [`rail:${run[0].stack.id}`, ...run.flatMap(foldIds)] : groupIds(run[0]),
+    run[0].stack ? [`rail:${run[0].stack.id}`, `merged:${run[0].stack.id}`, ...run.flatMap(foldIds)] : groupIds(run[0]),
   ),
   ...project.threads.flatMap(mapFolds),
 ];

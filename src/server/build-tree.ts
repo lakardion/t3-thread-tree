@@ -108,6 +108,12 @@ type KeyGroup = { key: string; nodes: Node[]; first: string; kind: GroupKind };
 type Stack = { set: Set<number>; threads: Thread[]; order: number[]; slots: number[] };
 
 const stackPrs = (t: Thread) => t.prs.filter((p) => STACK_SOURCES.has(p.source) && p.state === "open").map((p) => p.n);
+/** The open stack PRs of a thread and every PR in the stack slots of its stack PRs, merged ones too. */
+const stackMembers = (t: Thread) =>
+  new Set([
+    ...stackPrs(t),
+    ...t.prs.filter((p) => STACK_SOURCES.has(p.source) && p.state !== "closed").flatMap((p) => p.stackSlots ?? []),
+  ]);
 export const prNode = (p: Thread["prs"][number], labels: Label[]): PrNode => {
   const pos = p.stackSlots?.indexOf(p.n) ?? -1;
   return {
@@ -173,7 +179,7 @@ const creationKey = (t: Thread) => timeKey(t.createdAt, t.id);
 const byFirst = <T extends { first: string }>(a: T, b: T) => a.first.localeCompare(b.first);
 
 /**
- * Stacks are connected sets of open stack PRs across threads. The order is the layer list T3
+ * Stacks are connected sets of stack PRs across threads: the open ones and the merged ones in the T3 slots. The order is the layer list T3
  * synced last (a tie goes to the longest). Without one, it comes from the thread with the longest
  * list: its stack/agent PRs in list order, with each of its own created PRs placed after the last
  * lower number.
@@ -181,7 +187,7 @@ const byFirst = <T extends { first: string }>(a: T, b: T) => a.first.localeCompa
 export function computeStacks(threads: Thread[]): Stack[] {
   const stacks: Stack[] = [];
   for (const t of threads) {
-    const s = new Set(stackPrs(t));
+    const s = stackMembers(t);
     if (s.size < 2) continue;
     const hit = stacks.filter((st) => [...st.set].some((n) => s.has(n)));
     const merged: Stack = { set: s, threads: [t], order: [], slots: [] };
@@ -193,18 +199,18 @@ export function computeStacks(threads: Thread[]): Stack[] {
     stacks.push(merged);
   }
   for (const st of stacks) {
-    const latest = st.threads
-      .flatMap((t) => t.prs)
-      .filter((p) => p.stackLayers?.length)
-      .reduce<Pr | null>(
-        (a, b) =>
-          !a ||
-          syncedMs(b) > syncedMs(a) ||
-          (syncedMs(b) === syncedMs(a) && b.stackLayers!.length > a.stackLayers!.length)
-            ? b
-            : a,
-        null,
-      );
+    const prs = st.threads.flatMap((t) => t.prs);
+    const withLayers = prs.filter((p) => p.stackLayers?.length);
+    /** With no open layer, the slots still give the stack order. */
+    const latest = (withLayers.length ? withLayers : prs.filter((p) => p.stackSlots?.length)).reduce<Pr | null>(
+      (a, b) =>
+        !a ||
+        syncedMs(b) > syncedMs(a) ||
+        (syncedMs(b) === syncedMs(a) && (b.stackLayers?.length ?? 0) > (a.stackLayers?.length ?? 0))
+          ? b
+          : a,
+      null,
+    );
     st.order = latest?.stackLayers ?? fallbackOrder(st);
     st.slots = [...(latest?.stackSlots ?? st.order)];
     /** A thread's own PR that the layers lack, such as a merged one, goes after the last lower number. */
@@ -585,13 +591,16 @@ function prepare(input: BuildInput) {
 const bySlot = (a: Node, b: Node) => (a.slot ?? Infinity) - (b.slot ?? Infinity);
 const byPos = (a: Node, b: Node) => bySlot(a, b) || byFirst(a, b);
 
+/** The bottom open PR of a stack, else its first slot. */
+const bottomPr = (st: Stack) => st.order[0] ?? st.slots[0];
+
 /** The rail data of a stack. */
 const railOf = (st: Stack | undefined): Group["stack"] => {
   if (!st) return undefined;
   const prs = st.threads.flatMap((t) => t.prs);
   const base = prs.find((p) => st.set.has(p.n) && p.stackBase)?.stackBase ?? null;
   const number = prs.find((p) => st.set.has(p.n) && p.stackNumber)?.stackNumber;
-  return { id: `s${st.order[0]}`, total: st.order.length, base, ...(number && { number }) };
+  return { id: `s${bottomPr(st)}`, total: st.order.length, base, ...(number && { number }) };
 };
 
 /** The creation key of a node is the oldest of its own and its nested threads'. Sorts children on the way, with the stack mates of a Map group together. */
@@ -757,7 +766,7 @@ function projectLayout(entered: Set<Node>, claims: Map<Node, Claim>, f: Facts): 
     const pid = n.t.projectId;
     if (c.into === "review") addTo(pid, REVIEWS, "review", n);
     else if (c.into === "key") addTo(pid, c.by.key!, "key", n);
-    else if (c.into === "stack") addTo(pid, `PR stack #${stacks[c.si].order[0]}`, "stack", n);
+    else if (c.into === "stack") addTo(pid, `PR stack #${bottomPr(stacks[c.si])}`, "stack", n);
     else looseOf.set(pid, [...(looseOf.get(pid) ?? []), n]);
   }
 
@@ -910,7 +919,7 @@ function linearLayout(entered: Set<Node>, claims: Map<Node, Claim>, f: Facts): G
         continue;
       }
       const st = stacks[si];
-      const key = n.key ?? `PR stack #${st.order[0]}`;
+      const key = n.key ?? `PR stack #${bottomPr(st)}`;
       const rail = railOf(st)!;
       const g = keyed.get(`${si}:${key}`) ?? {
         id: `${parentId}:${rail.id}:${key}`,

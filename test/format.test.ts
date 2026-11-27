@@ -13,7 +13,9 @@ import {
   ownPos,
   phraseWith,
   prTone,
+  type RailRow,
   railRows,
+  railView,
   stackRuns,
   stopLabel,
   stripKey,
@@ -137,6 +139,12 @@ describe("railRows", () => {
     });
   });
 
+  test("a group whose only thread has a merged PR and no position gets a stop with that PR", () => {
+    const merged = { ...t("m", null), prs: [{ n: 7, state: "merged" }] } as unknown as ThreadNode;
+    expect(show([g("WEB-1", [merged])]).stops).toEqual([7]);
+    expect(show([g("WEB-2", [t("u", null)])]).stops).toEqual([null]);
+  });
+
   test("key groups keep their chip; a thread with no position gets no number; a group with none gets an unnumbered stop", () => {
     expect(
       show([g("WEB-1", [t("x", 1, "WEB-1"), t("y", null, "WEB-1")]), g("WEB-2", [t("z", null, "WEB-2")])]),
@@ -183,13 +191,13 @@ describe("foldIds", () => {
         { ...b("t:loose", [thread(null)]), kind: "loose" },
       ],
     );
-    expect(foldIds(p)).toEqual(["Reviews", "SHOP-1", "rail:s1"]);
+    expect(foldIds(p)).toEqual(["Reviews", "SHOP-1", "rail:s1", "merged:s1"]);
     expect(groupIds(nested)).toEqual(["Reviews", "SHOP-1"]);
   });
   test("a stack rail inside a group has its fold id", () => {
     const m = b("lm:m", [], [b("WEB-1", [thread("WEB-1")], [], "s1"), b("WEB-2", [thread("WEB-2")], [], "s1")]);
-    expect(foldIds(b("lp:x", [], [m]))).toEqual(["lm:m", "rail:s1"]);
-    expect(groupIds(m)).toEqual(["lm:m", "rail:s1"]);
+    expect(foldIds(b("lp:x", [], [m]))).toEqual(["lm:m", "rail:s1", "merged:s1"]);
+    expect(groupIds(m)).toEqual(["lm:m", "rail:s1", "merged:s1"]);
   });
   test("a group that folds into one thread has no fold id", () => {
     expect(groupIds(b("SHOP-1", [thread("SHOP-1")]))).toEqual([]);
@@ -202,6 +210,7 @@ describe("foldIds", () => {
     expect(foldIds(b("p", [thread("X", map)]))).toEqual(["t-X"]);
     expect(foldIds(b("p", [], [b("A", [head], [], "s1"), b("B", [thread("B")], [], "s1")]))).toEqual([
       "rail:s1",
+      "merged:s1",
       "t-SHOP-1",
       "t-null",
     ]);
@@ -374,5 +383,40 @@ describe("shortDate", () => {
       if (zone === undefined) delete process.env.TZ;
       else process.env.TZ = zone;
     }
+  });
+});
+
+describe("railView", () => {
+  const row = (id: string, merged: boolean, stop = id) =>
+    ({
+      t: { id, prs: [{ state: merged ? "merged" : "open" }] },
+      stop: { id: stop },
+      n: merged ? undefined : 1,
+    }) as unknown as RailRow;
+  const rows = [row("m1", true), row("m2", true), row("a", false), row("b", false), row("c", false)];
+  const show = (rs: RailRow[], open: boolean, mergedOpen: boolean) =>
+    railView(rs, { open, mergedOpen }).map((i) =>
+      i.kind === "row" ? i.row.t.id : `${i.what}:${i.rows.map((r) => r.t.id).join("")}`,
+    );
+
+  test("an open rail with merged rows open is unchanged", () => {
+    expect(show(rows, true, true)).toEqual(["m1", "m2", "a", "b", "c"]);
+  });
+  test("folded merged rows form one pile at the first merged place", () => {
+    expect(show(rows, true, false)).toEqual(["merged:m1m2", "a", "b", "c"]);
+  });
+  test("a closed rail piles the merged rows, keeps the two bottom rows and piles the rest", () => {
+    const four = [...rows, row("d", false)];
+    expect(show(four, false, true)).toEqual(["merged:m1m2", "a", "b", "more:cd"]);
+  });
+  test("a closed rail keeps every row of its two bottom stops", () => {
+    const shared = [row("a", false, "s1"), row("a2", false, "s1"), row("b", false), row("c", false), row("d", false)];
+    expect(show(shared, false, true)).toEqual(["a", "a2", "b", "more:cd"]);
+  });
+  test("a closed rail with two open rows has no more pile", () => {
+    expect(show(rows.slice(0, 4), false, true)).toEqual(["merged:m1m2", "a", "b"]);
+  });
+  test("no merged rows give no merged pile", () => {
+    expect(show(rows.slice(2), true, false)).toEqual(["a", "b", "c"]);
   });
 });
