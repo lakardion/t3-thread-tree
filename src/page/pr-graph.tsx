@@ -1,8 +1,18 @@
-import { AlertTriangle, FolderGit2, GitBranch, LoaderCircle, Map as MapIcon, RefreshCw } from "lucide-react";
+import {
+  AlertTriangle,
+  Check,
+  ChevronsUpDown,
+  FolderGit2,
+  GitBranch,
+  LoaderCircle,
+  Map as MapIcon,
+  RefreshCw,
+} from "lucide-react";
 import {
   createContext,
   useCallback,
   useEffect,
+  useId,
   useMemo,
   useRef,
   useState,
@@ -13,17 +23,18 @@ import {
 } from "react";
 
 import { Button } from "@/components/ui/button";
-import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import {
-  Select,
-  SelectContent,
-  SelectGroup,
-  SelectItem,
-  SelectLabel,
-  SelectSeparator,
-  SelectTrigger,
-  SelectValue,
-} from "@/components/ui/select";
+  Command,
+  CommandEmpty,
+  CommandGroup,
+  CommandInput,
+  CommandItem,
+  CommandList,
+  CommandSeparator,
+} from "@/components/ui/command";
+import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "@/components/ui/dialog";
+import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import { cn } from "@/lib/utils";
 
@@ -45,7 +56,16 @@ import {
   walk,
 } from "../shared/pr-graph.ts";
 import type { Group, Status } from "../shared/tree.ts";
-import { bandMates, bandsOf, GRAPH_SORTS, type GraphSort, mapsOf, sortBands, treeOrder } from "./graph-scope.ts";
+import {
+  bandMates,
+  bandsOf,
+  GRAPH_SORTS,
+  type GraphSort,
+  type MapEntry,
+  mapsOf,
+  sortBands,
+  treeOrder,
+} from "./graph-scope.ts";
 import type { Orders } from "./order.ts";
 import { oneOf, usePref } from "./prefs.ts";
 import { ProjectIcon } from "./project-icon.tsx";
@@ -492,6 +512,109 @@ function Lists({
 
 const openCount = (g: PrGraph) => g.nodes.filter((n) => n.state === "open").length;
 
+/** The scope picker: a searchable list of All, the projects with a band and the maps. */
+function ScopePicker({
+  scope,
+  setScope,
+  projects,
+  maps,
+}: {
+  scope: string;
+  setScope: (scope: string) => void;
+  projects: { id: string; label: string; prs: number }[];
+  maps: MapEntry[];
+}) {
+  const [open, setOpen] = useState(false);
+  const listId = useId();
+  const pick = (s: string) => {
+    setScope(s);
+    setOpen(false);
+  };
+  const mark = (s: string) => <Check className={cn("ml-auto", s !== scope && "invisible")} aria-hidden />;
+  const p = projects.find((x) => `project:${x.id}` === scope);
+  const m = maps.find((x) => `map:${x.key}` === scope);
+  const icon = p?.label ?? m?.project.label;
+  return (
+    <Popover open={open} onOpenChange={setOpen}>
+      <PopoverTrigger asChild>
+        <Button
+          variant="outline"
+          size="sm"
+          role="combobox"
+          aria-expanded={open}
+          aria-controls={listId}
+          aria-label="Scope"
+          className="w-56 justify-between font-normal"
+        >
+          <span className="flex min-w-0 items-center gap-1.5">
+            {icon && <ProjectIcon name={icon} />}
+            <span className="truncate">{p?.label ?? m?.name ?? "All projects"}</span>
+          </span>
+          <ChevronsUpDown className="opacity-50" aria-hidden />
+        </Button>
+      </PopoverTrigger>
+      <PopoverContent id={listId} align="start" className="w-80 p-0">
+        <Command>
+          <CommandInput placeholder="Find a project or map" />
+          <CommandList>
+            <CommandEmpty>No scope matches</CommandEmpty>
+            <CommandGroup>
+              <CommandItem value="all" keywords={["All projects"]} onSelect={() => pick("all")}>
+                All projects
+                {mark("all")}
+              </CommandItem>
+            </CommandGroup>
+            <CommandSeparator />
+            <CommandGroup
+              heading={
+                <span className="flex items-center gap-1.5">
+                  <FolderGit2 className="size-3.5" aria-hidden /> Projects
+                </span>
+              }
+            >
+              {projects.map((x) => (
+                <CommandItem
+                  key={x.id}
+                  value={`project:${x.id}`}
+                  keywords={[x.label]}
+                  onSelect={() => pick(`project:${x.id}`)}
+                >
+                  <ProjectIcon name={x.label} />
+                  {x.label} <span className="text-muted-foreground">· {x.prs}</span>
+                  {mark(`project:${x.id}`)}
+                </CommandItem>
+              ))}
+            </CommandGroup>
+            <CommandSeparator />
+            <CommandGroup
+              heading={
+                <span className="flex items-center gap-1.5">
+                  <MapIcon className="size-3.5" aria-hidden /> Maps
+                </span>
+              }
+            >
+              {maps.map((x) => (
+                <CommandItem
+                  key={x.key}
+                  value={`map:${x.key}`}
+                  keywords={[x.name, x.project.label]}
+                  onSelect={() => pick(`map:${x.key}`)}
+                >
+                  <span className="truncate">{x.name}</span>
+                  <span className="flex flex-none items-center gap-1 text-muted-foreground">
+                    · <ProjectIcon name={x.project.label} /> {x.project.label}
+                  </span>
+                  {mark(`map:${x.key}`)}
+                </CommandItem>
+              ))}
+            </CommandGroup>
+          </CommandList>
+        </Command>
+      </PopoverContent>
+    </Popover>
+  );
+}
+
 /**
  * The PR graph of a scope: `all`, `project:<id>` or `map:<key>`. `projects` is the raw tree, so every member counts.
  * `orders` and `pins` give the Tree order sort.
@@ -580,48 +703,18 @@ export function PrGraphDialog({
               <GitBranch className="size-4 flex-none" aria-hidden />
               PR graph
             </DialogTitle>
-            <Select value={scope} onValueChange={setScope}>
-              <SelectTrigger size="sm" className="w-56" aria-label="Scope">
-                <SelectValue />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="all">All projects</SelectItem>
-                <SelectSeparator />
-                <SelectGroup>
-                  <SelectLabel className="flex items-center gap-1.5">
-                    <FolderGit2 className="size-3.5" aria-hidden /> Projects
-                  </SelectLabel>
-                  {sorted.map((b) => (
-                    <SelectItem key={b.id} value={`project:${b.id}`}>
-                      <ProjectIcon name={b.label} />
-                      {b.label} <span className="text-muted-foreground">· {b.graph.nodes.length}</span>
-                    </SelectItem>
-                  ))}
-                </SelectGroup>
-                <SelectSeparator />
-                <SelectGroup>
-                  <SelectLabel className="flex items-center gap-1.5">
-                    <MapIcon className="size-3.5" aria-hidden /> Maps
-                  </SelectLabel>
-                  {maps
-                    .filter((m) => m.hasPrs || m.key === map?.key)
-                    .map((m) => (
-                      <SelectItem key={m.key} value={`map:${m.key}`}>
-                        {m.name}{" "}
-                        <span className="flex items-center gap-1 text-muted-foreground">
-                          · <ProjectIcon name={m.project.label} /> {m.project.label}
-                        </span>
-                      </SelectItem>
-                    ))}
-                </SelectGroup>
-              </SelectContent>
-            </Select>
+            <ScopePicker
+              scope={scope}
+              setScope={setScope}
+              projects={sorted.map((b) => ({ id: b.id, label: b.label, prs: b.graph.nodes.length }))}
+              maps={maps.filter((m) => m.hasPrs || m.key === map?.key)}
+            />
             {all && (
               <Select value={sort} onValueChange={(v) => setSort(v as GraphSort)}>
                 <SelectTrigger size="sm" className="w-40" aria-label="Sort projects">
                   <SelectValue />
                 </SelectTrigger>
-                <SelectContent>
+                <SelectContent position="popper">
                   <SelectItem value="title">Title</SelectItem>
                   <SelectItem value="open">Most open PRs</SelectItem>
                   <SelectItem value="tree">Tree order</SelectItem>
