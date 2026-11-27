@@ -15,6 +15,7 @@ import type { PrNode } from "../src/shared/tree.ts";
 import { startKey, type Workflow } from "../src/shared/workflow-start.ts";
 
 const pr = (n: number, over: Partial<PrNode> = {}): PrNode => ({
+  repository: "acme/shop",
   n,
   url: `https://github.com/acme/shop/pull/${n}`,
   state: "open",

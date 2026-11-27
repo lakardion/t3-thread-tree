@@ -14,8 +14,8 @@ export type MapGraphData = {
   rows: (PrNode & { threadId: string | null; threadHref: string | null })[];
   /** Stack slots of member PRs that no member links and no row holds. */
   mates: (PrNode & { threadId: string | null; threadHref: string | null })[];
-  /** PR number to `behindBy`, only for answers that came. */
-  behind: Record<number, number>;
+  /** PR id to `behindBy`, only for answers that came. */
+  behind: Record<string, number>;
   /** The key queries that failed. */
   errors: { key: string; text: string }[];
 };

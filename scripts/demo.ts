@@ -15,6 +15,7 @@ import { launchList, scanFields } from "../src/server/workflow-start.ts";
 import { workflowRoutes } from "../src/server/workflows.ts";
 import type { MapGraphData } from "../src/shared/map-graph.ts";
 import type { LocalConfig, LocalState, ModelPick } from "../src/shared/model.ts";
+import { prId } from "../src/shared/pr-graph.ts";
 import type { RuleId } from "../src/shared/rules.ts";
 import { type CatchUp, parseLabels, type LinearIssue } from "../src/shared/tree.ts";
 
@@ -766,7 +767,7 @@ const GRAPH: MapGraphData = {
       threadHref: null,
     },
   ],
-  behind: { 5102: 3 },
+  behind: { [prId({ repository: "", n: 5102 })]: 3 },
   errors: [],
 };
 

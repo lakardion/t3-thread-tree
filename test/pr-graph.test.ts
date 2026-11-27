@@ -5,6 +5,7 @@ import { buildPrGraph, focusOf, GY, NH, pileLift } from "../src/shared/pr-graph.
 import type { PrNode, ThreadNode } from "../src/shared/tree.ts";
 
 const pr = (n: number, over: Partial<PrNode> = {}): PrNode => ({
+  repository: "a/b",
   n,
   url: `u${n}`,
   state: "open",
@@ -63,6 +64,8 @@ const lane = (n: number, keys: string[]) => ({
   explicit: true,
   keys: keys.map((key) => ({ key, base: "main" })),
 });
+
+const id = (n: number) => `a/b#${n}`;
 
 const byN = (g: ReturnType<typeof buildPrGraph>, n: number) => g.nodes.find((x) => x.n === n)!;
 
@@ -199,6 +202,74 @@ describe("lanes and key", () => {
   });
 });
 
+describe("PR id", () => {
+  const two = () =>
+    buildPrGraph(
+      head(
+        node("a", { prs: [pr(1, { head: "feat" })] }),
+        node("b", { prs: [pr(1, { repository: "c/d", head: "feat" }), pr(2, { repository: "c/d", base: "feat" })] }),
+      ),
+      null,
+    );
+
+  test("two repos with the same number and head give two nodes, and a child links to its own repo", () => {
+    const g = two();
+    expect(g.nodes.map((n) => n.id).toSorted()).toEqual(["a/b#1", "c/d#1", "c/d#2"]);
+    expect(g.edges.find((e) => e.to === "c/d#2")).toEqual({ from: "c/d#1", to: "c/d#2", kind: "base" });
+  });
+
+  test("a base that is the head of a PR in another repo is a foreign base", () => {
+    const g = buildPrGraph(
+      head(node("a", { prs: [pr(1, { head: "feat" }), pr(2, { repository: "c/d", base: "feat" })] })),
+      null,
+    );
+    expect(g.edges.find((e) => e.to === "c/d#2")).toEqual({
+      from: { repository: "c/d", branch: "feat" },
+      to: "c/d#2",
+      kind: "base",
+    });
+    expect(g.edges.some((e) => e.from === "a/b#1" && e.to === "c/d#2")).toBe(false);
+  });
+
+  test("two repos with the same foreign base give two branch nodes and no shared fan-out", () => {
+    const g = buildPrGraph(
+      head(
+        node("a", {
+          prs: [pr(1, { base: "develop" }), pr(2, { repository: "c/d", base: "develop" })],
+        }),
+      ),
+      null,
+    );
+    expect(g.branches.map((b) => b.repository).toSorted()).toEqual(["a/b", "c/d"]);
+    expect(g.edges.find((e) => e.to === "c/d#2")).toMatchObject({ from: { repository: "c/d", branch: "develop" } });
+  });
+
+  test("open children of the same base name in two repos are no fan-out", () => {
+    const g = buildPrGraph(
+      head(
+        node("a", {
+          prs: [
+            pr(1, { base: "feat" }),
+            pr(2, { base: "feat" }),
+            pr(3, { repository: "c/d", base: "feat" }),
+            pr(4, { repository: "c/d", base: "feat" }),
+          ],
+        }),
+      ),
+      null,
+    );
+    expect(g.anomalies.filter((a) => a.text.includes("open children")).map((a) => a.prs)).toEqual([
+      ["a/b#1", "a/b#2"],
+      ["c/d#3", "c/d#4"],
+    ]);
+    const one = buildPrGraph(
+      head(node("a", { prs: [pr(1, { base: "feat" }), pr(3, { repository: "c/d", base: "feat" })] })),
+      null,
+    );
+    expect(one.anomalies.filter((a) => a.text.includes("open children"))).toEqual([]);
+  });
+});
+
 describe("edges", () => {
   const chain = () =>
     buildPrGraph(
@@ -219,12 +290,12 @@ describe("edges", () => {
 
   test("each edge kind", () => {
     const g = chain();
-    const e = (to: number) => g.edges.find((x) => x.to === to)!;
-    expect(e(1)).toEqual({ from: "main", to: 1, kind: "main" });
-    expect(e(3)).toEqual({ from: 1, to: 3, kind: "base" });
+    const e = (n: number) => g.edges.find((x) => x.to === id(n))!;
+    expect(e(1)).toEqual({ from: "main", to: id(1), kind: "main" });
+    expect(e(3)).toEqual({ from: id(1), to: id(3), kind: "base" });
     expect(e(4).kind).toBe("dim");
     expect(e(5).kind).toBe("dim");
-    expect(e(6)).toEqual({ from: { branch: "gone" }, to: 6, kind: "base" });
+    expect(e(6)).toEqual({ from: { repository: "a/b", branch: "gone" }, to: id(6), kind: "base" });
   });
 
   test("stack kind needs one stack number on both PRs", () => {
@@ -240,15 +311,15 @@ describe("edges", () => {
       ),
       null,
     );
-    expect(g.edges.find((x) => x.to === 2)!.kind).toBe("stack");
-    expect(g.edges.find((x) => x.to === 3)!.kind).toBe("base");
+    expect(g.edges.find((x) => x.to === id(2))!.kind).toBe("stack");
+    expect(g.edges.find((x) => x.to === id(3))!.kind).toBe("base");
   });
 
   test("a foreign base gives one branch node, one main edge, and an edge per child", () => {
     const g = chain();
-    expect(g.branches).toEqual([{ branch: "gone", col: 1, row: expect.any(Number) }]);
+    expect(g.branches).toEqual([{ repository: "a/b", branch: "gone", col: 1, row: expect.any(Number) }]);
     expect(g.edges.filter((x) => x.from === "main" && typeof x.to === "object")).toEqual([
-      { from: "main", to: { branch: "gone" }, kind: "main" },
+      { from: "main", to: { repository: "a/b", branch: "gone" }, kind: "main" },
     ]);
     expect(g.edges.filter((x) => typeof x.from === "object")).toHaveLength(2);
   });
@@ -267,12 +338,12 @@ describe("edges", () => {
       ),
       null,
     );
-    expect(g.edges.find((e) => e.to === 4)!.from).toBe(3);
+    expect(g.edges.find((e) => e.to === id(4))!.from).toBe(id(3));
     const open = buildPrGraph(
       head(node("a", { prs: [pr(1, { head: "x" }), pr(2, { head: "x", state: "merged" }), pr(4, { base: "x" })] })),
       null,
     );
-    expect(open.edges.find((e) => e.to === 4)!.from).toBe(1);
+    expect(open.edges.find((e) => e.to === id(4))!.from).toBe(id(1));
   });
 });
 
@@ -336,8 +407,8 @@ describe("layout", () => {
       [3, 0],
       [1, 1],
     ]);
-    expect(g.edges.filter((e) => e.to === 1 || e.to === 2)).toEqual([{ from: "main", to: 2, kind: "dim" }]);
-    expect(g.edges.find((e) => e.to === 3)).toEqual({ from: 2, to: 3, kind: "stack" });
+    expect(g.edges.filter((e) => e.to === id(1) || e.to === id(2))).toEqual([{ from: "main", to: id(2), kind: "dim" }]);
+    expect(g.edges.find((e) => e.to === id(3))).toEqual({ from: id(2), to: id(3), kind: "stack" });
   });
 
   test("a PR built on a hidden pile member chains on from the pile top", () => {
@@ -356,7 +427,7 @@ describe("layout", () => {
       ),
       null,
     );
-    expect(g.edges.find((e) => e.to === 4)).toMatchObject({ from: 2 });
+    expect(g.edges.find((e) => e.to === id(4))).toMatchObject({ from: id(2) });
     expect(byN(g, 4)).toMatchObject({ col: byN(g, 2).col + 1 });
     expect(byN(g, 5)).toMatchObject({ col: byN(g, 2).col + 2 });
   });
@@ -410,7 +481,7 @@ describe("Anomalies", () => {
   describe("Fan-out", () => {
     test("a base other than main with 2 open children", () => {
       const g = build([pr(1, { head: "x" }), pr(2, { base: "x" }), pr(3, { base: "x" })]);
-      expect(g.anomalies).toEqual([{ text: "x has 2 open children", prs: [2, 3] }]);
+      expect(g.anomalies).toEqual([{ text: "x has 2 open children", prs: [id(2), id(3)] }]);
     });
     test("main with 2 children, or one child, or one open child, is not a hit", () => {
       expect(texts(build([pr(1), pr(2)]))).toEqual([]);
@@ -440,8 +511,8 @@ describe("Anomalies", () => {
     test("one item for each open child of a closed PR", () => {
       const g = build([pr(1, { head: "x", state: "closed" }), pr(2, { base: "x" }), pr(3, { base: "x" })]);
       expect(g.anomalies.filter((a) => a.text.includes("closed"))).toEqual([
-        { text: "#1 is closed, but #2 builds on it", prs: [1, 2] },
-        { text: "#1 is closed, but #3 builds on it", prs: [1, 3] },
+        { text: "#1 is closed, but #2 builds on it", prs: [id(1), id(2)] },
+        { text: "#1 is closed, but #3 builds on it", prs: [id(1), id(3)] },
       ]);
     });
     test("a merged parent or a closed child is not a hit", () => {
@@ -452,7 +523,7 @@ describe("Anomalies", () => {
 
   describe("Conflicts", () => {
     test("an open conflicting PR", () => {
-      expect(build([pr(1, { conflicting: true })]).anomalies).toEqual([{ text: "#1 has conflicts", prs: [1] }]);
+      expect(build([pr(1, { conflicting: true })]).anomalies).toEqual([{ text: "#1 has conflicts", prs: [id(1)] }]);
     });
     test("a closed conflicting PR or an open clean PR is not a hit", () => {
       expect(texts(build([pr(1, { conflicting: true, state: "closed" }), pr(2)]))).toEqual([]);
@@ -462,8 +533,8 @@ describe("Anomalies", () => {
   describe("Foreign base", () => {
     test("each PR on a foreign base", () => {
       expect(build([pr(1, { base: "zzz" }), pr(2, { base: "zzz", state: "closed" })]).anomalies).toEqual([
-        { text: "#1 is based on zzz, which is not main or a map PR", prs: [1] },
-        { text: "#2 is based on zzz, which is not main or a map PR", prs: [2] },
+        { text: "#1 is based on zzz, which is not main or a map PR", prs: [id(1)] },
+        { text: "#2 is based on zzz, which is not main or a map PR", prs: [id(2)] },
       ]);
     });
     test("main or a map PR is not a hit", () => {
@@ -473,14 +544,14 @@ describe("Anomalies", () => {
 
   describe("Behind base", () => {
     test("an open stacked PR with behindBy above 0", () => {
-      const g = build([pr(1, { stack: stackOf(7) })], { behind: { 1: 3 } });
-      expect(g.anomalies).toEqual([{ text: "#1 is 3 commits behind its base", prs: [1] }]);
+      const g = build([pr(1, { stack: stackOf(7) })], { behind: { [id(1)]: 3 } });
+      expect(g.anomalies).toEqual([{ text: "#1 is 3 commits behind its base", prs: [id(1)] }]);
     });
     test("no stack, 0 behind, no answer, closed or data null is not a hit", () => {
-      expect(texts(build([pr(1)], { behind: { 1: 3 } }))).toEqual([]);
-      expect(texts(build([pr(1, { stack: stackOf(7) })], { behind: { 1: 0 } }))).toEqual([]);
+      expect(texts(build([pr(1)], { behind: { [id(1)]: 3 } }))).toEqual([]);
+      expect(texts(build([pr(1, { stack: stackOf(7) })], { behind: { [id(1)]: 0 } }))).toEqual([]);
       expect(texts(build([pr(1, { stack: stackOf(7) })], { behind: {} }))).toEqual([]);
-      expect(texts(build([pr(1, { stack: stackOf(7), state: "closed" })], { behind: { 1: 3 } }))).toEqual([]);
+      expect(texts(build([pr(1, { stack: stackOf(7), state: "closed" })], { behind: { [id(1)]: 3 } }))).toEqual([]);
       expect(texts(build([pr(1, { stack: stackOf(7) })], null))).toEqual([]);
     });
   });
@@ -488,7 +559,7 @@ describe("Anomalies", () => {
   describe("No thread", () => {
     test("an open PR with no thread", () => {
       expect(buildPrGraph(head(), data({ rows: [row(1)] })).anomalies).toEqual([
-        { text: "#1 has no thread", prs: [1] },
+        { text: "#1 has no thread", prs: [id(1)] },
       ]);
     });
     test("a PR with a thread, a closed PR or an outside stack mate is not a hit", () => {
@@ -501,7 +572,7 @@ describe("Anomalies", () => {
   describe("Stopped thread", () => {
     test("failed and interrupted live threads", () => {
       expect(build([pr(1)], {}, { status: "failed" }).anomalies).toEqual([
-        { text: "#1: its thread stopped", prs: [1] },
+        { text: "#1: its thread stopped", prs: [id(1)] },
       ]);
       expect(texts(build([pr(1)], {}, { status: "interrupted" }))).toEqual(["#1: its thread stopped"]);
     });
@@ -522,7 +593,7 @@ describe("Anomalies", () => {
     test("a base that is not the lane base", () => {
       const g = build([k(1, "K-1"), k(2, "K-2", { base: "other" })], { lanes: [laneOf(1, keys)] });
       expect(g.anomalies.filter((a) => a.text.includes("lane says"))).toEqual([
-        { text: "#2 is based on other; the lane says K-1", prs: [2] },
+        { text: "#2 is based on other; the lane says K-1", prs: [id(2)] },
       ]);
     });
     test("the head of a non-closed PR of the previous key passes", () => {
@@ -573,7 +644,7 @@ describe("Anomalies", () => {
         lanes: lanes(),
       });
       expect(g.anomalies.filter((a) => a.text.startsWith("Stack"))).toEqual([
-        { text: "Stack #7 spans lanes L1, L2", prs: [1, 2] },
+        { text: "Stack #7 spans lanes L1, L2", prs: [id(1), id(2)] },
       ]);
     });
     test("one lane, another stack, implicit lanes or data null is not a hit", () => {
@@ -597,7 +668,7 @@ describe("Anomalies", () => {
         lanes,
       });
       expect(g.anomalies.filter((a) => a.text.startsWith("K-1"))).toEqual([
-        { text: "K-1 has 2 PRs: #1, #2 (closed: #3)", prs: [1, 2, 3] },
+        { text: "K-1 has 2 PRs: #1, #2 (closed: #3)", prs: [id(1), id(2), id(3)] },
       ]);
     });
     test("a merged PR counts, a closed one does not", () => {
@@ -618,7 +689,7 @@ describe("Anomalies", () => {
   describe("Missing from Stacks", () => {
     test("an open stacked PR that no chain lists", () => {
       const g = build([pr(1, { stack: stackOf(7) }), pr(2, { stack: stackOf(7, 2) })], { stacks: [{ prs: [1] }] });
-      expect(g.anomalies).toEqual([{ text: "#2 is in a stack, but not in Stacks", prs: [2] }]);
+      expect(g.anomalies).toEqual([{ text: "#2 is in a stack, but not in Stacks", prs: [id(2)] }]);
     });
     test("no Stacks section, no stack, closed or data null is not a hit", () => {
       expect(texts(build([pr(1, { stack: stackOf(7) })], { stacks: null }))).toEqual([]);
@@ -654,17 +725,17 @@ describe("focusOf", () => {
 
   test("with no lanes, a chain shares the focus of its root", () => {
     const g = build([pr(1, { head: "h1" }), pr(2, { head: "h2", base: "h1" }), pr(3, { base: "h2" }), pr(4)]);
-    expect([1, 2, 3, 4].map((n) => focusOf(g, n))).toEqual(["#1", "#1", "#1", "#4"]);
+    expect([1, 2, 3, 4].map((n) => focusOf(g, id(n)))).toEqual([id(1), id(1), id(1), id(4)]);
   });
 
   test("a laned PR gives its lane, and a lane-less child of it too", () => {
     const g = build([pr(1, { head: "l1-1" }), pr(2, { base: "l1-1" })], [lane(1, ["L1-1"])]);
-    expect(focusOf(g, 1)).toBe("L1");
-    expect(focusOf(g, 2)).toBe("L1");
+    expect(focusOf(g, id(1))).toBe("L1");
+    expect(focusOf(g, id(2))).toBe("L1");
   });
 
   test("a branch pill has no focus", () => {
-    expect(focusOf(build([pr(1)]), { branch: "x" })).toBeNull();
+    expect(focusOf(build([pr(1)]), { repository: "a/b", branch: "x" })).toBeNull();
   });
 
   test("the top of a merged pile and the PR that chains on from it share a focus", () => {
@@ -674,6 +745,6 @@ describe("focusOf", () => {
       pr(2, { ...s(2), state: "merged", head: "h2", base: "h1" }),
       pr(3, { ...s(3), base: "h2" }),
     ]);
-    expect(focusOf(g, 3)).toBe(focusOf(g, 2));
+    expect(focusOf(g, id(3))).toBe(focusOf(g, id(2)));
   });
 });

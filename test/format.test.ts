@@ -248,6 +248,7 @@ describe("parseLinear", () => {
 
 describe("prTone", () => {
   const pr = (over: Partial<PrNode>): PrNode => ({
+    repository: "a/b",
     n: 1,
     url: "",
     state: "open",

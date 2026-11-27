@@ -184,7 +184,7 @@ describe("mapGraph", () => {
       list: async () => ({ rows: [row(1, { head: "abc-1-x", stack: { number: 1, pos: 1, total: 2 } })], error: null }),
     });
     const data = await g.get("k", ctx([thread("m1", { title: "ABC-1", prs: [pr] })]), false);
-    expect(data?.behind).toEqual({ 1: 2, 7: 2 });
+    expect(data?.behind).toEqual({ "a/b#1": 2, "a/b#7": 2 });
   });
 
   test("a cache hit makes no call, refresh calls again", async () => {
@@ -308,7 +308,7 @@ describe("mapGraph", () => {
       });
       const data = await g.get("k", ctx([owner([1, 2])]), false);
       expect(seen.filter((n) => n === 2)).toHaveLength(1);
-      expect(data?.behind[2]).toBe(4);
+      expect(data?.behind["a/b#2"]).toBe(4);
     });
   });
 });

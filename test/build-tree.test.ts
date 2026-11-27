@@ -580,6 +580,7 @@ describe("PR stack", () => {
     expect(closed.stack).toBeNull();
     expect(closed.prs).toEqual([
       {
+        repository: "org/repo",
         n: 20,
         url: "https://github.com/org/repo/pull/20",
         state: "merged",
@@ -723,6 +724,7 @@ describe("status", () => {
     expect(t).toMatchObject({ key: "SHOP-1", settled: true, input: true, updatedAt: expect.any(String) });
     expect(t.prs).toEqual([
       {
+        repository: "org/repo",
         n: 7,
         url: "https://github.com/org/repo/pull/7",
         state: "open",
@@ -740,6 +742,7 @@ describe("status", () => {
         labels: [],
       },
       {
+        repository: "org/repo",
         n: 8,
         url: "https://github.com/org/repo/pull/8",
         state: "open",
