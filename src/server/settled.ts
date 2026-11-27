@@ -30,11 +30,14 @@ const settledIn = (b: Group): ThreadNode[] => [...b.groups.flatMap(settledIn), .
 export function settledPage(projects: Group[], threads: Map<string, Thread>, after: string | null, limit: number) {
   const keyed = projects
     .flatMap((p) =>
-      settledIn(p).map((t) => ({
-        project: { id: p.id, label: p.label, kind: "project", repo: p.repo, groups: [], threads: [] } as Group,
-        t,
-        key: settledKey(threads.get(t.id)!),
-      })),
+      /** A Map header takes `settled` from its thread but has its own id, such as `map:<key>`. */
+      settledIn(p)
+        .filter((t) => threads.has(t.id))
+        .map((t) => ({
+          project: { id: p.id, label: p.label, kind: "project", repo: p.repo, groups: [], threads: [] } as Group,
+          t,
+          key: settledKey(threads.get(t.id)!),
+        })),
     )
     .toSorted((a, b) => (a.key < b.key ? 1 : -1));
   const rest = after === null ? keyed : keyed.filter((k) => k.key < after);

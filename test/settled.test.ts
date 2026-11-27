@@ -94,6 +94,26 @@ describe("settledPage", () => {
     expect(ids(out)).toEqual(["kid"]);
     expect(out.items[0].t.children).toEqual([]);
   });
+
+  test("skips a settled node with no thread of its own, such as a Map header", () => {
+    const a = thread("a", { settledAt: at(1) });
+    const tree = buildTree(
+      {
+        threads: [a],
+        projects: new Map([["p", { title: "Proj", repo: null }]]),
+        spawnerOf: () => undefined,
+        environmentId: "e",
+        settled: true,
+        now: 0,
+      },
+      defaultRules(false),
+    );
+    const node = tree[0].threads[0];
+    tree[0].threads.push({ ...node, id: "map:TIB-1" });
+    const out = settledPage(tree, new Map([["a", a]]), null, 10);
+    expect(ids(out)).toEqual(["a"]);
+    expect(out.total).toBe(1);
+  });
 });
 
 describe("settledSignature", () => {
