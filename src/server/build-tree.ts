@@ -2,6 +2,7 @@ import { ago } from "../page/format.ts";
 import { RULES, type RuleId } from "../shared/rules.ts";
 /** The tree rules: visibility, placement, stack order and status. Pure, so `bun test` covers it. */
 import {
+  isReviewTitle,
   LINEAR_LOOSE,
   LINEAR_REVIEWS,
   NO_MILESTONE,
@@ -34,7 +35,7 @@ import {
 } from "./t3.ts";
 
 /** Review threads sit in Reviews, whatever their key. */
-const isReview = (t: { title: string }) => t.title.startsWith("Review #");
+const isReview = (t: { title: string }) => isReviewTitle(t.title);
 const KEY = /\b[A-Z][A-Z0-9]+-\d+\b/;
 const STACK_SOURCES = new Set(["created", "stack", "agent"]);
 

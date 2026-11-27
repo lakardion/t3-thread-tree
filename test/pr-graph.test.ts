@@ -1,7 +1,7 @@
 import { describe, expect, test } from "bun:test";
 
 import type { MapGraphPart, PrGraphData } from "../src/shared/pr-graph-data.ts";
-import { buildPrGraph, focusOf, GY, NH, pileLift } from "../src/shared/pr-graph.ts";
+import { bandRoot, buildPrGraph as buildBand, focusOf, GY, NH, pileLift, walk } from "../src/shared/pr-graph.ts";
 import type { PrNode, ThreadNode } from "../src/shared/tree.ts";
 
 const pr = (n: number, over: Partial<PrNode> = {}): PrNode => ({
@@ -69,6 +69,8 @@ const lane = (n: number, keys: string[]) => ({
 
 const id = (n: number) => `a/b#${n}`;
 
+const buildPrGraph = (h: ThreadNode, d: PrGraphData | null, root = "main") => buildBand(walk(h), root, d);
+
 const byN = (g: ReturnType<typeof buildPrGraph>, n: number) => g.nodes.find((x) => x.n === n)!;
 
 describe("PR set", () => {
@@ -128,9 +130,9 @@ describe("PR set", () => {
 
   test("a mate is outside, also a mate thread in the tree", () => {
     const g = buildPrGraph(head(node("mate", { prs: [pr(2)] })), data({ rows: [row(1)], mates: [row(2), row(3)] }));
-    expect(byN(g, 1).outside).toBe(false);
-    expect(byN(g, 2).outside).toBe(true);
-    expect(byN(g, 3).outside).toBe(true);
+    expect(byN(g, 1).outside).toBeNull();
+    expect(byN(g, 2).outside).toBe("outside the map");
+    expect(byN(g, 3).outside).toBe("outside the map");
   });
 
   test("a member that heads a sub-map is kept, its children are not", () => {
@@ -166,7 +168,7 @@ describe("PR set", () => {
       null,
     );
     expect(g.nodes.map((n) => n.n)).toEqual([1]);
-    expect(g.nodes[0]).toMatchObject({ lane: null, outside: false });
+    expect(g.nodes[0]).toMatchObject({ lane: null, outside: null });
     expect(g.noPr).toEqual([]);
   });
 });
@@ -178,12 +180,12 @@ describe("lanes and key", () => {
       data({ lanes: [lane(1, ["ABC-1"]), lane(2, ["DEF-2"])] }),
     );
     expect([1, 2, 3].map((n) => byN(g, n).lane)).toEqual([1, null, 2]);
-    expect([1, 2, 3].map((n) => byN(g, n).outside)).toEqual([false, true, false]);
+    expect([1, 2, 3].map((n) => byN(g, n).outside)).toEqual([null, "outside the map", null]);
   });
 
   test("no lanes: nobody is outside", () => {
     const g = buildPrGraph(head(node("a", { prs: [pr(1)] })), data());
-    expect(g.nodes[0]).toMatchObject({ lane: null, outside: false });
+    expect(g.nodes[0]).toMatchObject({ lane: null, outside: null });
   });
 
   test("key: head branch, else title, else branch, else #n", () => {
@@ -293,7 +295,7 @@ describe("edges", () => {
   test("each edge kind", () => {
     const g = chain();
     const e = (n: number) => g.edges.find((x) => x.to === id(n))!;
-    expect(e(1)).toEqual({ from: "main", to: id(1), kind: "main" });
+    expect(e(1)).toEqual({ from: "root", to: id(1), kind: "main" });
     expect(e(3)).toEqual({ from: id(1), to: id(3), kind: "base" });
     expect(e(4).kind).toBe("dim");
     expect(e(5).kind).toBe("dim");
@@ -320,8 +322,8 @@ describe("edges", () => {
   test("a foreign base gives one branch node, one main edge, and an edge per child", () => {
     const g = chain();
     expect(g.branches).toEqual([{ repository: "a/b", branch: "gone", col: 1, row: expect.any(Number) }]);
-    expect(g.edges.filter((x) => x.from === "main" && typeof x.to === "object")).toEqual([
-      { from: "main", to: { repository: "a/b", branch: "gone" }, kind: "main" },
+    expect(g.edges.filter((x) => x.from === "root" && typeof x.to === "object")).toEqual([
+      { from: "root", to: { repository: "a/b", branch: "gone" }, kind: "main" },
     ]);
     expect(g.edges.filter((x) => typeof x.from === "object")).toHaveLength(2);
   });
@@ -409,7 +411,7 @@ describe("layout", () => {
       [3, 0],
       [1, 1],
     ]);
-    expect(g.edges.filter((e) => e.to === id(1) || e.to === id(2))).toEqual([{ from: "main", to: id(2), kind: "dim" }]);
+    expect(g.edges.filter((e) => e.to === id(1) || e.to === id(2))).toEqual([{ from: "root", to: id(2), kind: "dim" }]);
     expect(g.edges.find((e) => e.to === id(3))).toEqual({ from: id(2), to: id(3), kind: "stack" });
   });
 
@@ -535,8 +537,8 @@ describe("Anomalies", () => {
   describe("Foreign base", () => {
     test("each PR on a foreign base", () => {
       expect(build([pr(1, { base: "zzz" }), pr(2, { base: "zzz", state: "closed" })]).anomalies).toEqual([
-        { text: "#1 is based on zzz, which is not main or a map PR", prs: [id(1)] },
-        { text: "#2 is based on zzz, which is not main or a map PR", prs: [id(2)] },
+        { text: "#1 is based on zzz, which is not main or a graph PR", prs: [id(1)] },
+        { text: "#2 is based on zzz, which is not main or a graph PR", prs: [id(2)] },
       ]);
     });
     test("main or a map PR is not a hit", () => {
@@ -614,7 +616,7 @@ describe("Anomalies", () => {
     test("the stack on branch passes, another branch does not", () => {
       const lanes = [laneOf(1, [{ key: "K-1", base: "feat" }])];
       expect(texts(build([k(1, "K-1", { base: "feat" })], { lanes }))).toEqual([
-        "#1 is based on feat, which is not main or a map PR",
+        "#1 is based on feat, which is not main or a graph PR",
       ]);
       expect(texts(build([k(1, "K-1", { base: "feat" }), pr(9, { head: "feat" })], { lanes }))).toEqual([]);
       expect(texts(build([k(1, "K-1", { base: "x" }), pr(9, { head: "x" })], { lanes })).join()).toContain(
@@ -748,5 +750,112 @@ describe("focusOf", () => {
       pr(3, { ...s(3), base: "h2" }),
     ]);
     expect(focusOf(g, id(3))).toBe(focusOf(g, id(2)));
+  });
+});
+
+describe("Band root", () => {
+  const b = (base: string | null, branch: string | null = null) => ({ base, head: branch });
+
+  test("entry, main, master, most common foreign base, else main", () => {
+    expect(bandRoot("dev", [b("main")])).toBe("dev");
+    expect(bandRoot(undefined, [b("master"), b("main")])).toBe("main");
+    expect(bandRoot(undefined, [b("master"), b("x")])).toBe("master");
+    expect(bandRoot(undefined, [b("x", "h1"), b("y"), b("z"), b("z"), b("h1")])).toBe("z");
+    expect(bandRoot(undefined, [])).toBe("main");
+  });
+
+  test("master band: root edge, no fan-out on the root, foreign base text", () => {
+    const g = buildPrGraph(
+      head(node("a", { prs: [pr(1, { base: "master" }), pr(2, { base: "master" }), pr(3, { base: "zzz" })] })),
+      null,
+      "master",
+    );
+    expect(g.root).toBe("master");
+    expect(g.edges.find((e) => e.to === id(1))).toEqual({ from: "root", to: id(1), kind: "main" });
+    expect(g.anomalies.map((a) => a.text)).toEqual(["#3 is based on zzz, which is not master or a graph PR"]);
+  });
+
+  test("a lane base main means the root", () => {
+    const d = data({ lanes: [{ n: 1, label: "", explicit: true, keys: [{ key: "K-1", base: "main" }] }] });
+    const g = buildPrGraph(head(node("a", { prs: [pr(1, { head: "k-1", base: "master" })] })), d, "master");
+    expect(g.anomalies).toEqual([]);
+  });
+});
+
+describe("Thread link", () => {
+  test("a review-only PR links its review thread", () => {
+    const g = buildPrGraph(head(node("r", { prs: [pr(1)], review: true })), null);
+    expect(g.nodes[0]).toMatchObject({ viaReview: true, thread: { id: "r" } });
+  });
+
+  test("the author thread wins over an older review thread", () => {
+    const g = buildPrGraph(
+      head(
+        node("r", { prs: [pr(1)], review: true }, "2024-01-01"),
+        node("w", { prs: [pr(1)], review: false }, "2024-02-01"),
+      ),
+      null,
+    );
+    expect(g.nodes[0]).toMatchObject({ viaReview: false, thread: { id: "w" } });
+  });
+});
+
+describe("Graph without a map", () => {
+  const mapless = (): PrGraphData => ({
+    ...data(),
+    map: null,
+    mates: [row(9, { stack: { number: 7, pos: 2, total: 2 } })],
+  });
+
+  test("map rules fire with a map and stay silent without one", () => {
+    const cut = [
+      pr(1, { head: "k-1-a", base: "zzz" }),
+      pr(2, { head: "k-1-b", stack: { number: 5, pos: 1, total: 2 } }),
+      pr(3, { head: "k-2-a", stack: { number: 5, pos: 2, total: 2 } }),
+      pr(4, { head: "k-1-c", base: "x" }),
+      pr(5, { head: "k-1-d", base: "x" }),
+    ];
+    const withMap = data({
+      lanes: [
+        {
+          n: 1,
+          label: "",
+          explicit: true,
+          keys: [
+            { key: "K-1", base: "main" },
+            { key: "K-1", base: "x" },
+          ],
+        },
+        { n: 2, label: "", explicit: true, keys: [{ key: "K-2", base: "main" }] },
+      ],
+      stacks: [],
+    });
+    const run = (d: PrGraphData) =>
+      buildPrGraph(head(node("a", { prs: cut, title: "K-1 a" })), d).anomalies.map((a) => a.text);
+    const mapRules = /lane says|spans lanes|not in Stacks|\(planned\)/;
+    const on = run(withMap);
+    expect(on.filter((x) => mapRules.test(x))).toEqual([
+      "x has 2 open children (planned)",
+      "#1 is based on zzz; the lane says main",
+      "#4 is based on x; the lane says main",
+      "#5 is based on x; the lane says main",
+      "Stack #5 spans lanes L1, L2",
+      "#2 is in a stack, but not in Stacks",
+      "#3 is in a stack, but not in Stacks",
+    ]);
+    const off = run({ ...withMap, map: null });
+    expect(off.filter((x) => mapRules.test(x))).toEqual([]);
+    expect(off).toContain("x has 2 open children");
+    expect(off).toContain("K-1 has 4 PRs: #1, #2, #4, #5");
+  });
+
+  test("a mate is a stack mate", () => {
+    const g = buildPrGraph(head(node("a", { prs: [pr(1)] })), mapless());
+    expect(byN(g, 9).outside).toBe("stack mate");
+  });
+
+  test("noPr comes from the passed members", () => {
+    const g = buildBand([node("a"), node("b", { prs: [pr(1)] })], "main", null);
+    expect(g.noPr.map((t) => t.id)).toEqual(["a"]);
   });
 });

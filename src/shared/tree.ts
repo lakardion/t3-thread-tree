@@ -171,6 +171,9 @@ export const REVIEWS = "Reviews";
 export const NO_PROJECT = "No project";
 export const NO_MILESTONE = "No milestone";
 
+/** Review threads title themselves "Review #<n>". */
+export const isReviewTitle = (title: string): boolean => title.startsWith("Review #");
+
 /** The id of the Reviews group of the Linear tree. */
 export const LINEAR_REVIEWS = "lf:reviews";
 /** The id of the keyless threads of the Linear tree. They show as loose rows, with no header. */

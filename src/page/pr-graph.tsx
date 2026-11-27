@@ -19,6 +19,7 @@ import { cn } from "@/lib/utils";
 
 import type { PrGraphData } from "../shared/pr-graph-data.ts";
 import {
+  bandRoot,
   buildPrGraph,
   type Edge,
   branchKey,
@@ -30,6 +31,7 @@ import {
   pileLift,
   PILE_GAP,
   type PrGraph,
+  walk,
 } from "../shared/pr-graph.ts";
 import type { Status, ThreadNode } from "../shared/tree.ts";
 import { STATUS } from "./status-icon.tsx";
@@ -222,8 +224,9 @@ function NodeCard({
           <span className="min-w-0 truncate font-sans text-xs font-semibold">{n.key}</span>
         )}
         <span className="flex flex-none items-center gap-1 text-muted-foreground">
+          {n.viaReview && <span className="rounded bg-muted px-1 font-sans text-[10px]">review</span>}
           {n.outside ? (
-            <span className="rounded bg-muted px-1 font-sans text-[10px]">outside the map</span>
+            <span className="rounded bg-muted px-1 font-sans text-[10px]">{n.outside}</span>
           ) : (
             n.lane !== null && `L${n.lane}`
           )}
@@ -326,7 +329,7 @@ function Canvas({ graph }: { graph: PrGraph }) {
   };
   const anomalyTexts = (n: GraphNode) => graph.anomalies.filter((a) => a.prs.includes(n.id)).map((a) => a.text);
   const spot = new Map<string, { col: number; row: number }>([
-    ["main", { col: 0, row: 0 }],
+    ["root", { col: 0, row: 0 }],
     ...graph.nodes.map((n) => [n.id, n] as const),
     ...graph.branches.map((b) => [`b:${branchKey(b)}`, b] as const),
   ]);
@@ -348,7 +351,7 @@ function Canvas({ graph }: { graph: PrGraph }) {
         {graph.edges.map((e, i) => {
           const a = at(e.from);
           const b = at(e.to);
-          const x1 = place(a.col, a.row).x + (e.from === "main" ? MAIN_W : NW);
+          const x1 = place(a.col, a.row).x + (e.from === "root" ? MAIN_W : NW);
           const y1 = place(a.col, a.row).y + NH / 2;
           const x2 = place(b.col, b.row).x;
           const y2 = place(b.col, b.row).y + NH / 2;
@@ -364,7 +367,7 @@ function Canvas({ graph }: { graph: PrGraph }) {
           );
         })}
       </svg>
-      <Pill branch="main" col={0} row={0} />
+      <Pill branch={graph.root} col={0} row={0} />
       {graph.branches.map((b) => (
         <Pill key={branchKey(b)} {...b} />
       ))}
@@ -461,7 +464,15 @@ function Lists({ graph, box }: { graph: PrGraph; box: RefObject<HTMLDivElement |
 export function PrGraphDialog({ head, onOpenChange }: { head: ThreadNode; onOpenChange: (open: boolean) => void }) {
   const key = head.map!.key!;
   const [{ data, busy, down }, refresh] = useMapGraph(key);
-  const graph = useMemo(() => buildPrGraph(head, data), [head, data]);
+  const graph = useMemo(() => {
+    const members = walk(head);
+    const prs = [
+      ...members.flatMap((m) => m.prs),
+      ...(data?.map?.rows ?? []),
+      ...(data?.map?.settled ?? []).flatMap((s) => s.prs),
+    ];
+    return buildPrGraph(members, bandRoot(Object.values(data?.roots ?? {})[0], prs), data);
+  }, [head, data]);
   const box = useRef<HTMLDivElement>(null);
   const retry = (
     <button type="button" onClick={() => refresh()} className="underline">
