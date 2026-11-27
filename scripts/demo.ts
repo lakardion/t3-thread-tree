@@ -235,6 +235,7 @@ const threads: Thread[] = [
     ...completed,
     prs: [
       pr(3001, "linked", "open", {
+        base: "master",
         checks: "passing",
         review: "approved",
         title: "Bump to 4.2",
@@ -245,6 +246,7 @@ const threads: Thread[] = [
       pr(3002, "linked", "merged", { title: "Changelog entry", additions: 40, deletions: 0, changedFiles: 1 }),
       pr(3003, "linked", "closed", { title: "Try the old layout", additions: 5, deletions: 90, changedFiles: 6 }),
       pr(3004, "linked", "open", {
+        base: "master",
         draft: true,
         title: "Docs for 4.2",
         additions: 300,
@@ -264,6 +266,12 @@ const threads: Thread[] = [
   t("Sweep: fix the install page links", { id: "sweep-1", projectId: "docs", status: "running" }),
   t("Sweep: rename the guides folder", { id: "sweep-2", projectId: "docs", ...completed }),
   t("Compare two date libraries", { projectId: "scratch", status: "idle" }),
+  /** PROTOTYPE: a review thread outside storefront. */
+  t("Review #4202 cache-02", {
+    projectId: "api",
+    status: "idle",
+    prs: [pr(4202, "agent", "open", { stackBase: "main" })],
+  }),
   t("DOC-16 · Archive the old tutorial", { projectId: "docs", settledAt: ago(60), prs: [pr(3010, "linked")] }),
   t("Cache rollout dispatch", { id: "dispatch", projectId: "api", ...completed }),
   t("Search revamp map", { id: "search", projectId: "api", status: "idle" }),

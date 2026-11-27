@@ -1,7 +1,8 @@
-import { AlertTriangle, GitBranch, LoaderCircle, RefreshCw } from "lucide-react";
+import { AlertTriangle, Eye, GitBranch, LoaderCircle, RefreshCw } from "lucide-react";
 import {
   createContext,
   useCallback,
+  useContext,
   useEffect,
   useMemo,
   useRef,
@@ -34,12 +35,15 @@ import type { Status, ThreadNode } from "../shared/tree.ts";
 import { STATUS } from "./status-icon.tsx";
 
 /** Opens the PR graph of the map head with this id. */
+/** PROTOTYPE: PR numbers that a Review thread links. Their cards get a review mark. */
+export const ReviewPrs = createContext<Set<number>>(new Set());
+
 export const OpenGraph = createContext<(id: string) => void>(() => {});
 
 const NW = 210;
 const GX = 44;
 const PAD = 16;
-const MAIN_W = 64;
+const MAIN_W = 76;
 
 const EDGE: Record<Edge["kind"], string> = {
   stack: "stroke-primary",
@@ -71,7 +75,7 @@ const place = (col: number, row: number) => ({
 });
 
 /** The slow part of the graph. A failed read keeps the last answer. */
-function useMapGraph(key: string) {
+export function useMapGraph(key: string) {
   const [state, setState] = useState<{
     data: MapGraphData | null;
     busy: boolean;
@@ -109,7 +113,7 @@ function useMapGraph(key: string) {
 }
 
 /** Drags the empty area to pan. A drag that starts on a link or a button does not pan. */
-function pan(e: PointerEvent<HTMLDivElement>) {
+export function pan(e: PointerEvent<HTMLDivElement>) {
   if (e.button !== 0 || (e.target as HTMLElement).closest("a,button")) return;
   const el = e.currentTarget;
   const start = {
@@ -135,12 +139,12 @@ function pan(e: PointerEvent<HTMLDivElement>) {
   el.addEventListener("pointercancel", up);
 }
 
-function StatusMark({ thread }: { thread: GraphThread }) {
+export function StatusMark({ thread }: { thread: GraphThread }) {
   const s = STATUS[thread.status as Status];
   return s ? <s.icon className={cn("size-3.5 flex-none", s.shape)} aria-hidden /> : null;
 }
 
-function Legend() {
+export function Legend() {
   return (
     <div className="flex flex-wrap gap-x-4 gap-y-1 text-[11px] text-muted-foreground">
       {EDGE_LEGEND.map(([kind, text]) => (
@@ -221,6 +225,12 @@ function NodeCard({
           <span className="min-w-0 truncate font-sans text-xs font-semibold">{n.key}</span>
         )}
         <span className="flex flex-none items-center gap-1 text-muted-foreground">
+          {useContext(ReviewPrs).has(n.n) && (
+            <span className="flex items-center gap-0.5 rounded bg-status-plan/15 px-1 font-sans text-[10px] text-status-plan">
+              <Eye className="size-3" aria-hidden />
+              review
+            </span>
+          )}
           {n.outside ? (
             <span className="rounded bg-muted px-1 font-sans text-[10px]">outside the map</span>
           ) : (
@@ -315,7 +325,8 @@ function Pill({ branch, col, row }: { branch: string; col: number; row: number }
   );
 }
 
-function Canvas({ graph }: { graph: PrGraph }) {
+/** PROTOTYPE: `root` names the band root pill. */
+export function Canvas({ graph, root = "main" }: { graph: PrGraph; root?: string }) {
   /** The lane of the hovered card: other lanes dim. */
   const [lane, setLane] = useState<string | null>(null);
   const dim = (l: string | null) => lane !== null && l !== lane && "opacity-25";
@@ -364,7 +375,7 @@ function Canvas({ graph }: { graph: PrGraph }) {
           );
         })}
       </svg>
-      <Pill branch="main" col={0} row={0} />
+      <Pill branch={root} col={0} row={0} />
       {graph.branches.map((b) => (
         <Pill key={b.branch} {...b} />
       ))}
@@ -395,7 +406,16 @@ function Canvas({ graph }: { graph: PrGraph }) {
   );
 }
 
-function Lists({ graph, box }: { graph: PrGraph; box: RefObject<HTMLDivElement | null> }) {
+/** PROTOTYPE: `noPr` false leaves out the no-PR list. */
+export function Lists({
+  graph,
+  box,
+  noPr = true,
+}: {
+  graph: PrGraph;
+  box: RefObject<HTMLDivElement | null>;
+  noPr?: boolean;
+}) {
   const jump = (n: number) => {
     const el = box.current?.querySelector<HTMLElement>(`[data-pr="${n}"]`);
     el?.scrollIntoView({ block: "center", inline: "center" });
@@ -405,8 +425,8 @@ function Lists({ graph, box }: { graph: PrGraph; box: RefObject<HTMLDivElement |
     <details className="flex-none text-xs">
       <summary className="flex cursor-pointer items-center gap-1.5 font-semibold text-muted-foreground">
         <AlertTriangle className="size-3.5" aria-hidden /> {graph.anomalies.length}{" "}
-        {graph.anomalies.length === 1 ? "anomaly" : "anomalies"} · {graph.noPr.length}{" "}
-        {graph.noPr.length === 1 ? "thread" : "threads"} with no PR
+        {graph.anomalies.length === 1 ? "anomaly" : "anomalies"}
+        {noPr && ` · ${graph.noPr.length} ${graph.noPr.length === 1 ? "thread" : "threads"} with no PR`}
       </summary>
       <div className="mt-2 grid max-h-[calc(min(860px,100dvh-2rem)*0.3)] grid-rows-[minmax(0,1fr)] gap-4 sm:grid-cols-2">
         <section className="min-h-0 overflow-auto">
@@ -435,23 +455,25 @@ function Lists({ graph, box }: { graph: PrGraph; box: RefObject<HTMLDivElement |
             </ul>
           )}
         </section>
-        <section className="min-h-0 overflow-auto">
-          <h3 className="mb-1.5 font-semibold text-muted-foreground">Threads with no PR</h3>
-          {graph.noPr.length === 0 ? (
-            <p className="text-muted-foreground">None</p>
-          ) : (
-            <ul className="space-y-1">
-              {graph.noPr.map((t) => (
-                <li key={t.id} className="flex items-center gap-1.5">
-                  <StatusMark thread={t} />
-                  <a href={t.href} className="min-w-0 truncate hover:underline">
-                    {t.title}
-                  </a>
-                </li>
-              ))}
-            </ul>
-          )}
-        </section>
+        {noPr && (
+          <section className="min-h-0 overflow-auto">
+            <h3 className="mb-1.5 font-semibold text-muted-foreground">Threads with no PR</h3>
+            {graph.noPr.length === 0 ? (
+              <p className="text-muted-foreground">None</p>
+            ) : (
+              <ul className="space-y-1">
+                {graph.noPr.map((t) => (
+                  <li key={t.id} className="flex items-center gap-1.5">
+                    <StatusMark thread={t} />
+                    <a href={t.href} className="min-w-0 truncate hover:underline">
+                      {t.title}
+                    </a>
+                  </li>
+                ))}
+              </ul>
+            )}
+          </section>
+        )}
       </div>
     </details>
   );

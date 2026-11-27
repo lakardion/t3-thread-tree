@@ -27,6 +27,7 @@ import {
   Info,
   Layers,
   List,
+  GitBranch,
   ListTree,
   LoaderCircle,
   Map as MapIcon,
@@ -175,7 +176,8 @@ import {
   type Orders,
 } from "./order.ts";
 import { PinButton, Pins } from "./pin-button.tsx";
-import { OpenGraph, PrGraphDialog } from "./pr-graph.tsx";
+import { ScopedGraphDialog } from "./pr-graph-prototype.tsx";
+import { OpenGraph } from "./pr-graph.tsx";
 import {
   flag,
   forget,
@@ -3377,9 +3379,9 @@ function App() {
     if (body.pick) setCli(body.pick);
     void putPick(body).then((saved) => saved !== null && setCatchUpOn(saved));
   };
-  const graphHead = graphFor ? mapHead(tree?.projects ?? [], graphFor) : undefined;
+  const graphHead = graphFor && graphFor !== "all" ? mapHead(tree?.projects ?? [], graphFor) : undefined;
   /** A head that leaves the tree closes its graph for good, so it does not open again when the head comes back. */
-  if (graphFor && !graphHead) setGraphFor(null);
+  if (graphFor && graphFor !== "all" && tree && !graphHead) setGraphFor(null);
   const live = new Map((tree?.projects ?? []).flatMap(allThreads).map((t) => [t.id, t]));
   /** Threads and run items, for Triage. Skip and Send use `live`, which holds threads only. */
   const triageLive = new Map<string, ThreadNode | RunItem>([...live, ...runs.map((r) => [r.id, r] as const)]);
@@ -3640,6 +3642,10 @@ function App() {
       <link rel="icon" type="image/svg+xml" href={favicon(appIcon, tabCount)} />
       <header className="mb-3.5 flex flex-none flex-wrap items-center gap-x-4 gap-y-3 text-muted-foreground">
         <h1 className="m-0 text-[15px] font-semibold text-foreground">Thread tree</h1>
+        {/** PROTOTYPE: the top-bar entry to the PR graph at All scope. */}
+        <Button variant="outline" size="sm" onClick={() => setGraphFor("all")}>
+          <GitBranch aria-hidden /> PR graph
+        </Button>
         <ToggleGroup
           type="single"
           size="sm"
@@ -3955,7 +3961,14 @@ function App() {
         />
       )}
       {undoIds && <UndoToast key={undoIds.join()} ids={undoIds} onClose={() => setUndoIds(null)} />}
-      {graphHead && <PrGraphDialog key={graphHead.id} head={graphHead} onOpenChange={() => setGraphFor(null)} />}
+      {/** PROTOTYPE: every entry opens the scoped modal. */}
+      {graphFor && tree && (
+        <ScopedGraphDialog
+          projects={tree.projects}
+          start={graphFor === "all" ? "all" : `map:${graphFor}`}
+          onOpenChange={() => setGraphFor(null)}
+        />
+      )}
       <SendDialog
         fixed
         open={sendTo.open}
