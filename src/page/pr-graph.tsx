@@ -555,7 +555,7 @@ function ScopePicker({
       </PopoverTrigger>
       <PopoverContent id={listId} align="start" className="w-80 p-0">
         <Command>
-          <CommandInput placeholder="Find a project or map" />
+          <CommandInput placeholder={maps.length > 0 ? "Find a project or map" : "Find a project"} />
           <CommandList>
             <CommandEmpty>No scope matches</CommandEmpty>
             <CommandGroup>
@@ -585,27 +585,31 @@ function ScopePicker({
                 </CommandItem>
               ))}
             </CommandGroup>
-            <CommandSeparator />
-            <CommandGroup
-              heading={
-                <span className="flex items-center gap-1.5">
-                  <MapIcon className="size-3.5" aria-hidden /> Maps
-                </span>
-              }
-            >
-              {maps.map((x) => (
-                <CommandItem
-                  key={x.key}
-                  value={`map:${x.key}`}
-                  keywords={[x.name, x.project.label]}
-                  onSelect={() => pick(`map:${x.key}`)}
+            {maps.length > 0 && (
+              <>
+                <CommandSeparator />
+                <CommandGroup
+                  heading={
+                    <span className="flex items-center gap-1.5">
+                      <MapIcon className="size-3.5" aria-hidden /> Maps
+                    </span>
+                  }
                 >
-                  <ProjectIcon name={x.project.label} />
-                  <span className="truncate">{x.name}</span>
-                  {mark(`map:${x.key}`)}
-                </CommandItem>
-              ))}
-            </CommandGroup>
+                  {maps.map((x) => (
+                    <CommandItem
+                      key={x.key}
+                      value={`map:${x.key}`}
+                      keywords={[x.name, x.project.label]}
+                      onSelect={() => pick(`map:${x.key}`)}
+                    >
+                      <ProjectIcon name={x.project.label} />
+                      <span className="truncate">{x.name}</span>
+                      {mark(`map:${x.key}`)}
+                    </CommandItem>
+                  ))}
+                </CommandGroup>
+              </>
+            )}
           </CommandList>
         </Command>
       </PopoverContent>
