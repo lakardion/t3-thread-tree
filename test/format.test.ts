@@ -387,8 +387,12 @@ describe("shortDate", () => {
 });
 
 describe("railView", () => {
-  const row = (id: string, merged: boolean) =>
-    ({ t: { id, prs: [{ state: merged ? "merged" : "open" }] }, n: merged ? undefined : 1 }) as unknown as RailRow;
+  const row = (id: string, merged: boolean, stop = id) =>
+    ({
+      t: { id, prs: [{ state: merged ? "merged" : "open" }] },
+      stop: { id: stop },
+      n: merged ? undefined : 1,
+    }) as unknown as RailRow;
   const rows = [row("m1", true), row("m2", true), row("a", false), row("b", false), row("c", false)];
   const show = (rs: RailRow[], open: boolean, mergedOpen: boolean) =>
     railView(rs, { open, mergedOpen }).map((i) =>
@@ -401,11 +405,16 @@ describe("railView", () => {
   test("folded merged rows form one pile at the first merged place", () => {
     expect(show(rows, true, false)).toEqual(["merged:m1m2", "a", "b", "c"]);
   });
-  test("a closed rail piles the merged rows, keeps the bottom row and piles the rest", () => {
-    expect(show(rows, false, true)).toEqual(["merged:m1m2", "a", "more:bc"]);
+  test("a closed rail piles the merged rows, keeps the two bottom rows and piles the rest", () => {
+    const four = [...rows, row("d", false)];
+    expect(show(four, false, true)).toEqual(["merged:m1m2", "a", "b", "more:cd"]);
   });
-  test("a closed rail with one open row has no more pile", () => {
-    expect(show(rows.slice(0, 3), false, true)).toEqual(["merged:m1m2", "a"]);
+  test("a closed rail keeps every row of its two bottom stops", () => {
+    const shared = [row("a", false, "s1"), row("a2", false, "s1"), row("b", false), row("c", false), row("d", false)];
+    expect(show(shared, false, true)).toEqual(["a", "a2", "b", "more:cd"]);
+  });
+  test("a closed rail with two open rows has no more pile", () => {
+    expect(show(rows.slice(0, 4), false, true)).toEqual(["merged:m1m2", "a", "b"]);
   });
   test("no merged rows give no merged pile", () => {
     expect(show(rows.slice(2), true, false)).toEqual(["a", "b", "c"]);

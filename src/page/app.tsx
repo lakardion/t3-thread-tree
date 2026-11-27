@@ -2099,7 +2099,7 @@ function ThreadRow({
   return <Sortable sort={sort}>{render}</Sortable>;
 }
 
-/** The PR stack rail of consecutive members in a Map group: no fold, no drag. */
+/** The PR stack rail of consecutive members in a Map group: it folds through its dots and piles, with no drag. */
 function MapRail({ run }: { run: Group[] }) {
   const { closed, toggle, fold } = useContext(Folds);
   return <StackRail run={run} flat closed={closed} toggle={toggle} fold={fold} />;
@@ -2389,6 +2389,8 @@ function RailNode({
   n,
   merged,
   bare,
+  onClick,
+  label,
 }: {
   y: number;
   color: string;
@@ -2399,27 +2401,42 @@ function RailNode({
   merged?: boolean;
   /** Line segments only, with no dot. */
   bare?: boolean;
+  /** Makes the dot a button named `label`. The line segments stay inert. */
+  onClick?: () => void;
+  label?: string;
 }) {
   const line = `color-mix(in oklch, ${color} 45%, transparent)`;
+  const dotProps = {
+    className: cn(
+      "absolute flex -translate-y-1/2 items-center justify-center rounded-full text-[9px] font-bold text-background",
+      n
+        ? "left-px size-[18px]"
+        : merged
+          ? "left-1 size-3 bg-pr-merged"
+          : "left-1 size-3 border-2 border-muted-foreground bg-card",
+      onClick &&
+        "pointer-events-auto cursor-pointer focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring",
+    ),
+    style: { top: y, background: n ? color : undefined },
+  };
   return (
-    <span aria-hidden className="pointer-events-none absolute inset-y-0 left-0 w-5">
-      {above && <span className="absolute left-[9px] w-0.5" style={{ top: 0, height: y, background: line }} />}
-      {below && <span className="absolute bottom-0 left-[9px] w-0.5" style={{ top: y, background: line }} />}
-      {!bare && (
-        <span
-          className={cn(
-            "absolute flex -translate-y-1/2 items-center justify-center rounded-full text-[9px] font-bold text-background",
-            n
-              ? "left-px size-[18px]"
-              : merged
-                ? "left-1 size-3 bg-pr-merged"
-                : "left-1 size-3 border-2 border-muted-foreground bg-card",
-          )}
-          style={{ top: y, background: n ? color : undefined }}
-        >
-          {n}
-        </span>
+    <span className="pointer-events-none absolute inset-y-0 left-0 w-5">
+      {above && (
+        <span aria-hidden className="absolute left-[9px] w-0.5" style={{ top: 0, height: y, background: line }} />
       )}
+      {below && (
+        <span aria-hidden className="absolute bottom-0 left-[9px] w-0.5" style={{ top: y, background: line }} />
+      )}
+      {!bare &&
+        (onClick ? (
+          <button type="button" aria-label={label} onClick={onClick} {...dotProps}>
+            {n}
+          </button>
+        ) : (
+          <span aria-hidden {...dotProps}>
+            {n}
+          </span>
+        ))}
     </span>
   );
 }
@@ -2527,7 +2544,7 @@ function StackRail({
       () => {},
     );
   };
-  const open = flat || !closed.has(`rail:${id}`);
+  const open = !closed.has(`rail:${id}`);
   const { stops, rows: allRows } = railRows(run);
   const section = useContext(Section);
   const [showOther, setShowOther] = useState(false);
@@ -2696,7 +2713,18 @@ function StackRail({
                 const r = item.row;
                 return (
                   <li className="relative pl-6">
-                    <RailNode {...line} color={prTone(r.stop.p)} n={r.n} merged={isMergedRow(r)} />
+                    <RailNode
+                      {...line}
+                      color={prTone(r.stop.p)}
+                      n={r.n}
+                      merged={isMergedRow(r)}
+                      {...(isMergedRow(r)
+                        ? { onClick: () => toggle(`merged:${id}`), label: "Collapse merged PRs" }
+                        : {
+                            onClick: () => toggle(`rail:${id}`),
+                            label: open ? "Collapse PR stack" : "Expand PR stack",
+                          })}
+                    />
                     <ul className="m-0 list-none p-0">
                       <ThreadRow t={r.t} chip={r.chip} inStack />
                     </ul>

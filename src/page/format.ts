@@ -58,11 +58,18 @@ export type RailItem = { kind: "row"; row: RailRow } | { kind: "pile"; what: "me
 
 /**
  * The body items of a rail. Merged rows form one pile when `mergedOpen` is off or the rail is closed.
- * A closed rail keeps its first other row; the remaining rows form one `more` pile after it.
+ * A closed rail keeps the rows of its first two other stops; the remaining rows form one `more` pile after them.
  */
 export function railView(rows: RailRow[], { open, mergedOpen }: { open: boolean; mergedOpen: boolean }): RailItem[] {
   const merged = open && mergedOpen ? [] : rows.filter(isMergedRow);
-  const more = open ? [] : rows.filter((r) => !merged.includes(r)).slice(1);
+  const rest = rows.filter((r) => !merged.includes(r));
+  const kept = new Set(
+    rest
+      .map((r) => r.stop.id)
+      .filter((id, i, ids) => ids.indexOf(id) === i)
+      .slice(0, 2),
+  );
+  const more = open ? [] : rest.filter((r) => !kept.has(r.stop.id));
   const items: RailItem[] = [];
   for (const row of rows) {
     const what = merged.includes(row) ? "merged" : more.includes(row) ? "more" : null;
