@@ -2,7 +2,7 @@ import { describe, expect, test } from "bun:test";
 import { homedir } from "node:os";
 
 import { pinIdOf } from "../src/page/order.ts";
-import { flatten, sortFlat } from "../src/page/view.ts";
+import { flatten, folds, sections, sequence, sortFlat } from "../src/page/view.ts";
 import {
   buildLinearTree,
   buildTree,
@@ -1850,6 +1850,88 @@ describe("Lineage groups", () => {
     expect(allRuns(tree[0])).toHaveLength(1);
   });
 
+  describe("flat view", () => {
+    const ask = (since: string) => ({
+      pendingRuntimeRequest: { id: "r", kind: "user_input", createdAt: since },
+    });
+    const unitsOf = (raws: object[], spawners: Record<string, string>) => flatten(build(raws, spawners));
+
+    test("a group is one unit in Needs input; the done member folds as context", () => {
+      const units = unitsOf(
+        [
+          shell("root", "root"),
+          shell("a", "a", ask("2026-11-12T10:00:00.000Z")),
+          shell("b", "b", { status: "completed" }),
+        ],
+        { a: "root", b: "root" },
+      );
+      expect(units.map((u) => u.id)).toEqual(["t:root"]);
+      const [sec] = sections(units);
+      expect(sec.label).toBe("Needs input");
+      expect(sec.units.map((u) => u.id)).toEqual(["t:root"]);
+      const [u] = units;
+      if (u.kind !== "thread") throw new Error("expected a thread unit");
+      expect(u.t.children.map((c) => [c.title, folds(c, sec.statuses!)])).toEqual([
+        ["a", false],
+        ["b", true],
+      ]);
+      const [header] = sequence(units, "status");
+      expect(header).toMatchObject({ kind: "section", label: "Needs input", count: 1 });
+    });
+
+    test("a settled root is headed by the Lineage header and sits in one section", () => {
+      const units = unitsOf([shell("root", "root", SETTLED), shell("a", "a", ask("2026-11-12T10:00:00.000Z"))], {
+        a: "root",
+      });
+      expect(units).toHaveLength(1);
+      const [u] = units;
+      if (u.kind !== "thread") throw new Error("expected a thread unit");
+      expect(u.t.map?.header).toBe(true);
+      expect(sections(units).map((s) => s.label)).toEqual(["Needs input"]);
+      expect(sequence(units, "status")[0]).toMatchObject({ kind: "section", count: 1 });
+    });
+
+    test("Group by Linear project puts the unit in the section of its head", () => {
+      const answers: Record<string, LinearIssue> = {
+        "SHOP-1": { project: { id: "x", name: "Proj x", url: "u" }, milestone: null },
+        "SHOP-2": { project: { id: "y", name: "Proj y", url: "u" }, milestone: null },
+      };
+      const projects = buildLinearTree(
+        inputOf(
+          [shell("root", "SHOP-1 root"), shell("t2", "SHOP-2 b")],
+          { t2: "root" },
+          { linearOf: (k) => answers[k] },
+        ),
+        defaultRules(),
+      );
+      const items = sequence(flatten(projects), "linear", new Set(), true, projects);
+      expect(items.filter((i) => i.kind === "section").map((i) => i.key)).toEqual(["lm:x:none"]);
+      expect(items.filter((i) => i.kind === "thread").map((i) => i.id)).toEqual(["t:root"]);
+    });
+
+    test("groups in Needs input go by the oldest Wait of their members", () => {
+      const units = unitsOf(
+        [
+          shell("r1", "r1"),
+          shell("a1", "a1", ask("2026-11-12T11:00:00.000Z")),
+          shell("r2", "r2"),
+          shell("a2", "a2", ask("2026-11-12T09:00:00.000Z")),
+        ],
+        { a1: "r1", a2: "r2" },
+      );
+      expect(units.map((u) => u.id)).toEqual(["t:r1", "t:r2"]);
+      expect(sections(units)[0].units.map((u) => u.id)).toEqual(["t:r2", "t:r1"]);
+    });
+
+    test("with no grouping, each group is one unit", () => {
+      const units = unitsOf(
+        [shell("r1", "r1"), shell("a1", "a1"), shell("b1", "b1"), shell("r2", "r2"), shell("a2", "a2")],
+        { a1: "r1", b1: "r1", a2: "r2" },
+      );
+      expect(sequence(units, "none").map((u) => u.id)).toEqual(["t:r1", "t:r2"]);
+    });
+  });
+
   describe("Linear tree", () => {
     const answers: Record<string, LinearIssue> = {
       "SHOP-1": { project: { id: "x", name: "Proj x", url: "u" }, milestone: null },
@@ -1891,6 +1973,25 @@ describe("Lineage groups", () => {
       expect(titles(tree[0].groups[0].threads[0].children)).toEqual(["SHOP-1 a", "SHOP-3 c"]);
     });
 
+    test("a keyless root whose members share a project but not a milestone goes to No milestone", () => {
+      const proj = { id: "x", name: "Proj x", url: "u" };
+      const shared: Record<string, LinearIssue> = {
+        "SHOP-1": { project: proj, milestone: { id: "m1", name: "M1", targetDate: null } },
+        "SHOP-3": { project: proj, milestone: { id: "m2", name: "M2", targetDate: null } },
+      };
+      const tree = buildLinearTree(
+        inputOf(
+          [shell("chart", "Wayfinder"), shell("t1", "SHOP-1 a"), shell("t3", "SHOP-3 c")],
+          { t1: "chart", t3: "chart" },
+          { linearOf: (k) => shared[k] },
+        ),
+        defaultRules(),
+      );
+      expect(tree.map((b) => b.id)).toEqual(["lp:x"]);
+      expect(tree[0].groups.map((g) => g.id)).toEqual(["lm:x:none"]);
+      expect(tree[0].groups[0].threads.map((t) => t.id)).toEqual(["chart"]);
+    });
+
     test("a keyless program root goes to the Linear project its members share", () => {
       const shared: Record<string, LinearIssue> = {
         "SHOP-1": { project: { id: "x", name: "Proj x", url: "u" }, milestone: null },
@@ -1906,6 +2007,21 @@ describe("Lineage groups", () => {
       );
       expect(tree.map((b) => b.id)).toEqual(["lp:x"]);
       expect(tree[0].groups[0].threads[0].children.map((c) => c.id)).toEqual(["map:/m/x", "map:/m/y"]);
+    });
+
+    test("a keyless root whose members have no shared project is a loose thread, with its group", () => {
+      const tree = buildL([shell("chart", "Wayfinder"), shell("t1", "SHOP-1 a"), shell("t2", "SHOP-2 b")], {
+        t1: "chart",
+        t2: "chart",
+      });
+      expect(tree.map((b) => b.id)).toEqual(["lf:loose"]);
+      expect(titles(tree[0].threads[0].children)).toEqual(["SHOP-1 a", "SHOP-2 b"]);
+    });
+
+    test("a settled keyless root puts its Lineage header in the shared project", () => {
+      const tree = buildL([shell("chart", "Wayfinder", SETTLED), shell("t1", "SHOP-1 a")], { t1: "chart" });
+      expect(tree.map((b) => b.id)).toEqual(["lp:x"]);
+      expect(tree[0].groups[0].threads[0]).toMatchObject({ id: "chart", map: { header: true } });
     });
   });
 });
