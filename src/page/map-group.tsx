@@ -1,4 +1,4 @@
-import { ChevronDown, ExternalLink, GitBranch, Map as MapIcon } from "lucide-react";
+import { ChevronDown, ExternalLink, GitBranch, Map as MapIcon, Network } from "lucide-react";
 import { useContext, useState, type ComponentType, type CSSProperties, type ReactNode, type Ref } from "react";
 
 import { Button } from "@/components/ui/button";
@@ -29,7 +29,7 @@ const FoldIcon = ({ open }: { open: boolean }) => (
 );
 
 const MAP_DOT =
-  "absolute top-[18px] left-1 flex size-5 -translate-y-1/2 items-center justify-center rounded-full border-2 border-amber-500/60 bg-card";
+  "absolute top-[18px] left-1 flex size-5 -translate-y-1/2 items-center justify-center rounded-full border-2 bg-card";
 
 /** The PR graph button of a map head. A head that anchors several maps has no map key and no button. */
 function GraphButton({ t }: { t: ThreadNode }) {
@@ -56,8 +56,8 @@ function GraphButton({ t }: { t: ThreadNode }) {
 }
 
 /**
- * A Map group on its amber rail: the map thread row, or a Map header, then the members. `Row` renders a member, a
- * sub-map or a thread row; `Rail` renders consecutive members of one PR stack. `liRef`, `liClass`, `liStyle` and
+ * A Lineage group: the root row, or a Lineage or Map header, then the members. A group with a map key gets the amber
+ * look, any other group the neutral look. `Row` renders a member, a sub-map or a thread row; `Rail` renders consecutive members of one PR stack. `liRef`, `liClass`, `liStyle` and
  * `handle` and `pin` come from the caller, which owns the drag and the row frame. In a status section, a row folds behind
  * "+N other threads" when it and its subthreads are context rows.
  */
@@ -97,6 +97,11 @@ export function MapGroup({
 }) {
   const [showOther, setShowOther] = useState(false);
   const info = t.map!;
+  const isMap = !!info.key;
+  const Icon = isMap ? MapIcon : Network;
+  const tone = isMap ? MAP_TONE : "text-muted-foreground";
+  const iconLabel = isMap ? "Map" : "Lineage group";
+  const link = info.root ? "Open root thread in T3" : "Open map thread in T3";
   const count = t.children.flatMap(flat).length;
   const entries = t.children.reduce<ThreadNode[][]>((out, c) => {
     const last = out.at(-1);
@@ -142,7 +147,7 @@ export function MapGroup({
       : []),
   ];
   const countText = (
-    <span className="flex-none text-[11px] text-muted-foreground tabular-nums" title="Map members">
+    <span className="flex-none text-[11px] text-muted-foreground tabular-nums" title="Members">
       {count}
     </span>
   );
@@ -150,8 +155,8 @@ export function MapGroup({
   return (
     <li ref={liRef} className={cn("relative my-px list-none", liClass)} style={liStyle}>
       <div className="relative pl-7">
-        <span className={MAP_DOT}>
-          <MapIcon className={cn("size-3", MAP_TONE)} aria-hidden />
+        <span className={cn(MAP_DOT, isMap ? "border-amber-500/60" : "border-border")}>
+          <Icon className={cn("size-3", tone)} aria-hidden />
         </span>
         {info.header ? (
           <div
@@ -167,7 +172,7 @@ export function MapGroup({
               className="flex min-w-0 items-center gap-2 text-left select-none after:absolute after:inset-0 max-[720px]:min-h-11"
             >
               <FoldIcon open={open} />
-              <MapIcon className={cn("size-3.5 flex-none", MAP_TONE)} aria-label="Map" />
+              <Icon className={cn("size-3.5 flex-none", tone)} aria-label={iconLabel} />
               <span className="truncate font-semibold">{info.name}</span>
             </button>
             {info.key && (
@@ -185,8 +190,8 @@ export function MapGroup({
             {info.href && (
               <a
                 href={info.href}
-                aria-label="Open map thread in T3"
-                title="Open map thread in T3"
+                aria-label={link}
+                title={link}
                 className="relative z-10 flex-none text-muted-foreground hover:text-foreground"
               >
                 <ExternalLink className="size-3" aria-hidden />
@@ -212,7 +217,7 @@ export function MapGroup({
                     variant="ghost"
                     size="icon"
                     className="size-5 flex-none rounded-[6px] text-muted-foreground pointer-coarse:min-h-11 pointer-coarse:min-w-11"
-                    aria-label={open ? "Fold map" : "Unfold map"}
+                    aria-label={open ? "Fold group" : "Unfold group"}
                     aria-expanded={open}
                     data-fold
                     data-stop={`fold:${t.id}`}
@@ -231,11 +236,20 @@ export function MapGroup({
           {items.map((el, i) => (
             <li key={el.key} className="relative list-none pl-3">
               {i < items.length - 1 ? (
-                <span aria-hidden className="absolute inset-y-0 left-0 w-0.5 bg-amber-500/40" />
+                <span
+                  aria-hidden
+                  className={cn(
+                    "absolute inset-y-0 left-0 w-0.5",
+                    isMap ? "bg-amber-500/40" : "bg-muted-foreground/40",
+                  )}
+                />
               ) : (
                 <span
                   aria-hidden
-                  className="absolute top-0 left-0 h-[18px] w-2 rounded-bl-[8px] border-b-2 border-l-2 border-amber-500/40"
+                  className={cn(
+                    "absolute top-0 left-0 h-[18px] w-2 rounded-bl-[8px] border-b-2 border-l-2",
+                    isMap ? "border-amber-500/40" : "border-muted-foreground/40",
+                  )}
                 />
               )}
               <ul className="m-0 flex list-none flex-col p-0">{el}</ul>
