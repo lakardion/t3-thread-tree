@@ -495,6 +495,56 @@ describe("PR stack", () => {
     }
   });
 
+  test("merged PRs in the T3 slots keep a stack with one open PR", () => {
+    const stack = {
+      base: "main",
+      layers: [
+        { number: 10, state: "merged" },
+        { number: 11, state: "merged" },
+        { number: 12, state: "open" },
+      ],
+    };
+    const own = (n: number) =>
+      [10, 11, 12].map((x) => pr(x, x === n ? "created" : "stack", x === 12 ? "open" : "merged", stack));
+    const tree = build([
+      shell("c", "WEB-3 C", { pullRequests: own(12) }),
+      shell("b", "WEB-2 B", { pullRequests: own(11) }),
+      shell("a", "WEB-1 A", { pullRequests: own(10) }),
+    ]);
+    expect(tree[0].groups.map((b) => [b.label, b.stack?.id, b.stack?.total, b.threads[0].stack?.pos])).toEqual([
+      ["WEB-1", "s12", 1, null],
+      ["WEB-2", "s12", 1, null],
+      ["WEB-3", "s12", 1, 1],
+    ]);
+  });
+
+  test("slots of a closed PR do not make a stack", () => {
+    const stack = {
+      base: "main",
+      layers: [10, 11].map((number) => ({ number, state: "closed" })),
+    };
+    const tree = build([shell("a", "WEB-1 A", { pullRequests: [pr(10, "created", "closed", stack)] })]);
+    expect(tree[0].groups.map((b) => b.stack)).toEqual([undefined]);
+  });
+
+  test("an all-merged stack stays whole in the T3 slot order", () => {
+    const stack = {
+      base: "main",
+      layers: [31, 30, 32].map((number) => ({ number, state: "merged" })),
+    };
+    const own = (n: number) => [30, 31, 32].map((x) => pr(x, x === n ? "created" : "stack", "merged", stack));
+    const tree = build([
+      shell("a", "WEB-1 A", { pullRequests: own(30) }),
+      shell("b", "WEB-2 B", { pullRequests: own(31) }),
+      shell("c", "WEB-3 C", { pullRequests: own(32) }),
+    ]);
+    expect(tree[0].groups.map((b) => [b.label, b.stack?.id, b.stack?.total, b.threads[0].stack?.pos])).toEqual([
+      ["WEB-2", "s31", 0, null],
+      ["WEB-1", "s31", 0, null],
+      ["WEB-3", "s31", 0, null],
+    ]);
+  });
+
   test("the most recently synced stack layers win, whatever the thread order", () => {
     const layers = (ns: number[]) => ({ base: "main", layers: ns.map((number) => ({ number, state: "open" })) });
     const copy = (n: number, ns: number[], at: string) =>

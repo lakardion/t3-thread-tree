@@ -196,7 +196,7 @@ The **Map rail**, in amber: `amber-500` for the rail, `amber-600` (light) and `a
 - **Map thread row.** The normal thread row with no details fold. At the right end, the member count, the PR graph button and the map fold take the place of the details fold.
 - **Map header.** The map node, the fold, the map icon, the display name, the member count, the PR graph button and, only when a map thread exists, "Open map thread in T3" (`t3code://threads/<environmentId>/<threadId>`). It shows no age. Its hover shows "Last run <date> · <title>" for its block time. It has no status, no Settle and no Send. It is not a thread: no count, Needs you, Open next, Triage, Looks done or Find takes it.
 - **Rail.** An amber rail drops from the map node. Members hang on it, nested like subthreads. It is one continuous line and ends in a rounded elbow into the last member. A sub-map nests on the parent's rail with its own map node and rail.
-- **PR stack inside.** The stack mates sit together in a small stack rail inside the group: the PR stack rail of today, a dashed box with a line of PR stops and numbered PR nodes on the rows. The rows show no `1/2` badges.
+- **PR stack inside.** The stack mates sit together in a small stack rail inside the group: the PR stack rail of today, a dashed box with a line of PR stops and numbered PR nodes on the rows. The rows show no `1/2` badges. The rail folds the same way as the stack rail: see "PR stack rail folds".
 - **Count.** The count of visible members, sub-map members included.
 - **Fold.** The map fold hides the rail and the members. The head stays. The closed state is saved in `thread-tree:closed` under the head id; a map header under a map thread of several maps uses `map:<key>`.
 - **Keys.** The map fold and the map header fold are stops. On the map thread row, `o`, `l` and `h` act on the map fold. On a map header, Enter folds and unfolds, and `s` does nothing.
@@ -419,7 +419,7 @@ A **top-level thread** has no native `parentThreadId`. A **subagent** has `relat
 6. **Placement.** A thread is always placed in its own `projectId`, except a **Map member**, which goes into its map group (see "Map groups"). The chain of **Placement rules** decides the rest (see "Placement rules").
 7. **Launcher threads** get no special rule.
 8. **PR stack:** it adds no level to the tree. Each thread in a stack shows a badge with its position, for example `⧉ 3/6`. Key groups and the stack group in one project that share a stack sit next to each other, in stack order. A group with no PR of its own in the stack goes after the others.
-   - Stack membership: the thread's open PRs with `source` `created`, `stack` or `agent`.
+   - Stack membership: the thread's open PRs with `source` `created`, `stack` or `agent`, and every PR that T3 lists in the stack layers of those PRs, merged ones too. A stack of fewer than 2 such PRs is not a stack.
    - Stack order: as computed by `build.py` on branch `prototype/005-tree-ui`.
 9. **Order:**
    - Projects are sorted by their oldest thread, oldest first.
@@ -455,7 +455,8 @@ The server places every thread with one ordered chain of **Placement rules**. Th
 | Issue key      | `key`    | A thread with an issue key (Tree rule 4) into the group of its key.                                                                 | The user can reorder it.                                      | On      |
 | Launch nesting | `nest`   | A keyless thread that is not a review, under its visible spawner (Tree rule 5), when both have the same **Home**.                   | Always last: it needs the place of the spawner.               | Off     |
 
-- **PR stack, project layout.** A stack thread with an issue key goes to its own key group while the Issue key rule is on. The other stack threads go to `Project › PR stack #<n>`, where `<n>` is the bottom PR of the stack. All keyless threads of one stack share this group, and it gets the stack rail.
+- **PR stack, project layout.** A stack thread with an issue key goes to its own key group while the Issue key rule is on. The other stack threads go to `Project › PR stack #<n>`, where `<n>` is the bottom open PR of the stack, or the first PR in the T3 stack layers when no PR is open. All keyless threads of one stack share this group, and it gets the stack rail.
+- **PR stack rail folds.** Merged rows show by default. The merged fold (`merged:<stack id>` in `thread-tree:closed`) hides them: they become one pile at the place of the first merged row, shown as up to 4 purple dots and the caption "N merged". The same count shows in the header as one button. A closed rail keeps its bottom row that is not merged. Its other rows become one pile with the caption "N more". A click on a pile opens the rail and the merged fold. "Collapse all" and "Show in tree" set the merged fold with the rail fold.
 - **PR stack, Linear layout.** The lowest free stack thread that has an issue key and is not a review places the full stack. Each other stack thread uses the key of that thread in the Linear layout. A stack with no such thread is a set of loose threads.
 - **Home.** The container of the layout that the node's own key and review flag give it. Project layout: its T3 project. Linear layout: Reviews, its milestone, No project or the top level. One nest condition serves both layouts. It gives the same tree as the two conditions of today, and the tests must show this.
 - **Runs.** A run enters the pool. Map group, PR stack and Launch nesting skip it, so only Reviews and Issue key place it.

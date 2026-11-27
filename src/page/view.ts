@@ -413,7 +413,9 @@ export function pathFolds(projects: Group[], id: string): string[] {
     const path = walk(p);
     if (path)
       return [
-        ...path.flatMap((b) => (b.kind === "loose" ? [] : b.stack ? [b.id, `rail:${b.stack.id}`] : [b.id])),
+        ...path.flatMap((b) =>
+          b.kind === "loose" ? [] : b.stack ? [b.id, `rail:${b.stack.id}`, `merged:${b.stack.id}`] : [b.id],
+        ),
         ...path.at(-1)!.threads.flatMap((t) => mapHeadsTo(t, id)),
       ];
   }

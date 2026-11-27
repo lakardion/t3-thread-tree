@@ -117,10 +117,13 @@ import {
   initials,
   ink,
   isKeyGroup,
+  isMergedRow,
+  isMergedStop,
   labelPill,
   linearHref,
   prTone,
   railRows,
+  railView,
   shortDate,
   stackRuns,
   stopLabel,
@@ -2385,6 +2388,7 @@ function RailNode({
   below,
   n,
   merged,
+  bare,
 }: {
   y: number;
   color: string;
@@ -2393,26 +2397,87 @@ function RailNode({
   n?: number;
   /** An unnumbered stop whose PR is merged: a filled merge-colored dot. */
   merged?: boolean;
+  /** Line segments only, with no dot. */
+  bare?: boolean;
 }) {
   const line = `color-mix(in oklch, ${color} 45%, transparent)`;
   return (
     <span aria-hidden className="pointer-events-none absolute inset-y-0 left-0 w-5">
       {above && <span className="absolute left-[9px] w-0.5" style={{ top: 0, height: y, background: line }} />}
       {below && <span className="absolute bottom-0 left-[9px] w-0.5" style={{ top: y, background: line }} />}
+      {!bare && (
+        <span
+          className={cn(
+            "absolute flex -translate-y-1/2 items-center justify-center rounded-full text-[9px] font-bold text-background",
+            n
+              ? "left-px size-[18px]"
+              : merged
+                ? "left-1 size-3 bg-pr-merged"
+                : "left-1 size-3 border-2 border-muted-foreground bg-card",
+          )}
+          style={{ top: y, background: n ? color : undefined }}
+        >
+          {n}
+        </span>
+      )}
+    </span>
+  );
+}
+
+/** Up to 4 overlapping dots, one per PR in `tones`, and a caption with the count. */
+function PileButton({
+  tones,
+  caption,
+  label,
+  expanded,
+  merged,
+  rail,
+  onClick,
+}: {
+  tones: string[];
+  caption: string;
+  label: string;
+  expanded?: boolean;
+  merged?: boolean;
+  /** In a rail body: the dots stack on the rail line, inside the gutter. */
+  rail?: boolean;
+  onClick: () => void;
+}) {
+  return (
+    <button
+      type="button"
+      className={cn(
+        "inline-flex items-center gap-1.5 rounded-full text-muted-foreground hover:text-foreground max-[720px]:min-h-11",
+        rail && "relative -ml-6 self-stretch pl-6",
+      )}
+      aria-label={label}
+      aria-expanded={expanded}
+      onClick={onClick}
+    >
+      <span
+        aria-hidden
+        className={cn("inline-flex items-center", rail && "absolute top-1/2 left-1 -translate-y-1/2 flex-col")}
+      >
+        {tones.slice(0, 4).map((tone, i) => (
+          <span
+            key={i}
+            className={cn(
+              "size-3 rounded-full border-2 border-card",
+              rail ? "-mt-1.5 first:mt-0" : "-ml-1.5 first:ml-0",
+            )}
+            style={{ background: tone }}
+          />
+        ))}
+      </span>
       <span
         className={cn(
-          "absolute flex -translate-y-1/2 items-center justify-center rounded-full text-[9px] font-bold text-background",
-          n
-            ? "left-px size-[18px]"
-            : merged
-              ? "left-1 size-3 bg-pr-merged"
-              : "left-1 size-3 border-2 border-muted-foreground bg-card",
+          "rounded-full border px-1.5 text-[10px] font-semibold",
+          merged ? "border-pr-merged/50 text-pr-merged" : "border-border",
         )}
-        style={{ top: y, background: n ? color : undefined }}
       >
-        {n}
+        {caption}
       </span>
-    </span>
+    </button>
   );
 }
 
@@ -2444,6 +2509,7 @@ function StackRail({
   run,
   closed,
   toggle,
+  fold,
   sort,
   flat,
   project,
@@ -2469,10 +2535,16 @@ function StackRail({
   const rows = showOther ? allRows : allRows.filter((r) => !hidden.includes(r));
   const numbered = stops.filter((s) => s.n).length;
   const partial = numbered < total;
+  const mergedOpen = !closed.has(`merged:${id}`);
+  const mergedRows = rows.filter(isMergedRow);
+  const prCount = total + mergedRows.length;
+  const openStops = stops.filter((s) => !isMergedStop(s));
+  const view = railView(rows, { open, mergedOpen });
+  const showAll = () => fold([`rail:${id}`, `merged:${id}`], false);
   /**
    * ponytail: fixed threshold; measure fit with a ResizeObserver if a fixed count proves too coarse.
    */
-  const overlap = stops.length > 3;
+  const overlap = openStops.length > 3;
   const tip = headerTip(groupTime(run, useContext(ShowSnoozed)));
   const rowProject = useContext(RowProject);
   const projectPath = project?.path ?? rowProject;
@@ -2498,15 +2570,15 @@ function StackRail({
         >
           <DragHandle handleRef={handleRef} name={`PR stack of ${run[0].label}`} />
           {flat ? (
-            <span className="flex items-center text-muted-foreground" title={`PR stack · ${total} PRs`}>
-              <Layers className="size-3.5" aria-label={`PR stack · ${total} PRs`} />
+            <span className="flex items-center text-muted-foreground" title={`PR stack · ${prCount} PRs`}>
+              <Layers className="size-3.5" aria-label={`PR stack · ${prCount} PRs`} />
             </span>
           ) : (
             <CollapsibleTrigger
               data-stop={`rail:${id}`}
               className="flex items-center gap-1 text-muted-foreground select-none after:absolute after:inset-0 max-[720px]:min-h-11"
-              aria-label={`PR stack · ${total} PRs`}
-              title={`PR stack · ${total} PRs`}
+              aria-label={`PR stack · ${prCount} PRs`}
+              title={`PR stack · ${prCount} PRs`}
             >
               <Chevron open={open} />
               <Layers className="size-3.5" aria-hidden />
@@ -2519,9 +2591,19 @@ function StackRail({
                 {base}
               </code>
             )}
-            {stops.map(({ id: stopId, label, p, n }, i) => (
+            {mergedRows.length > 0 && (
+              <PileButton
+                merged
+                tones={mergedRows.map(() => "var(--pr-merged)")}
+                caption={`${mergedRows.length} merged`}
+                label={`${open && mergedOpen ? "Hide" : "Show"} ${mergedRows.length} merged PRs`}
+                expanded={open && mergedOpen}
+                onClick={open ? () => toggle(`merged:${id}`) : showAll}
+              />
+            )}
+            {openStops.map(({ id: stopId, label, p, n }, i) => (
               <span key={stopId} className="inline-flex items-center">
-                {(i > 0 || base) && (
+                {(i > 0 || base || mergedRows.length > 0) && (
                   <span
                     className={cn(
                       "h-0.5 w-4 transition-[margin,width] motion-reduce:transition-none",
@@ -2589,27 +2671,41 @@ function StackRail({
           )}
           {copies > 0 && <CopiedToast key={copies} number={number!} onClose={() => setCopies(0)} />}
         </div>
-        <CollapsibleContent asChild>
+        {view.length > 0 && (
           <ul className="m-0 list-none p-0 pb-1 pl-1">
-            <Presence items={rows} keyOf={(r) => r.t.id}>
-              {(r) => (
-                <li className="relative pl-6">
-                  <RailNode
-                    y={18}
-                    color={prTone(r.stop.p)}
-                    above={r.t !== rows[0].t}
-                    below={r.t !== rows.at(-1)!.t}
-                    n={r.n}
-                    merged={!r.n && r.t.prs[0]?.state === "merged"}
-                  />
-                  <ul className="m-0 list-none p-0">
-                    <ThreadRow t={r.t} chip={r.chip} inStack />
-                  </ul>
-                </li>
-              )}
+            <Presence items={view} keyOf={(it) => (it.kind === "pile" ? `pile:${it.what}` : it.row.t.id)}>
+              {(item) => {
+                const line = { y: 18, above: item !== view[0], below: item !== view.at(-1) };
+                if (item.kind === "pile") {
+                  const merged = item.what === "merged";
+                  const count = item.rows.length;
+                  return (
+                    <li className="relative flex min-h-9 items-center pl-6">
+                      <RailNode {...line} color="var(--muted-foreground)" bare />
+                      <PileButton
+                        rail
+                        merged={merged}
+                        tones={item.rows.map((r) => (merged ? "var(--pr-merged)" : prTone(r.stop.p)))}
+                        caption={`${count} ${item.what}`}
+                        label={`Show ${count} ${merged ? "merged" : "more"} PRs`}
+                        onClick={showAll}
+                      />
+                    </li>
+                  );
+                }
+                const r = item.row;
+                return (
+                  <li className="relative pl-6">
+                    <RailNode {...line} color={prTone(r.stop.p)} n={r.n} merged={isMergedRow(r)} />
+                    <ul className="m-0 list-none p-0">
+                      <ThreadRow t={r.t} chip={r.chip} inStack />
+                    </ul>
+                  </li>
+                );
+              }}
             </Presence>
           </ul>
-        </CollapsibleContent>
+        )}
       </li>
     </Collapsible>
   );

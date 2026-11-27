@@ -632,7 +632,7 @@ describe("pathFolds", () => {
   ];
   test("lists the groups from the project down", () => expect(pathFolds(tree, "x")).toEqual(["p2", REVIEWS, "r"]));
   test("adds the rail of a stack, and finds a subthread", () =>
-    expect(pathFolds(tree, "c")).toEqual(["p2", "s1", "rail:st"]));
+    expect(pathFolds(tree, "c")).toEqual(["p2", "s1", "rail:st", "merged:st"]));
   test("is empty for an unknown thread", () => expect(pathFolds(tree, "zz")).toEqual([]));
   test("leaves out a loose wrapper but keeps the Map heads of its thread", () => {
     const head: ThreadNode = {
@@ -726,8 +726,8 @@ describe("Linear tree", () => {
   });
 
   test("foldIds and pathFolds reach the rail of a stack in a milestone", () => {
-    expect(foldIds(stacked())).toEqual(["lm:m", "rail:st"]);
-    expect(pathFolds([stacked()], "b")).toEqual(["lp:s", "lm:m", "lm:m:K", "rail:st"]);
+    expect(foldIds(stacked())).toEqual(["lm:m", "rail:st", "merged:st"]);
+    expect(pathFolds([stacked()], "b")).toEqual(["lp:s", "lm:m", "lm:m:K", "rail:st", "merged:st"]);
   });
 
   test("foldIds and pathFolds cover the milestones", () => {

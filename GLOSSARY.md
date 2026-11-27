@@ -60,6 +60,9 @@ _Avoid_: ticket id, slug
 **PR stack**:
 A chain of dependent PRs. T3 reports every PR in a thread's stack.
 
+**Pile**:
+Stacked dots in a **PR stack** rail. They stand for rows that the user folded. A caption gives the count, for example "3 merged" or "2 more".
+
 **Group**:
 A named set of rows in the tree: a **Project**, an **Issue key**, a **PR stack**, a **Map group**, the Reviews group, No project, or a Linear project or milestone.
 _Avoid_: branch (that word is for git)
@@ -280,7 +283,7 @@ _Avoid_: mini window, small window, Needs-you window
 - A **Pin** orders a list that the **Placement rules** already built. It never moves an item to another list.
 - A **Map group** has one **PR graph**. Its nodes are the PRs of its **Map members** and the PRs of its keys.
 - A **Map thread** heads one **Map group** for each map it launched. A **Map group** can hold the **Map group** of a sub-map, at the place of its **Map thread**.
-- The keyless threads of one **PR stack** share one group, named after the bottom PR (`PR stack #61`).
+- The keyless threads of one **PR stack** share one group, named after the bottom open PR, or the first PR of the stack when no PR is open (`PR stack #61`).
 
 ## Example dialogue
 
