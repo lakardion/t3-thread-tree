@@ -77,4 +77,7 @@ function ToggleGroupItem({
   );
 }
 
+/** The dev bundler renames the function; the Retouche overlay matches components by this name. */
+ToggleGroupItem.displayName = "UiToggleGroupItem";
+
 export { ToggleGroup, ToggleGroupItem };

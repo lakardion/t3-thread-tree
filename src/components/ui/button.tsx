@@ -60,4 +60,7 @@ function Button({
   );
 }
 
+/** The dev bundler renames the function; the Retouche overlay matches components by this name. */
+Button.displayName = "Button";
+
 export { Button, buttonVariants };

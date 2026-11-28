@@ -15,4 +15,7 @@ function Textarea({ className, ...props }: React.ComponentProps<"textarea">) {
   );
 }
 
+/** The dev bundler renames the function; the Retouche overlay matches components by this name. */
+Textarea.displayName = "Textarea";
+
 export { Textarea };

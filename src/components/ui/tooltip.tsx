@@ -41,4 +41,7 @@ function TooltipContent({
   );
 }
 
+/** The dev bundler renames the function; the Retouche overlay matches components by this name. */
+TooltipContent.displayName = "UiTooltipContent";
+
 export { Tooltip, TooltipTrigger, TooltipContent, TooltipProvider };

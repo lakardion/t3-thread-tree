@@ -49,4 +49,7 @@ function Badge({
   );
 }
 
+/** The dev bundler renames the function; the Retouche overlay matches components by this name. */
+Badge.displayName = "Badge";
+
 export { Badge, badgeVariants };

@@ -36,4 +36,7 @@ function Toggle({
   );
 }
 
+/** The dev bundler renames the function; the Retouche overlay matches components by this name. */
+Toggle.displayName = "UiToggle";
+
 export { Toggle, toggleVariants };

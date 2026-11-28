@@ -122,6 +122,10 @@ function DialogDescription({ className, ...props }: React.ComponentProps<typeof 
   );
 }
 
+/** The dev bundler renames the function; the Retouche overlay matches components by this name. */
+DialogTitle.displayName = "UiDialogTitle";
+DialogDescription.displayName = "UiDialogDescription";
+
 export {
   Dialog,
   DialogClose,
