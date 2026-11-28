@@ -1345,6 +1345,23 @@ Each build ticket updates the README for its own part: the "What you get" entry,
 - **End.** The run is `completed` when the top PR is merged. It is `stopped` on any "stop" answer or a closed layer. Asks have no timeout.
 - **Extra prompt.** The setting `settings/land-stack/extra-prompt` adds one last agent step. The step runs in the thread of the conflict agent if one ran, else in the project.
 
+### review-pr
+
+- `workflows/review-pr.ts` is `export default workflow("review-pr", …)`, version 1. It also exports the schemas `Pr`, `Payload`, `Finding` and `Verdict`. A caller can `invoke` the default export and gets a typed **Verdict**.
+- The payload is `{ pr: { repo, number }, project, text? }`. `text` is extra focus for the review.
+- The run title is `Review #<n> <PR title>`. The subject is the PR address. The agent thread has the same title.
+- The step `pr` reads the title, base branch, head commit and address with `gh pr view`. A `gh` error pauses the run.
+- The agent `review` runs in a worktree of `project`, from `origin/<base>`, with the project default model. Its brief tells it to check out the head commit detached, read the PR body and the linked issues, and review the diff on two axes. Standards uses the docs of the repo. Spec uses the PR body and the linked issues. It changes no file and posts nothing.
+- The agent returns `{ summary, findings }`. A finding has `axis` (`standards` or `spec`), `severity` (`blocker`, `major`, `minor` or `nit`), `body`, and `file` and `line` when it applies.
+- The code sets the decision: `changes` when a finding is a `blocker` or `major`, else `approve`. The run returns `{ decision, summary, findings }` whatever the user chooses.
+- The question `post-review` is "Post this review to #<n>?" with the choices Post and Don't post. The question has no timeout. The code treats no answer as Don't post.
+- The step `post` runs after Post. It posts one review with `gh api`. The event is always `COMMENT`, never `APPROVE` or `REQUEST_CHANGES`.
+  - The review body has the summary, the decision, the reviewed commit and a marker with the run id. The step first lists the reviews of the PR. When one has the marker, it posts nothing.
+  - A finding with `file` and `line` inside the diff is an inline comment. GitHub refuses the whole review when one comment is outside the diff, so any other finding goes in the body.
+  - When the PR head moved after the review, no finding is inline. The body names the reviewed commit.
+- Settings: `settings/review-pr/checks` adds "Also apply these checks" to the brief. It holds text, a file path or a skill name. A linked environment cannot read a local path. Those findings have `axis: "standards"`. `settings/review-pr/extra-prompt` adds one last agent step `extra` in the review thread.
+- T3 loads a top-level file only once per workflow name. A private workflow that invokes review-pr replaces the `review-pr.ts` entry file in the T3 workflows folder and re-exports the repo definition. `bun run workflows:install` writes no entry file when another top-level file already imports the repo file. A caller file added after the install, next to the entry file, gives "defined twice". So the caller must replace the entry file.
+
 ## Check at build
 
 These facts are not confirmed against a real stream. The research used the MCP thread list and SQLite.

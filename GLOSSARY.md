@@ -206,6 +206,10 @@ _Avoid_: run thread, workflow thread
 An open question that a **Run** asks the user, with a title and choices. The user answers with one choice and an optional reason.
 _Avoid_: workflow prompt, ask, approval
 
+**Verdict**:
+The typed result of a **Run** of the review-pr **Workflow**: approve or changes, a summary and findings.
+_Avoid_: review result, score
+
 **Paused run**:
 A **Run** that a failed step stopped and that waits for a person to resume or cancel it. A run that T3 will resume by itself is not a paused run.
 _Avoid_: failed run, stuck run
