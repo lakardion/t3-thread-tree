@@ -528,7 +528,7 @@ The modal of SPEC.md › "PR graph". Variant A of the prototype of map `map-pr-g
 
 - **Group head button.** Ghost icon button, lucide `GitBranch`, the size of the group fold, after the count. Tooltip "PR graph". When it shows: SPEC.md › "PR graph" › Where it opens.
 - **Top bar button.** Ghost icon button, lucide `GitBranch`, the size of the Settings button, before it. Tooltip "PR graph (G)".
-- **Header.** The title with a 16 px `GitBranch` icon and "PR graph" in `text-base`. Then the scope picker, a shadcn Combobox (`Popover` and `Command`) with a small outline trigger, `w-56`, that opens below the trigger with a search field. Then, at All, the graph sort as a small `Select` that opens below its trigger. A spacer, then the outline Refresh button. The row wraps on a phone.
+- **Header.** The title with a 16 px `GitBranch` icon and "PR graph" in `text-lg`. Then the scope picker, a shadcn Combobox (`Popover` and `Command`) with a small outline trigger, `w-56`, that opens below the trigger with a search field. Then, at All, the graph sort as a small `Select` that opens below its trigger. A spacer, then the outline Refresh button. The row wraps on a phone.
 - **Scope picker list.** "All projects", a separator, the "Projects" group, a separator, the "Groups" group. A group heading has a 14 px icon: lucide `FolderGit2` for Projects, lucide `Network` for Groups. A project item: `ProjectIcon`, the name, then "· N" in `--muted-foreground`. A map item: lucide `Map` in amber, then the map name. A lineage item: lucide `Network` in `--muted-foreground`, then the root title.
 - **Band.** A `<section>` with a dashed bottom border; the last band has none. The label is `sticky top-0 left-0`, `w-fit`, `rounded-br-md`, `bg-background/85` with a backdrop blur, `px-4 pt-3 pb-1`, 12 px text: the `ProjectIcon` and the name in `font-semibold`, the repo in mono `--muted-foreground`, then "root `<branch>` · N PRs · M open · K anomalies" in `--muted-foreground`, the branch in mono.
 - **Dialog.** The app `Dialog`, `max-w-[1200px]`, at most 860 px high, with a 1rem margin. On a phone it takes the full width minus 2rem.
@@ -570,7 +570,7 @@ The modal of SPEC.md › "PR graph". Variant A of the prototype of map `map-pr-g
 
 Add components with the shadcn CLI. Status icons, washes, edges and the stack rail are plain Tailwind classes and the CSS in this spec.
 
-**Key hints.** A key hint is a small, muted `Kbd`: `h-4 min-w-4`, 10 px text, `text-muted-foreground`. It floats over the corner of its control, with a 1 px border, the popover background and a small shadow. The Find bar and the row pill use the same border, background and shadow. A hint takes no space. The rules are in [SPEC.md](SPEC.md) › UI › Key hints.
+**Key hints.** A key hint is a small, muted `Kbd` in the `sm` size: `h-4 min-w-4`, 10 px text, `text-muted-foreground`. It floats over the corner of its control, with a 1 px border, the popover background and a small shadow. The Find bar and the row pill use the same border, background and shadow. A hint takes no space. The rules are in [SPEC.md](SPEC.md) › UI › Key hints.
 
 ## Data
 
