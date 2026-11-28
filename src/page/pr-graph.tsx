@@ -551,7 +551,7 @@ function ScopePicker({
           aria-expanded={open}
           aria-controls={listId}
           aria-label="Scope"
-          className="w-56 justify-between font-normal"
+          className="w-56 justify-between"
         >
           <span className="flex min-w-0 items-center gap-1.5">
             {icon && <ProjectIcon name={icon} />}
@@ -779,7 +779,7 @@ export function PrGraphDialog({
       <DialogContent className="h-[min(860px,calc(100dvh-2rem))] max-w-[calc(100%-2rem)] grid-cols-[minmax(0,1fr)] grid-rows-[auto_auto_minmax(0,1fr)_auto] gap-3 sm:max-w-[1200px]">
         <DialogHeader className="pr-8 text-left">
           <div className="flex flex-wrap items-center gap-2">
-            <DialogTitle className="flex flex-none items-center gap-2 text-base">
+            <DialogTitle className="flex flex-none items-center gap-2">
               <GitBranch className="size-4 flex-none" aria-hidden />
               PR graph
             </DialogTitle>

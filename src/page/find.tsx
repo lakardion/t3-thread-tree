@@ -180,7 +180,7 @@ function FindBody({ list, canShow, now, open, show, workflows, start, openGraph 
       onKeyDown={onKeyDown}
       className="min-h-0 rounded-[inherit] [&_[data-slot=command-input-wrapper]]:h-12 [&_[data-slot=command-input-wrapper]]:pr-11"
     >
-      <CommandInput value={q} onValueChange={setQ} placeholder="Find a thread" className="h-12 text-[15px]" />
+      <CommandInput value={q} onValueChange={setQ} placeholder="Find a thread" className="h-12" />
       <CommandList className="max-h-[min(60vh,480px)] max-[720px]:max-h-none max-[720px]:flex-1">
         {startMode && <StartGroup workflows={workflows} text={query.slice(1).trim()} start={start} />}
         {!startMode &&

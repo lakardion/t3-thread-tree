@@ -7,14 +7,7 @@ import { holdRule } from "./key-hints.ts";
 
 /** A key hint: hidden until the hold, floats over its host. */
 export function Hint({ surface, className, ...props }: ComponentProps<"kbd"> & { surface: "header" | "triage" }) {
-  return (
-    <Kbd
-      aria-hidden
-      data-hint={surface}
-      className={cn("key-hint h-4 min-w-4 px-1 text-[10px]", className)}
-      {...props}
-    />
-  );
+  return <Kbd aria-hidden data-hint={surface} size="sm" className={cn("key-hint", className)} {...props} />;
 }
 
 /** Marks the page with `data-key-hints` while the user holds Alt/Option. Does nothing when off or on touch. */

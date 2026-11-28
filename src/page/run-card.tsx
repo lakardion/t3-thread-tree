@@ -186,7 +186,7 @@ export function RunCard({ r, gone, pos, total, fresh, now, upcoming, onSkip, onF
                       aria-label="Reason"
                       placeholder="Reason (optional)…"
                       rows={2}
-                      className="max-h-40 min-h-9 flex-1 resize-none text-sm"
+                      className="max-h-40 min-h-9 flex-1 resize-none"
                       value={reason}
                       onChange={(e) => setReason(e.target.value)}
                     />

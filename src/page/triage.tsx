@@ -249,7 +249,7 @@ function Card({ t, gone, pos, total, fresh, now, t3cli, upcoming, onSkip, onFini
                     aria-label="Reply"
                     placeholder="Reply…"
                     rows={2}
-                    className="max-h-40 min-h-9 flex-1 resize-none text-sm"
+                    className="max-h-40 min-h-9 flex-1 resize-none"
                     value={draft}
                     onChange={(e) => setDraft(e.target.value)}
                     onKeyDown={(e) => {
