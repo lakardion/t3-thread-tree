@@ -126,13 +126,15 @@ export type ThreadNode = {
   rail?: Group["stack"];
 };
 
-/** `header`: a Map header, which is not a thread. `href` is the map thread link, null with no map thread. */
+/** `header`: a Lineage header or a Map header, which is not a thread. `href` is the thread link, null with no thread. */
 export type MapInfo = {
   name: string;
   header: boolean;
   href: string | null;
   /** The map key. Not set on a head that anchors several maps. */
   key?: string;
+  /** The head of a Lineage group: the root row or its Lineage header. */
+  root?: true;
 };
 
 /** What a group holds, so that a reader does not match the label text. */

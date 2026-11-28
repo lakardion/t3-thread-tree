@@ -529,12 +529,13 @@ function prepare(input: BuildInput) {
         const ls = labelsOf(a);
         const header = !visible.has(a);
         const href = header ? hrefOf(environmentId, a) : null;
+        const rootMark = a === root ? { root: true as const } : {};
         if (ls.length === 1) {
           const title = maps.threadOf(root, ls[0]) === a ? n.title : null;
-          marks.set(n, { name: mapName(ls[0], title, allKeys), header, href, key: ls[0] });
+          marks.set(n, { name: mapName(ls[0], title, allKeys), header, href, key: ls[0], ...rootMark });
           continue;
         }
-        marks.set(n, { name: n.title, header, href });
+        marks.set(n, { name: n.title, header, href, ...rootMark });
         for (const k of ls) {
           const mapHref = maps.threadOf(root, k) === a ? hrefOf(environmentId, a) : null;
           const h = headerOf(n.t, `map:${k}`, mapHref ?? "", created(ms.find((m) => maps.mapOf(m) === k)!));

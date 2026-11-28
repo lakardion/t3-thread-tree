@@ -1534,7 +1534,7 @@ describe("Lineage groups", () => {
     expect(tree[0].groups).toEqual([]);
     const [head] = loose(tree);
     expect(titles(head.children)).toEqual(["a", "SHOP-1 k"]);
-    expect(head.map).toEqual({ name: "root", header: false, href: null });
+    expect(head.map).toEqual({ name: "root", header: false, href: null, root: true });
     expect(pinIdOf(head)).toBe("t:root");
   });
 
@@ -1575,7 +1575,7 @@ describe("Lineage groups", () => {
         prs: [],
         stack: null,
         lastRun: null,
-        map: { name: "SHOP-1 root", header: true, href: hrefOf("root") },
+        map: { name: "SHOP-1 root", header: true, href: hrefOf("root"), root: true },
       });
       expect(titles(header.children)).toEqual(["a", "b"]);
       expect(header.children.map((c) => c.detail.launchedBy)).toEqual([null, null]);
@@ -1611,7 +1611,7 @@ describe("Lineage groups", () => {
       );
       expect(tree[0].groups).toEqual([]);
       const [head] = loose(tree);
-      expect(head.map).toEqual({ name: "Search", header: false, href: null, key: "/m/search" });
+      expect(head.map).toEqual({ name: "Search", header: false, href: null, key: "/m/search", root: true });
       expect(pinIdOf(head)).toBe("map:/m/search");
       expect(titles(head.children)).toEqual(["SHOP-1 a", "SHOP-2 b"]);
     });
@@ -1619,7 +1619,7 @@ describe("Lineage groups", () => {
     test("a keyed root anchors its own label", () => {
       const tree = mapped([shell("r", "root"), shell("c", "c")], { r: "/m/own-map" }, { c: "r" });
       const [head] = loose(tree);
-      expect(head.map).toEqual({ name: "Own map", header: false, href: null, key: "/m/own-map" });
+      expect(head.map).toEqual({ name: "Own map", header: false, href: null, key: "/m/own-map", root: true });
       expect(titles(head.children)).toEqual(["c"]);
     });
 
@@ -1627,9 +1627,10 @@ describe("Lineage groups", () => {
       const raws = [shell("chart", "Charting"), shell("y", "y"), shell("x", "x"), shell("h", "helper")];
       const tree = mapped(raws, { x: "/m/k", y: "/m/l" }, { x: "chart", y: "chart", h: "chart" });
       const [head] = loose(tree);
-      expect(head.map).toEqual({ name: "Charting", header: false, href: null });
+      expect(head.map).toEqual({ name: "Charting", header: false, href: null, root: true });
       expect(pinIdOf(head)).toBe("t:chart");
       expect(head.children.map((c) => c.id)).toEqual(["map:/m/l", "map:/m/k", "h"]);
+      expect(head.children.slice(0, 2).map((c) => c.map?.root)).toEqual([undefined, undefined]);
       expect(head.children.slice(0, 2).map((c) => [c.map?.key, c.map?.name, c.map?.href])).toEqual([
         ["/m/l", "L", hrefOf("chart")],
         ["/m/k", "K", hrefOf("chart")],
