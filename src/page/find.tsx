@@ -66,9 +66,9 @@ function Row({ h, now, canShow, open, show }: RowProps) {
       </span>
       {canShow && (
         <Button
-          variant="ghost"
+          variant="quiet"
           size="icon-xs"
-          className="flex-none text-muted-foreground"
+          className="flex-none"
           aria-label={`Show ${t.title || t.id} in tree`}
           title="Show in tree (Shift+Enter)"
           onPointerDown={(e) => e.stopPropagation()}

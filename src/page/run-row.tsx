@@ -96,15 +96,15 @@ export function RunRow({
           {at > -Infinity && agoAt(at, now)}
         </span>
         {pin}
-        <Button asChild variant="ghost" size="icon" className="size-6 flex-none text-muted-foreground">
+        <Button asChild variant="quiet" size="icon" className="size-6 flex-none">
           <a href={t.href} target="_blank" rel="noreferrer" aria-label="Open run in T3">
             <ExternalLink className="size-3.5" />
           </a>
         </Button>
         <Button
-          variant="ghost"
+          variant="quiet"
           size="icon"
-          className="size-6 flex-none text-muted-foreground"
+          className="size-6 flex-none"
           aria-label={open ? "Fold run" : "Unfold run"}
           aria-expanded={open}
           data-fold

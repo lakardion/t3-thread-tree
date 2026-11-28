@@ -86,7 +86,7 @@ export function StartMenu({
       <DropdownMenu modal={false}>
         <DropdownMenuTrigger asChild>
           <Button
-            variant={label ? "outline" : "ghost"}
+            variant={label ? "outline" : "quiet"}
             size={label ? "sm" : "icon"}
             className={className}
             aria-label="Start a workflow"
@@ -220,7 +220,7 @@ function StartForm({ req, onStarted }: { req: StartRequest; onStarted: (runId: s
       </fieldset>
       <Collapsible>
         <CollapsibleTrigger asChild>
-          <Button variant="ghost" size="xs" className="group -ml-2 text-muted-foreground">
+          <Button variant="quiet" size="xs" className="group -ml-2">
             <ChevronDown className="transition-transform group-data-[state=open]:rotate-180" />
             Advanced
           </Button>

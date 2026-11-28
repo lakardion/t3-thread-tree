@@ -1418,7 +1418,7 @@ function LabelPill({ t }: { t: ThreadNode }) {
 }
 
 const ROW_BUTTON =
-  "size-5 rounded-[6px] text-muted-foreground motion-reduce:transition-none pointer-coarse:min-h-11 pointer-coarse:min-w-11 focus-visible:border-transparent focus-visible:ring-0 focus-visible:outline-2 focus-visible:outline-solid focus-visible:outline-offset-2 focus-visible:outline-ring";
+  "size-5 rounded-[6px] motion-reduce:transition-none pointer-coarse:min-h-11 pointer-coarse:min-w-11 focus-visible:border-transparent focus-visible:ring-0 focus-visible:outline-2 focus-visible:outline-solid focus-visible:outline-offset-2 focus-visible:outline-ring";
 const BAR_BUTTON = cn(ROW_BUTTON, "rounded-xs");
 const FILTER_ITEM =
   "pointer-coarse:min-h-11 pointer-coarse:min-w-11 focus-visible:ring-0 focus-visible:outline-solid focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring";
@@ -1503,7 +1503,7 @@ const DragHandle = ({ handleRef, name }: { handleRef?: RefFn; name: string }) =>
   handleRef && (
     <Button
       ref={handleRef}
-      variant="ghost"
+      variant="quiet"
       size="icon"
       aria-label={`Move ${name}`}
       className={cn(
@@ -1520,10 +1520,10 @@ const DragHandle = ({ handleRef, name }: { handleRef?: RefFn; name: string }) =>
 function PrChip({ p }: { p: PrNode }) {
   return (
     <Badge
-      variant="outline"
+      variant="quiet"
       size="chip"
       className={cn(
-        "font-mono text-muted-foreground focus-visible:ring-0",
+        "font-mono focus-visible:ring-0",
         p.draft && "border-dashed",
         "duration-300 motion-reduce:transition-none",
         p.state === "merged" && "text-pr-merged",
@@ -1713,7 +1713,7 @@ function SettleButton({ t }: { t: ThreadNode }) {
         {/** A disabled button gets no hover, so the wrapper keeps the tooltip. */}
         <span className="inline-flex" data-err={err ? "" : undefined} data-busy={busy ? "" : undefined}>
           <Button
-            variant="ghost"
+            variant="quiet"
             size="icon"
             className={cn(BAR_BUTTON, err && "text-destructive")}
             aria-label={label}
@@ -1784,7 +1784,7 @@ function RowActions({ t, projectPath }: { t: ThreadNode; projectPath?: string })
     <Popover.Root open={open} onOpenChange={(o) => (o ? show() : close())}>
       <Popover.Trigger asChild>
         <Button
-          variant="ghost"
+          variant="quiet"
           size="icon"
           className={ROW_BUTTON}
           aria-label="Row actions"
@@ -1829,7 +1829,7 @@ function RowActions({ t, projectPath }: { t: ThreadNode; projectPath?: string })
               <Tooltip>
                 <TooltipTrigger asChild>
                   <Button
-                    variant="ghost"
+                    variant="quiet"
                     size="icon"
                     className={BAR_BUTTON}
                     aria-label="Send message"
@@ -1945,9 +1945,9 @@ function ThreadRow({
           {project && <ProjectColumn b={project} />}
           {chip && (
             <Badge
-              variant="outline"
+              variant="quiet"
               size="chip"
-              className={cn("flex-none font-mono text-muted-foreground", chipHref && "hover:underline")}
+              className={cn("flex-none font-mono", chipHref && "hover:underline")}
               asChild={!!chipHref}
             >
               {chipHref ? (
@@ -1961,9 +1961,9 @@ function ThreadRow({
           )}
           {t.t3Project && (
             <Badge
-              variant={projectNames ? "outline" : "ghost"}
+              variant="quiet"
               size="chip"
-              className={cn("flex-none text-muted-foreground max-[720px]:border-transparent")}
+              className={cn("flex-none max-[720px]:border-transparent", !projectNames && "border-transparent")}
               title={projectNames ? t.t3Project.label : undefined}
             >
               <ProjectTip name={t.t3Project.label} />
@@ -1987,29 +1987,29 @@ function ThreadRow({
           </CatchUpTitle>
           <span className="ml-auto flex flex-none items-center gap-1.5 max-[720px]:ml-0 max-[720px]:basis-full max-[720px]:flex-wrap max-[720px]:pl-5">
             {t.input && (
-              <Badge variant="outline" size="chip" className="text-muted-foreground">
+              <Badge variant="quiet" size="chip">
                 Input
               </Badge>
             )}
             {t.snoozedUntil && (
-              <Badge variant="outline" size="chip" className="text-muted-foreground">
+              <Badge variant="quiet" size="chip">
                 until {until(t.snoozedUntil)}
               </Badge>
             )}
             {t.settled && (
-              <Badge variant="outline" size="chip" className="text-muted-foreground">
+              <Badge variant="quiet" size="chip">
                 Settled
               </Badge>
             )}
             {t.stack &&
               !inStack &&
               (t.stack.pos ? (
-                <Badge variant="outline" size="chip" className="chip-stack text-muted-foreground" title="PR stack">
+                <Badge variant="quiet" size="chip" className="chip-stack" title="PR stack">
                   <Layers />
                   {`${t.stack.pos}/${t.stack.total}`}
                 </Badge>
               ) : (
-                <Badge variant="outline" size="chip" className="chip-stack text-muted-foreground" title={noPrLabel}>
+                <Badge variant="quiet" size="chip" className="chip-stack" title={noPrLabel}>
                   <Layers role="img" aria-label={noPrLabel} />
                 </Badge>
               ))}
@@ -2019,7 +2019,7 @@ function ThreadRow({
             ))}
             {t.prs.length > 2 && (
               <Button
-                variant="ghost"
+                variant="quiet"
                 size="chip"
                 className={cn(ROW_BUTTON, "w-auto")}
                 title={`Show all ${t.prs.length} pull requests`}
@@ -2042,7 +2042,7 @@ function ThreadRow({
             <RowActions t={t} projectPath={projectPath} />
             {end ?? (
               <CollapsibleTrigger asChild>
-                <Button variant="ghost" size="icon" className={cn(ROW_BUTTON, "group")} aria-label="Details">
+                <Button variant="quiet" size="icon" className={cn(ROW_BUTTON, "group")} aria-label="Details">
                   <ChevronDown className="size-3.5 transition-transform duration-200 group-data-[state=open]:rotate-180 motion-reduce:transition-none" />
                 </Button>
               </CollapsibleTrigger>
@@ -2219,7 +2219,7 @@ function FoldAll({
   const label = `${shut ? "Collapse" : "Expand"} all${name ? ` in ${name}` : ""}`;
   return (
     <Button
-      variant="ghost"
+      variant="quiet"
       size={name ? "icon" : "icon-sm"}
       aria-label={label}
       title={label}
@@ -2624,7 +2624,7 @@ function StackRail({
           <StartMenu
             point={stackPoint(stops.flatMap((s) => s.p ?? []))}
             project={projectPath}
-            className="relative z-10 size-6 text-muted-foreground"
+            className="relative z-10 size-6"
           />
           {(pinId || hidden.length > 0 || number) && (
             <span className="relative z-10 ml-auto flex items-center gap-2">
@@ -3696,7 +3696,7 @@ function App() {
         <Reveal value={reveal}>
           {lost && (
             <Alert className="mb-3 border-l-[3px] border-l-status-needs-input">
-              <AlertDescription className="flex flex-wrap items-center gap-x-2 text-foreground">
+              <AlertDescription className="flex flex-wrap items-center gap-x-2">
                 Live updates stopped: the rows can be out of date. Reconnecting… Last update{" "}
                 {lost.last ? hhmm(lost.last) : "never"}.
                 <Button variant="link" size="sm" className="h-auto p-0" onClick={() => reconnect.current()}>
@@ -3707,14 +3707,14 @@ function App() {
           )}
           {tree?.conn === "down" && (
             <Alert className="mb-3 border-l-[3px] border-l-status-needs-input">
-              <AlertDescription className="text-foreground">
+              <AlertDescription>
                 T3 not running: last update {tree.lastUpdate ? hhmm(tree.lastUpdate) : "never"}
               </AlertDescription>
             </Alert>
           )}
           {(tree?.conn === "no-token" || tree?.conn === "unauthorized") && (
             <Alert className="mb-3 border-l-[3px] border-l-status-needs-input">
-              <AlertDescription className="flex flex-wrap items-center gap-x-2 text-foreground">
+              <AlertDescription className="flex flex-wrap items-center gap-x-2">
                 {tree.conn === "no-token" ? "No T3 token is set." : "T3 rejected the token."}
                 <Button
                   variant="link"
@@ -3732,7 +3732,7 @@ function App() {
           )}
           {linearOn && tree?.linearKey === "rejected" && (
             <Alert className="mb-3 border-l-[3px] border-l-status-needs-input">
-              <AlertDescription className="flex flex-wrap items-center gap-x-2 text-foreground">
+              <AlertDescription className="flex flex-wrap items-center gap-x-2">
                 Linear rejected the API key.
                 <Button
                   variant="link"
