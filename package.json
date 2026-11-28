@@ -5,7 +5,7 @@
   "type": "module",
   "main": "dist/desktop/main.cjs",
   "scripts": {
-    "start": "bun run src/server.ts",
+    "start": "NODE_ENV=development bun run src/server.ts",
     "typecheck": "tsc --noEmit",
     "desktop:bundle": "bun build src/desktop/main.ts src/desktop/preload.ts src/desktop/up-next-preload.ts --target node --format cjs --external electron --outdir dist/desktop --entry-naming '[name].cjs'",
     "desktop": "bun run desktop:bundle && electron .",
@@ -54,6 +54,7 @@
     "oxlint": "^1.93.0",
     "oxlint-tsgolint": "^7.0.2007",
     "playwright-core": "^1.65.1",
+    "retouche-dev": "^0.1.2",
     "typescript": "^7.0.2"
   },
   "build": {

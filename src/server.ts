@@ -1,6 +1,8 @@
 import { homedir } from "node:os";
 import { dirname, join } from "node:path";
 
+import { GET as retoucheGet, POST as retouchePost } from "retouche-dev/next";
+
 import index from "./page/index.html";
 import upNext from "./page/up-next.html";
 import {
@@ -509,6 +511,8 @@ const server = Bun.serve({
   routes: {
     "/": index,
     "/up-next": upNext,
+    /** Retouche overlay API; answers 404 unless NODE_ENV is "development". */
+    "/api/retouche/*": { GET: retoucheGet, POST: retouchePost },
     "/models": { GET: async () => Response.json(await models.offered()) },
     ...send.routes,
     ...localModelRoutes(localModelFile),
