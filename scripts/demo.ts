@@ -14,7 +14,7 @@ import type { Pr, Project, RunsSnapshot, Thread } from "../src/server/t3.ts";
 import { launchList, scanFields } from "../src/server/workflow-start.ts";
 import { workflowRoutes } from "../src/server/workflows.ts";
 import type { LocalConfig, LocalState, ModelPick } from "../src/shared/model.ts";
-import { parseScope, type MapGraphPart, type PrGraphData } from "../src/shared/pr-graph-data.ts";
+import { parseScope, type GroupGraphPart, type PrGraphData } from "../src/shared/pr-graph-data.ts";
 import { prId } from "../src/shared/pr-graph.ts";
 import type { RuleId } from "../src/shared/rules.ts";
 import { type CatchUp, parseLabels, type LinearIssue } from "../src/shared/tree.ts";
@@ -286,6 +286,12 @@ const threads: Thread[] = [
       ),
     }),
   ),
+  t("cache-04 · Document the cache", {
+    id: "cache-docs",
+    projectId: "docs",
+    status: "idle",
+    prs: [pr(4210, "created", "open", { stackBase: "main", checks: "passing" })],
+  }),
   /** The latest run is a queued follow-up with no start or end; an older run still works. */
   t("Move the project docs to the wiki", {
     projectId: "docs",
@@ -345,6 +351,7 @@ const spawners: Record<string, string> = {
   "cache-1": "dispatch",
   "cache-2": "cache-1",
   "cache-3": "cache-2",
+  "cache-docs": "dispatch",
   "search-plan": "search",
   "search-r": "search",
   "search-w": "search-plan",
@@ -712,8 +719,8 @@ const FORMS = [
   [5306, "ds-306-slider-tokens"],
 ] as const;
 
-/** The map part of the `/pr-graph` fixture of the demo map. */
-const MAP_GRAPH: MapGraphPart = {
+/** The group part of the `/pr-graph` fixture of the demo map. */
+const MAP_GRAPH: GroupGraphPart = {
   lanes: [
     {
       n: 1,
@@ -741,6 +748,7 @@ const MAP_GRAPH: MapGraphPart = {
       stack: { number: 93, pos: i + 1, total: FORMS.length },
       threadId: `forms-${n}`,
       threadHref: "#",
+      projectId: "storefront",
     })),
     {
       ...prNode(
@@ -754,6 +762,7 @@ const MAP_GRAPH: MapGraphPart = {
       stack: { number: 91, pos: 4, total: 5 },
       threadId: null,
       threadHref: null,
+      projectId: "storefront",
     },
     {
       ...prNode(
@@ -762,6 +771,7 @@ const MAP_GRAPH: MapGraphPart = {
       ),
       threadId: null,
       threadHref: null,
+      projectId: "storefront",
     },
   ],
   errors: [],
@@ -787,7 +797,39 @@ const GRAPH: PrGraphData = {
     },
   ],
   behind: { [prId({ repository: "", n: 5102 })]: 3 },
-  map: MAP_GRAPH,
+  group: MAP_GRAPH,
+};
+
+/** The `/pr-graph` fixture of the `dispatch` Lineage group: two projects, a key row with no thread, a settled member. */
+const LINEAGE_GRAPH: PrGraphData = {
+  at: GRAPH.at,
+  roots: { api: "master", docs: "main" },
+  mates: [],
+  behind: {},
+  group: {
+    lanes: null,
+    stacks: null,
+    settled: [
+      {
+        id: "dispatch",
+        title: "Cache rollout dispatch",
+        status: "idle",
+        createdAt: ago(400),
+        href: "#",
+        prs: [prNode(pr(4200, "created", "merged", { head: "cache-00-dispatch", base: "main" }), [])],
+        projectId: "api",
+      },
+    ],
+    rows: [
+      {
+        ...prNode(pr(4290, "linked", "open", { head: "cache-05-warm-up", base: "main", title: "Warm the cache" }), []),
+        threadId: null,
+        threadHref: null,
+        projectId: "api",
+      },
+    ],
+    errors: [],
+  },
 };
 
 /** The `/pr-graph` fixture of the All scope. No entry in `roots` for `docs`. */
@@ -806,7 +848,7 @@ const ALL_GRAPH: PrGraphData = {
     },
   ],
   behind: { [prId({ repository: "", n: 2102 })]: 2 },
-  map: null,
+  group: null,
 };
 
 /** The fixture of a project scope: the All answer cut to one project. The mate and the PR behind are in `storefront`. */
@@ -894,9 +936,13 @@ const server = Bun.serve({
         const data = projectGraph(scope.id);
         return data ? Response.json(data) : new Response(null, { status: 404 });
       }
+      if (scope.kind === "lineage") {
+        if (scope.id !== "dispatch") return new Response(null, { status: 404 });
+        return Response.json(LINEAGE_GRAPH);
+      }
       if (scope.key !== "/wiki/design-system") return new Response(null, { status: 404 });
       const errors = process.env.GRAPH === "fail" ? [{ key: "DS-201", text: "GitHub rate limit exceeded" }] : [];
-      return Response.json({ ...GRAPH, map: { ...MAP_GRAPH, errors } });
+      return Response.json({ ...GRAPH, group: { ...MAP_GRAPH, errors } });
     },
     "/events": async (req) => {
       server.timeout(req, 0);

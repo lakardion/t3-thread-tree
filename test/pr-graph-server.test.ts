@@ -1,6 +1,6 @@
 import { describe, expect, test } from "bun:test";
 
-import { graphKeys, isFresh, prGraph, prGraphRoutes, type GraphCtx } from "../src/server/pr-graph.ts";
+import { graphKeys, isFresh, lineageMembers, prGraph, prGraphRoutes, type GraphCtx } from "../src/server/pr-graph.ts";
 import type { ListRow, Pr, Thread } from "../src/server/t3.ts";
 import { parseScope } from "../src/shared/pr-graph-data.ts";
 import { rowMatches } from "../src/shared/pr-graph.ts";
@@ -99,6 +99,42 @@ describe("isFresh", () => {
   });
 });
 
+describe("lineageMembers", () => {
+  const spawners: Record<string, string> = { a: "r", b: "a", c: "r" };
+  const all = ["r", "a", "b", "c", "m", "lone"];
+  const members = (root: string, stacks: string[][] = [], ids = all) => {
+    const found = lineageMembers({
+      root,
+      threads: ids.map((id) => thread(id, { settledAt: id === "b" ? "2026-01-01T00:00:00Z" : null, gone: id === "c" })),
+      spawnerOf: (id) => spawners[id] ?? null,
+      known: (id) => all.includes(id),
+      isStep: () => false,
+      createdKey: (id) => id,
+      stacks,
+      issueKeyOf: () => false,
+    });
+    return found && found.map((t) => t.id);
+  };
+
+  test("null for an unknown id, an id with a spawner and a lone top-level thread", () => {
+    expect(members("nope")).toBeNull();
+    expect(members("a")).toBeNull();
+    expect(members("lone")).toBeNull();
+  });
+
+  test("the root, settled and archived members and a keyless stack mate, oldest first", () => {
+    expect(members("r", [["a", "m"]])).toEqual(["a", "b", "c", "m", "r"]);
+  });
+
+  test("a stack mate with no stack is no member", () => {
+    expect(members("r")).toEqual(["a", "b", "c", "r"]);
+  });
+
+  test("a root that is not in the threads is left out", () => {
+    expect(members("r", [], ["a", "b"])).toEqual(["a", "b"]);
+  });
+});
+
 describe("prGraph", () => {
   const MAP = { kind: "map", key: "k" } as const;
   const ctx =
@@ -106,7 +142,7 @@ describe("prGraph", () => {
     () => ({
       members,
       projects: [{ id: "p", path: "/p" }],
-      map: { key: "k", project: "p" },
+      group: { mapKey: "k", projectOf: () => "p" },
       threadOf: (_, n) => (n === 1 ? "m1" : null),
       hrefOf: (id) => `h:${id}`,
     });
@@ -133,8 +169,8 @@ describe("prGraph", () => {
 
   test("a missing map.md gives null lanes and stacks", async () => {
     const data = await setup().g.get("map:k", MAP, ctx(), false);
-    expect(data?.map?.lanes).toBeNull();
-    expect(data?.map?.stacks).toBeNull();
+    expect(data?.group?.lanes).toBeNull();
+    expect(data?.group?.stacks).toBeNull();
   });
 
   test("no member gives null", async () => {
@@ -167,8 +203,8 @@ describe("prGraph", () => {
     });
     const members = [thread("a", { title: "ABC-1 · a" }), thread("b", { title: "XYZ-2 · b" })];
     const data = await g.get("map:k", MAP, ctx(members), false);
-    expect(data?.map?.errors).toEqual([{ key: "ABC-1", text: "boom" }]);
-    expect(data?.map?.rows.map((r) => r.n)).toEqual([2]);
+    expect(data?.group?.errors).toEqual([{ key: "ABC-1", text: "boom" }]);
+    expect(data?.group?.rows.map((r) => r.n)).toEqual([2]);
   });
 
   test("a failed detail adds nothing", async () => {
@@ -178,8 +214,8 @@ describe("prGraph", () => {
     });
     const data = await g.get("map:k", MAP, ctx(), false);
     expect(data?.behind).toEqual({});
-    expect(data?.map?.errors).toEqual([]);
-    expect(data?.map?.rows).toHaveLength(1);
+    expect(data?.group?.errors).toEqual([]);
+    expect(data?.group?.rows).toHaveLength(1);
   });
 
   test("behind comes from rows and member PRs", async () => {
@@ -217,8 +253,8 @@ describe("prGraph", () => {
       thread("c", { title: "ABC-2" }),
     ];
     const data = await g.get("map:k", MAP, ctx(members), false);
-    expect(data?.map?.rows).toHaveLength(1);
-    expect(data?.map?.rows[0].threadId).toBe("m1");
+    expect(data?.group?.rows).toHaveLength(1);
+    expect(data?.group?.rows[0].threadId).toBe("m1");
   });
 
   test("settled and archived members come with their status", async () => {
@@ -228,7 +264,7 @@ describe("prGraph", () => {
       ctx([thread("live"), thread("done", { settledAt: "2026-01-01T00:00:00Z" }), thread("old", { gone: true })]),
       false,
     );
-    expect(data?.map?.settled.map((s) => s.id)).toEqual(["done", "old"]);
+    expect(data?.group?.settled.map((s) => s.id)).toEqual(["done", "old"]);
   });
 
   describe("scopes", () => {
@@ -239,7 +275,7 @@ describe("prGraph", () => {
       () => ({
         members,
         projects: [{ id: "p", path: "/p" }],
-        map: null,
+        group: null,
         threadOf: () => null,
         hrefOf: (id) => `h:${id}`,
       });
@@ -259,7 +295,7 @@ describe("prGraph", () => {
       const { g, calls } = setup({ readMap: async () => (seen.readMap++, null) });
       const pr = { n: 7, state: "open", stackNumber: 3, host: "github.com", repository: "a/b" } as Pr;
       const data = await g.get("all", ALL, allCtx([thread("m1", { title: "ABC-1", prs: [pr] })]), false);
-      expect(data?.map).toBeNull();
+      expect(data?.group).toBeNull();
       expect([calls.archived, calls.list, seen.readMap]).toEqual([0, 0, 0]);
       expect(data?.behind).toEqual({ "a/b#7": 2 });
     });
@@ -287,6 +323,46 @@ describe("prGraph", () => {
     });
   });
 
+  describe("lineage scope", () => {
+    const LINEAGE = { kind: "lineage", id: "r" } as const;
+    const lineageCtx = (): GraphCtx => {
+      const members = [
+        thread("m1", { title: "ABC-1 · a", projectId: "p1" }),
+        thread("m2", { title: "XYZ-2 · b", projectId: "p2", settledAt: "2026-01-01T00:00:00Z" }),
+      ];
+      return {
+        members,
+        projects: [
+          { id: "p1", path: "/p1" },
+          { id: "p2", path: "/p2" },
+        ],
+        group: { mapKey: null, projectOf: (k) => members.find((t) => t.title.startsWith(k))!.projectId },
+        threadOf: () => null,
+        hrefOf: (id) => `h:${id}`,
+      };
+    };
+
+    test("no lanes or stacks, no map.md, each key queried in its project, projectId on settled and rows", async () => {
+      const asked: string[] = [];
+      let read = 0;
+      const { g, calls } = setup({
+        readMap: async () => (read++, null),
+        list: async (projectId, q) => (
+          asked.push(`${projectId}:${q}`),
+          { rows: [row(1, { head: `${q}-x` })], error: null }
+        ),
+      });
+      const data = await g.get("lineage:r", LINEAGE, lineageCtx, false);
+      expect(data?.group?.lanes).toBeNull();
+      expect(data?.group?.stacks).toBeNull();
+      expect(read).toBe(0);
+      expect(calls.archived).toBe(1);
+      expect(asked.toSorted()).toEqual(["p1:ABC-1", "p2:XYZ-2"]);
+      expect(data?.group?.settled.map((s) => s.projectId)).toEqual(["p2"]);
+      expect(data?.group?.rows.map((r) => r.projectId)).toEqual(["p"]);
+    });
+  });
+
   describe("prGraphRoutes", () => {
     const route = (o: { up?: boolean; data?: unknown } = {}) =>
       prGraphRoutes({
@@ -305,6 +381,7 @@ describe("prGraph", () => {
     });
     test("no answer gives 404", async () => {
       expect((await ask(route(), "?scope=project:x")).status).toBe(404);
+      expect((await ask(route(), "?scope=lineage:x")).status).toBe(404);
     });
     test("an answer gives JSON", async () => {
       const res = await ask(route({ data: { at: "t" } }), "?scope=map:/m");
@@ -384,7 +461,7 @@ describe("prGraph", () => {
       const { g } = setup({ ...keep, detail: async () => Promise.reject(new Error("no")) });
       const data = await g.get("map:k", MAP, ctx([owner([1, 2])]), false);
       expect(data?.mates).toEqual([]);
-      expect(data?.map?.errors).toEqual([]);
+      expect(data?.group?.errors).toEqual([]);
     });
 
     test("an open mate behindBy lands in behind with one call for it", async () => {

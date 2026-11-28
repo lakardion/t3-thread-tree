@@ -1,9 +1,10 @@
 /** The slow calls behind the PR graph of a scope: key queries, behind-base details, `map.md`, root branches. */
-import { parseScope, type MapGraphPart, type PrGraphData, type Scope } from "../shared/pr-graph-data.ts";
+import { parseScope, type GroupGraphPart, type PrGraphData, type Scope } from "../shared/pr-graph-data.ts";
 import { prId, rowMatches } from "../shared/pr-graph.ts";
 import type { PrNode } from "../shared/tree.ts";
 import { issueKey, prNode, statusOf } from "./build-tree.ts";
 import { parseMapMd, type MapLane } from "./map-md.ts";
+import { mapsOf } from "./maps.ts";
 import type { ListRow, Thread } from "./t3.ts";
 
 const LINEAR = /^[A-Z][A-Z0-9]*-\d+$/;
@@ -43,14 +44,17 @@ export function limit(n: number) {
 }
 
 export type GraphCtx = {
-  /** The graph members. At map scope also the settled and archived ones. */
+  /** The graph members. At map and lineage scope also the settled and archived ones. */
   members: Thread[];
   /** The projects whose roots the answer carries. `none` is No project, with no path. */
   projects: { id: string; path: string | null }[];
   threadOf: (repository: string, n: number) => string | null;
   hrefOf: (id: string) => string;
-  /** Set only at map scope. `project` is the T3 project of the map head. */
-  map: { key: string; project: string } | null;
+  /**
+   * Set only at map and lineage scope. `mapKey` is the map to read `map.md` of, null at lineage scope. `projectOf` gives
+   * the T3 project for the query of a key.
+   */
+  group: { mapKey: string | null; projectOf: (key: string) => string } | null;
 };
 
 type Ref = { projectId: string; host: string; repository: string; number: number };
@@ -81,6 +85,32 @@ export async function gitRoot(cwd: string): Promise<string | null> {
   }
 }
 
+/**
+ * The threads of a lineage graph: the root, the members of its Lineage group and the keyless stack mates that join
+ * it, oldest first. Null when `root` is no known thread, has a spawner, or has no member and no mate.
+ */
+export function lineageMembers(o: {
+  root: string;
+  threads: Thread[];
+  spawnerOf: (id: string) => string | null | undefined;
+  known: (id: string) => boolean;
+  isStep: (id: string) => boolean;
+  createdKey: (id: string) => string;
+  /** The PR stacks of the threads, each lowest first. */
+  stacks: string[][];
+  issueKeyOf: (id: string) => boolean;
+}): Thread[] | null {
+  const maps = mapsOf({ ids: o.threads.map((t) => t.id), keyOf: () => null, ...o });
+  if (!o.known(o.root) || maps.rootOf(o.root) !== o.root) return null;
+  const mates = [...maps.mates].filter(([, r]) => r === o.root).map(([id]) => id);
+  const group = maps.groups.get(o.root) ?? [];
+  if (group.length === 0 && mates.length === 0) return null;
+  const wanted = new Set([o.root, ...group, ...mates]);
+  return o.threads
+    .filter((t) => wanted.has(t.id))
+    .toSorted((a, b) => o.createdKey(a.id).localeCompare(o.createdKey(b.id)));
+}
+
 export function prGraph(o: {
   list: (projectId: string, query: string) => Promise<{ rows: ListRow[]; error: string | null }>;
   detail: (ref: Ref) => Promise<PrDetail>;
@@ -95,19 +125,19 @@ export function prGraph(o: {
   const cache = new Map<string, { at: number; data: PrGraphData }>();
   const running = new Map<string, Promise<PrGraphData | null>>();
 
-  /** The key queries, `map.md` and the settled members of a map scope. */
-  async function mapPart(ctx: GraphCtx, m: NonNullable<GraphCtx["map"]>) {
-    const text = await o.readMap(m.key);
-    const parsed = text === null ? null : parseMapMd(text, m.key);
+  /** The key queries, `map.md` and the settled members of a map or lineage scope. */
+  async function groupPart(ctx: GraphCtx, g: NonNullable<GraphCtx["group"]>) {
+    const text = g.mapKey === null ? null : await o.readMap(g.mapKey);
+    const parsed = text === null ? null : parseMapMd(text, g.mapKey!);
     const keys = graphKeys(
       parsed?.lanes ?? [],
       ctx.members.map((t) => t.title),
     );
-    const errors: MapGraphPart["errors"] = [];
+    const errors: GroupGraphPart["errors"] = [];
     const found = new Map<string, ListRow>();
     await Promise.all(
       keys.map((k) =>
-        queue(() => o.list(m.project, k)).then(
+        queue(() => o.list(g.projectOf(k), k)).then(
           ({ rows, error }) => {
             if (error) errors.push({ key: k, text: error });
             else for (const r of rows) if (rowMatches(r, keys)) found.set(prId(r), r);
@@ -117,7 +147,7 @@ export function prGraph(o: {
       ),
     );
     const now = o.now();
-    const map: MapGraphPart = {
+    const part: GroupGraphPart = {
       lanes: parsed?.lanes ?? null,
       stacks: parsed?.stacks ?? null,
       settled: ctx.members
@@ -129,6 +159,7 @@ export function prGraph(o: {
           createdAt: t.createdAt,
           href: ctx.hrefOf(t.id),
           prs: t.prs.map((p) => prNode(p, [])),
+          projectId: t.projectId,
         })),
       rows: [...found.values()].map((r) => {
         const threadId = ctx.threadOf(r.repository, r.n);
@@ -136,7 +167,7 @@ export function prGraph(o: {
       }),
       errors,
     };
-    return { map, found };
+    return { part, found };
   }
 
   /** The stack mates and the behind-base counts of the graph PRs and the key rows. */
@@ -226,9 +257,9 @@ export function prGraph(o: {
   }
 
   async function build(scope: Scope, ctxOf: (archived: Thread[]) => GraphCtx | null): Promise<PrGraphData | null> {
-    const ctx = ctxOf(scope.kind === "map" ? await queue(o.archived).catch(() => []) : []);
+    const ctx = ctxOf(scope.kind === "map" || scope.kind === "lineage" ? await queue(o.archived).catch(() => []) : []);
     if (!ctx) return null;
-    const part = ctx.map ? await mapPart(ctx, ctx.map) : null;
+    const part = ctx.group ? await groupPart(ctx, ctx.group) : null;
     const { mates, behind } = await details(ctx, part?.found ?? new Map());
     const roots: PrGraphData["roots"] = {};
     await Promise.all(
@@ -237,7 +268,7 @@ export function prGraph(o: {
         if (root) roots[p.id] = root;
       }),
     );
-    return { at: new Date(o.now()).toISOString(), roots, mates, behind, map: part?.map ?? null };
+    return { at: new Date(o.now()).toISOString(), roots, mates, behind, group: part?.part ?? null };
   }
 
   return {
