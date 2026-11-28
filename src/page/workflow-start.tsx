@@ -209,7 +209,7 @@ function StartForm({ req, onStarted }: { req: StartRequest; onStarted: (runId: s
       <fieldset disabled={edited} className="grid gap-3">
         {fields.map((f) => (
           <div key={f} className="grid gap-1.5">
-            <Label htmlFor={`wf-${f}`} className="text-[12px]">
+            <Label htmlFor={`wf-${f}`}>
               {LABEL[f]}
               {fill[f] && values[f] === fill[f] && (
                 <span className="font-normal text-muted-foreground">· from the row</span>
