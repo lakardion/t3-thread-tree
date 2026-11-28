@@ -7,6 +7,7 @@ import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip
 import { cn } from "@/lib/utils";
 
 import { flat, type Group, type Status, type ThreadNode } from "../shared/tree.ts";
+import { lineageScope } from "./graph-scope.ts";
 import { OpenGraph } from "./pr-graph.tsx";
 import { folds } from "./view.ts";
 
@@ -31,11 +32,11 @@ const FoldIcon = ({ open }: { open: boolean }) => (
 const MAP_DOT =
   "absolute top-[18px] left-1 flex size-5 -translate-y-1/2 items-center justify-center rounded-full border-2 bg-card";
 
-/** The PR graph button of a map head. A head that anchors several maps has no map key and no button. */
+/** The PR graph button of a group head. A group with no map key and no live PR has no button. */
 function GraphButton({ t }: { t: ThreadNode }) {
   const open = useContext(OpenGraph);
-  const key = t.map?.key;
-  if (!key) return null;
+  const scope = lineageScope(t);
+  if (!scope) return null;
   return (
     <Tooltip>
       <TooltipTrigger asChild>
@@ -45,7 +46,7 @@ function GraphButton({ t }: { t: ThreadNode }) {
           className="relative z-10 size-5 flex-none rounded-[6px] text-muted-foreground pointer-coarse:min-h-11 pointer-coarse:min-w-11"
           aria-label="PR graph"
           data-graph-for={t.id}
-          onClick={() => open(`map:${key}`)}
+          onClick={() => open(scope)}
         >
           <GitBranch className="size-3.5" aria-hidden />
         </Button>
@@ -175,7 +176,7 @@ export function MapGroup({
               <Icon className={cn("size-3.5 flex-none", tone)} aria-label={iconLabel} />
               <span className="truncate font-semibold">{info.name}</span>
             </button>
-            {info.key && (
+            {lineageScope(t) && (
               <span
                 aria-hidden
                 data-hint="row"

@@ -128,6 +128,7 @@ import {
   stopLabel,
   stripKey,
 } from "./format.ts";
+import { lineageScope } from "./graph-scope.ts";
 import { GroupingSection } from "./grouping.tsx";
 import { IconState } from "./icon-state.tsx";
 import { Hint, useKeyHints } from "./key-hints.tsx";
@@ -1933,7 +1934,7 @@ function ThreadRow({
                 <Kbd>s</Kbd> Send
               </span>
             )}
-            {block?.map?.key && (
+            {block && lineageScope(block) && (
               <span className="flex items-center gap-1">
                 <Kbd>g</Kbd> Graph
               </span>
@@ -2874,7 +2875,7 @@ const KEYS: [keys: string, action: string][] = [
   ["l h", "Expand, collapse"],
   ["s", "Send"],
   ["p", "Pin"],
-  ["g", "Map PR graph"],
+  ["g", "Group PR graph"],
   ["G", "PR graph"],
   ["n", "Open next"],
   ["t", "Triage"],
@@ -3125,7 +3126,7 @@ function App() {
   const [catchUpOn, setCatchUpOn] = useState<boolean>();
   const [t3cli, setT3cli] = useState<CliStatus | null>(null);
   const [sendTo, setSendTo] = useState({ id: "", open: false });
-  /** The scope id of the open PR graph: `all`, `project:<id>` or `map:<key>`. */
+  /** The scope id of the open PR graph: `all`, `project:<id>`, `map:<key>` or `lineage:<id>`. */
   const [graphScope, setGraphScope] = useState<string | null>(null);
   const [wfStart, setWfStart] = useState<{ req: StartRequest | null; open: boolean }>({ req: null, open: false });
   const [wfStarted, setWfStarted] = useState<{ name: string; runId: string } | null>(null);

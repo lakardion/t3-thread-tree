@@ -1,6 +1,16 @@
 import { describe, expect, test } from "bun:test";
 
-import { bandMates, bandsOf, graphActionMatches, mapsOf, NONE, sortBands, treeOrder } from "../src/page/graph-scope.ts";
+import {
+  bandMates,
+  bandsOf,
+  graphActionMatches,
+  lineageScope,
+  lineagesOf,
+  mapsOf,
+  NONE,
+  sortBands,
+  treeOrder,
+} from "../src/page/graph-scope.ts";
 import type { GraphPr } from "../src/shared/pr-graph-data.ts";
 import type { Group, PrNode, ThreadNode } from "../src/shared/tree.ts";
 
@@ -8,7 +18,15 @@ const pr = (n: number, over: Partial<PrNode> = {}): PrNode =>
   ({ repository: "a/b", n, stack: null, ...over }) as PrNode;
 
 const thread = (id: string, over: Partial<ThreadNode> = {}): ThreadNode =>
-  ({ id, title: id, settled: false, prs: [], children: [], ...over }) as unknown as ThreadNode;
+  ({
+    id,
+    title: id,
+    settled: false,
+    prs: [],
+    children: [],
+    detail: { createdAt: null },
+    ...over,
+  }) as unknown as ThreadNode;
 
 const project = (id: string, label: string, ...threads: ThreadNode[]): Group => ({
   id: `p:${id}`,
@@ -81,9 +99,9 @@ describe("mapsOf", () => {
         thread("multi", { map: { name: "multi", header: false, href: null }, children: [header] }),
       ),
     ]);
-    expect(maps.map((m) => [m.key, m.name, m.head.id, m.project.label])).toEqual([
-      ["beta", "Beta map", "m", "Alpha"],
-      ["zed", "Zed", "h", "Alpha"],
+    expect(maps.map((m) => [m.key, m.name, m.heads.map((h) => h.id), m.project.label])).toEqual([
+      ["beta", "Beta map", ["m"], "Alpha"],
+      ["zed", "Zed", ["h"], "Alpha"],
     ]);
   });
 
@@ -103,6 +121,79 @@ describe("mapsOf", () => {
       ["a", false],
       ["b", true],
     ]);
+  });
+});
+
+describe("a key in two groups", () => {
+  const head = (id: string, child: ThreadNode) =>
+    thread(id, {
+      map: { name: "K", header: false, href: null, key: "k" },
+      children: [child],
+    });
+  const kid = (id: string, createdAt: string, prs: PrNode[] = []) =>
+    thread(id, { prs, detail: { createdAt } as ThreadNode["detail"] });
+
+  test("lists every head, oldest first, and the members of all of them", () => {
+    const [entry] = mapsOf([
+      project("1", "Alpha", head("late", kid("x", "2026-02-01")), head("early", kid("y", "2026-01-01", [pr(1)]))),
+      project("2", "Beta", head("third", kid("x", "2026-02-01"))),
+    ]);
+    expect(entry.heads.map((h) => h.id)).toEqual(["early", "late", "third"]);
+    expect(entry.members.map((m) => m.id)).toEqual(["y", "x"]);
+    expect(entry.project.label).toBe("Alpha");
+    expect(entry.hasPrs).toBe(true);
+  });
+});
+
+describe("lineagesOf", () => {
+  const root = (name: string, over: Partial<ThreadNode>) =>
+    thread(name, { map: { name, header: false, href: null, root: true }, ...over });
+
+  test("a program root with two sub-maps lists all members", () => {
+    const subMap = (key: string, ...children: ThreadNode[]) =>
+      thread(`m-${key}`, { map: { name: key, header: false, href: null, key }, children });
+    const head = root("prog", {
+      children: [
+        subMap("a", thread("a1", { prs: [pr(1)] })),
+        thread("h", { map: { name: "h", header: true, href: null, key: "b" }, children: [thread("b1")] }),
+        thread("run", { run: {} as ThreadNode["run"], children: [thread("step")] }),
+      ],
+    });
+    const [entry] = lineagesOf([project("1", "Alpha", head)]);
+    expect(entry.members.map((m) => m.id)).toEqual(["prog", "m-a", "a1", "b1"]);
+    expect(entry.hasPrs).toBe(true);
+    expect(entry.project.label).toBe("Alpha");
+  });
+
+  test("a settled root's header is no member; a group with no live PR has hasPrs false", () => {
+    const header = thread("hd", {
+      map: { name: "G", header: true, href: null, root: true },
+      children: [thread("c", { settled: true, prs: [pr(1)] }), thread("d")],
+    });
+    const [entry] = lineagesOf([project("1", "Alpha", header)]);
+    expect(entry.members.map((m) => m.id)).toEqual(["c", "d"]);
+    expect(entry.hasPrs).toBe(false);
+  });
+
+  test("a group with a map key is a map, not a lineage entry", () => {
+    const head = thread("m", { map: { name: "M", header: false, href: null, key: "m", root: true } });
+    expect(lineagesOf([project("1", "Alpha", head)])).toEqual([]);
+  });
+});
+
+describe("lineageScope", () => {
+  const group = (over: Partial<ThreadNode["map"] & object>, ...children: ThreadNode[]) =>
+    thread("g", { map: { name: "G", header: false, href: null, ...over }, children });
+
+  test("a map head gives its map scope", () => {
+    expect(lineageScope(group({ key: "k", root: true }))).toBe("map:k");
+  });
+  test("a keyless root with a live PR gives its lineage scope", () => {
+    expect(lineageScope(group({ root: true }, thread("c", { prs: [pr(1)] })))).toBe("lineage:g");
+  });
+  test("a keyless root with no PR, or a non-root, gives null", () => {
+    expect(lineageScope(group({ root: true }, thread("c")))).toBeNull();
+    expect(lineageScope(group({}, thread("c", { prs: [pr(1)] })))).toBeNull();
   });
 });
 

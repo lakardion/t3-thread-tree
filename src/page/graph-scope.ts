@@ -1,7 +1,7 @@
 import { isGraphMember } from "../shared/pr-graph-data.ts";
 import type { GraphPr } from "../shared/pr-graph-data.ts";
 import { stackKey, walk } from "../shared/pr-graph.ts";
-import { allThreads, NO_PROJECT, type Group, type PrNode, type ThreadNode } from "../shared/tree.ts";
+import { allThreads, bySince, isThread, NO_PROJECT, type Group, type PrNode, type ThreadNode } from "../shared/tree.ts";
 import { applyOrder, PROJECTS, pinnedList, type Orders } from "./order.ts";
 
 /** The band id of the threads with no project. */
@@ -16,7 +16,7 @@ export type Band = Project & { members: ThreadNode[]; threads: ThreadNode[] };
  * The T3 project of a thread: its own `t3Project` (Linear tree), else the project group that holds it.
  * A project whose label equals its id has no known project in T3; the match is a heuristic.
  */
-function projectOf(t: ThreadNode, group: Project | undefined): Project {
+export function projectOf(t: ThreadNode, group: Project | undefined): Project {
   const p = t.t3Project ?? group;
   return !p || p.label === p.id ? { id: NONE, label: NO_PROJECT } : p;
 }
@@ -39,22 +39,28 @@ export function bandsOf(projects: Group[]): Band[] {
   return [...bands.values()];
 }
 
-/** `hasPrs`: a member of the map in the tree links a PR. */
-export type MapEntry = { key: string; name: string; head: ThreadNode; project: Project; hasPrs: boolean };
+/** `heads`: every anchor of the key in the tree, oldest first. `members`: the threads of all heads. `hasPrs`: a member links a PR. */
+export type MapEntry = {
+  key: string;
+  name: string;
+  heads: ThreadNode[];
+  members: ThreadNode[];
+  project: Project;
+  hasPrs: boolean;
+};
 
-/** Every map of a raw tree, by name: a map thread row or a Map header, with the project of its thread. */
-export function mapsOf(projects: Group[]): MapEntry[] {
-  const maps = new Map<string, MapEntry>();
+/** A Lineage group with no map key. `members` holds the head (unless it is a header) and every thread below it. */
+export type LineageEntry = { name: string; head: ThreadNode; project: Project; members: ThreadNode[]; hasPrs: boolean };
+
+/** The thread nodes below `n`, through headers and sub-map heads. A run node leaves out its subtree. */
+const walkAll = (n: ThreadNode): ThreadNode[] =>
+  n.children.flatMap((c) => (c.run ? [] : [...(isThread(c) ? [c] : []), ...walkAll(c)]));
+
+/** Every node of a raw tree with the project it sits in. */
+function eachNode(projects: Group[], visit: (t: ThreadNode, project: Project) => void) {
   const down = (t: ThreadNode, inherited: Project) => {
     const project = t.t3Project ? projectOf(t, undefined) : inherited;
-    if (t.map?.key)
-      maps.set(t.map.key, {
-        key: t.map.key,
-        name: t.map.name,
-        head: t,
-        project,
-        hasPrs: walk(t).some((m) => m.prs.length > 0),
-      });
+    visit(t, project);
     for (const c of t.children) down(c, project);
   };
   for (const g of projects) {
@@ -65,7 +71,59 @@ export function mapsOf(projects: Group[]): MapEntry[] {
     };
     walkGroup(g);
   }
-  return [...maps.values()].toSorted((a, b) => a.name.localeCompare(b.name));
+}
+
+/** Every map of a raw tree, by name: a map thread row or a Map header. A key under several heads lists them all. */
+export function mapsOf(projects: Group[]): MapEntry[] {
+  const found = new Map<
+    string,
+    { name: string; heads: { t: ThreadNode; project: Project; oldest: string | null }[] }
+  >();
+  eachNode(projects, (t, project) => {
+    if (!t.map?.key) return;
+    const oldest =
+      walk(t)
+        .map((m) => m.detail.createdAt)
+        .filter((c) => c !== null)
+        .toSorted()[0] ?? null;
+    const entry = found.get(t.map.key) ?? { name: t.map.name, heads: [] };
+    found.set(t.map.key, entry);
+    entry.heads.push({ t, project, oldest });
+  });
+  return [...found]
+    .map(([key, { name, heads }]) => {
+      const sorted = heads.toSorted((a, b) => bySince(a.oldest, b.oldest));
+      const members = [...new Map(sorted.flatMap((h) => walk(h.t)).map((m) => [m.id, m])).values()];
+      return {
+        key,
+        name,
+        heads: sorted.map((h) => h.t),
+        members,
+        project: sorted[0].project,
+        hasPrs: members.some((m) => m.prs.length > 0),
+      };
+    })
+    .toSorted((a, b) => a.name.localeCompare(b.name));
+}
+
+const lineageMembers = (head: ThreadNode) => [...(isThread(head) ? [head] : []), ...walkAll(head)];
+const livePrs = (members: ThreadNode[]) => members.some((m) => !m.settled && m.prs.length > 0);
+
+/** Every Lineage group with no map key, with the project of its head. */
+export function lineagesOf(projects: Group[]): LineageEntry[] {
+  const out: LineageEntry[] = [];
+  eachNode(projects, (t, project) => {
+    if (!t.map?.root || t.map.key) return;
+    const members = lineageMembers(t);
+    out.push({ name: t.map.name, head: t, project, members, hasPrs: livePrs(members) });
+  });
+  return out;
+}
+
+/** The scope id of the PR graph button of a group head: its map, else its Lineage group when a live member links a PR. */
+export function lineageScope(t: ThreadNode): string | null {
+  if (t.map?.key) return `map:${t.map.key}`;
+  return t.map?.root && livePrs(lineageMembers(t)) ? `lineage:${t.id}` : null;
 }
 
 const mateKey = (p: PrNode) => p.stack && stackKey({ repository: p.repository, stack: p.stack });
