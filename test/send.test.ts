@@ -53,12 +53,20 @@ describe("sendService", () => {
   type Result = Awaited<ReturnType<CliRun>>;
   const ok = (stdout: string): Result => ({ code: 0, stdout, stderr: "", timedOut: false });
 
+  const types: Record<string, "string" | "number" | "boolean" | "other"> = {
+    "settings/w/time": "string",
+    "settings/w/limit": "number",
+    "settings/w/on": "boolean",
+    "settings/w/shape": "other",
+  };
+
   function setup(result: Result | Error = ok('{"delivery":"queued"}'), available = true) {
     const calls: { argv: string[]; stdin: string }[] = [];
     const svc = sendService({
       cli: Promise.resolve({ available, path: "/bin/t3" }),
       hasThread: (id) => id === "T",
       hasProject: (id) => id === "P",
+      settingType: (key) => types[key] ?? null,
       run: async (argv, stdin) => {
         calls.push({ argv, stdin });
         if (result instanceof Error) throw result;
@@ -76,6 +84,63 @@ describe("sendService", () => {
     };
     return { calls, call, svc };
   }
+
+  const setting = async (s: ReturnType<typeof setup>, body: unknown) => {
+    const res = await s.svc.routes["/t3/workflows/settings"].POST(
+      new Request("http://x/t3/workflows/settings", { method: "POST", body: JSON.stringify(body) }),
+    );
+    return res.status === 204 ? { status: 204 } : { status: res.status, json: (await res.json()) as unknown };
+  };
+
+  test("settings: set runs `store set` with the JSON value", async () => {
+    const s = setup(ok("Set settings/w/time.\n"));
+    expect(await setting(s, { key: "settings/w/time", value: "9am" })).toEqual({ status: 204 });
+    expect(await setting(s, { key: "settings/w/limit", value: 3 })).toEqual({ status: 204 });
+    expect(await setting(s, { key: "settings/w/on", value: false })).toEqual({ status: 204 });
+    expect(s.calls.map((c) => c.argv)).toEqual([
+      ["/bin/t3", "workflow", "store", "set", "settings/w/time", '"9am"'],
+      ["/bin/t3", "workflow", "store", "set", "settings/w/limit", "3"],
+      ["/bin/t3", "workflow", "store", "set", "settings/w/on", "false"],
+    ]);
+  });
+
+  test("settings: a negative number gets a leading space, so it is not read as a flag", async () => {
+    const s = setup(ok(""));
+    await setting(s, { key: "settings/w/limit", value: -5 });
+    expect(s.calls[0].argv.at(-1)).toBe(" -5");
+  });
+
+  test("settings: null runs `store delete`, even for a key the scan does not list", async () => {
+    const s = setup(ok("Deleted.\n"));
+    expect(await setting(s, { key: "settings/w/gone", value: null })).toEqual({ status: 204 });
+    expect(s.calls[0].argv).toEqual(["/bin/t3", "workflow", "store", "delete", "settings/w/gone"]);
+  });
+
+  test("settings: a bad key, a wrong type and an unknown key give 400 and do not run the CLI", async () => {
+    const s = setup(ok(""));
+    for (const body of [
+      { key: "other/w/time", value: "x" },
+      { key: "--x", value: null },
+      { key: 3, value: "x" },
+      { key: "settings/w/limit", value: "3" },
+      { key: "settings/w/time", value: 3 },
+      { key: "settings/w/on", value: "true" },
+      { key: "settings/w/shape", value: "x" },
+      { key: "settings/w/unknown", value: "x" },
+    ])
+      expect((await setting(s, body)).status).toBe(400);
+    expect(s.calls).toHaveLength(0);
+  });
+
+  test("settings: GET lists the stored values; a CLI failure gives 502", async () => {
+    const stored = [{ key: "settings/w/time", value: "9am" }];
+    const s = setup(ok(JSON.stringify(stored)));
+    const res = await s.svc.routes["/t3/workflows/settings"].GET();
+    expect(await res.json()).toEqual(stored);
+    expect(s.calls[0].argv).toEqual(["/bin/t3", "workflow", "store", "list", "--json", "settings/"]);
+    const bad = setup({ code: 1, stdout: "", stderr: "boom\n", timedOut: false });
+    expect((await bad.svc.routes["/t3/workflows/settings"].GET()).status).toBe(502);
+  });
 
   const SEND = { threadId: "T", message: "hi" };
   const START = { projectId: "P", title: " SHOP-1 ", message: "go" };

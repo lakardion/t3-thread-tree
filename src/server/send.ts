@@ -4,6 +4,7 @@ import { homedir } from "node:os";
 import { join } from "node:path";
 
 import { type CliStatus, DELIVERIES, type Delivery, type SendError } from "../shared/send.ts";
+import type { SettingType } from "../shared/workflow-start.ts";
 import { oldCli } from "./workflow-start.ts";
 
 const TIMEOUT_MS = 30_000;
@@ -45,6 +46,18 @@ export const workflowStartArgs = (bin: string, name: string, input: object, key:
   `--key=${key}`,
   name,
 ];
+
+/**
+ * A JSON value that starts with `-` (a negative number) gets a leading space, so the CLI does not read it as a flag.
+ */
+export const storeSetArgs = (bin: string, key: string, value: string | number | boolean) => {
+  const json = JSON.stringify(value);
+  return [bin, "workflow", "store", "set", key, json.startsWith("-") ? ` ${json}` : json];
+};
+
+export const storeDeleteArgs = (bin: string, key: string) => [bin, "workflow", "store", "delete", key];
+
+export const storeListArgs = (bin: string) => [bin, "workflow", "store", "list", "--json", "settings/"];
 
 export type CliRun = (
   argv: string[],
@@ -89,15 +102,20 @@ export function sendService(o: {
   hasThread: (id: string) => boolean;
   hasProject: (id: string) => boolean;
   projectList?: () => { id: string; label: string }[];
+  /** The scanned type of a settings key. Without it, every set is `400`. */
+  settingType?: (key: string) => SettingType | null;
   run?: CliRun;
 }) {
   const run = o.run ?? runCli;
 
-  /** Run the CLI and map the outcome to a response. `pick` reads the success field. `failText` may replace the stderr line. */
+  /**
+   * Run the CLI and map the outcome to a response. `pick` reads the success field. A null `pick` expects plain text
+   * output and answers `204`. `failText` may replace the stderr line.
+   */
   async function exec(
     argv: (bin: string) => string[],
     stdin: string,
-    pick: (out: unknown) => Record<string, string> | null,
+    pick: ((out: unknown) => object | null) | null,
     failText?: (stderr: string) => string | undefined,
   ) {
     const { available, path } = await o.cli;
@@ -121,6 +139,7 @@ export function sendService(o: {
         r.code,
         r.stderr,
       );
+    if (!pick) return new Response(null, { status: 204 });
     let out: unknown;
     try {
       out = JSON.parse(r.stdout);
@@ -178,6 +197,20 @@ export function sendService(o: {
     );
   }
 
+  /** `{ key, value }`: `value` null deletes the key. Else the value must fit the scanned type of the key. */
+  async function writeSetting(req: Request) {
+    const body = (await req.json().catch(() => null)) as Record<string, unknown> | null;
+    if (!body || typeof body !== "object") return fail(400, "Invalid JSON");
+    const { key, value } = body;
+    if (typeof key !== "string" || !key.startsWith("settings/")) return fail(400, "Missing key");
+    if (value === null) return exec((bin) => storeDeleteArgs(bin, key), "", null);
+    const type = o.settingType?.(key);
+    if (!type || type === "other") return fail(400, "Unknown setting");
+    const fits = type === "number" ? typeof value === "number" && Number.isFinite(value) : typeof value === type;
+    if (!fits) return fail(400, `The value must be a ${type}`);
+    return exec((bin) => storeSetArgs(bin, key, value as string | number | boolean), "", null);
+  }
+
   return {
     routes: {
       "/t3/cli": { GET: async () => Response.json(await o.cli) },
@@ -197,6 +230,16 @@ export function sendService(o: {
           }),
       },
       "/t3/workflows/start": { POST: startWorkflow },
+      "/t3/workflows/settings": {
+        GET: () =>
+          exec(
+            storeListArgs,
+            "",
+            (out) => (Array.isArray(out) ? out : null),
+            (stderr) => (oldCli(stderr) ? "Update T3 Code to use workflows" : undefined),
+          ),
+        POST: writeSetting,
+      },
       "/t3/start": {
         POST: (req: Request) =>
           handle(req, {

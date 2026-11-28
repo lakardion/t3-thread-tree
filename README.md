@@ -46,6 +46,7 @@ Use it as a Mac app or in a browser. The Mac app adds a Dock badge, notification
 ### Also
 
 - **Mac app:** Dock badge, notifications, a menu-bar entry and an Up next window (⌥⌘U) that stays on top.
+- **Workflow settings:** Settings › Workflows has one fold for each workflow that reads settings from the T3 store. Edit text, numbers and switches, then click Save. "Use default" clears a value. The extra prompt adds one last agent step to each run.
 - **Start a workflow:** type `>` in Cmd+K, or use the workflow button on a row, a PR stack or the Looks done list.
 - **Suggested replies:** the send dialog offers reply chips, such as `commit push`, from the last agent message.
 - **Looks done:** finds threads that look finished and settles them in one step, with undo. The eye button on a row shows the last message of the thread in the same dialog, with Markdown formatting, so you can examine the thread before you settle it.
@@ -95,7 +96,7 @@ The scopes:
 
 - `orchestration:read` shows the tree.
 - `orchestration:operate` lets you settle and snooze threads.
-- `filesystem:read` lets the app fill the fields when you start a workflow. Without it, the rest of the app works.
+- `filesystem:read` lets the app fill the fields when you start a workflow, and find the workflow settings. Without it, the rest of the app works.
 
 The token is valid for 52 weeks. When it expires, the app shows a banner. Issue a new token and paste it again.
 
@@ -120,6 +121,38 @@ The app checks GitHub Releases. When a new version exists, the app menu, the men
 ### Use it in a browser
 
 The browser version runs from source and needs [Bun](https://bun.sh). See [Contributing](#contributing).
+
+## Custom steps
+
+Two ways let you add steps to a workflow of this repo. This is optional. The `t3` CLI must be installed.
+
+**Way 1: the extra prompt.** A workflow that has an `extra-prompt` setting shows it in Settings › Workflows. Write text there. The workflow runs one last agent step with that text in each run. Click "Use default" to remove it.
+
+**Way 2: a private workflow file.** Put your own file in `~/.t3/workflows/`. The file imports the repo workflow, invokes it, and adds steps after it.
+
+1. Link the `workflows/` folder of this repo as a subfolder of `~/.t3/workflows/`, for example `~/.t3/workflows/t3-thread-tree/`. T3 does not load a subfolder on its own.
+2. For a repo workflow that you use as it is, add a top-level file that has one line: `export { default } from "./t3-thread-tree/land-stack.ts";`
+3. For a repo workflow that you extend, write a private file instead of that line. Do not keep both. T3 holds back a workflow that two files define.
+
+```ts
+import landStack from "./t3-thread-tree/land-stack.ts";
+const { workflow, invoke, step, stop } = T3;
+
+const withWiki = workflow(
+  "land-stack-wiki",
+  { version: 1, payload: landStack.payload },
+  Effect.fn(function* (payload) {
+    const ended = yield* invoke("land", landStack, payload);
+    if (ended.outcome !== "completed") return yield* stop(`land-stack ${ended.outcome}`);
+    yield* step("wiki-log", { returns: Schema.Void }, writeWikiLog(ended.value));
+  }),
+);
+
+/* Export the repo definition too: a reload of this file does not run the cached import again. */
+export default [landStack, withWiki];
+```
+
+`writeWikiLog` is your own helper. The child run shows under the parent run. When you edit the repo file, restart T3 Code.
 
 ## Contributing
 

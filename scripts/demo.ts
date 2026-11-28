@@ -11,7 +11,7 @@ import { cliPath, type CliRun, projectChoices, sendService } from "../src/server
 import { settleRoutes } from "../src/server/settle.ts";
 import { settledPage, settledRoutes, settledSignature } from "../src/server/settled.ts";
 import type { Pr, Project, RunsSnapshot, Thread } from "../src/server/t3.ts";
-import { launchList, scanFields } from "../src/server/workflow-start.ts";
+import { launchList, scanFields, scanSettings, settingType } from "../src/server/workflow-start.ts";
 import { workflowRoutes } from "../src/server/workflows.ts";
 import type { LocalConfig, LocalState, ModelPick } from "../src/shared/model.ts";
 import { parseScope, type GroupGraphPart, type PrGraphData } from "../src/shared/pr-graph-data.ts";
@@ -559,11 +559,23 @@ const workflows: RunsSnapshot = {
 };
 /** The fake workflow files. `WF_SCAN=off` makes the read fail, as a token without the read scope does. */
 const DEFINITION = [
-  { source: "const payload = { pr: PR, text: Text }", workflows: ["review-pr@3"] },
+  {
+    source: `const payload = { pr: PR, text: Text }
+const shape = store.entry("settings/review-pr/rules", Schema.Struct({ strict: Schema.Boolean }))`,
+    workflows: ["review-pr@3"],
+  },
   { source: "const payload = { stack: Stack }", workflows: ["land-stack@1"] },
-  { source: "const payload = { threadIds: Ids, text: Text }", workflows: ["digest@2"] },
+  {
+    source: `const payload = { threadIds: Ids, text: Text }
+const time = store.entry("settings/digest/time", Schema.String)
+const limit = store.entry("settings/digest/limit", Schema.Number)
+const weekends = store.entry("settings/digest/weekends", Schema.Boolean)
+const extra = store.entry("settings/digest/extra-prompt", Schema.String)`,
+    workflows: ["digest@2"],
+  },
   { source: "const payload = { project: Path }", workflows: ["sentry-hook@1"] },
 ];
+const settingScan = scanSettings(DEFINITION);
 const SCAN_ERROR = "The authenticated token is missing required scope: filesystem:read";
 const treeFor = (rules: RuleId[], labels: string[], wantsLinear: boolean) =>
   JSON.stringify({
@@ -574,7 +586,14 @@ const treeFor = (rules: RuleId[], labels: string[], wantsLinear: boolean) =>
     settled: settledSignature(threads),
     projects: projectsFor(false, rules, labels, wantsLinear),
     runs: runItems(workflows, "http://127.0.0.1:3773", "demo-env"),
-    workflows: launchList(workflows.workflows ?? [], process.env.WF_SCAN === "off" ? null : scanFields(DEFINITION)),
+    workflows:
+      process.env.WF_LIST === "none"
+        ? []
+        : launchList(
+            workflows.workflows ?? [],
+            process.env.WF_SCAN === "off" ? null : scanFields(DEFINITION),
+            process.env.WF_SCAN === "off" ? null : settingScan,
+          ),
     workflowScan: process.env.WF_SCAN === "off" ? SCAN_ERROR : null,
     t3Origin: "http://127.0.0.1:3773",
   });
@@ -607,12 +626,28 @@ const offered = () =>
     ...(localConfig ? [{ id: "local" as const, label: `Local · ${localConfig.model}` }] : []),
   ]);
 
+const ok = (stdout: string) => ({ code: 0, stdout, stderr: "", timedOut: false });
+/** The T3 store of the stub CLI, in memory. */
+const store = new Map<string, unknown>([["settings/digest/time", "08:00"]]);
+
 /**
  * Waits 1 s, then answers like the CLI. `SEND=failed` fails with the wrapper text. A workflow start fails when
- * its input holds "fail", and `WF_OLD=1` makes it fail like a CLI without the command.
+ * its input holds "fail", and `WF_OLD=1` makes it fail like a CLI without the command. `workflow store` keeps values in `store`.
  */
 const stubCli: CliRun = async (argv) => {
   await Bun.sleep(1000);
+  if (argv[2] === "store") {
+    const [, , , op, key = ""] = argv;
+    if (op === "set") store.set(key, JSON.parse(argv[5]));
+    if (op === "delete") store.delete(key);
+    return ok(
+      op === "list"
+        ? JSON.stringify(
+            [...store].map(([k, value]) => ({ key: k, value })).filter((e) => e.key.startsWith(argv.at(-1)!)),
+          )
+        : `${op === "set" ? "Set" : "Deleted"} ${key}.\n`,
+    );
+  }
   if (argv[1] === "workflow") {
     const input = argv.find((a) => a.startsWith("--input="))!;
     if (process.env.WF_OLD === "1")
@@ -636,6 +671,7 @@ const sender = sendService({
   hasThread: (id) => threads.some((th) => th.id === id && !th.gone),
   hasProject: (id) => projects.has(id),
   projectList: () => projectChoices(projects, dirname(import.meta.dir)),
+  settingType: (key) => settingType(process.env.WF_SCAN === "off" ? null : settingScan, key),
   run: stubCli,
 });
 
