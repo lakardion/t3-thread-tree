@@ -399,13 +399,20 @@ export function decodeRunsSnapshot(raw: unknown): RunsSnapshot {
   };
 }
 
-/** Lenient decode of a `workflows.getDefinition` result: the source of each file and the `name@version` of its workflows. */
-export const decodeDefinitionFiles = (raw: unknown): { source: string; workflows: string[] }[] =>
-  list(obj(raw).files).flatMap((f) => {
+/**
+ * Lenient decode of a `workflows.getDefinition` result: the folder T3 read, the source of each file and the
+ * `name@version` of its workflows.
+ */
+export const decodeDefinitionFiles = (
+  raw: unknown,
+): { directory: string | null; files: { source: string; workflows: string[] }[] } => ({
+  directory: str(obj(raw).directory),
+  files: list(obj(raw).files).flatMap((f) => {
     const o = obj(f);
     const source = str(o.source);
     return source === null ? [] : [{ source, workflows: list(o.workflows).filter((x) => typeof x === "string") }];
-  });
+  }),
+});
 
 /** Lenient decode of a `workflows.get` result: the steps in start order. Entries without a name drop out. */
 export type RunStepsRaw = { name: string; status: string; threadId: string | null }[];

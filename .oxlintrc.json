@@ -25,6 +25,10 @@
       "rules": { "typescript/no-import-type-side-effects": "off" }
     },
     {
+      "files": ["workflows/*.ts"],
+      "globals": { "T3": "readonly", "Effect": "readonly", "Schema": "readonly", "Option": "readonly" }
+    },
+    {
       "files": ["test/**"],
       "rules": { "unicorn/consistent-function-scoping": "off" }
     }

@@ -420,6 +420,7 @@ The user can start a **Workflow** from the page. The start opens a dialog, and n
 
 - The page fills the payload fields `threadId`, `pr`, `stack`, `threadIds`, `project` and `text`. T3 drops the fields that a payload schema does not name.
 - The server calls `workflows.getDefinition` with `{}`. For each file, it looks for each field name as `<name>:` in `source`, not after a word character, `$` or `.`. Each workflow of `files[].workflows` (`name@version`) gets the fields of its file. The result is `fields` of the workflow in the tree.
+- `getDefinition` lists only the top-level files of the T3 workflows folder. A file that is an installed entry file (`export { default } from "./t3-thread-tree/<name>";`) gives its fields and settings from the repo file `<directory>/t3-thread-tree/<name>`, where `directory` is the folder in the result. With no readable file, the entry file stays. T3 does not watch the linked subfolder, so after an edit to a repo workflow the scan can stay old until the T3 server restarts.
 - The server reads the files again when `definition.revision` changes. A failed read is retried on the next snapshot, and logged once for each error text.
 - With no result, `fields` is null. This holds with no read scope, with a failed read, and for a workflow that no file names. A workflow with `fields` null shows in Find only.
 - `workflowScan` is the error text of the last failed read, else null. Settings shows it (see "Where it starts").
@@ -494,6 +495,41 @@ Settings has a group "Workflows", after the Setup group. It edits the **Workflow
 ### Demo stub
 
 `digest` has the settings `time` (String), `limit` (Number), `weekends` (Boolean) and `extra-prompt`. `review-pr` has `rules`, a `Schema.Struct` (read-only). The stub CLI keeps the store in memory, with `time` set. `WF_SCAN=off` gives the scan error row. `WF_LIST=none` gives no workflows. `T3CLI=0` gives the disabled state.
+
+## Wrap-up workflow
+
+`workflows/wrap-up.ts` is the **Wrap-up** workflow. The pure rules are in `workflows/lib/wrap-up.ts`. The payload is `{ threadIds }`, a non-empty list, so the **Looks done** "Start a workflow" button lists it. It has the setting `settings/wrap-up/extra-prompt`.
+
+### Checks
+
+The workflow reads each thread with `t3 thread show`, then reads git and `gh` from inside its worktree. A thread keeps its worktree and branch, with a reason, when any of these fails, in this order:
+
+- A read failed.
+- The thread has no worktree (main checkout).
+- The thread is not idle: an active run, a pending request or a pending background task.
+- HEAD is not on the thread's branch.
+- A rebase, merge or bisect is in progress.
+- The tree has an uncommitted or untracked file.
+- The branch has no PR.
+- The PR is not merged.
+- The branch tip is not the `headRefOid` of the merged PR.
+
+Threads on one worktree go together. The worktree goes only when every checked thread on it passes. Else all its threads are kept. A worktree is also kept when another unsettled thread of the project uses it, or when the workflow cannot tell. Only unsettled threads that `t3 thread list` shows count. Workflow step threads and settled threads do not count. T3 recreates the worktree of a settled thread on its next message.
+
+### Question
+
+One `ask` of the kind `confirm` with the choices "Wrap up N" (N is the checked thread count) and "Cancel", and no timeout. The title counts the worktrees and branches that go. The data lists each worktree with its branch, threads and ignored files (the first 20 names), and each kept thread with its reason. No answer or "Cancel" ends the run as stopped. Nothing changes and nothing settles.
+
+### Cleanup
+
+Each side effect is one step, named from the plan index. A step never fails for a git error: it returns `kept: <reason>`. A thing that is already gone counts as done, so a second run is a no-op. The order:
+
+1. `remove/<i>`: read the threads, HEAD, tree and branch tip again. If a thread runs, HEAD moved, the tree is dirty or the tip is not the merged head, keep the worktree. Else `git worktree remove` with no `--force`.
+2. `branch/<i>`, for a removed worktree: if the tip is not the merged head, keep the branch. Else `git branch -D`.
+3. `settle`: one agent with `runtimeMode: "full-access"` calls `t3_thread_organize` with `action: "settle"` for every checked thread. It runs after the cleanup, so no `runOnSettle` script runs in a removed folder.
+4. `extra`: when `extra-prompt` is not blank, one more agent step in the thread of `settle`.
+
+The run result is a Markdown summary: worktrees removed, branches deleted, threads settled, and threads kept with the reason.
 
 ## Launched-thread lineage
 
