@@ -1,5 +1,6 @@
 import { describe, expect, test } from "bun:test";
 
+import { entryFile } from "../scripts/install-workflows.ts";
 import {
   contextOf,
   fillOf,
@@ -10,7 +11,14 @@ import {
   stackPoint,
   type StartPoint,
 } from "../src/page/workflow-start.ts";
-import { launchList, oldCli, scanFields, scanSettings, settingType } from "../src/server/workflow-start.ts";
+import {
+  launchList,
+  oldCli,
+  resolveEntries,
+  scanFields,
+  scanSettings,
+  settingType,
+} from "../src/server/workflow-start.ts";
 import type { PrNode } from "../src/shared/tree.ts";
 import { startKey, type Workflow } from "../src/shared/workflow-start.ts";
 
@@ -263,5 +271,24 @@ describe("scanSettings", () => {
     const [w] = launchList([{ name: "digest", version: 2, triggers: [] }], null, scan);
     expect(w.settings).toHaveLength(4);
     expect(launchList([{ name: "digest", version: 2, triggers: [] }], null)[0].settings).toBeNull();
+  });
+});
+
+describe("resolveEntries", () => {
+  test("swaps an installed entry file for the source it names", () => {
+    const files = [{ source: entryFile("x.ts"), workflows: ["x@1"] }];
+    expect(resolveEntries(files, (name) => `source of ${name}`)).toEqual([
+      { source: "source of x.ts", workflows: ["x@1"] },
+    ]);
+  });
+
+  test("passes a file with other text through", () => {
+    const files = [{ source: "workflow('y', {})", workflows: ["y@1"] }];
+    expect(resolveEntries(files, () => "never")).toEqual(files);
+  });
+
+  test("keeps the entry file when the read gives null", () => {
+    const files = [{ source: entryFile("x.ts"), workflows: ["x@1"] }];
+    expect(resolveEntries(files, () => null)).toEqual(files);
   });
 });

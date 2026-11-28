@@ -1,6 +1,23 @@
 /** The pure parts of Start workflow: the field scan, the list for the page and the CLI error check. */
 import { type Field, FIELDS, type Setting, type SettingType, type Workflow } from "../shared/workflow-start.ts";
 
+const ENTRY_FILE = /^\/\*\*[^]*?\*\/\nexport \{ default \} from "\.\/t3-thread-tree\/([\w.-]+)";\n?$/;
+
+/**
+ * Replaces the source of an installed entry file (a one-line re-export of a repo workflow) with the source of the file
+ * it names, so the scans see the real workflow. `read` gives null for a file it cannot read: the entry file stays.
+ */
+export function resolveEntries(
+  files: { source: string; workflows: string[] }[],
+  read: (name: string) => string | null,
+): { source: string; workflows: string[] }[] {
+  return files.map((f) => {
+    const name = ENTRY_FILE.exec(f.source)?.[1];
+    const source = name === undefined ? null : read(name);
+    return source === null ? f : { ...f, source };
+  });
+}
+
 /** The fields that each file names as `<name>:`, for each workflow of the file. Keys are workflow names. */
 export function scanFields(files: { source: string; workflows: string[] }[]): Map<string, Field[]> {
   const out = new Map<string, Field[]>();
