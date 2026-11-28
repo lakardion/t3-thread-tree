@@ -33,8 +33,6 @@ export const postStart = (projectId: string, title: string, message: string) =>
 
 export const postSettle = (threadId: string, settled: boolean) => post("/t3/settle", { threadId, settled });
 
-export const postMapThread = (id: string, marked: boolean) => post("/map-threads", { id, marked });
-
 export const postSnooze = (threadId: string, snoozedUntil: string) => post("/t3/snooze", { threadId, snoozedUntil });
 
 export const postAnswer = (runId: string, name: string, choice: string, reason: string) =>

@@ -57,8 +57,6 @@ export type Detail = {
   goal: { objective: string; status: string } | null;
   tags: string[];
   pinned: boolean;
-  /** Set when the thread is in the map thread file. */
-  mapMarked?: true;
 };
 
 /** The one-line read of a waiting thread. `did`, `ask`, `options` and `doneLike` are set when `state` is `done`. `question` is the raw last question, set when `state` is `done` or `failed`. */

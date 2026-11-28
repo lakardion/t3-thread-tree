@@ -45,59 +45,114 @@ describe("idSet", () => {
 describe("ruleList", () => {
   const ids = (rs: { id: string }[]) => rs.map((r) => r.id);
   const defaults: Rule[] = [
-    { id: "map", on: true },
+    { id: "lineage", on: true },
     { id: "review", on: true },
     { id: "stack", on: true },
     { id: "key", on: true },
-    { id: "nest", on: false },
   ];
+  const parse = (v: unknown) => ruleList().parse(JSON.stringify(v));
 
-  test("nothing stored: the defaults, with Launch nesting on for the legacy flag", () => {
-    expect(ruleList(false).parse(null)).toEqual(defaults);
-    expect(
-      ruleList(true)
-        .parse(null)
-        .find((r) => r.id === "nest")!.on,
-    ).toBe(true);
+  test("nothing stored: the defaults", () => {
+    expect(ruleList().parse(null)).toEqual(defaults);
   });
 
   test("round-trips an order and its switches", () => {
-    const c = ruleList(false);
+    const c = ruleList();
     const rules: Rule[] = [
-      { id: "map", on: false },
+      { id: "lineage", on: false },
       { id: "key", on: true },
       { id: "stack", on: false },
       { id: "review", on: true },
-      { id: "nest", on: true },
     ];
     expect(c.parse(c.format(rules))).toEqual(rules);
   });
 
-  test("a stored value ignores the legacy flag", () => {
-    expect(ruleList(true).parse(JSON.stringify(defaults))).toEqual(defaults);
-  });
-
   test("bad JSON or a non-array reads as the defaults", () => {
-    expect(ruleList(false).parse("{")).toEqual(defaults);
-    expect(ruleList(false).parse("{}")).toEqual(defaults);
+    expect(ruleList().parse("{")).toEqual(defaults);
+    expect(ruleList().parse("{}")).toEqual(defaults);
   });
 
   test("unknown and repeated ids drop, a bad switch reads as the default, missing ids go last", () => {
-    const rs = ruleList(false).parse(
-      '[{"id":"x","on":true},{"id":"key","on":false},{"id":"key","on":true},{"id":"review","on":1}]',
-    );
-    expect(rs).toEqual([
-      { id: "map", on: true },
+    expect(
+      parse([
+        { id: "x", on: true },
+        { id: "key", on: false },
+        { id: "key", on: true },
+        { id: "review", on: 1 },
+      ]),
+    ).toEqual([
+      { id: "lineage", on: true },
       { id: "key", on: false },
       { id: "review", on: true },
       { id: "stack", on: true },
-      { id: "nest", on: false },
     ]);
   });
 
-  test("map is forced first and nest last", () => {
-    const rs = ruleList(false).parse('[{"id":"nest","on":true},{"id":"key","on":true},{"id":"map","on":true}]');
-    expect(ids(rs)).toEqual(["map", "key", "review", "stack", "nest"]);
+  test("lineage is forced first", () => {
+    expect(
+      ids(
+        parse([
+          { id: "key", on: true },
+          { id: "lineage", on: true },
+        ]),
+      ),
+    ).toEqual(["lineage", "key", "review", "stack"]);
+  });
+
+  describe("migration", () => {
+    test("a stored map reads as lineage at the first place", () => {
+      expect(
+        parse([
+          { id: "map", on: true },
+          { id: "review", on: true },
+        ])[0],
+      ).toEqual({ id: "lineage", on: true });
+      expect(
+        parse([
+          { id: "review", on: true },
+          { id: "map", on: false },
+        ]),
+      ).toEqual([
+        { id: "lineage", on: false },
+        { id: "review", on: true },
+        { id: "stack", on: true },
+        { id: "key", on: true },
+      ]);
+    });
+
+    test("map off and nest on: lineage on", () => {
+      expect(
+        parse([
+          { id: "map", on: false },
+          { id: "nest", on: true },
+        ])[0],
+      ).toEqual({ id: "lineage", on: true });
+    });
+
+    test("map and nest both off: lineage off", () => {
+      expect(
+        parse([
+          { id: "map", on: false },
+          { id: "nest", on: false },
+        ])[0],
+      ).toEqual({ id: "lineage", on: false });
+    });
+
+    test("only nest stored: lineage follows it", () => {
+      expect(parse([{ id: "nest", on: false }])[0]).toEqual({ id: "lineage", on: false });
+      expect(parse([{ id: "nest", on: true }])[0]).toEqual({ id: "lineage", on: true });
+    });
+
+    test("nest drops", () => {
+      expect(
+        ids(
+          parse([
+            { id: "nest", on: true },
+            { id: "map", on: true },
+          ]),
+        ),
+      ).toEqual(["lineage", "review", "stack", "key"]);
+    });
   });
 });
 
@@ -105,11 +160,11 @@ describe("rulesParam", () => {
   test("joins the ids that are on, in order; none gives an empty text", () => {
     expect(
       rulesParam([
-        { id: "map", on: true },
+        { id: "lineage", on: true },
         { id: "key", on: false },
         { id: "review", on: true },
       ]),
-    ).toBe("map,review");
-    expect(rulesParam([{ id: "map", on: false }])).toBe("");
+    ).toBe("lineage,review");
+    expect(rulesParam([{ id: "lineage", on: false }])).toBe("");
   });
 });

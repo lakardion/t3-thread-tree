@@ -38,7 +38,7 @@ const pages = (list: Thread[], spawners: Record<string, string> = {}) => {
         settled: true,
         now: 0,
       },
-      defaultRules(false),
+      defaultRules(),
     );
   return (after: string | null, limit: number) => settledPage(tree(), threads, after, limit);
 };
@@ -106,7 +106,7 @@ describe("settledPage", () => {
         settled: true,
         now: 0,
       },
-      defaultRules(false),
+      defaultRules(),
     );
     const node = tree[0].threads[0];
     tree[0].threads.push({ ...node, id: "map:TIB-1" });

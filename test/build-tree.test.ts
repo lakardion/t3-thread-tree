@@ -101,11 +101,13 @@ function inputOf(raws: object[], spawners: Record<string, string> = {}, over: Pa
   };
 }
 
-/** `nest` picks the rule chain; the rest is build input. */
-type Over = Partial<BuildInput> & { nest?: boolean };
+type Over = Partial<BuildInput>;
 
-function build(raws: object[], spawners: Record<string, string> = {}, over: Over = {}) {
-  return buildTree(inputOf(raws, spawners, over), defaultRules(over.nest ?? true));
+/** The default chain without Lineage group: launched threads stay where the other rules put them. */
+const NO_LINEAGE = defaultRules().filter((r) => r !== "lineage");
+
+function build(raws: object[], spawners: Record<string, string> = {}, over: Partial<BuildInput> = {}) {
+  return buildTree(inputOf(raws, spawners, over), defaultRules());
 }
 
 const labels = (b: Group[]) => b.map((x) => x.label);
@@ -233,25 +235,10 @@ describe("placement", () => {
     expect(titles(tree[0].threads)).toEqual(["loose thread"]);
   });
 
-  test("keyless thread nests under its visible spawner, skipping a settled launcher", () => {
-    const tree = build(
-      [
-        shell("map", "Wayfinder map"),
-        shell("launcher", "launcher", { settledAt: "2026-11-12T09:00:00.000Z" }),
-        shell("mcp:t1", "ticket 001"),
-      ],
-      { "mcp:t1": "launcher", launcher: "map" },
-    );
-    const [map] = child(tree, "frontend").threads;
-    expect(map.title).toBe("Wayfinder map");
-    expect(titles(map.children)).toEqual(["ticket 001"]);
-  });
-
-  test("with nesting off, a launched thread sits directly in its project and names its spawner", () => {
-    const tree = build(
-      [shell("map", "Wayfinder map"), shell("mcp:t1", "ticket 001")],
-      { "mcp:t1": "map" },
-      { nest: false },
+  test("a keyless launched thread sits directly in its project and names its spawner", () => {
+    const tree = buildTree(
+      inputOf([shell("map", "Wayfinder map"), shell("mcp:t1", "ticket 001")], { "mcp:t1": "map" }),
+      NO_LINEAGE,
     );
     const ts = child(tree, "frontend").threads;
     expect(titles(ts)).toEqual(["Wayfinder map", "ticket 001"]);
@@ -294,15 +281,11 @@ describe("placement", () => {
 
 describe("order", () => {
   test("projects, groups and threads in creation order, oldest first", () => {
-    const tree = build(
-      [
-        shell("b1", "backend thing", { projectId: "p2" }),
-        shell("old", "old root"),
-        shell("new", "new root"),
-        shell("mcp:kid", "kid of old"),
-      ],
-      { "mcp:kid": "old" },
-    );
+    const tree = build([
+      shell("b1", "backend thing", { projectId: "p2" }),
+      shell("old", "old root"),
+      shell("new", "new root"),
+    ]);
     expect(labels(tree)).toEqual(["backend", "frontend"]);
     expect(titles(child(tree, "frontend").threads)).toEqual(["old root", "new root"]);
   });
@@ -874,11 +857,6 @@ describe("details", () => {
 
   describe("launchedBy", () => {
     const spawner = { title: "Spawner", href: "t3code://threads/env-1/sp" };
-    test("null when the thread nests under its spawner or the spawner is unknown", () => {
-      const raws = [shell("sp", "Spawner"), shell("k", "keyless")];
-      expect(node(raws, "k", { k: "sp" }).detail.launchedBy).toBeNull();
-      expect(node([shell("k", "keyless")], "k", { k: "ghost" }).detail.launchedBy).toBeNull();
-    });
     test("set for a keyed thread", () => {
       expect(node([shell("sp", "Spawner"), shell("k", "SHOP-1 keyed")], "k", { k: "sp" }).detail.launchedBy).toEqual(
         spawner,
@@ -887,6 +865,10 @@ describe("details", () => {
     test("set on a loose thread when the spawner is in another project", () => {
       const raws = [shell("sp", "Spawner", { projectId: "p2" }), shell("k", "keyless")];
       expect(node(raws, "k", { k: "sp" }).detail.launchedBy).toEqual(spawner);
+    });
+    test("null when the spawner id is unknown", () => {
+      const tree = buildTree(inputOf([shell("k", "keyless")], { k: "gone" }), NO_LINEAGE);
+      expect(tree[0].threads[0].detail.launchedBy).toBeNull();
     });
     test("names a settled spawner when the thread nests under a grandparent", () => {
       const raws = [
@@ -963,7 +945,7 @@ describe("linearOf", () => {
     milestone: null,
   };
   const linearOf = (key: string) => (key === "SHOP-1" ? ISSUE : undefined);
-  const nodeOf = (title: string, over: Over = {}) => {
+  const nodeOf = (title: string, over: Partial<BuildInput> = {}) => {
     const [p] = build([shell("a", title)], {}, over);
     return [...p.groups.flatMap((g) => g.threads), ...p.threads][0];
   };
@@ -990,10 +972,10 @@ describe("buildLinearTree", () => {
     raws: object[],
     answers: Record<string, LinearIssue | null> = {},
     spawners: Record<string, string> = {},
-    over: Over = {},
+    over: Partial<BuildInput> = {},
   ) => {
     const linearOf = (k: string) => answers[k] ?? undefined;
-    return buildLinearTree(inputOf(raws, spawners, { linearOf, ...over }), defaultRules(over.nest ?? true));
+    return buildLinearTree(inputOf(raws, spawners, { linearOf, ...over }), defaultRules());
   };
   const ids = (b: Group[]) => b.map((x) => x.id);
 
@@ -1139,22 +1121,6 @@ describe("buildLinearTree", () => {
     expect(titles(tree[0].threads)).toEqual(["other"]);
   });
 
-  test("a keyless thread nests under a keyless spawner, not under a keyed one", () => {
-    const raws = [shell("p", "parent"), shell("k", "SHOP-1 keyed"), shell("c", "child"), shell("d", "other child")];
-    const tree = buildL(raws, { "SHOP-1": issue("x") }, { c: "p", d: "k" });
-    const nokey = tree.find((b) => b.id === "lf:loose")!;
-    expect(titles(nokey.threads)).toEqual(["parent", "other child"]);
-    expect(titles(nokey.threads[0].children)).toEqual(["child"]);
-    expect(nokey.threads[0].children[0].detail.launchedBy).toBeNull();
-    expect(nokey.threads[1].detail.launchedBy?.title).toBe("SHOP-1 keyed");
-  });
-
-  test("a keyless thread does not nest with nest off", () => {
-    const tree = buildL([shell("p", "parent"), shell("c", "child")], {}, { c: "p" }, { nest: false });
-    expect(titles(tree[0].threads)).toEqual(["parent", "child"]);
-    expect(tree[0].threads[1].detail.launchedBy?.title).toBe("parent");
-  });
-
   test("ids, Linear meta on groups, and t3Project on nodes and children", () => {
     const m = ms("m", "2026-12-04");
     const tree = buildL(
@@ -1166,7 +1132,6 @@ describe("buildLinearTree", () => {
         shell("r", "Review #1"),
       ],
       { "SHOP-1": issue("x", m), "SHOP-2": issue("x") },
-      { c: "p" },
     );
     expect(ids(tree)).toEqual(["lp:x", "lf:reviews", "lf:loose"]);
     expect(ids(tree[0].groups)).toEqual(["lm:m", "lm:x:none"]);
@@ -1177,8 +1142,7 @@ describe("buildLinearTree", () => {
     expect(tree[1].linear).toEqual({});
     expect(tree[0].groups[0].threads[0].t3Project).toEqual({ id: "p2", label: "backend" });
     expect(tree[0].groups[1].threads[0].t3Project).toEqual({ id: "p1", label: "frontend" });
-    const parent = tree[2].threads[0];
-    expect(parent.children[0].t3Project).toEqual({ id: "p2", label: "backend" });
+    expect(tree[2].threads[1].t3Project).toEqual({ id: "p2", label: "backend" });
   });
 
   test("a keyless stack thread does not nest under its keyless spawner", () => {
@@ -1197,34 +1161,18 @@ describe("buildLinearTree", () => {
     expect(tree[0].groups[0].threads[0].detail.launchedBy?.title).toBe("parent");
   });
 
+  test("a keyless launched thread is loose and names its spawner", () => {
+    const tree = buildLinearTree(inputOf([shell("p", "parent"), shell("c", "child")], { c: "p" }), NO_LINEAGE);
+    expect(titles(tree[0].threads)).toEqual(["parent", "child"]);
+    expect(tree[0].threads[0].children).toEqual([]);
+    expect(tree[0].threads[1].detail.launchedBy?.title).toBe("parent");
+  });
+
   test("a keyless thread does not nest under a keyless review", () => {
     const tree = buildL([shell("r", "Review #1"), shell("c", "child")], {}, { c: "r" });
     expect(ids(tree)).toEqual(["lf:reviews", "lf:loose"]);
     expect(titles(tree[1].threads)).toEqual(["child"]);
     expect(tree[1].threads[0].detail.launchedBy?.title).toBe("Review #1");
-  });
-
-  test("nesting follows a nested spawner", () => {
-    const tree = buildL([shell("a", "A"), shell("b", "B"), shell("c", "C")], {}, { b: "a", c: "b" });
-    expect(titles(tree[0].threads)).toEqual(["A"]);
-    expect(titles(tree[0].threads[0].children)).toEqual(["B"]);
-    expect(titles(tree[0].threads[0].children[0].children)).toEqual(["C"]);
-  });
-
-  test("nested children sort by creation and a parent takes its oldest child's place", () => {
-    const tree = buildL(
-      [
-        shell("late", "late child", { createdAt: "2026-11-12T10:00:00.000Z" }),
-        shell("x", "x"),
-        shell("early", "early child"),
-        shell("y", "y"),
-        shell("p", "parent"),
-      ],
-      {},
-      { late: "p", early: "p" },
-    );
-    expect(titles(tree[0].threads)).toEqual(["x", "parent", "y"]);
-    expect(titles(tree[0].threads[1].children)).toEqual(["early child", "late child"]);
   });
 
   test("stack mates take the place of their oldest member among unrelated threads", () => {
@@ -1254,7 +1202,7 @@ describe("suggested replies", () => {
   const req = (kind: string) => ({ pendingRuntimeRequest: { id: "r", kind, createdAt: "2026-11-12T09:00:00.000Z" } });
   const MSG = "Tell me when PR #53 is merged.";
   const all = (b: Group[]): ThreadNode[] => b.flatMap(allThreads);
-  const repliesOf = (raws: object[], over: Over = {}, spawners: Record<string, string> = {}) => {
+  const repliesOf = (raws: object[], over: Partial<BuildInput> = {}, spawners: Record<string, string> = {}) => {
     const asked: string[][] = [];
     const tree = build(raws, spawners, {
       lastMessagesOf: (ids) => (asked.push(ids), new Map(ids.map((id) => [id, id === "none" ? null : MSG]))),
@@ -1296,11 +1244,23 @@ describe("suggested replies", () => {
     });
   });
 
-  test("a nested subthread gets none; with nesting off it is top-level and gets them", () => {
+  test("a launched top-level thread gets its replies", () => {
     const raws = [shell("map", "Wayfinder map", DONE_AT), shell("mcp:t1", "ticket 001", DONE_AT)];
-    const spawners = { "mcp:t1": "map" };
-    expect(repliesOf(raws, {}, spawners).by).toEqual({ map: ["merged"], "mcp:t1": undefined });
-    expect(repliesOf(raws, { nest: false }, spawners).by).toEqual({ map: ["merged"], "mcp:t1": ["merged"] });
+    const asked: string[][] = [];
+    const tree = buildTree(
+      inputOf(
+        raws,
+        { "mcp:t1": "map" },
+        {
+          lastMessagesOf: (ids) => (asked.push(ids), new Map(ids.map((id) => [id, MSG]))),
+        },
+      ),
+      NO_LINEAGE,
+    );
+    expect(Object.fromEntries(all(tree).map((t) => [t.id, t.suggestedReplies]))).toEqual({
+      map: ["merged"],
+      "mcp:t1": ["merged"],
+    });
   });
 
   test("no reader gives no field", () => {
@@ -1376,7 +1336,7 @@ describe("runs", () => {
       for (const tree of [
         build(raws, {}, snap([run("r1")])),
         build(raws, {}, { ...snap([run("r1")]), settled: true }),
-        buildLinearTree(inputOf(raws, {}, snap([run("r1")])), defaultRules(true)),
+        buildLinearTree(inputOf(raws, {}, snap([run("r1")])), defaultRules()),
       ]) {
         const tops = tree.flatMap((p) => [...p.threads, ...p.groups.flatMap((b) => b.threads)]);
         expect(tops.filter((t) => !t.run).map((t) => t.id)).toEqual(["x"]);
@@ -1388,7 +1348,7 @@ describe("runs", () => {
       const raws = [shell("spawner", "Wayfinder"), step("a", "Plan", "r1", "plan")];
       const tree = buildLinearTree(
         inputOf(raws, { "run:r1": "spawner", a: "spawner" }, snap([run("r1", { title: "Nightly" })])),
-        defaultRules(true),
+        defaultRules(),
       );
       expect(tree.flatMap((p) => p.threads).map((t) => t.id)).toEqual(["spawner", "run:r1"]);
       expect(tree[0].threads[0].children).toEqual([]);
@@ -1621,17 +1581,6 @@ describe("Map groups", () => {
     expect(titles(header.children)).toEqual(["SHOP-1 a", "b"]);
   });
 
-  test("a settled map thread places its header by the rules, under its visible spawner", () => {
-    const tree = mapped(
-      [shell("boss", "boss"), shell("chart", "Wayfinder", SETTLED), shell("t1", "a")],
-      { t1: "/m/x" },
-      { chart: "boss", t1: "chart" },
-    );
-    const [boss] = loose(tree);
-    expect(boss.children.map((c) => c.id)).toEqual(["chart"]);
-    expect(boss.children[0].map?.header).toBe(true);
-  });
-
   test("a map with no map thread puts its header at the oldest member's place", () => {
     const tree = mapped([shell("t1", "SHOP-1 a"), shell("t2", "SHOP-2 b")], { t1: "/m/alpha-map", t2: "/m/alpha-map" });
     expect(labels(tree[0].groups)).toEqual(["SHOP-1"]);
@@ -1831,7 +1780,7 @@ describe("Map groups", () => {
           },
         },
       ),
-      defaultRules(true),
+      defaultRules(),
     );
     expect(titles(loose(tree).filter((t) => t.map)[0].children)).toEqual(["a"]);
     expect(allRuns(tree[0])).toHaveLength(1);
@@ -1843,7 +1792,7 @@ describe("Map groups", () => {
       "SHOP-2": { project: { id: "y", name: "Proj y", url: "u" }, milestone: null },
     };
     const buildL = (raws: object[], m: Record<string, string>, spawners: Record<string, string> = {}) =>
-      buildLinearTree(inputOf(raws, spawners, { linearOf: (k) => answers[k], ...keys(m) }), defaultRules(true));
+      buildLinearTree(inputOf(raws, spawners, { linearOf: (k) => answers[k], ...keys(m) }), defaultRules());
 
     test("the group follows the map thread; a member in another Linear project stays", () => {
       const tree = buildL(
@@ -1879,7 +1828,7 @@ describe("Map groups", () => {
           { t1: "chart", t3: "chart" },
           { linearOf: (k) => shared[k], ...keys({ t1: "/m/x", t3: "/m/x" }) },
         ),
-        defaultRules(true),
+        defaultRules(),
       );
       expect(tree.map((b) => b.id)).toEqual(["lp:x"]);
       expect(tree[0].groups.map((g) => g.id)).toEqual(["lm:m1"]);
@@ -1897,7 +1846,7 @@ describe("Map groups", () => {
           { t1: "chart", t3: "chart" },
           { linearOf: (k) => shared[k], ...keys({ t1: "/m/x", t3: "/m/y" }) },
         ),
-        defaultRules(true),
+        defaultRules(),
       );
       expect(tree.map((b) => b.id)).toEqual(["lp:x"]);
       expect(tree[0].groups[0].threads[0].children.map((c) => c.id)).toEqual(["map:/m/x", "map:/m/y"]);
@@ -1932,16 +1881,6 @@ describe("Map groups", () => {
 
     test("a native key: the mates sit together in stack order, not nested", () => {
       check(mapped(threads(), { s1: "/m/x", s2: "/m/x", s3: "/m/x" }, spawners));
-    });
-  });
-
-  describe("marked map threads", () => {
-    const marked = (...ids: string[]) => ({ ...keys({}), marked: new Set(ids) });
-    const plan = shell("plan", "Plan Interview Mode Work Lanes");
-
-    test("an unmarked thread gets no group and no flag", () => {
-      const tree = build([plan, shell("t1", "TIB-1 a")], { t1: "plan" }, marked());
-      expect(loose(tree).every((t) => !t.map && !t.detail.mapMarked)).toBe(true);
     });
   });
 });

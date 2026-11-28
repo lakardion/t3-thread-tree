@@ -11,7 +11,6 @@ import { lastMessageRoutes } from "./server/last-message.ts";
 import { mayBeLaunched, needsScan, openLineage } from "./server/lineage.ts";
 import { fetchLinear } from "./server/linear-api.ts";
 import { linearStore } from "./server/linear.ts";
-import { mapThreadRoutes, readMapThreads } from "./server/map-threads.ts";
 import { mapKey, mapsOf } from "./server/maps.ts";
 import {
   appleHelperPath,
@@ -143,10 +142,7 @@ const clients = new Set<Client>();
 
 const linear = parseLinear(process.env.LINEAR_WORKSPACE, process.env.LINEAR_TEAMS);
 
-/** `POST /map-threads` marks and unmarks map threads here. */
-const mapThreadsFile = process.env.MAP_THREADS_FILE ?? join(homedir(), ".config", "t3-thread-tree", "map-threads");
-
-const treeFor = (settled: boolean, rules = defaultRules(false), labels: string[] = [], wantsLinear = false): Tree => ({
+const treeFor = (settled: boolean, rules = defaultRules(), labels: string[] = [], wantsLinear = false): Tree => ({
   conn: ready ? conn : "connecting",
   lastUpdate,
   linear,
@@ -173,7 +169,6 @@ const treeFor = (settled: boolean, rules = defaultRules(false), labels: string[]
       stepsOf: (runId) => runSteps.get(runId)?.steps,
       origin: runsOrigin,
       mapKeyOf,
-      marked: readMapThreads(mapThreadsFile),
     },
     rules,
   ),
@@ -459,7 +454,6 @@ const server = Bun.serve({
     "/models": { GET: async () => Response.json(await models.offered()) },
     ...send.routes,
     ...localModelRoutes(localModelFile),
-    ...mapThreadRoutes(mapThreadsFile, changed),
     ...pickRoutes(pickFile, () => {
       if (!readPickFile(pickFile).catchUp) catchUp.clear();
       changed();

@@ -4,11 +4,10 @@ import { moveRule, ruleChanges } from "../src/page/grouping.ts";
 import type { Rule } from "../src/page/prefs.ts";
 
 const base = (): Rule[] => [
-  { id: "map", on: true },
+  { id: "lineage", on: true },
   { id: "review", on: true },
   { id: "stack", on: true },
   { id: "key", on: true },
-  { id: "nest", on: false },
 ];
 const ids = (rs: Rule[]) => rs.map((r) => r.id);
 const set = (rs: Rule[], id: Rule["id"], on: boolean) => rs.map((r) => (r.id === id ? { ...r, on } : r));
@@ -32,21 +31,20 @@ describe("ruleChanges", () => {
     expect(ruleChanges(set(moveRule(base(), 2, 1), "stack", false), false)).toHaveLength(1);
   });
 
-  test("each off rule and nest on give one line", () => {
+  test("each off rule gives one line", () => {
     const lines = {
-      map: "Map members leave their map and go to the next rule.",
+      lineage: "Launched threads no longer group under the thread that started them.",
       review: "Review threads go to their stack or key group, or stay loose.",
       stack: "Stacked threads no longer group by stack.",
       key: "Threads with a key no longer group by key.",
     };
     for (const [id, line] of Object.entries(lines))
       expect(ruleChanges(set(base(), id as Rule["id"], false), false)).toEqual([line]);
-    expect(ruleChanges(set(base(), "nest", true), false)).toEqual(["Launched threads nest under their spawner."]);
   });
 });
 
 describe("moveRule", () => {
-  test("moves among the middle rules and keeps map first and nest last", () => {
-    expect(ids(moveRule(base(), 0, 2))).toEqual(["map", "stack", "key", "review", "nest"]);
+  test("moves among the last three rules and keeps lineage first", () => {
+    expect(ids(moveRule(base(), 0, 2))).toEqual(["lineage", "stack", "key", "review"]);
   });
 });

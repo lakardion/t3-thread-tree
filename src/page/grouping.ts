@@ -3,7 +3,7 @@ import { arrayMove } from "@dnd-kit/helpers";
 import type { Rule } from "./prefs.ts";
 
 const OFF = {
-  map: "Map members leave their map and go to the next rule.",
+  lineage: "Launched threads no longer group under the thread that started them.",
   review: "Review threads go to their stack or key group, or stay loose.",
   stack: "Stacked threads no longer group by stack.",
   key: "Threads with a key no longer group by key.",
@@ -20,14 +20,12 @@ export const ruleChanges = (rules: Rule[], linear: boolean): string[] => {
     out.push(
       `A stack thread with a key goes to ${linear ? "its own milestone" : "its key group"}. Stack mates without a key stay in the stack.`,
     );
-  for (const id of ["map", "review", "stack", "key"] as const) if (!on(id)) out.push(OFF[id]);
-  if (on("nest")) out.push("Launched threads nest under their spawner.");
+  for (const id of ["lineage", "review", "stack", "key"] as const) if (!on(id)) out.push(OFF[id]);
   return out;
 };
 
-/** Moves a middle rule from position `from` to `to` (0 to 2); `map` stays first and `nest` last. */
+/** Moves a rule from position `from` to `to` (0 to 2) among the rules after the first; `lineage` stays first. */
 export const moveRule = (rules: Rule[], from: number, to: number): Rule[] => [
   rules[0],
-  ...arrayMove(rules.slice(1, -1), from, to),
-  rules.at(-1)!,
+  ...arrayMove(rules.slice(1), from, to),
 ];

@@ -102,16 +102,15 @@ const PLUGINS = (defaults: typeof defaultPreset.plugins) => [
   ANNOUNCEMENTS,
 ];
 
-/** The placement rules: a switch for each, and drag handles to reorder the middle three. */
+/** The placement rules: a switch for each, and drag handles to reorder the last three. */
 export function GroupingSection({ rules, setRules, linear }: Props) {
   const changes = ruleChanges(rules, linear);
-  const map = rules[0];
-  const nest = rules.at(-1)!;
+  const first = rules[0];
   return (
     <section className="grid gap-1.5">
       <h3 className="m-0 px-1 text-xs font-semibold text-muted-foreground">Grouping</h3>
       <div className="divide-y rounded-lg border bg-background">
-        <RuleRow rule={map} setRules={setRules} lead={<Lock className="size-3.5" />} note=" Always first." />
+        <RuleRow rule={first} setRules={setRules} lead={<Lock className="size-3.5" />} note=" Always first." />
         <DragDropProvider
           plugins={PLUGINS}
           onDragEnd={({ operation: { source }, canceled }) => {
@@ -120,11 +119,10 @@ export function GroupingSection({ rules, setRules, linear }: Props) {
             setRules((rs) => moveRule(rs, initialIndex, index));
           }}
         >
-          {rules.slice(1, -1).map((r, i) => (
+          {rules.slice(1).map((r, i) => (
             <SortRow key={r.id} rule={r} index={i} setRules={setRules} />
           ))}
         </DragDropProvider>
-        <RuleRow rule={nest} setRules={setRules} lead={<Lock className="size-3.5" />} note=" Always last." />
       </div>
       <div className="grid gap-1.5 px-1">
         <p className={cn(HINT, "m-0")}>A thread goes to the first rule that fits it, top to bottom.</p>
