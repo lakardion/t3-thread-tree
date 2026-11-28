@@ -1275,7 +1275,19 @@ Each build ticket updates the README for its own part: the "What you get" entry,
   - It writes no entry when a top-level file with that name exists and is not an exact entry file, or when another top-level file imports `./t3-thread-tree/<name>`. The same workflow in two top-level files is a clash that T3 holds back.
   - It removes an entry file whose repo file is gone, and a top-level symlink that points into the repo.
   - A second run changes nothing.
-- T3 reloads only top-level files. After an edit to a repo workflow, the user restarts the T3 server.
+- T3 reloads only top-level files. After an edit to a repo workflow, the user restarts the T3 server. This holds for `workflows/lib/` too.
+- T3 registers every `workflow(...)` call made while a file loads, imports included. So a top-level file holds only the `workflow(...)` call. Shared code, options and bodies are in `workflows/lib/`. The install command writes no entry for a folder.
+
+### Morning catch-up
+
+`workflows/morning-catch-up.ts` calls `workflow("morning-catch-up", options, body)` with `options` and `body` from `workflows/lib/morning-catch-up.ts`. Its pure rules are in `workflows/lib/catch-up-rules.ts`.
+
+- **Trigger.** `daily("09:00", { weekdays: [1, 2, 3, 4, 5] })` with the payload `Tick`. A manual `t3 workflow start morning-catch-up` also works. A user changes the time with a private wrapper (see "Change the time of a workflow" in docs/workflows.md).
+- **Project.** The agent steps run in the main checkout of the repo that holds the file, found with `git rev-parse --git-common-dir`. T3 must know that checkout as a project.
+- **Groups.** Step `read` is an agent step with the thread title "Morning catch-up". It calls `t3_thread_list` with `allProjects: true, settled: false, snoozed: false`. It drops a thread that has a parent, and a thread titled exactly "Morning catch-up" (the threads of this workflow). Looks done: at least one PR and no open PR (`pullRequestCount` of 1 or more, `openPullRequestCount` 0). Waiting: the other threads with status `waiting`, `completed`, `failed` or `interrupted`, oldest `updatedAt` first. Each row has id, title, project, status, `updatedAt`, link and PRs. A third group holds the runs with the status `paused`, from `runs`.
+- **Question.** With all groups empty, the run ends with no question. Else `ask("catch-up")` of kind `catch-up`, with the three groups as `data` and the timeout 9 hours. The choices are: settle the look-done threads and snooze the rest, settle the look-done threads only, snooze all, do nothing. A snooze goes to 09:00 of the next weekday, read once in a step. Paused runs show only.
+- **Act.** A timeout, "Do nothing" or two empty id lists give no action. Else the agent step `act` runs in the `read` thread. It reads the reason first, leaves out every thread that the reason names, and calls `t3_thread_organize` with `settle` or `snooze` for the rest. Settle and snooze are idempotent.
+- **Setting.** The store key `settings/morning-catch-up/extra-prompt` (String). When it is set, the agent step `extra` runs it in the `read` thread at the end of every run.
 
 ## Check at build
 
