@@ -40,7 +40,7 @@ function RuleRow({
     <div className="flex items-center gap-2 px-2 py-2.5">
       <span className="flex w-5 justify-center text-muted-foreground">{lead}</span>
       <div className="grid min-w-0 flex-1 gap-0.5">
-        <Label htmlFor={`rule-${id}`} className="text-[13px] font-normal">
+        <Label htmlFor={`rule-${id}`} variant="choice">
           {label}
         </Label>
         <div className={HINT}>

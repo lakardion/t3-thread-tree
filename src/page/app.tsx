@@ -583,7 +583,7 @@ const Row = ({
 }) => (
   <div className="flex items-center justify-between gap-2 px-3 py-2.5">
     <div className="grid min-w-0 gap-0.5">
-      <Label htmlFor={htmlFor} className="text-[13px] font-normal">
+      <Label htmlFor={htmlFor} variant="choice">
         {label}
       </Label>
       {hint && <div className={HINT}>{hint}</div>}
@@ -1142,7 +1142,7 @@ function CatchUpFold(p: {
             {p.clis.map((c) => (
               <div key={c.id} className="flex items-center gap-2">
                 <RadioGroupItem id={`catch-up-${c.id}`} value={c.id} />
-                <Label htmlFor={`catch-up-${c.id}`} className="gap-2 text-[13px] font-normal">
+                <Label htmlFor={`catch-up-${c.id}`} variant="choice">
                   <ProviderIcon cli={c.id} className="size-3.5" />
                   {c.label}
                 </Label>
