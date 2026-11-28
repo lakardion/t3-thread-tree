@@ -1277,6 +1277,22 @@ Each build ticket updates the README for its own part: the "What you get" entry,
   - A second run changes nothing.
 - T3 reloads only top-level files. After an edit to a repo workflow, the user restarts the T3 server.
 
+## Repo workflows
+
+### pr-comments
+
+`workflows/pr-comments.ts` checks the open review comments of a PR, fixes the valid ones, and pushes after the user agrees.
+
+- **Payload.** `pr` (`{ repo, number }`) and `project` (the T3 project path). Both are required.
+- **Open items.** One GraphQL call reads the PR. An item is an unresolved inline review comment thread, or a general comment or review summary that has a body, is not minimized and is not by the PR author. The fetch step numbers the items from 1: inline comment threads, then comments, then reviews.
+- **Guards.** The run stops and starts no thread when the PR is not open, its branch is in a fork, its branch is the default branch, or it has no open item.
+- **Critic.** One agent in a new worktree of the PR branch reads each item as presumed invalid. It returns a verdict for each: `VALID`, `INVALID`, `ALREADY_ADDRESSED` or `NEEDS_DECISION`, with evidence.
+- **Decide.** Each `NEEDS_DECISION` item gives one question with the options of the critic and `skip`. A withdrawn question or `skip` changes nothing. The question has no timeout.
+- **Fix.** The critic thread applies each valid fix and each chosen option. It makes no commit and posts nothing. It returns a rundown, the changed files and reply drafts.
+- **Push.** The run asks "push" or "don't push" with the rundown and the diff stat. On "push", it commits the changed files and runs `git push origin HEAD:<branch>`, never with force. If the host rejects the push, the run pauses.
+- **End.** The run stops on a guard. Else it completes with the rundown and the reply drafts. A run with no changed file, or with "don't push", leaves the worktree and the changes for the user. Neither agent has a timeout.
+- **Extra prompt.** The setting `settings/pr-comments/extra-prompt` adds one agent step after the push, in the fix thread. The last step settles the thread. The worktree and branch stay.
+
 ## Check at build
 
 These facts are not confirmed against a real stream. The research used the MCP thread list and SQLite.

@@ -118,6 +118,8 @@ Issue keys can link to Linear, and the tree can group by Linear project and mile
 
 The repo holds general T3 Code workflows. To install them, you need a clone of the repo and [Bun](https://bun.sh). See [Workflows setup](docs/workflows.md).
 
+- **pr-comments** checks each open review comment of a PR with a critic agent, fixes the valid ones in a new worktree, and asks you before it pushes. It writes reply drafts and posts nothing.
+
 ### Updates
 
 The app checks GitHub Releases. When a new version exists, the app menu, the menu-bar menu and Settings show **Update and restart**.
