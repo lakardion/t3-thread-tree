@@ -493,7 +493,7 @@ The block is a two-column list of label and value, 12 px. It shows a line only w
 
 A thread row with a Catch-up has a line under the title. The title keeps its place, and the line sits in the same column. The line has `text-xs`, `leading-[18px]` and `--muted-foreground`, and it truncates to one line. Under 720 px, the line takes the full width with `pl-5`, like the title.
 
-- **Ask:** the `did` text, "Asks:" in semibold in the status color, the ask in `--foreground`, then each option as an outline chip (`h-[18px]`, `text-[11px]`).
+- **Ask:** the `did` text, "Asks:" in semibold in the status color, the ask in `--foreground`, then each option as an outline chip (`Badge size="chip"`, `h-[18px]`).
 - **Loading:** a skeleton bar, `h-3 w-56`. It does not pulse with reduced motion.
 - **No clear ask or failed call:** a dashed tag (`text-[10px]`, uppercase, `border-dashed`, no status color), then the first line of the raw question in italic and quotes.
 - **Tooltip:** the line shows the last message of the thread. Like the "Updated" tooltip of the row, it does not open on touch.
@@ -546,7 +546,7 @@ The modal of SPEC.md › "PR graph". Variant A of the prototype of map `map-pr-g
 ### Typography and focus
 
 - Sans: `Inter` when installed, else `system-ui`. Mono: `ui-monospace, "SF Mono", Menlo`.
-- Sizes: page title 15 px; project name 14 px; row title 13 px; phrase, group headers and details 12 px; chips and age 11 px.
+- Sizes: page title 15 px; project name 14 px; row title 13 px; phrase, group headers and details 12 px; chips use the `text-meta` token (11 px); age 11 px. The Catch-up ask line keeps `h-[18px]`; its option chips have the 6 px chip radius.
 - Radius: card 12 px, row 8 px, chip 6 px.
 - Keep the nested `<ul>` lists. Do not add ARIA tree roles.
 - Each link and button shows a 2 px `--ring` focus ring with a 2 px gap. A tooltip is never the only source of a label.

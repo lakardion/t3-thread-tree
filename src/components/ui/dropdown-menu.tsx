@@ -1,8 +1,21 @@
+import { cva, type VariantProps } from "class-variance-authority";
 import { CheckIcon, ChevronRightIcon, CircleIcon } from "lucide-react";
 import { DropdownMenu as DropdownMenuPrimitive } from "radix-ui";
 import type { ComponentProps } from "react";
 
 import { cn } from "@/lib/utils";
+
+const dropdownMenuLabelVariants = cva("px-2 py-1.5 data-[inset]:pl-8", {
+  variants: {
+    variant: {
+      default: "text-sm font-medium",
+      meta: "text-meta font-normal text-muted-foreground",
+    },
+  },
+  defaultVariants: {
+    variant: "default",
+  },
+});
 
 function DropdownMenu({ ...props }: ComponentProps<typeof DropdownMenuPrimitive.Root>) {
   return <DropdownMenuPrimitive.Root data-slot="dropdown-menu" {...props} />;
@@ -120,15 +133,18 @@ function DropdownMenuRadioItem({
 function DropdownMenuLabel({
   className,
   inset,
+  variant = "default",
   ...props
-}: ComponentProps<typeof DropdownMenuPrimitive.Label> & {
-  inset?: boolean;
-}) {
+}: ComponentProps<typeof DropdownMenuPrimitive.Label> &
+  VariantProps<typeof dropdownMenuLabelVariants> & {
+    inset?: boolean;
+  }) {
   return (
     <DropdownMenuPrimitive.Label
       data-slot="dropdown-menu-label"
       data-inset={inset}
-      className={cn("px-2 py-1.5 text-sm font-medium data-[inset]:pl-8", className)}
+      data-variant={variant}
+      className={cn(dropdownMenuLabelVariants({ variant }), className)}
       {...props}
     />
   );

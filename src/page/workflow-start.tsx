@@ -98,9 +98,7 @@ export function StartMenu({
           </Button>
         </DropdownMenuTrigger>
         <DropdownMenuContent align="end" className="min-w-48">
-          <DropdownMenuLabel className="text-[11px] font-normal text-muted-foreground">
-            Start a workflow
-          </DropdownMenuLabel>
+          <DropdownMenuLabel variant="meta">Start a workflow</DropdownMenuLabel>
           {fit.map((w) => (
             <DropdownMenuItem
               key={w.name}
