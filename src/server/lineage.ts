@@ -69,6 +69,11 @@ export function needsScan(
   return false;
 }
 
+const ROW = `
+  SELECT title, project_id AS projectId, created_at AS createdAt
+  FROM orchestration_v2_projection_threads
+  WHERE thread_id = ?`;
+
 const LAST_MESSAGES = `
   SELECT ids.value AS id, m.message_id AS messageId, json_extract(m.payload_json, '$.text') AS text
   FROM json_each(?1) AS ids
@@ -87,6 +92,7 @@ export function openLineage(path = join(USERDATA, "statev2.sqlite")) {
   const sender = db.query<{ sender: string | null }, [string]>(SENDER);
   const firstLaunched = db.query<{ text: string | null }, [string]>(FIRST_LAUNCHED);
   const firstUser = db.query<{ text: string | null }, [string]>(FIRST_USER);
+  const rowQuery = db.query<{ title: string; projectId: string; createdAt: string }, [string]>(ROW);
   const last = db.query<{ id: string; messageId: string | null; text: string | null }, [string]>(LAST_MESSAGES);
   const lastEntries = (ids: string[]): Map<string, { id: string; text: string } | null> =>
     new Map(
@@ -97,6 +103,8 @@ export function openLineage(path = join(USERDATA, "statev2.sqlite")) {
   let callers = new Map<string, string>();
 
   return {
+    /** The thread table row of an id, archived and deleted rows included; `null` when there is none. */
+    row: (id: string) => rowQuery.get(id) ?? null,
     /** The text of the first user message of a thread; `null` when it has none yet. */
     firstMessage: (id: string): string | null =>
       (id.startsWith("mcp:") ? firstLaunched : firstUser).get(id)?.text ?? null,

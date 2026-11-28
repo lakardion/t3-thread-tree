@@ -43,8 +43,16 @@ describe("firstMessage", () => {
   add("m0", "thread:mcp:b:1", "assistant", "2026-01-01", "assistant first");
   add("m2", "thread:mcp:b:1", "user", "2026-01-03", "second");
   add("m1", "thread:mcp:b:1", "user", "2026-01-02", "first");
+  db.run(`CREATE TABLE orchestration_v2_projection_threads (
+    thread_id TEXT PRIMARY KEY, title TEXT NOT NULL, project_id TEXT NOT NULL, created_at TEXT NOT NULL)`);
+  db.run("INSERT INTO orchestration_v2_projection_threads VALUES ('old', 'Old root', 'p1', '2026-01-01')");
   db.close();
   const lineage = openLineage(path);
+
+  test("row reads a thread table row by id, or null", () => {
+    expect(lineage.row("old")).toEqual({ title: "Old root", projectId: "p1", createdAt: "2026-01-01" });
+    expect(lineage.row("none")).toBeNull();
+  });
 
   test("an mcp id is a primary-key lookup", () => {
     expect(lineage.firstMessage("mcp:a")).toBe("launched");
