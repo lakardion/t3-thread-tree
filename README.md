@@ -118,6 +118,8 @@ Issue keys can link to Linear, and the tree can group by Linear project and mile
 
 The repo holds general T3 Code workflows. To install them, you need a clone of the repo and [Bun](https://bun.sh). See [Workflows setup](docs/workflows.md).
 
+- **land-stack** lands a PR stack from the bottom, one PR at a time, with squash merges. It asks you only when a PR needs you. It needs the [`gh stack`](https://github.com/github/gh-stack) extension.
+
 ### Updates
 
 The app checks GitHub Releases. When a new version exists, the app menu, the menu-bar menu and Settings show **Update and restart**.
