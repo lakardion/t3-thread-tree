@@ -95,6 +95,11 @@ describe("settledPage", () => {
     expect(out.items[0].t.children).toEqual([]);
   });
 
+  test("a settled member nested under its settled root is a page item too", () => {
+    const p = pages([thread("root", { settledAt: at(1) }), thread("kid", { settledAt: at(2) })], { kid: "root" });
+    expect(ids(p(null, 10))).toEqual(["kid", "root"]);
+  });
+
   test("skips a settled node with no thread of its own, such as a Map header", () => {
     const a = thread("a", { settledAt: at(1) });
     const tree = buildTree(

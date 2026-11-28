@@ -132,14 +132,13 @@ describe("defaultRules", () => {
   });
 });
 
-describe("Map group rule", () => {
-  test("a member goes under its head, not in a key group; a map thread is not a spawner", () => {
+describe("Lineage group rule", () => {
+  test("a member goes under its head, not in a key group", () => {
     const raws = [shell("chart", "Wayfinder"), shell("t1", "WEB-1 a"), shell("other", "other")];
     const tree = projectOf(raws, { t1: "chart", other: "chart" }, keys({ t1: "/m/x" }));
     expect(tree[0].groups).toEqual([]);
-    const [head, other] = tree[0].threads;
-    expect(titles(head.children)).toEqual(["WEB-1 a"]);
-    expect(other.title).toBe("other");
+    const [head] = tree[0].threads;
+    expect(titles(head.children)).toEqual(["WEB-1 a", "other"]);
   });
 
   test("Linear layout: a member stays under its head and gets its T3 project", () => {
@@ -149,7 +148,7 @@ describe("Map group rule", () => {
     expect(head.children.map((c) => [c.title, c.t3Project])).toEqual([["WEB-1 a", { id: "p2", label: "backend" }]]);
   });
 
-  test("a sub-map header gets no launchedBy", () => {
+  test("a sub-map header and a member under it get no launchedBy", () => {
     const raws = [
       shell("chart", "Wayfinder"),
       shell("t", "ticket", SETTLED),
@@ -164,7 +163,7 @@ describe("Map group rule", () => {
     const [head] = tree[0].threads;
     const sub = head.children.find((c) => c.map?.header)!;
     expect(sub.detail.launchedBy).toBeNull();
-    expect(sub.children[0].detail.launchedBy).toMatchObject({ title: "ticket" });
+    expect(sub.children[0].detail.launchedBy).toBeNull();
   });
 });
 
@@ -209,7 +208,7 @@ describe("PR stack rule", () => {
     expect(groups.map((g) => g.label)).toEqual(["WEB-1", "WEB-2", "WEB-3", "PR stack #10"]);
   });
 
-  test("Linear: a stack with no key is loose and does not nest under its spawner", () => {
+  test("Linear: a stack with no key is loose and nests under its spawner", () => {
     const raws = [
       shell("lead", "lead"),
       shell("a", "a", { pullRequests: [pr(20, "created"), pr(21, "stack")] }),
@@ -217,9 +216,9 @@ describe("PR stack rule", () => {
     ];
     const tree = linearOf(raws, { a: "lead", b: "lead" });
     expect(tree.map((g) => g.id)).toEqual(["lf:loose"]);
-    expect(titles(tree[0].groups[0].threads)).toEqual(["a", "b"]);
+    expect(tree[0].groups).toEqual([]);
     expect(titles(tree[0].threads)).toEqual(["lead"]);
-    expect(tree[0].threads[0].children).toEqual([]);
+    expect(titles(tree[0].threads[0].children)).toEqual(["a", "b"]);
   });
 });
 
@@ -261,11 +260,13 @@ describe("chain order", () => {
 });
 
 describe("Home", () => {
-  test("Linear: a keyless child does not nest under a keyed or review spawner", () => {
+  test("Linear: a keyless child nests under a keyed or review spawner", () => {
     const raws = [shell("lead", "WEB-1 lead"), shell("rev", "Review #1 WEB-2"), shell("k1", "k1"), shell("k2", "k2")];
     const tree = linearOf(raws, { k1: "lead", k2: "rev" });
-    const loose = tree.find((g) => g.id === "lf:loose")!;
-    expect(titles(loose.threads)).toEqual(["k1", "k2"]);
+    const by = (id: string) => tree.flatMap(allThreads).find((t) => t.id === id)!;
+    expect(tree.some((g) => g.id === "lf:loose")).toBe(false);
+    expect(titles(by("lead").children)).toEqual(["k1"]);
+    expect(titles(by("rev").children)).toEqual(["k2"]);
   });
 });
 

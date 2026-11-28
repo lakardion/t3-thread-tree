@@ -416,6 +416,7 @@ const projectsFor = (settled: boolean, rules = defaultRules(), labels: string[] 
       projects,
       spawnerOf: (id) => spawners[id],
       mapKeyOf: (id) => MAP_KEYS[id] ?? null,
+      rowOf: () => null,
       environmentId: "demo",
       settled,
       now,
