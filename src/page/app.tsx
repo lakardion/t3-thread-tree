@@ -1400,10 +1400,8 @@ function LabelPill({ t }: { t: ThreadNode }) {
       <TooltipTrigger asChild>
         <Badge
           variant={label.color ? "outline" : "secondary"}
-          className={cn(
-            "min-w-0 gap-0.5 rounded-full px-1 py-0 text-[11px] font-medium",
-            label.color && "border-transparent",
-          )}
+          size="chip"
+          className={cn("min-w-0 gap-0.5 rounded-full px-1 py-0", label.color && "border-transparent")}
           style={label.color ? { background: `#${label.color}`, color: ink(label.color) } : undefined}
           tabIndex={0}
           role="img"
@@ -1419,7 +1417,6 @@ function LabelPill({ t }: { t: ThreadNode }) {
   );
 }
 
-const CHIP = "gap-1 rounded-[6px] px-1.5 py-0 text-[11px] font-normal text-muted-foreground";
 const ROW_BUTTON =
   "size-5 rounded-[6px] text-muted-foreground motion-reduce:transition-none pointer-coarse:min-h-11 pointer-coarse:min-w-11 focus-visible:border-transparent focus-visible:ring-0 focus-visible:outline-2 focus-visible:outline-solid focus-visible:outline-offset-2 focus-visible:outline-ring";
 const FILTER_ITEM =
@@ -1523,9 +1520,9 @@ function PrChip({ p }: { p: PrNode }) {
   return (
     <Badge
       variant="outline"
+      size="chip"
       className={cn(
-        CHIP,
-        "font-mono focus-visible:ring-0",
+        "font-mono text-muted-foreground focus-visible:ring-0",
         p.draft && "border-dashed",
         "duration-300 motion-reduce:transition-none",
         p.state === "merged" && "text-pr-merged",
@@ -1948,7 +1945,8 @@ function ThreadRow({
           {chip && (
             <Badge
               variant="outline"
-              className={cn(CHIP, "flex-none font-mono", chipHref && "hover:underline")}
+              size="chip"
+              className={cn("flex-none font-mono text-muted-foreground", chipHref && "hover:underline")}
               asChild={!!chipHref}
             >
               {chipHref ? (
@@ -1963,7 +1961,8 @@ function ThreadRow({
           {t.t3Project && (
             <Badge
               variant={projectNames ? "outline" : "ghost"}
-              className={cn(CHIP, "flex-none max-[720px]:border-transparent")}
+              size="chip"
+              className={cn("flex-none text-muted-foreground max-[720px]:border-transparent")}
               title={projectNames ? t.t3Project.label : undefined}
             >
               <ProjectTip name={t.t3Project.label} />
@@ -1987,29 +1986,29 @@ function ThreadRow({
           </CatchUpTitle>
           <span className="ml-auto flex flex-none items-center gap-1.5 max-[720px]:ml-0 max-[720px]:basis-full max-[720px]:flex-wrap max-[720px]:pl-5">
             {t.input && (
-              <Badge variant="outline" className={CHIP}>
+              <Badge variant="outline" size="chip" className="text-muted-foreground">
                 Input
               </Badge>
             )}
             {t.snoozedUntil && (
-              <Badge variant="outline" className={CHIP}>
+              <Badge variant="outline" size="chip" className="text-muted-foreground">
                 until {until(t.snoozedUntil)}
               </Badge>
             )}
             {t.settled && (
-              <Badge variant="outline" className={CHIP}>
+              <Badge variant="outline" size="chip" className="text-muted-foreground">
                 Settled
               </Badge>
             )}
             {t.stack &&
               !inStack &&
               (t.stack.pos ? (
-                <Badge variant="outline" className={cn(CHIP, "chip-stack")} title="PR stack">
+                <Badge variant="outline" size="chip" className="chip-stack text-muted-foreground" title="PR stack">
                   <Layers />
                   {`${t.stack.pos}/${t.stack.total}`}
                 </Badge>
               ) : (
-                <Badge variant="outline" className={cn(CHIP, "chip-stack")} title={noPrLabel}>
+                <Badge variant="outline" size="chip" className="chip-stack text-muted-foreground" title={noPrLabel}>
                   <Layers role="img" aria-label={noPrLabel} />
                 </Badge>
               ))}
@@ -2020,7 +2019,8 @@ function ThreadRow({
             {t.prs.length > 2 && (
               <Button
                 variant="ghost"
-                className={cn(ROW_BUTTON, "w-auto px-1 text-[11px] font-normal")}
+                size="chip"
+                className={cn(ROW_BUTTON, "w-auto")}
                 title={`Show all ${t.prs.length} pull requests`}
                 onClick={() => show(t.id)}
               >

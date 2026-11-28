@@ -54,7 +54,7 @@ export function CatchUpTitle({ t, children }: { t: ThreadNode; children: ReactNo
               <>
                 {lines.did} <AsksLabel status={t.status} /> <span className="text-foreground">{t.catchUp?.ask}</span>{" "}
                 {t.catchUp?.options?.map((o) => (
-                  <Badge key={o} variant="outline" className="h-[18px] px-1.5 text-[11px] font-normal">
+                  <Badge key={o} variant="outline" size="chip" className="h-[18px]">
                     {o}
                   </Badge>
                 ))}
