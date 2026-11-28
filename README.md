@@ -114,6 +114,10 @@ Then open Settings › **Catch-up**, turn on the switch and pick the model. The 
 
 Issue keys can link to Linear, and the tree can group by Linear project and milestone. See [Linear setup](docs/linear.md).
 
+### 7. Install the repo workflows (optional)
+
+The repo holds general T3 Code workflows. To install them, you need a clone of the repo and [Bun](https://bun.sh). See [Workflows setup](docs/workflows.md).
+
 ### Updates
 
 The app checks GitHub Releases. When a new version exists, the app menu, the menu-bar menu and Settings show **Update and restart**.
@@ -206,6 +210,7 @@ bun run build:apple-helper  # compiles the Apple model helper (macOS 26.4 SDK)
 bun run desktop:install  # builds and installs the app in /Applications
 bun run desktop:dmg      # builds the .dmg in release/
 bun run release          # builds the .dmg and .zip and creates the GitHub release
+bun run workflows:install  # installs the repo workflows in ~/.t3/workflows/
 bun run screenshots      # writes the framed README screenshots in docs/ from the demo data (needs Google Chrome)
 ```
 
