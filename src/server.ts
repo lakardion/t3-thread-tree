@@ -1,3 +1,4 @@
+import { readFileSync } from "node:fs";
 import { homedir } from "node:os";
 import { dirname, join } from "node:path";
 
@@ -44,7 +45,7 @@ import {
   type Thread,
 } from "./server/t3.ts";
 import { parseToken, readToken, tokenResponse, writeToken } from "./server/token.ts";
-import { launchList, scanFields, scanSettings, settingType } from "./server/workflow-start.ts";
+import { launchList, resolveEntries, scanFields, scanSettings, settingType } from "./server/workflow-start.ts";
 import { workflowRoutes } from "./server/workflows.ts";
 import { isGraphMember, type Scope } from "./shared/pr-graph-data.ts";
 import type { RuleId } from "./shared/rules.ts";
@@ -268,7 +269,15 @@ function syncScan(snapshot: RunsSnapshot) {
     .workflow("workflows.getDefinition", {})
     .then(
       (r) => {
-        const files = decodeDefinitionFiles(r);
+        const { directory, files: raw } = decodeDefinitionFiles(r);
+        const files = resolveEntries(raw, (name) => {
+          if (directory === null) return null;
+          try {
+            return readFileSync(join(directory, "t3-thread-tree", name), "utf8");
+          } catch {
+            return null;
+          }
+        });
         fieldScan = scanFields(files);
         settingScan = scanSettings(files);
         scanError = null;

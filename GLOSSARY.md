@@ -226,6 +226,10 @@ _Avoid_: workflow option, workflow config, workflow variable
 A **Workflow setting** named `extra-prompt` that adds one last agent step to a **Run**. Its text is the prompt of that step.
 _Avoid_: custom prompt, suffix prompt
 
+**Wrap-up**:
+A **Workflow** that settles the checked **Looks done** threads and, after one **Run question**, removes the worktree and local branch of each thread whose PR merged.
+_Avoid_: cleanup, tidy-up, sweep
+
 ### Lineages and maps
 
 **Lineage root**:
