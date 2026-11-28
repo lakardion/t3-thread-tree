@@ -547,7 +547,7 @@ The modal of SPEC.md › "PR graph". Variant A of the prototype of map `map-pr-g
 
 - Sans: `Inter` when installed, else `system-ui`. Mono: `ui-monospace, "SF Mono", Menlo`.
 - Sizes: page title 15 px; project name 14 px; row title 13 px; phrase, group headers and details 12 px; chips use the `text-meta` token (11 px); age 11 px. The Catch-up ask line keeps `h-[18px]`; its option chips have the 6 px chip radius.
-- Radius: card 12 px, row 8 px, chip 6 px.
+- Radius: card 12 px, row 8 px, chip 6 px, toolbar button 2 px.
 - Keep the nested `<ul>` lists. Do not add ARIA tree roles.
 - Each link and button shows a 2 px `--ring` focus ring with a 2 px gap. A tooltip is never the only source of a label.
 

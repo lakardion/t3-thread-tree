@@ -1419,6 +1419,7 @@ function LabelPill({ t }: { t: ThreadNode }) {
 
 const ROW_BUTTON =
   "size-5 rounded-[6px] text-muted-foreground motion-reduce:transition-none pointer-coarse:min-h-11 pointer-coarse:min-w-11 focus-visible:border-transparent focus-visible:ring-0 focus-visible:outline-2 focus-visible:outline-solid focus-visible:outline-offset-2 focus-visible:outline-ring";
+const BAR_BUTTON = cn(ROW_BUTTON, "rounded-xs");
 const FILTER_ITEM =
   "pointer-coarse:min-h-11 pointer-coarse:min-w-11 focus-visible:ring-0 focus-visible:outline-solid focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring";
 
@@ -1714,7 +1715,7 @@ function SettleButton({ t }: { t: ThreadNode }) {
           <Button
             variant="ghost"
             size="icon"
-            className={cn(ROW_BUTTON, err && "text-destructive")}
+            className={cn(BAR_BUTTON, err && "text-destructive")}
             aria-label={label}
             disabled={busy}
             onClick={async (e) => {
@@ -1830,7 +1831,7 @@ function RowActions({ t, projectPath }: { t: ThreadNode; projectPath?: string })
                   <Button
                     variant="ghost"
                     size="icon"
-                    className={ROW_BUTTON}
+                    className={BAR_BUTTON}
                     aria-label="Send message"
                     disabled={sendTo.t3cli?.available === false}
                     onClick={(e) => {
@@ -1849,7 +1850,7 @@ function RowActions({ t, projectPath }: { t: ThreadNode; projectPath?: string })
             point={{ kind: "row", threadId: t.id, prs: prChoices(t.prs) }}
             project={projectPath}
             forTitle={t.title || t.id}
-            className={ROW_BUTTON}
+            className={BAR_BUTTON}
           />
         </Popover.Content>
       </Popover.Portal>
