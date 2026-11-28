@@ -63,6 +63,7 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { ButtonGroup } from "@/components/ui/button-group";
 import { Card, CardContent } from "@/components/ui/card";
+import { WorkflowSettingsProto } from "./workflow-settings.prototype.tsx";
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
 import {
   DropdownMenu,
@@ -557,7 +558,7 @@ function LabelsForm({ labels, setLabels }: LabelsProps) {
 }
 
 /** One labelled group: a title outside a card of rows. */
-const SettingsGroup = ({ title, children, accent }: { title: string; children: ReactNode; accent?: boolean }) => (
+export const SettingsGroup = ({ title, children, accent }: { title: string; children: ReactNode; accent?: boolean }) => (
   <section className="grid gap-1.5">
     <h3 className="m-0 px-1 text-xs font-semibold text-muted-foreground">{title}</h3>
     <div className={cn("divide-y rounded-lg border bg-background", accent && "border-l-[3px] border-l-primary")}>
@@ -567,7 +568,7 @@ const SettingsGroup = ({ title, children, accent }: { title: string; children: R
 );
 
 /** Label and hint at the left, control at the right. */
-const Row = ({
+export const Row = ({
   label,
   hint,
   children,
@@ -598,7 +599,7 @@ const TONE: Record<Tone, { cls: string; Icon: typeof Info | null }> = {
 };
 
 /** A row that folds open, with its current value at the right. */
-const Fold = ({
+export const Fold = ({
   label,
   value,
   tone,
@@ -1333,6 +1334,7 @@ function SettingsPanel(p: PanelProps) {
             <Keys />
           </Fold>
         </SettingsGroup>
+        <WorkflowSettingsProto />
       </div>
     </aside>
   );
@@ -3150,7 +3152,7 @@ function App() {
   const linear = linearSet ?? tree?.linear ?? null;
   const [labels, setLabelsState] = useState(() => parseLabels(load(LABELS_KEY) ?? ""));
   const labelsParam = labels.join(",");
-  const [settingsOpen, setSettingsOpen] = useState(false);
+  const [settingsOpen, setSettingsOpen] = useState(() => new URLSearchParams(location.search).has("variant"));
   const settingsButtonRef = useRef<HTMLButtonElement>(null);
   const [seen, setSeen] = useState<ReadonlySet<string>>(new Set());
   const [tokenOpen, setTokenOpen] = useState(false);
