@@ -47,7 +47,9 @@ Use it as a Mac app or in a browser. The Mac app adds a Dock badge, notification
 
 - **Mac app:** Dock badge, notifications, a menu-bar entry and an Up next window (⌥⌘U) that stays on top.
 - **Workflow settings:** Settings › Workflows has one fold for each workflow that reads settings from the T3 store. Edit text, numbers and switches, then click Save. "Use default" clears a value. The extra prompt adds one last agent step to each run.
+- **Morning catch-up workflow:** at 09:00 on weekdays, one Run question lists the threads that look done, the threads that wait and the paused runs. Your answer settles or snoozes them.
 - **Start a workflow:** type `>` in Cmd+K, or use the workflow button on a row, a PR stack or the Looks done list.
+- **Wrap-up workflow:** `bun run workflows:install` adds it. Start it from the Looks done list. It settles the checked threads. Then it asks you once and removes the worktree and local branch of each thread whose PR merged. A thread with uncommitted changes, an open or closed PR, or new commits keeps its worktree and branch.
 - **Suggested replies:** the send dialog offers reply chips, such as `commit push`, from the last agent message.
 - **Looks done:** finds threads that look finished and settles them in one step, with undo. The eye button on a row shows the last message of the thread in the same dialog, with Markdown formatting, so you can examine the thread before you settle it.
 - **Views:** Tree or Flat, group by T3 project, Linear project or status, and drag rows into your own order.
@@ -118,6 +120,8 @@ Issue keys can link to Linear, and the tree can group by Linear project and mile
 
 The repo holds general T3 Code workflows. To install them, you need a clone of the repo and [Bun](https://bun.sh). See [Workflows setup](docs/workflows.md).
 
+- **land-stack** lands a PR stack from the bottom, one PR at a time, with squash merges. It asks you only when a PR needs you. It needs the [`gh stack`](https://github.com/github/gh-stack) extension.
+- **morning-catch-up** runs at 09:00 on weekdays, T3 server time. A private wrapper changes the time (see [Workflows setup](docs/workflows.md)). Its agent steps need the repo checkout to be a T3 project.
 - **pr-comments** checks each open review comment of a PR with a critic agent, fixes the valid ones in a new worktree, and asks you before it pushes. It writes reply drafts and posts nothing.
 
 ### Updates
