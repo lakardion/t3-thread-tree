@@ -214,6 +214,14 @@ _Avoid_: failed run, stuck run
 One new **Run** of a **Workflow** from the page, which the user confirms first. The page fills the input from where the user starts it: a thread, a PR, a PR stack or the checked **Looks done** threads.
 _Avoid_: launch, trigger, kick off
 
+**Workflow setting**:
+A value that a **Workflow** reads from the T3 store under `settings/<workflow>/`. The user edits it in Settings › Workflows. A key with no value uses the default in the workflow code.
+_Avoid_: workflow option, workflow config, workflow variable
+
+**Extra prompt**:
+A **Workflow setting** named `extra-prompt` that adds one last agent step to a **Run**. Its text is the prompt of that step.
+_Avoid_: custom prompt, suffix prompt
+
 ### Lineages and maps
 
 **Lineage root**:

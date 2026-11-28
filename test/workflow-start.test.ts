@@ -10,7 +10,7 @@ import {
   stackPoint,
   type StartPoint,
 } from "../src/page/workflow-start.ts";
-import { launchList, oldCli, scanFields } from "../src/server/workflow-start.ts";
+import { launchList, oldCli, scanFields, scanSettings, settingType } from "../src/server/workflow-start.ts";
 import type { PrNode } from "../src/shared/tree.ts";
 import { startKey, type Workflow } from "../src/shared/workflow-start.ts";
 
@@ -39,6 +39,7 @@ const wf = (fields: Workflow["fields"], over: Partial<Workflow> = {}): Workflow 
   version: 1,
   triggers: [],
   fields,
+  settings: null,
   webhookOnly: false,
   ...over,
 });
@@ -217,5 +218,50 @@ describe("payloadOf", () => {
     const r = payloadOf(["pr", "stack"], { pr: "7", stack: "acme/shop" });
     expect(r.ok).toBe(false);
     expect(!r.ok && Object.keys(r.errors)).toEqual(["pr", "stack"]);
+  });
+});
+
+describe("scanSettings", () => {
+  const src = [
+    'const a = store.entry("settings/digest/time", Schema.String);',
+    "const b = store.entry('settings/digest/limit', Schema.Number);",
+    "const c = store.entry(`settings/digest/weekends`, Schema.Boolean);",
+    'const d = store.entry("settings/digest/shape", Schema.Struct({ a: Schema.String }));',
+    "const e = store.entry(`settings/digest/${name}`, Schema.String);",
+    'const f = store.entry(prefix + "x", Schema.String);',
+    'const g = store.entry("settings/other/time", Schema.String);',
+    'const h = store.entry("settings/digest/time", Schema.String);',
+  ].join("\n");
+  const scan = scanSettings([{ source: src, workflows: ["digest@2"] }]);
+
+  test("literal keys of each type, the other schema is read-only", () => {
+    expect(scan.get("digest")).toEqual([
+      { key: "settings/digest/time", field: "time", type: "string" },
+      { key: "settings/digest/limit", field: "limit", type: "number" },
+      { key: "settings/digest/weekends", field: "weekends", type: "boolean" },
+      { key: "settings/digest/shape", field: "shape", type: "other" },
+    ]);
+  });
+
+  test("a non-literal key and a key of another workflow are skipped", () => {
+    const keys = scan.get("digest")!.map((s) => s.key);
+    expect(keys).not.toContain("settings/other/time");
+    expect(keys).toHaveLength(4);
+  });
+
+  test("a workflow with no setting gets an empty list", () => {
+    expect(scanSettings([{ source: "const p = {}", workflows: ["a@1"] }]).get("a")).toEqual([]);
+  });
+
+  test("settingType finds a scanned key", () => {
+    expect(settingType(scan, "settings/digest/limit")).toBe("number");
+    expect(settingType(scan, "settings/digest/nope")).toBeNull();
+    expect(settingType(null, "settings/digest/limit")).toBeNull();
+  });
+
+  test("launchList carries the settings", () => {
+    const [w] = launchList([{ name: "digest", version: 2, triggers: [] }], null, scan);
+    expect(w.settings).toHaveLength(4);
+    expect(launchList([{ name: "digest", version: 2, triggers: [] }], null)[0].settings).toBeNull();
   });
 });

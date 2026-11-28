@@ -44,13 +44,13 @@ import {
   type Thread,
 } from "./server/t3.ts";
 import { parseToken, readToken, tokenResponse, writeToken } from "./server/token.ts";
-import { launchList, scanFields } from "./server/workflow-start.ts";
+import { launchList, scanFields, scanSettings, settingType } from "./server/workflow-start.ts";
 import { workflowRoutes } from "./server/workflows.ts";
 import { isGraphMember, type Scope } from "./shared/pr-graph-data.ts";
 import type { RuleId } from "./shared/rules.ts";
 import type { RunItem } from "./shared/runs.ts";
 import { allRuns, allThreads, parseLabels, parseLinear, type Conn, type Tree } from "./shared/tree.ts";
-import type { Field } from "./shared/workflow-start.ts";
+import type { Field, Setting } from "./shared/workflow-start.ts";
 
 const threads = new Map<string, Thread>();
 const projects = new Map<string, Project>();
@@ -59,6 +59,7 @@ let runsSnapshot: RunsSnapshot | null = null;
 let runsOrigin: string | undefined;
 /** The fields that the workflow files name, by workflow name. Null while unread or when the read failed. */
 let fieldScan: Map<string, Field[]> | null = null;
+let settingScan: Map<string, Setting[]> | null = null;
 let scanError: string | null = null;
 let readingFiles = false;
 let latestSnapshot: RunsSnapshot | null = null;
@@ -166,7 +167,7 @@ const treeFor = (settled: boolean, rules = defaultRules(), labels: string[] = []
   linearKey: linearSource.state(),
   settled: settledSignature(threads.values()),
   runs,
-  workflows: runsSnapshot && launchList(runsSnapshot.workflows ?? [], fieldScan),
+  workflows: runsSnapshot && launchList(runsSnapshot.workflows ?? [], fieldScan, settingScan),
   workflowScan: scanError,
   t3Origin: runsOrigin ?? null,
   projects: (wantsLinear ? buildLinearTree : buildTree)(
@@ -267,7 +268,9 @@ function syncScan(snapshot: RunsSnapshot) {
     .workflow("workflows.getDefinition", {})
     .then(
       (r) => {
-        fieldScan = scanFields(decodeDefinitionFiles(r));
+        const files = decodeDefinitionFiles(r);
+        fieldScan = scanFields(files);
+        settingScan = scanSettings(files);
         scanError = null;
         scannedRevision = revision;
       },
@@ -275,6 +278,7 @@ function syncScan(snapshot: RunsSnapshot) {
         if (TRANSIENT.test(e.message)) return;
         if (e.message !== scanError) log(`could not read the workflow files: ${e.message}`);
         fieldScan = null;
+        settingScan = null;
         scanError = e.message;
         scannedRevision = revision;
       },
@@ -499,6 +503,7 @@ const send = sendService({
   hasThread: (id) => threads.get(id)?.gone === false,
   hasProject: (id) => projects.has(id),
   projectList: () => projectChoices(projects, dirname(import.meta.dir)),
+  settingType: (key) => settingType(settingScan, key),
 });
 
 const server = Bun.serve({

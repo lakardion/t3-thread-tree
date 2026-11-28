@@ -463,6 +463,38 @@ The dialog closes. A toast says "Started <workflow>" with "Show in tree", for 10
 
 The demo has four fake workflows and a fake file scan: `review-pr` (`pr`, `text`), `land-stack` (`stack`), `digest` (`threadIds`, `text`) and `sentry-hook` (webhook only). The stub CLI answers `workflow start` after 1 s with a new run id. An input that holds "fail" gives a payload error. `WF_OLD=1` gives the unknown command error. `WF_SCAN=off` makes the file scan fail, with a scope error.
 
+## Workflow settings
+
+Settings has a group "Workflows", after the Setup group. It edits the **Workflow settings** that a workflow reads from the T3 store. The server writes them with `t3 workflow store`, like **Start workflow** runs `t3 workflow start`.
+
+### Scan
+
+- In the same pass as the fields scan, the server finds each `store.entry("<key>", Schema.<Type>)` whose key is a string literal that starts with `settings/<workflow>/`, where `<workflow>` is a workflow of that file. A literal is `"…"`, `'…'`, or a backtick string with no `${`. `<field>` is the rest of the key. A key twice in one file counts once.
+- `Schema.String`, `Schema.Number` and `Schema.Boolean` give the types `string`, `number` and `boolean`. Any other schema gives `other`, which the page shows read-only.
+- Each workflow of the tree has `settings`: a list of `{ key, field, type }`, or null when there is no scan (like `fields`).
+
+### Routes
+
+- `GET /t3/workflows/settings` runs `t3 workflow store list --json settings/` and answers its JSON array of `{ key, value }`.
+- `POST /t3/workflows/settings` with `{ key, value }`. `key` must start with `settings/`, so it cannot start with `-`. A bad body gives `400`.
+- `value` null runs `t3 workflow store delete <key>`. It needs no scan.
+- Else the scan must list `key` with the type `string`, `number` or `boolean`, and `value` must fit it (a string, a finite number or a boolean). If not, `400`. The server runs `t3 workflow store set <key> <json>`. A JSON value that starts with `-` gets a leading space, so the CLI does not read it as a flag.
+- Both commands print plain text. Success answers `204`. A missing CLI gives `503`. A CLI failure or a timeout gives `502`, like the start route.
+
+### Look
+
+- **Group.** One row of text replaces the folds when there is nothing to edit: the `workflowScan` text with the scope hint of the T3 token fold; "Turn on Workflows in T3 Settings → Labs, or add a workflow file." with no workflows; "No workflow reads settings yet." when no workflow has a setting.
+- **Fold.** One fold for each workflow that has at least one setting. The label is the workflow name. The value is "<n> of <m> set" (tone `ok`) or "Defaults" (tone `none`).
+- **Form.** A small label above each control, the field in sentence case. A string has a text input and a number has a number input, both with the placeholder "Default". A boolean is a switch. `extra-prompt` is a textarea of 3 rows with the placeholder "None" and the hint "Adds one last agent step to each run." An `other` setting is the read-only line `t3 workflow store set <key> '…'`.
+- **Use default.** A text button at the right of the label shows when the field has a value. It empties the field.
+- **Save.** One Save button for each workflow, enabled only when the form differs from the stored values. It writes each changed key: an empty field deletes its key. Then the page reads the values again. A failed read or write shows its error text under the form.
+- **Values.** The page reads the values when the panel opens, and after each Save. It makes no request when the `t3` CLI is missing.
+- **No CLI.** The group says "Install the t3 CLI to edit workflow settings." and every control is off.
+
+### Demo stub
+
+`digest` has the settings `time` (String), `limit` (Number), `weekends` (Boolean) and `extra-prompt`. `review-pr` has `rules`, a `Schema.Struct` (read-only). The stub CLI keeps the store in memory, with `time` set. `WF_SCAN=off` gives the scan error row. `WF_LIST=none` gives no workflows. `T3CLI=0` gives the disabled state.
+
 ## Launched-thread lineage
 
 Source: [Can the spawner of a launched thread be recovered?](.wayfinder/tickets/002-recover-launched-lineage.md), [Standalone webapp or a view inside T3 Code?](.wayfinder/tickets/003-standalone-or-in-t3.md), research on branch `research/launched-lineage`.

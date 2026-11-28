@@ -45,3 +45,7 @@ export const postCancel = (runId: string) => post("/t3/workflows/cancel", { runI
 
 export const postWorkflowStart = (workflow: string, input: object, key: string) =>
   post<WorkflowStartOk>("/t3/workflows/start", { workflow, input, key });
+
+/** `value` null deletes the key. */
+export const postSetting = (key: string, value: string | number | boolean | null) =>
+  post("/t3/workflows/settings", { key, value });

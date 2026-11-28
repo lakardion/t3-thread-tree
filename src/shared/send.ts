@@ -12,3 +12,6 @@ export type StartOk = { threadId: string };
 export type WorkflowStartOk = { runId: string };
 
 export type SendError = { error: string; exitCode: number | null; stderrTail: string };
+
+/** One stored value of `GET /t3/workflows/settings`. */
+export type StoreValue = { key: string; value: unknown };

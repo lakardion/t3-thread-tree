@@ -337,6 +337,7 @@ The hover background of a row is `--accent`. It replaces the wash while the poin
 - Header, one line that wraps: the title "Thread tree" (15 px, semibold), the header counts, the "All / Needs you" filter, then at the right the "Reset order" button, the "show settled" switch and the theme choice. "Reset order" is a ghost `sm` button. It shows only when the user has a stored order. A click clears the stored order.
 - The banner is below the header, as now.
 - The Catch-up fold sits in Settings › Setup, before "Local model". It uses the fold row of the other Setup folds: the label at the left, the value at the right (green with a label, neutral for "Off", yellow with a warning sign for "No model"). Its body has a switch row and a radio group of the Model picks, each with its provider icon, 14 px, and its label (13 px).
+- The Workflows group is a separate Settings group after Setup. It has one fold for each workflow with settings; the fold row shows the workflow name and "<n> of <m> set" (green) or "Defaults" (neutral). The fold body is a stacked form: a small label (12 px) above each control, a text or number `Input` (`h-8`, 13 px, placeholder "Default"), a `Switch` for a boolean, and a `Textarea` of 3 rows (13 px, placeholder "None") for the extra prompt, with a muted hint under it. A "Use default" text button (11 px, muted, underline on hover) sits at the right of the label when the field has a value. A setting with a schema that the app cannot edit shows a read-only code line with `Terminal` icon and the CLI command. One small Save button sits at the bottom right of each fold. An empty state is one muted row of text, with a warning sign for a scan error.
 - One card with all projects follows.
 
 **Header counts.** Count chips over the visible threads, nested threads included:
@@ -563,6 +564,7 @@ The modal of SPEC.md › "PR graph". Variant A of the prototype of map `map-pr-g
 | Theme choice                                         | `Select`                       | Add       |
 | First load                                           | `Skeleton`                     | Add       |
 | "show settled"                                       | `Switch`, `Label`              | Installed |
+| Workflow settings form                               | `Input`, `Textarea`, `Switch`  | Installed |
 | Summary chips, key chip, stack chip, PR chips, notes | `Badge`                        | Installed |
 | Raw status, exact time                               | `Tooltip`                      | Installed |
 | Banner                                               | `Alert`                        | Installed |
