@@ -272,8 +272,8 @@ const threads: Thread[] = [
   t("Billing: add the invoice export", { id: "prog-bill", projectId: "api", ...completed }),
   t("Check the staging quota", { id: "prog-help", projectId: "api", status: "idle" }),
   t("Search revamp map", { id: "search", projectId: "api", status: "idle" }),
-  t("Search: plan the new index", { id: "search-plan", projectId: "api", ...completed }),
-  t("Search: build the index writer", { id: "search-w", projectId: "api", status: "running" }),
+  t("SHOP-440 · Search: plan the new index", { id: "search-plan", projectId: "api", ...completed }),
+  t("SHOP-441 · Search: build the index writer", { id: "search-w", projectId: "api", status: "running" }),
   t("Search: backfill old documents", { id: "search-b", projectId: "api", pending: request("user_input") }),
   t("Search: rank by freshness", { id: "search-r", projectId: "api", snoozedUntil: later(45) }),
   ...[4201, 4202, 4203].map((own, i) =>
@@ -376,6 +376,7 @@ const CHECKOUT = {
   url: "https://linear.app/acme/project/checkout-redesign",
 };
 const PAYMENTS = { id: "demo-payments", name: "Payments", url: "https://linear.app/acme/project/payments" };
+const SEARCH = { id: "demo-search", name: "Search revamp", url: "https://linear.app/acme/project/search-revamp" };
 const BETA = { id: "demo-beta", name: "Beta", targetDate: "2026-12-01" };
 /** Linear data by issue key. Beta holds two issues. Threads with no key stay without Linear data. */
 const LINEAR: Record<string, LinearIssue> = {
@@ -384,6 +385,8 @@ const LINEAR: Record<string, LinearIssue> = {
   "SHOP-413": { project: CHECKOUT, milestone: { id: "demo-polish", name: "Polish", targetDate: null } },
   "SHOP-415": { project: PAYMENTS, milestone: null },
   "SHOP-418": { project: null, milestone: null },
+  "SHOP-440": { project: SEARCH, milestone: null },
+  "SHOP-441": { project: SEARCH, milestone: null },
   "SHOP-398": { project: PAYMENTS, milestone: { id: "demo-launch", name: "Launch", targetDate: "2026-12-15" } },
 };
 
