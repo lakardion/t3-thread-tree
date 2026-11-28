@@ -1,3 +1,4 @@
+import "retouche-dev/instrument";
 import { CollisionPriority, CollisionType } from "@dnd-kit/abstract";
 import {
   Accessibility,
@@ -57,6 +58,7 @@ import {
 } from "react";
 import { flushSync } from "react-dom";
 import { createRoot } from "react-dom/client";
+import { Retouche } from "retouche-dev";
 
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { Badge } from "@/components/ui/badge";
@@ -86,6 +88,7 @@ import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/comp
 import { cn } from "@/lib/utils";
 
 import appIcon from "../../assets/icon.svg" with { type: "text" };
+import retoucheConfig from "../../retouche.config.ts";
 import type { UpdateState } from "../shared/desktop.ts";
 import { hits } from "../shared/find.ts";
 import type { LocalConfig, LocalState, ModelPick, Offered } from "../shared/model.ts";
@@ -3955,4 +3958,9 @@ function App() {
 /** Hot reload re-runs this module; reuse the root so two roots never share one container. */
 const container = document.getElementById("root")!;
 const root = import.meta.hot ? (import.meta.hot.data.root ??= createRoot(container)) : createRoot(container);
-root.render(<App />);
+root.render(
+  <>
+    <App />
+    <Retouche config={retoucheConfig} />
+  </>,
+);

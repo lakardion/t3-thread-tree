@@ -70,7 +70,8 @@ const frame = (shot: Shot, png: Buffer) => `<!doctype html>
 </div>`;
 
 const demo = Bun.spawn(["bun", "run", "scripts/demo.ts"], {
-  env: { ...process.env, PORT: String(PORT) },
+  /** Keeps the dev-only Retouche overlay out of screenshots. */
+  env: { ...process.env, PORT: String(PORT), NODE_ENV: "production" },
   stdout: "ignore",
 });
 const browser = await chromium.launch({ channel: "chrome" });
