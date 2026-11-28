@@ -15,9 +15,9 @@ export function CopyPrompt({ prompt, label }: { prompt: string; label: string })
     <Tooltip>
       <TooltipTrigger asChild>
         <Button
-          variant="ghost"
+          variant="quiet"
           size="icon-xs"
-          className="flex-none text-muted-foreground"
+          className="flex-none"
           aria-label={label}
           onClick={() => navigator.clipboard?.writeText(prompt).then(() => setDone(true))}
         >

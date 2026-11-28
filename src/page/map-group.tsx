@@ -41,9 +41,9 @@ function GraphButton({ t }: { t: ThreadNode }) {
     <Tooltip>
       <TooltipTrigger asChild>
         <Button
-          variant="ghost"
+          variant="quiet"
           size="icon"
-          className="relative z-10 size-5 flex-none rounded-[6px] text-muted-foreground pointer-coarse:min-h-11 pointer-coarse:min-w-11"
+          className="relative z-10 size-5 flex-none rounded-[6px] pointer-coarse:min-h-11 pointer-coarse:min-w-11"
           aria-label="PR graph"
           data-graph-for={t.id}
           onClick={() => open(scope)}
@@ -215,9 +215,9 @@ export function MapGroup({
                   {countText}
                   <GraphButton t={t} />
                   <Button
-                    variant="ghost"
+                    variant="quiet"
                     size="icon"
-                    className="size-5 flex-none rounded-[6px] text-muted-foreground pointer-coarse:min-h-11 pointer-coarse:min-w-11"
+                    className="size-5 flex-none rounded-[6px] pointer-coarse:min-h-11 pointer-coarse:min-w-11"
                     aria-label={open ? "Fold group" : "Unfold group"}
                     aria-expanded={open}
                     data-fold

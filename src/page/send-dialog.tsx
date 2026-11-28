@@ -52,7 +52,7 @@ export function ActionDialog({
 /** The failure of a send, settle or snooze: the message, the exit code and the tail of stderr. */
 export const SendErrorAlert = ({ err }: { err: SendError }) => (
   <Alert className="border-l-[3px] border-l-status-failed">
-    <AlertDescription className="block text-foreground">
+    <AlertDescription className="block">
       {err.error}
       {err.exitCode !== null && <span className="text-muted-foreground"> exit {err.exitCode}</span>}
       {err.stderrTail && (

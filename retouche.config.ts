@@ -33,6 +33,12 @@ export default defineConfig({
     "UiToggleGroupItem",
     "UiTooltipContent",
   ],
-  /** Code (ids, branch names, JSON) shows in mono on any component. */
-  allow: [{ classes: ["font-mono"] }],
+  allow: [
+    /** Code (ids, branch names, JSON) shows in mono on any component. */
+    { classes: ["font-mono"] },
+    /** A state (thread status, PR state, error) sets the color. */
+    { classes: ["text-status-*", "text-pr-*", "text-destructive"] },
+    /** A number that changes keeps its width. */
+    { classes: ["tabular-nums"] },
+  ],
 });

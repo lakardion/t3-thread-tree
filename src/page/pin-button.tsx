@@ -31,13 +31,12 @@ export function PinButton({
     <Tooltip>
       <TooltipTrigger asChild>
         <Button
-          variant="ghost"
+          variant={pinned ? "ghost" : "quiet"}
           size="icon"
           className={cn(
             className,
-            pinned
-              ? "text-foreground"
-              : "opacity-0 group-focus-within/row:opacity-100 group-hover/row:opacity-100 focus-visible:opacity-100 pointer-coarse:opacity-100",
+            !pinned &&
+              "opacity-0 group-focus-within/row:opacity-100 group-hover/row:opacity-100 focus-visible:opacity-100 pointer-coarse:opacity-100",
           )}
           aria-label={label}
           aria-pressed={pinned}
