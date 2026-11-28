@@ -1401,7 +1401,7 @@ function LabelPill({ t }: { t: ThreadNode }) {
         <Badge
           variant={label.color ? "outline" : "secondary"}
           className={cn(
-            "min-w-0 gap-0.5 rounded-full px-1 py-0 font-mono text-[11px] font-medium",
+            "min-w-0 gap-0.5 rounded-full px-1 py-0 text-[11px] font-medium",
             label.color && "border-transparent",
           )}
           style={label.color ? { background: `#${label.color}`, color: ink(label.color) } : undefined}
@@ -2891,7 +2891,7 @@ const Keys = () => (
     {KEYS.map(([keys, action]) => (
       <Fragment key={action}>
         <dt>
-          <Kbd className="font-mono">{keys}</Kbd>
+          <Kbd>{keys}</Kbd>
         </dt>
         <dd className="m-0 text-muted-foreground">{action}</dd>
       </Fragment>

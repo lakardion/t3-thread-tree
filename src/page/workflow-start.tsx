@@ -151,7 +151,7 @@ function StartForm({ req, onStarted }: { req: StartRequest; onStarted: (runId: s
     if (f === "pr" && prs.length > 1)
       return (
         <Select value={values.pr} onValueChange={(v) => set(f, v)}>
-          <SelectTrigger id={id} className="w-full font-mono">
+          <SelectTrigger id={id} className="w-full">
             <SelectValue />
           </SelectTrigger>
           <SelectContent>
@@ -231,7 +231,7 @@ function StartForm({ req, onStarted }: { req: StartRequest; onStarted: (runId: s
           <Textarea
             aria-label="Payload (JSON)"
             rows={6}
-            className="font-mono text-[12px]"
+            className="font-mono"
             value={json ?? (built.ok ? JSON.stringify(built.payload, null, 2) : "")}
             onChange={(e) => setJson(e.target.value)}
           />
