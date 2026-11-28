@@ -211,6 +211,11 @@ function DropdownMenuSubContent({ className, ...props }: ComponentProps<typeof D
   );
 }
 
+/** The dev bundler renames the function; the Retouche overlay matches components by this name. */
+DropdownMenuItem.displayName = "UiDropdownMenuItem";
+DropdownMenuLabel.displayName = "UiDropdownMenuLabel";
+DropdownMenuRadioItem.displayName = "UiDropdownMenuRadioItem";
+
 export {
   DropdownMenu,
   DropdownMenuPortal,

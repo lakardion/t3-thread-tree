@@ -18,4 +18,7 @@ function Input({ className, type, ...props }: React.ComponentProps<"input">) {
   );
 }
 
+/** The dev bundler renames the function; the Retouche overlay matches components by this name. */
+Input.displayName = "Input";
+
 export { Input };

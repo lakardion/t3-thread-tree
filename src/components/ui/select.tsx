@@ -143,6 +143,10 @@ function SelectScrollDownButton({ className, ...props }: ComponentProps<typeof S
   );
 }
 
+/** The dev bundler renames the function; the Retouche overlay matches components by this name. */
+SelectItem.displayName = "UiSelectItem";
+SelectTrigger.displayName = "UiSelectTrigger";
+
 export {
   Select,
   SelectContent,

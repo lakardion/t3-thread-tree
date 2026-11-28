@@ -50,7 +50,7 @@ export function TriageButton({ count, open, toggle }: { count: number; open: boo
         <Toggle
           variant="outline"
           size="sm"
-          className={cn("gap-1.5 text-foreground", count === 0 && "text-muted-foreground")}
+          className="gap-1.5"
           aria-label={`Triage, ${count} waiting`}
           aria-keyshortcuts="t"
           pressed={open}

@@ -124,6 +124,12 @@ function CommandShortcut({ className, ...props }: React.ComponentProps<"span">) 
   );
 }
 
+/** The dev bundler renames the function; the Retouche overlay matches components by this name. */
+CommandEmpty.displayName = "CommandEmpty";
+CommandGroup.displayName = "CommandGroup";
+CommandInput.displayName = "CommandInput";
+CommandItem.displayName = "CommandItem";
+
 export {
   Command,
   CommandDialog,
