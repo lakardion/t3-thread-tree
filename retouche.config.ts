@@ -33,4 +33,6 @@ export default defineConfig({
     "ToggleGroupItem",
     "TooltipContent",
   ],
+  /** Code (ids, branch names, JSON) shows in mono on any component. */
+  allow: [{ classes: ["font-mono"] }],
 });
