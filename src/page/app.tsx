@@ -2762,7 +2762,7 @@ function FlatRow({
         />
       </Section>
     );
-  if (i.loose) return <li aria-hidden className="mx-2 my-1 border-t" />;
+  if (i.loose) return <li aria-hidden className="mx-2 my-1 border-t first:hidden" />;
   return (
     <MotionHook>
       {(ref) => (
