@@ -1313,6 +1313,26 @@ Each build ticket updates the README for its own part: the "What you get" entry,
   - A second run changes nothing.
 - T3 reloads only top-level files. After an edit to a repo workflow, the user restarts the T3 server.
 
+## Repo workflows
+
+### land-stack
+
+`workflows/land-stack.ts` lands a `gh stack` PR stack from the bottom, with squash merges. It needs the `gh stack` extension.
+
+- **Payload.** `stack` (`{ repo, prs }`, bottom PR first) and `project` (the T3 project path). Both are required.
+- **Scope.** The workflow lands each layer from `prs[0]` to the top PR at the start. Each round, a step reads the live stack and takes the lowest layer that is not merged. A layer added above the top is not landed. The run asks nothing before the first merge.
+- **Title.** `Land <repo> #<bottom>→#<top>`, with the progress, for example `(2/4)`.
+- **Per layer.** The workflow reads the PR with `gh pr view`, then applies the first rule that holds:
+  - Closed and not merged: the run stops.
+  - Draft or changes requested: it asks "merge anyway" or "stop". For a draft, "merge anyway" first marks the PR ready.
+  - Conflict, or a failed branch update: one agent merges the base branch into the PR branch and pushes it, never with force. If the agent fails, the workflow asks "retry" or "stop".
+  - Behind the base: it updates the branch and waits for the new head.
+  - Checks failing or timed out after 60 minutes: it asks "retry" or "stop". "Retry" reruns the failed jobs.
+  - Else it runs `gh stack merge <n> --yes --squash` and waits for the merge. If the merge is refused, it asks "retry" or "stop" with the last line of `gh` stderr.
+- **Stack-number guard.** `gh stack merge` reads a bare number as a stack number first. When the number of the PR is also a stack number, the merge step fails and says so, so the workflow never merges a whole stack by mistake.
+- **End.** The run is `completed` when the top PR is merged. It is `stopped` on any "stop" answer or a closed layer. Asks have no timeout.
+- **Extra prompt.** The setting `settings/land-stack/extra-prompt` adds one last agent step. The step runs in the thread of the conflict agent if one ran, else in the project.
+
 ## Check at build
 
 These facts are not confirmed against a real stream. The research used the MCP thread list and SQLite.
