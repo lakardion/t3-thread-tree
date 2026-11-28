@@ -46,6 +46,7 @@ Use it as a Mac app or in a browser. The Mac app adds a Dock badge, notification
 ### Also
 
 - **Mac app:** Dock badge, notifications, a menu-bar entry and an Up next window (⌥⌘U) that stays on top.
+- **Review-pr workflow:** `bun run workflows:install` adds it. Start it from the Workflow menu of a row with a PR, or from Find. One agent reviews the PR in a worktree. It checks the PR against the docs of the repo and the issues of the PR. Then it asks you once. If you choose Post, it posts one review as a comment, with inline comments. It never approves and never requests changes. The `checks` setting adds rules: text, a file path or a skill name. A linked environment cannot read a local path.
 - **Workflow settings:** Settings › Workflows has one fold for each workflow that reads settings from the T3 store. Edit text, numbers and switches, then click Save. "Use default" clears a value. The extra prompt adds one last agent step to each run.
 - **Start a workflow:** type `>` in Cmd+K, or use the workflow button on a row, a PR stack or the Looks done list.
 - **Suggested replies:** the send dialog offers reply chips, such as `commit push`, from the last agent message.
